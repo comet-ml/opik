@@ -2,7 +2,10 @@
 
 from flask import Blueprint, request, abort
 from werkzeug.exceptions import HTTPException
+import io
+import logging
 import os
+import re
 import time
 from opik import opik_context, track, Attachment
 from .utils import (
@@ -86,6 +89,51 @@ def create_traces_client():
         )
 
     return success_response({"traces_created": traces_number})
+
+
+@traces_bp.route("/create-traces-and-get-url", methods=["POST"])
+def create_traces_and_get_url():
+    data = request.get_json()
+    validate_required_fields(data, ["project_name"])
+
+    project_name = data["project_name"]
+    traces_number = data.get("traces_number", 5)
+    prefix = data.get("prefix", "test-trace-")
+
+    # Capture SDK terminal output to extract the logged project URL
+    log_capture = io.StringIO()
+    capture_handler = logging.StreamHandler(log_capture)
+    capture_handler.setLevel(logging.INFO)
+    opik_logger = logging.getLogger("opik")
+    opik_logger.addHandler(capture_handler)
+
+    try:
+        client = get_opik_client()
+        for i in range(traces_number):
+            client.trace(
+                name=f"{prefix}{i}",
+                project_name=project_name,
+                input={"input": "test input"},
+                output={"output": "test output"},
+            )
+        capture_handler.flush()
+        terminal_output = log_capture.getvalue()
+    finally:
+        opik_logger.removeHandler(capture_handler)
+
+    # Parse the URL from the SDK's terminal log message:
+    # 'Started logging traces to the "project_name" project at {url}.'
+    url_match = re.search(
+        r'Started logging traces.*? at (https?://\S+)\.',
+        terminal_output
+    )
+    if not url_match:
+        abort(500, f"Could not extract project URL from SDK terminal output: {terminal_output!r}")
+
+    return success_response({
+        "traces_created": traces_number,
+        "project_url": url_match.group(1),
+    })
 
 
 @traces_bp.route("/create-traces-with-spans-client", methods=["POST"])

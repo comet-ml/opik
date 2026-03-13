@@ -360,7 +360,7 @@ class ProjectMetricsResourceTest {
     class NumberOfTracesTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -510,7 +510,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -565,7 +565,7 @@ class ProjectMetricsResourceTest {
     class FeedbackScoresTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -669,7 +669,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -745,7 +745,7 @@ class ProjectMetricsResourceTest {
     class ThreadFeedbackScoresTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -860,7 +860,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -950,7 +950,7 @@ class ProjectMetricsResourceTest {
     class TokenUsageTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -973,7 +973,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         @DisplayName("interval_end is optional - filters token usage from interval_start onwards")
         void whenIntervalEndOmitted_thenFilterTokenUsageFromIntervalStart(TimeInterval interval) {
             // setup
@@ -1065,7 +1065,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1171,7 +1171,7 @@ class ProjectMetricsResourceTest {
     class CostTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1196,7 +1196,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         @DisplayName("interval_end is optional - filters cost from interval_start onwards")
         void whenIntervalEndOmitted_thenFilterCostFromIntervalStart(TimeInterval interval) {
             // setup
@@ -1285,7 +1285,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1352,7 +1352,7 @@ class ProjectMetricsResourceTest {
     class DurationTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1483,7 +1483,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1561,7 +1561,7 @@ class ProjectMetricsResourceTest {
     class GuardrailsFailedCountTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1645,7 +1645,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1750,7 +1750,7 @@ class ProjectMetricsResourceTest {
     class ThreadCountTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1782,7 +1782,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         @DisplayName("interval_end is optional - filters threads from interval_start onwards without filling gaps")
         void whenIntervalEndOmitted_thenFilterThreadsFromIntervalStart(TimeInterval interval) {
             // setup
@@ -1893,7 +1893,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -1965,7 +1965,7 @@ class ProjectMetricsResourceTest {
     class ThreadDurationTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2092,7 +2092,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2622,7 +2622,7 @@ class ProjectMetricsResourceTest {
     class SpanCountTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2703,7 +2703,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2750,7 +2750,7 @@ class ProjectMetricsResourceTest {
     class SpanDurationTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2892,7 +2892,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2992,7 +2992,7 @@ class ProjectMetricsResourceTest {
     class SpanTokenUsageTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -3077,7 +3077,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -3197,7 +3197,7 @@ class ProjectMetricsResourceTest {
     class SpanFeedbackScoresTest {
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -3314,7 +3314,7 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(TimeInterval.class)
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -3409,6 +3409,62 @@ class ProjectMetricsResourceTest {
                             Map.Entry::getKey,
                             e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
                                     .toList())));
+        }
+    }
+
+    @Nested
+    @DisplayName("Total interval aggregation")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TotalIntervalTest {
+
+        @Test
+        void traceCount() {
+            mockTargetWorkspace();
+
+            Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // create traces across different time buckets
+            createTraces(projectName, marker.minus(3, ChronoUnit.HOURS), 3);
+            createTraces(projectName, marker.minus(1, ChronoUnit.HOURS), 2);
+            createTraces(projectName, marker, 1);
+
+            Instant intervalStart = marker.minus(4, ChronoUnit.HOURS);
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.TRACE_COUNT)
+                            .interval(TimeInterval.TOTAL)
+                            .intervalStart(intervalStart)
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    Integer.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
+            assertThat(response.interval()).isEqualTo(TimeInterval.TOTAL);
+            assertThat(response.results()).hasSize(1);
+
+            var result = response.results().getFirst();
+            assertThat(result.name()).isEqualTo(ProjectMetricsDAO.NAME_TRACES);
+            assertThat(result.data()).hasSize(1);
+            assertThat(result.data().getFirst().value()).isEqualTo(6);
+            assertThat(result.data().getFirst().time()).isEqualTo(intervalStart);
+        }
+
+        private List<Trace> createTraces(String projectName, Instant marker, int count) {
+            List<Trace> traces = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(idGenerator.generateId(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .build();
+                    })
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            return traces;
         }
     }
 }

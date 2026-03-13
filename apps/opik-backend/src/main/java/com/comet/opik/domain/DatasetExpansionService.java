@@ -180,7 +180,6 @@ public class DatasetExpansionService {
                     .model(request.model())
                     .addUserMessage(prompt)
                     .temperature(1.0) // Set temperature to 1.0 for consistent output
-                    .maxCompletionTokens(4000)
                     .stream(false) // Non-streaming request for dataset expansion
                     .build();
 

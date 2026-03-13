@@ -5,6 +5,7 @@ import type * as OpikApi from "../index.js";
 export interface LocalRunner {
     id?: string;
     name?: string;
+    projectId?: string;
     status?: OpikApi.LocalRunnerStatus;
     connectedAt?: Date;
     agents?: OpikApi.Agent[];

@@ -65,11 +65,18 @@ export enum ManagementPermissionsNames {
   DASHBOARD_VIEW = "dashboard_view",
   DATASET_VIEW = "dataset_view",
   PROJECT_DELETE = "project_delete",
+  ANNOTATION_QUEUE_CREATE = "annotation_queue_create",
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_DELETE = "trace_delete",
   PROMPT_DELETE = "prompt_delete",
   DATASET_DELETE = "dataset_delete",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
+  USER_ROLE_UPDATE = "user_role_update",
+  WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
+  AI_PROVIDER_UPDATE = "ai_provider_update",
+  PROJECT_CREATE = "project_create",
+  COMMENT_WRITE = "comment_write",
+  ALERT_UPDATE = "alert_update",
 }
 
 export interface UserPermission {

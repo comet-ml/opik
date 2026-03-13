@@ -10,9 +10,10 @@ export interface LocalRunnerJob {
     inputs?: OpikApi.JsonNode;
     result?: OpikApi.JsonNode;
     error?: string;
-    project?: string;
+    projectId?: string;
     traceId?: string;
     maskId?: string;
+    metadata?: OpikApi.LocalRunnerJobMetadata;
     timeout?: number;
     createdAt?: Date;
     startedAt?: Date;

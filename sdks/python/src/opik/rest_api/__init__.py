@@ -11,6 +11,8 @@ from .types import (
     AgentBlueprintWrite,
     AgentBlueprintWriteType,
     AgentConfigEnv,
+    AgentConfigValueHistory,
+    AgentConfigValueHistoryType,
     AgentConfigValuePublic,
     AgentConfigValuePublicType,
     AgentConfigValueWrite,
@@ -170,6 +172,8 @@ from .types import (
     CountValueStatPublic,
     DashboardPagePublic,
     DashboardPublic,
+    DashboardPublicScope,
+    DashboardPublicType,
     DataPointDouble,
     DataPointNumberPublic,
     Dataset,
@@ -355,8 +359,10 @@ from .types import (
     LlmAsJudgeOutputSchemaWrite,
     LlmAsJudgeOutputSchemaWriteType,
     LocalRunner,
+    LocalRunnerConnectResponse,
     LocalRunnerHeartbeatResponse,
     LocalRunnerJob,
+    LocalRunnerJobMetadata,
     LocalRunnerJobPage,
     LocalRunnerJobStatus,
     LocalRunnerLogEntry,
@@ -399,6 +405,7 @@ from .types import (
     PercentageValues,
     PercentageValuesDetailed,
     PercentageValuesPublic,
+    Permission,
     Project,
     ProjectDetailed,
     ProjectDetailedVisibility,
@@ -568,6 +575,7 @@ from .types import (
     WorkspaceNameHolder,
     WorkspaceSpansCount,
     WorkspaceTraceCount,
+    WorkspaceUserPermissions,
 )
 from .errors import (
     BadGatewayError,
@@ -609,6 +617,7 @@ from . import (
     system_usage,
     traces,
     welcome_wizard,
+    workspace_permissions,
     workspaces,
 )
 from .alerts import GetWebhookExamplesRequestAlertType
@@ -619,6 +628,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
+from .dashboards import DashboardUpdatePublicScope, DashboardUpdatePublicType, DashboardWriteScope, DashboardWriteType
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
@@ -649,6 +659,8 @@ __all__ = [
     "AgentBlueprintWrite",
     "AgentBlueprintWriteType",
     "AgentConfigEnv",
+    "AgentConfigValueHistory",
+    "AgentConfigValueHistoryType",
     "AgentConfigValuePublic",
     "AgentConfigValuePublicType",
     "AgentConfigValueWrite",
@@ -814,6 +826,12 @@ __all__ = [
     "CreatePromptVersionDetailTemplateStructure",
     "DashboardPagePublic",
     "DashboardPublic",
+    "DashboardPublicScope",
+    "DashboardPublicType",
+    "DashboardUpdatePublicScope",
+    "DashboardUpdatePublicType",
+    "DashboardWriteScope",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -1014,8 +1032,10 @@ __all__ = [
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
     "LocalRunner",
+    "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
+    "LocalRunnerJobMetadata",
     "LocalRunnerJobPage",
     "LocalRunnerJobResultRequestStatus",
     "LocalRunnerJobStatus",
@@ -1064,6 +1084,7 @@ __all__ = [
     "PercentageValues",
     "PercentageValuesDetailed",
     "PercentageValuesPublic",
+    "Permission",
     "Project",
     "ProjectDetailed",
     "ProjectDetailedVisibility",
@@ -1246,6 +1267,7 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "WorkspaceUserPermissions",
     "agent_configs",
     "alerts",
     "annotation_queues",
@@ -1272,5 +1294,6 @@ __all__ = [
     "system_usage",
     "traces",
     "welcome_wizard",
+    "workspace_permissions",
     "workspaces",
 ]

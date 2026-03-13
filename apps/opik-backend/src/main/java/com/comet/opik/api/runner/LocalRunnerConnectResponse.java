@@ -12,5 +12,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record LocalRunnerConnectResponse(
         UUID runnerId,
-        UUID workspaceId) {
+        String workspaceId,
+        UUID projectId,
+        String projectName) {
 }

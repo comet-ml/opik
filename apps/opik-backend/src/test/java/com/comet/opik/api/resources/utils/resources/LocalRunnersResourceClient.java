@@ -3,10 +3,12 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
+import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
+import com.comet.opik.api.runner.LocalRunnerPairRequest;
 import com.comet.opik.api.runner.LocalRunnerPairResponse;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
@@ -31,19 +33,21 @@ public class LocalRunnersResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public LocalRunnerPairResponse generatePairingCode(String apiKey, String workspaceName) {
+    public LocalRunnerPairResponse generatePairingCode(UUID projectId, String apiKey, String workspaceName) {
+        LocalRunnerPairRequest request = LocalRunnerPairRequest.builder().projectId(projectId).build();
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("pairs")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(""))) {
+                .post(Entity.json(request))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return response.readEntity(LocalRunnerPairResponse.class);
         }
     }
 
-    public UUID connect(LocalRunnerConnectRequest request, String apiKey, String workspaceName) {
+    public LocalRunnerConnectResponse connect(LocalRunnerConnectRequest request, String apiKey,
+            String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("connections")
                 .request()
@@ -51,21 +55,21 @@ public class LocalRunnersResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            String location = response.getHeaderString("Location");
-            assertThat(location).isNotBlank();
-            return UUID.fromString(location.substring(location.lastIndexOf('/') + 1));
+            return response.readEntity(LocalRunnerConnectResponse.class);
         }
     }
 
-    public LocalRunner.LocalRunnerPage listRunners(String apiKey, String workspaceName) {
-        return listRunners(0, 25, apiKey, workspaceName);
+    public LocalRunner.LocalRunnerPage listRunners(UUID projectId, String apiKey, String workspaceName) {
+        return listRunners(projectId, 0, 25, apiKey, workspaceName);
     }
 
-    public LocalRunner.LocalRunnerPage listRunners(int page, int size, String apiKey, String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+    public LocalRunner.LocalRunnerPage listRunners(UUID projectId, int page, int size, String apiKey,
+            String workspaceName) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size)
-                .request()
+                .queryParam("project_id", projectId);
+        try (var response = target.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
@@ -139,15 +143,15 @@ public class LocalRunnersResourceClient {
         }
     }
 
-    public LocalRunnerJob.LocalRunnerJobPage listJobs(UUID runnerId, String project,
+    public LocalRunnerJob.LocalRunnerJobPage listJobs(UUID runnerId, UUID projectId,
             int page, int size, String apiKey, String workspaceName) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(runnerId.toString())
                 .path("jobs")
                 .queryParam("page", page)
                 .queryParam("size", size);
-        if (project != null) {
-            target = target.queryParam("project", project);
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
         }
         try (var response = target.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -283,7 +287,8 @@ public class LocalRunnersResourceClient {
                 .get();
     }
 
-    public Response callAppendLogs(UUID jobId, List<LocalRunnerLogEntry> entries, String apiKey, String workspaceName) {
+    public Response callAppendLogs(UUID jobId, List<LocalRunnerLogEntry> entries, String apiKey,
+            String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("jobs")
                 .path(jobId.toString())

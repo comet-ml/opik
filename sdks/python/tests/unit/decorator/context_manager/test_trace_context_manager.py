@@ -2,7 +2,7 @@ import pytest
 
 import opik
 from opik import opik_context
-from opik.decorator import base_track_decorator
+from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import ErrorInfoDict
 from tests.testlib import (
     ANY_BUT_NONE,
@@ -206,3 +206,48 @@ def test_start_as_current_trace__context_cleanup__trace_removed_after_exit(
     # Verify trace was logged to backend
     assert len(fake_backend.trace_trees) == 1
     assert fake_backend.trace_trees[0].name == "test-trace"
+
+
+def test_start_as_current_trace__pop_end_candidates_preserves_trace(fake_backend):
+    """
+    Regression test: when a stream handler calls pop_end_candidates() inside
+    start_as_current_trace, the trace must remain in context so that subsequent
+    tracked calls can still attach as children.
+    """
+    with opik.start_as_current_trace(
+        "parent-trace", project_name="test-project", flush=True
+    ) as trace_data:
+        # Simulate what happens when a decorator creates a span under the trace
+        # (e.g., track_anthropic wrapping messages.create)
+        base_track_decorator.add_start_candidates(
+            start_span_parameters=arguments_helpers.StartSpanParameters(
+                name="llm-call",
+                type="llm",
+                project_name="test-project",
+            ),
+            opik_distributed_trace_headers=None,
+            opik_args_data=None,
+            tracing_active=True,
+            create_duplicate_root_span=True,
+        )
+
+        # Simulate what _streams_handler does: pop_end_candidates
+        popped_span, popped_trace = base_track_decorator.pop_end_candidates()
+
+        assert popped_span is not None
+        # The trace should NOT be popped since it was created by start_as_current_trace
+        assert popped_trace is None
+
+        # The trace should still be in context
+        current_trace = opik_context.get_current_trace_data()
+        assert current_trace is not None
+        assert current_trace.id == trace_data.id
+
+        # A subsequent tracked call should still see the parent trace
+        @opik.track(name="child-work", type="tool")
+        def do_child_work():
+            return "result"
+
+        do_child_work()
+
+    assert opik_context.get_current_trace_data() is None

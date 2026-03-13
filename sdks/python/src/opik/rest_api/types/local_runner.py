@@ -12,6 +12,7 @@ from .local_runner_status import LocalRunnerStatus
 class LocalRunner(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: typing.Optional[str] = None
+    project_id: typing.Optional[str] = None
     status: typing.Optional[LocalRunnerStatus] = None
     connected_at: typing.Optional[dt.datetime] = None
     agents: typing.Optional[typing.List[Agent]] = None

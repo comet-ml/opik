@@ -30,7 +30,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -275,6 +274,12 @@ public interface DatasetItemVersionDAO {
      */
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemRowIds);
 
+    record DatasetItemPolicyEntry(UUID datasetVersionId, UUID datasetItemId, ExecutionPolicy policy) {
+    }
+
+    Flux<DatasetItemPolicyEntry> getExecutionPoliciesByDatasetItemIds(Set<UUID> datasetItemIds,
+            Set<UUID> datasetVersionIds);
+
     /**
      * Mapping from row ID to dataset_item_id.
      */
@@ -332,6 +337,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String DATASET_ITEM_VERSIONS = "dataset_item_versions";
     private static final String CLICKHOUSE = "Clickhouse";
+
+    private static final List<FilterQueryBuilder.FilterStrategyParam> FILTER_STRATEGY_PARAMS = List.of(
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.EXPERIMENT_ITEM, "experiment_item_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES, "feedback_scores_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY,
+                    "feedback_scores_empty_filters"));
+
+    private static final List<FilterStrategy> BIND_STRATEGIES = List.of(
+            FilterStrategy.DATASET_ITEM,
+            FilterStrategy.EXPERIMENT_ITEM,
+            FilterStrategy.FEEDBACK_SCORES,
+            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
 
     private static final String SELECT_ITEM_IDS_AND_HASHES = """
             SELECT
@@ -975,10 +993,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.item_last_updated_at AS last_updated_at,
                 di.item_created_by AS created_by,
                 di.item_last_updated_by AS last_updated_by,
-                argMax(tfs.duration, ei.id) AS duration,
-                argMax(tfs.total_estimated_cost, ei.id) AS total_estimated_cost,
-                argMax(tfs.usage, ei.id) AS usage,
-                argMax(tfs.feedback_scores, ei.id) AS feedback_scores,
+                avg(tfs.duration) AS duration,
+                avg(tfs.total_estimated_cost) AS total_estimated_cost,
+                avgMap(tfs.usage) AS usage,
+                avgMap(tfs.feedback_scores) AS feedback_scores,
                 argMax(tfs.input, ei.id) AS input,
                 argMax(tfs.output, ei.id) AS output,
                 argMax(tfs.metadata, ei.id) AS metadata,
@@ -1438,6 +1456,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             LIMIT 1 BY id
             """;
 
+    private static final String SELECT_EXECUTION_POLICIES_BY_DATASET_ITEM_IDS = """
+            SELECT DISTINCT
+                dataset_item_id,
+                dataset_version_id,
+                execution_policy
+            FROM dataset_item_versions
+            WHERE dataset_item_id IN :datasetItemIds
+            AND dataset_version_id IN :datasetVersionIds
+            AND workspace_id = :workspace_id
+            """;
+
     private static final String SELECT_ITEMS_BY_DATASET_ITEM_IDS = """
             SELECT
                 id,
@@ -1818,7 +1847,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
@@ -1915,30 +1943,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @param criteria The search criteria containing filters and search terms
      */
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
-        // Add filters if present
-        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-            var datasetItemFiltersOpt = FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
-                    FilterStrategy.DATASET_ITEM);
-            datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                    datasetItemFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.EXPERIMENT_ITEM)
-                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
-                            experimentItemFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES)
-                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters",
-                            feedbackScoresFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                    .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
-                            feedbackScoresEmptyFilters));
-        }
-
-        // Add search if present
-        if (StringUtils.isNotBlank(criteria.search())) {
-            template.add("search", true);
-        }
+        DatasetItemSearchCriteriaMapper.applyToTemplate(template, criteria, FILTER_STRATEGY_PARAMS);
     }
 
     /**
@@ -1976,20 +1981,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @return The statement with all parameters bound
      */
     private Statement bindSearchAndFilters(@NonNull Statement statement, @NonNull DatasetItemSearchCriteria criteria) {
-        // Bind search terms if present
-        if (StringUtils.isNotBlank(criteria.search())) {
-            statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-        }
-
-        // Bind filter parameters if present
-        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-        }
-
-        return statement;
+        return DatasetItemSearchCriteriaMapper.bindSearchCriteria(statement, criteria, BIND_STRATEGIES,
+                filterQueryBuilder);
     }
 
     @Override
@@ -2195,52 +2188,48 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
                 versionId);
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+        return asyncTemplate.nonTransaction(connection -> {
+            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
 
-            return asyncTemplate.nonTransaction(connection -> {
-                ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
-                template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-                template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
+            // Add experiment IDs if present
+            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                template.add("experiment_ids", true);
+            }
 
-                // Add experiment IDs if present
-                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                    template.add("experiment_ids", true);
-                }
+            // Add filters and search criteria using helper method
+            addFiltersToTemplate(template, criteria);
 
-                // Add filters and search criteria using helper method
-                addFiltersToTemplate(template, criteria);
+            // Add target project IDs flag to template (from separate query to reduce traces table scans)
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                template.add("has_target_projects", true);
+            }
 
-                // Add target project IDs flag to template (from separate query to reduce traces table scans)
-                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                    template.add("has_target_projects", true);
-                }
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", criteria.datasetId())
+                    .bind("versionId", versionId.toString());
 
-                var statement = connection.createStatement(template.render())
-                        .bind("datasetId", criteria.datasetId())
-                        .bind("versionId", versionId.toString());
+            // Bind target project IDs (from separate query to reduce traces table scans)
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+            }
 
-                // Bind target project IDs (from separate query to reduce traces table scans)
-                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                    statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
-                }
+            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+            }
 
-                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                    statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-                }
+            // Bind search and filter parameters using helper method
+            statement = bindSearchAndFilters(statement, criteria);
 
-                // Bind search and filter parameters using helper method
-                statement = bindSearchAndFilters(statement, criteria);
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "count_dataset_item_versions_with_experiment_filters");
 
-                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
-                        "count_dataset_item_versions_with_experiment_filters");
-
-                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                        .doFinally(signalType -> endSegment(segment))
-                        .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
-                        .reduce(0L, Long::sum);
-            });
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
+                    .reduce(0L, Long::sum);
         });
     }
 
@@ -3119,6 +3108,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             UUID.fromString(row.get("id", String.class)))))
                     .collectList()
                     .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItemPolicyEntry> getExecutionPoliciesByDatasetItemIds(
+            @NonNull Set<UUID> datasetItemIds,
+            @NonNull Set<UUID> datasetVersionIds) {
+        if (datasetItemIds.isEmpty() || datasetVersionIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(SELECT_EXECUTION_POLICIES_BY_DATASET_ITEM_IDS)
+                    .bind("datasetItemIds", datasetItemIds.toArray(UUID[]::new))
+                    .bind("datasetVersionIds", datasetVersionIds.toArray(UUID[]::new));
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "get_execution_policies_by_dataset_item_ids");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
+                        var versionId = UUID.fromString(row.get("dataset_version_id", String.class));
+                        var policy = ExecutionPolicyMapper.fromJson(row.get("execution_policy", String.class));
+                        return new DatasetItemPolicyEntry(versionId, datasetItemId, policy);
+                    }))
+                    .filter(entry -> entry.policy() != null);
         });
     }
 

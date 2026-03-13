@@ -8,6 +8,7 @@ export { disableLogger, logger, setLoggerLevel } from "@/utils/logger";
 
 export type { Span } from "@/tracer/Span";
 export type { Trace } from "@/tracer/Trace";
+export type { ErrorInfo } from "@/rest_api/api/types/ErrorInfo";
 export type { SpanType } from "@/rest_api/api/types/SpanType";
 export { SpanType as OpikSpanType } from "@/rest_api/api/types/SpanType";
 export type { DatasetPublic } from "@/rest_api/api/types/DatasetPublic";
@@ -25,6 +26,10 @@ export type { FilterExpression } from "@/query";
 
 export { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queue";
 export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_api/api/types/AnnotationQueuePublicScope";
+
+// AgentConfig exports
+export { AgentConfig, Blueprint } from "@/agent-config";
+export type { CreateBlueprintOptions, GetBlueprintOptions } from "@/agent-config";
 
 // Re-export Zod to ensure consumers use the same version as the SDK
 export { z } from "zod";

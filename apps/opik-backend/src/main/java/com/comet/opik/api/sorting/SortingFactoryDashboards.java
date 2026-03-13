@@ -9,6 +9,7 @@ import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
+import static com.comet.opik.api.sorting.SortableFields.TYPE;
 
 public class SortingFactoryDashboards extends SortingFactory {
     @Override
@@ -17,6 +18,7 @@ public class SortingFactoryDashboards extends SortingFactory {
                 ID,
                 NAME,
                 DESCRIPTION,
+                TYPE,
                 CREATED_AT,
                 LAST_UPDATED_AT,
                 CREATED_BY,

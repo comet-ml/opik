@@ -16,6 +16,10 @@ export const CreatePromptVersionDetail: core.serialization.Schema<
         "template_structure",
         CreatePromptVersionDetailTemplateStructure.optional(),
     ),
+    excludeBlueprintUpdateForProjects: core.serialization.property(
+        "exclude_blueprint_update_for_projects",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
 });
 
 export declare namespace CreatePromptVersionDetail {
@@ -23,5 +27,6 @@ export declare namespace CreatePromptVersionDetail {
         name: string;
         version: PromptVersionDetail.Raw;
         template_structure?: CreatePromptVersionDetailTemplateStructure.Raw | null;
+        exclude_blueprint_update_for_projects?: string[] | null;
     }
 }

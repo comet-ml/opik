@@ -9,4 +9,5 @@ import type * as OpikApi from "../../../../index.js";
 export interface FindFeedbackScoreNames1Request {
     projectId?: string;
     type?: OpikApi.FindFeedbackScoreNames1RequestType;
+    excludeCategoryNames?: string | string[];
 }

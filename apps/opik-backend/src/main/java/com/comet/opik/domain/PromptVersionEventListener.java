@@ -24,6 +24,7 @@ public class PromptVersionEventListener {
                 event.workspaceId(),
                 event.promptId(),
                 event.commit(),
-                "auto-update");
+                "auto-update",
+                event.excludeProjectIds());
     }
 }

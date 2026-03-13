@@ -7,8 +7,8 @@ import type * as serializers from "../index.js";
 export const ProjectMetricResponsePublicInterval: core.serialization.Schema<
     serializers.ProjectMetricResponsePublicInterval.Raw,
     OpikApi.ProjectMetricResponsePublicInterval
-> = core.serialization.enum_(["HOURLY", "DAILY", "WEEKLY"]);
+> = core.serialization.enum_(["HOURLY", "DAILY", "WEEKLY", "TOTAL"]);
 
 export declare namespace ProjectMetricResponsePublicInterval {
-    export type Raw = "HOURLY" | "DAILY" | "WEEKLY";
+    export type Raw = "HOURLY" | "DAILY" | "WEEKLY" | "TOTAL";
 }

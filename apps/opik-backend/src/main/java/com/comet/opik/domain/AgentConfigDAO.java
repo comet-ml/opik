@@ -18,17 +18,21 @@ import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
+import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(AgentConfig.class)
@@ -238,6 +242,7 @@ interface AgentConfigDAO {
     @SqlQuery("""
             SELECT blueprint_id FROM agent_config_envs
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name
+                AND ended_at IS NULL
             """)
     UUID getBlueprintIdByEnvName(
             @Bind("workspace_id") String workspaceId,
@@ -275,6 +280,7 @@ interface AgentConfigDAO {
     @SqlQuery("""
             SELECT env_name FROM agent_config_envs
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND blueprint_id = :blueprint_id
+                AND ended_at IS NULL
             """)
     List<String> getEnvsByBlueprintId(
             @Bind("workspace_id") String workspaceId,
@@ -305,11 +311,15 @@ interface AgentConfigDAO {
                 AND acv.type = 'prompt'
                 AND acv.valid_to_blueprint_id IS NULL
                 AND acv.value IN (SELECT commit FROM prompt_commits)
+                <if(exclude_project_ids)> AND ab.project_id NOT IN (<exclude_project_ids>) <endif>
             """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
     List<BlueprintValueReference> findProjectsWithOutdatedPromptReferences(
             @Bind("workspace_id") String workspaceId,
             @Bind("prompt_id") UUID promptId,
-            @Bind("new_commit") String newCommit);
+            @Bind("new_commit") String newCommit,
+            @Define("exclude_project_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "exclude_project_ids") Set<UUID> excludeProjectIds);
 
     @SqlQuery("""
             SELECT
@@ -352,6 +362,7 @@ interface AgentConfigDAO {
                     ON e.workspace_id = b.workspace_id
                     AND e.project_id = b.project_id
                     AND e.blueprint_id = b.id
+                    AND e.ended_at IS NULL
                 WHERE b.workspace_id = :workspace_id
                     AND b.project_id = :project_id
                     AND b.type = 'blueprint'
@@ -383,9 +394,10 @@ interface AgentConfigDAO {
             @Bind("project_id") UUID projectId);
 
     @SqlQuery("""
-            SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at
+            SELECT id, project_id, env_name, blueprint_id, created_by, created_at, ended_at
             FROM agent_config_envs
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name IN (<env_names>)
+                AND ended_at IS NULL
             """)
     List<AgentConfigEnv> getEnvsByNames(
             @Bind("workspace_id") String workspaceId,
@@ -400,8 +412,7 @@ interface AgentConfigDAO {
                 config_id,
                 env_name,
                 blueprint_id,
-                created_by,
-                last_updated_by
+                created_by
             )
             VALUES (
                 :bean.id,
@@ -410,8 +421,7 @@ interface AgentConfigDAO {
                 :config_id,
                 :bean.envName,
                 :bean.blueprintId,
-                :created_by,
-                :last_updated_by
+                :created_by
             )
             """)
     void batchInsertEnvs(
@@ -419,22 +429,20 @@ interface AgentConfigDAO {
             @Bind("project_id") UUID projectId,
             @Bind("config_id") UUID configId,
             @Bind("created_by") String createdBy,
-            @Bind("last_updated_by") String lastUpdatedBy,
             @BindMethods("bean") List<AgentConfigEnv> envs);
 
-    @SqlBatch("""
+    @SqlUpdate("""
             UPDATE agent_config_envs
-            SET blueprint_id = :bean.blueprintId,
-                last_updated_by = :last_updated_by
+            SET ended_at = CURRENT_TIMESTAMP(6)
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND env_name = :bean.envName
+                AND id IN (<ids>)
+                AND ended_at IS NULL
             """)
-    void batchUpdateEnvs(
+    void batchCloseEnvs(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
-            @Bind("last_updated_by") String lastUpdatedBy,
-            @BindMethods("bean") List<AgentConfigEnv> envs);
+            @BindList("ids") List<UUID> ids);
 
     class BlueprintWithEnvsRowMapper implements RowMapper<AgentBlueprint> {
 

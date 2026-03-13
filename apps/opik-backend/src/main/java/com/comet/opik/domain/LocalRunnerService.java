@@ -4,8 +4,10 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
+import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
+import com.comet.opik.api.runner.LocalRunnerJobMetadata;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
@@ -14,6 +16,8 @@ import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -24,7 +28,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RBlockingDeque;
 import org.redisson.api.RBucket;
 import org.redisson.api.RList;
@@ -49,34 +52,34 @@ import java.util.concurrent.TimeUnit;
 @ImplementedBy(LocalRunnerServiceImpl.class)
 public interface LocalRunnerService {
 
-    LocalRunnerPairResponse generatePairingCode(String workspaceId, String userName);
+    LocalRunnerPairResponse generatePairingCode(String workspaceId, String userName, UUID projectId);
 
-    UUID connect(String workspaceId, String userName, LocalRunnerConnectRequest request);
+    LocalRunnerConnectResponse connect(String workspaceId, String userName, LocalRunnerConnectRequest request);
 
-    LocalRunner.LocalRunnerPage listRunners(String workspaceId, int page, int size);
+    LocalRunner.LocalRunnerPage listRunners(String workspaceId, String userName, UUID projectId, int page, int size);
 
-    LocalRunner getRunner(String workspaceId, UUID runnerId);
+    LocalRunner getRunner(String workspaceId, String userName, UUID runnerId);
 
-    void registerAgents(UUID runnerId, String workspaceId, Map<String, LocalRunner.Agent> agents);
+    void registerAgents(UUID runnerId, String workspaceId, String userName, Map<String, LocalRunner.Agent> agents);
 
-    LocalRunnerHeartbeatResponse heartbeat(UUID runnerId, String workspaceId);
+    LocalRunnerHeartbeatResponse heartbeat(UUID runnerId, String workspaceId, String userName);
 
     UUID createJob(String workspaceId, String userName, CreateLocalRunnerJobRequest request);
 
-    CompletionStage<LocalRunnerJob> nextJob(UUID runnerId, String workspaceId);
+    CompletionStage<LocalRunnerJob> nextJob(UUID runnerId, String workspaceId, String userName);
 
-    LocalRunnerJob.LocalRunnerJobPage listJobs(UUID runnerId, String project, String workspaceId,
+    LocalRunnerJob.LocalRunnerJobPage listJobs(UUID runnerId, UUID projectId, String workspaceId, String userName,
             int page, int size);
 
-    LocalRunnerJob getJob(UUID jobId, String workspaceId);
+    LocalRunnerJob getJob(UUID jobId, String workspaceId, String userName);
 
-    List<LocalRunnerLogEntry> getJobLogs(UUID jobId, int offset, String workspaceId);
+    List<LocalRunnerLogEntry> getJobLogs(UUID jobId, int offset, String workspaceId, String userName);
 
-    void appendLogs(UUID jobId, String workspaceId, List<LocalRunnerLogEntry> entries);
+    void appendLogs(UUID jobId, String workspaceId, String userName, List<LocalRunnerLogEntry> entries);
 
-    void reportResult(UUID jobId, String workspaceId, LocalRunnerJobResultRequest result);
+    void reportResult(UUID jobId, String workspaceId, String userName, LocalRunnerJobResultRequest result);
 
-    void cancelJob(UUID jobId, String workspaceId);
+    void cancelJob(UUID jobId, String workspaceId, String userName);
 
     void reapDeadRunners();
 }
@@ -111,8 +114,16 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return "opik:runners:workspace:" + workspaceId + ":runners";
     }
 
-    private static String userRunnerKey(String workspaceId, String userName) {
-        return "opik:runners:workspace:" + workspaceId + ":user:" + userName + ":runner";
+    private static String projectUserRunnerKey(String workspaceId, UUID projectId, String userName) {
+        return "opik:runners:workspace:" + workspaceId + ":project:" + projectId + ":user:" + userName + ":runner";
+    }
+
+    private static String projectRunnersKey(String workspaceId, UUID projectId) {
+        return "opik:runners:workspace:" + workspaceId + ":project:" + projectId + ":runners";
+    }
+
+    private static String workspaceUserRunnersKey(String workspaceId, String userName) {
+        return "opik:runners:workspace:" + workspaceId + ":user:" + userName + ":runners";
     }
 
     private static String jobKey(UUID jobId) {
@@ -152,7 +163,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     private static final String FIELD_LAST_HEARTBEAT = "last_heartbeat";
     private static final String FIELD_RUNNER_ID = "runner_id";
     private static final String FIELD_AGENT_NAME = "agent_name";
-    private static final String FIELD_PROJECT = "project";
+    private static final String FIELD_PROJECT_ID = "project_id";
     private static final String FIELD_CREATED_AT = "created_at";
     private static final String FIELD_STARTED_AT = "started_at";
     private static final String FIELD_COMPLETED_AT = "completed_at";
@@ -164,18 +175,26 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     private static final String FIELD_TRACE_ID = "trace_id";
     private static final String FIELD_TIMEOUT = "timeout";
     private static final String FIELD_MASK_ID = "mask_id";
+    private static final String FIELD_METADATA = "metadata";
 
     private final @NonNull RedissonClient redisClient;
     private final @NonNull LocalRunnerConfig runnerConfig;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull ProjectService projectService;
 
     @Override
-    public LocalRunnerPairResponse generatePairingCode(@NonNull String workspaceId, @NonNull String userName) {
+    public LocalRunnerPairResponse generatePairingCode(@NonNull String workspaceId, @NonNull String userName,
+            @NonNull UUID projectId) {
+        String projectName = projectService.get(projectId, workspaceId).name();
+
         String code = generatePairingCodeString();
         UUID runnerId = idGenerator.generateId();
 
+        String pairPayload = JsonUtils.writeValueAsString(
+                new PairingCodePayload(runnerId, workspaceId, projectId, projectName));
+
         RBucket<String> pairBucket = redisClient.getBucket(pairKey(code), StringCodec.INSTANCE);
-        boolean claimed = pairBucket.setIfAbsent(runnerId + ":" + workspaceId,
+        boolean claimed = pairBucket.setIfAbsent(pairPayload,
                 runnerConfig.getPairingCodeTtl().toJavaDuration());
         if (!claimed) {
             throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
@@ -188,11 +207,11 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 FIELD_NAME, "",
                 FIELD_STATUS, LocalRunnerStatus.PAIRING.getValue(),
                 FIELD_WORKSPACE_ID, workspaceId,
-                FIELD_USER_NAME, userName));
+                FIELD_USER_NAME, userName,
+                FIELD_PROJECT_ID, projectId.toString()));
         runnerMap.expire(runnerConfig.getPairingRunnerTtl().toJavaDuration());
 
-        addRunnerToWorkspace(workspaceId, runnerId);
-        setUserRunner(workspaceId, userName, runnerId);
+        registerRunnerInSets(workspaceId, userName, projectId, runnerId);
 
         return LocalRunnerPairResponse.builder()
                 .pairingCode(code)
@@ -202,37 +221,48 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public UUID connect(@NonNull String workspaceId, @NonNull String userName,
+    public LocalRunnerConnectResponse connect(@NonNull String workspaceId, @NonNull String userName,
             @NonNull LocalRunnerConnectRequest request) {
-        UUID runnerId;
+        PairingCodePayload payload = claimPairingCode(request.pairingCode(), workspaceId);
+        UUID runnerId = payload.runnerId();
+        UUID projectId = payload.projectId();
 
-        if (StringUtils.isNotBlank(request.pairingCode())) {
-            runnerId = claimPairingCode(request.pairingCode(), workspaceId);
-        } else {
-            runnerId = idGenerator.generateId();
-            addRunnerToWorkspace(workspaceId, runnerId);
-        }
+        evictExistingRunner(workspaceId, projectId, userName, runnerId);
+        setUserRunner(workspaceId, projectId, userName, runnerId);
+        activateRunner(runnerId, workspaceId, projectId, userName, request.runnerName());
 
-        evictExistingRunner(workspaceId, userName, runnerId);
-        setUserRunner(workspaceId, userName, runnerId);
-        activateRunner(runnerId, workspaceId, userName, request.runnerName());
-
-        return runnerId;
+        return LocalRunnerConnectResponse.builder()
+                .runnerId(runnerId)
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .projectName(payload.projectName())
+                .build();
     }
 
     @Override
-    public LocalRunner.LocalRunnerPage listRunners(@NonNull String workspaceId, int page, int size) {
-        RScoredSortedSet<String> runnerIds = redisClient.getScoredSortedSet(
-                workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
-        int total = runnerIds.size();
+    public LocalRunner.LocalRunnerPage listRunners(@NonNull String workspaceId, @NonNull String userName,
+            @NonNull UUID projectId, int page, int size) {
+        RSet<String> projectRunnerIds = redisClient.getSet(
+                projectRunnersKey(workspaceId, projectId), StringCodec.INSTANCE);
+        var projectIds = projectRunnerIds.readAll();
 
-        int fromIndex = page * size;
-        int toIndex = fromIndex + size - 1;
+        RScoredSortedSet<String> userRunnerIds = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        var allUserIds = userRunnerIds.valueRangeReversed(0, -1);
 
-        var ids = runnerIds.valueRange(fromIndex, toIndex);
+        List<String> matchedIds = new ArrayList<>();
+        for (String runnerIdStr : allUserIds) {
+            if (projectIds.contains(runnerIdStr)) {
+                matchedIds.add(runnerIdStr);
+            }
+        }
+
+        int total = matchedIds.size();
+        int fromIndex = Math.min(page * size, total);
+        int toIndex = Math.min(fromIndex + size, total);
 
         List<LocalRunner> runners = new ArrayList<>();
-        for (String runnerIdStr : ids) {
+        for (String runnerIdStr : matchedIds.subList(fromIndex, toIndex)) {
             UUID runnerId = UUID.fromString(runnerIdStr);
             LocalRunner runner = loadRunner(runnerId, workspaceId);
             if (runner != null) {
@@ -245,7 +275,8 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public LocalRunner getRunner(@NonNull String workspaceId, @NonNull UUID runnerId) {
+    public LocalRunner getRunner(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID runnerId) {
+        validateRunnerOwnership(runnerId, workspaceId, userName);
         LocalRunner runner = loadRunner(runnerId, workspaceId);
         if (runner == null) {
             throw new NotFoundException("Runner not found: " + runnerId);
@@ -254,9 +285,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public void registerAgents(@NonNull UUID runnerId, @NonNull String workspaceId,
+    public void registerAgents(@NonNull UUID runnerId, @NonNull String workspaceId, @NonNull String userName,
             @NonNull Map<String, LocalRunner.Agent> agents) {
-        validateRunnerWorkspace(runnerId, workspaceId);
+        validateRunnerOwnership(runnerId, workspaceId, userName);
 
         if (agents.size() > runnerConfig.getMaxAgentsPerRunner()) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
@@ -277,31 +308,28 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public LocalRunnerHeartbeatResponse heartbeat(@NonNull UUID runnerId, @NonNull String workspaceId) {
-        RMap<String, String> runnerMap = redisClient.getMap(
-                runnerKey(runnerId), StringCodec.INSTANCE);
-        Map<String, String> fields = runnerMap.readAllMap();
-
-        if (fields.isEmpty()) {
+    public LocalRunnerHeartbeatResponse heartbeat(@NonNull UUID runnerId, @NonNull String workspaceId,
+            @NonNull String userName) {
+        if (!isRunnerOwnedByUser(runnerId, workspaceId, userName)) {
             throw new ClientErrorException(Response.status(Response.Status.GONE)
-                    .entity(new ErrorMessage(List.of("Runner not found or evicted: " + runnerId)))
+                    .entity(new ErrorMessage(List.of("Runner not found: " + runnerId)))
                     .build());
         }
 
-        if (!workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
-            throw new NotFoundException("Runner not found: " + runnerId);
+        RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE);
+        String projectIdStr = runnerMap.get(FIELD_PROJECT_ID);
+        if (projectIdStr == null) {
+            throw new IllegalStateException("Runner " + runnerId + " has no project_id");
         }
 
-        String userName = fields.get(FIELD_USER_NAME);
-        if (userName != null) {
-            RBucket<String> currentRunnerBucket = redisClient.getBucket(
-                    userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
-            String currentRunnerId = currentRunnerBucket.get();
-            if (currentRunnerId != null && !currentRunnerId.equals(runnerId.toString())) {
-                throw new ClientErrorException(Response.status(Response.Status.GONE)
-                        .entity(new ErrorMessage(List.of("Runner evicted by a newer connection")))
-                        .build());
-            }
+        UUID projectId = UUID.fromString(projectIdStr);
+        RBucket<String> currentRunnerBucket = redisClient.getBucket(
+                projectUserRunnerKey(workspaceId, projectId, userName), StringCodec.INSTANCE);
+        String currentRunnerId = currentRunnerBucket.get();
+        if (currentRunnerId != null && !currentRunnerId.equals(runnerId.toString())) {
+            throw new ClientErrorException(Response.status(Response.Status.GONE)
+                    .entity(new ErrorMessage(List.of("Runner evicted by a newer connection")))
+                    .build());
         }
 
         setHeartbeat(runnerId);
@@ -331,29 +359,32 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     @Override
     public UUID createJob(@NonNull String workspaceId, @NonNull String userName,
             @NonNull CreateLocalRunnerJobRequest request) {
-        UUID runnerId;
+        String runnerIdStr = redisClient.<String>getBucket(
+                projectUserRunnerKey(workspaceId, request.projectId(), userName), StringCodec.INSTANCE).get();
 
-        if (request.runnerId() == null) {
-            String runnerIdStr = redisClient.<String>getBucket(
-                    userRunnerKey(workspaceId, userName), StringCodec.INSTANCE).get();
-
-            if (runnerIdStr == null) {
-                throw new NotFoundException(Response.status(Response.Status.NOT_FOUND)
-                        .entity(new ErrorMessage(List.of(
-                                "No runner configured. Pair one from the Runners page.")))
-                        .build());
-            }
-            runnerId = UUID.fromString(runnerIdStr);
-        } else {
-            runnerId = request.runnerId();
+        if (runnerIdStr == null) {
+            throw new NotFoundException(Response.status(Response.Status.NOT_FOUND)
+                    .entity(new ErrorMessage(List.of(
+                            "No runner configured. Pair one from the Runners page.")))
+                    .build());
         }
+        UUID runnerId = UUID.fromString(runnerIdStr);
 
-        validateRunnerWorkspace(runnerId, workspaceId);
+        validateRunnerOwnership(runnerId, workspaceId, userName);
 
         if (!isRunnerAlive(runnerId)) {
             throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
                     .entity(new ErrorMessage(List.of(
                             "Your runner is not connected. Start it with: opik connect")))
+                    .build());
+        }
+
+        RMap<String, String> agentsMap = redisClient.getMap(
+                runnerAgentsKey(runnerId), StringCodec.INSTANCE);
+        if (!agentsMap.containsKey(request.agentName())) {
+            throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(List.of(
+                            "Agent '%s' is not registered on this runner".formatted(request.agentName()))))
                     .build());
         }
 
@@ -373,7 +404,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         jobFields.put(FIELD_RUNNER_ID, runnerId.toString());
         jobFields.put(FIELD_AGENT_NAME, request.agentName());
         jobFields.put(FIELD_STATUS, LocalRunnerJobStatus.PENDING.getValue());
-        jobFields.put(FIELD_PROJECT, request.project() != null ? request.project() : "default");
+        jobFields.put(FIELD_PROJECT_ID, request.projectId().toString());
         jobFields.put(FIELD_WORKSPACE_ID, workspaceId);
         jobFields.put(FIELD_CREATED_AT, now);
         jobFields.put(FIELD_RETRY_COUNT, "0");
@@ -383,6 +414,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         }
         if (request.maskId() != null) {
             jobFields.put(FIELD_MASK_ID, request.maskId().toString());
+        }
+        if (request.metadata() != null) {
+            jobFields.put(FIELD_METADATA, JsonUtils.writeValueAsString(request.metadata()));
         }
 
         int timeout = resolveAgentTimeout(runnerId, request.agentName());
@@ -400,8 +434,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public CompletionStage<LocalRunnerJob> nextJob(@NonNull UUID runnerId, @NonNull String workspaceId) {
-        validateRunnerWorkspace(runnerId, workspaceId);
+    public CompletionStage<LocalRunnerJob> nextJob(@NonNull UUID runnerId, @NonNull String workspaceId,
+            @NonNull String userName) {
+        validateRunnerOwnership(runnerId, workspaceId, userName);
 
         String pendingKey = pendingJobsKey(runnerId);
         String activeKey = activeJobsKey(runnerId);
@@ -430,13 +465,14 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public LocalRunnerJob.LocalRunnerJobPage listJobs(@NonNull UUID runnerId, String project,
-            @NonNull String workspaceId, int page, int size) {
+    public LocalRunnerJob.LocalRunnerJobPage listJobs(@NonNull UUID runnerId, UUID projectId,
+            @NonNull String workspaceId, @NonNull String userName, int page, int size) {
+        validateRunnerOwnership(runnerId, workspaceId, userName);
         RScoredSortedSet<String> runnerJobs = redisClient.getScoredSortedSet(
                 runnerJobsKey(runnerId), StringCodec.INSTANCE);
 
-        if (project != null) {
-            return listJobsWithFilter(runnerJobs, project, workspaceId, page, size);
+        if (projectId != null) {
+            return listJobsWithFilter(runnerJobs, projectId, workspaceId, page, size);
         }
 
         int total = runnerJobs.size();
@@ -464,7 +500,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     private LocalRunnerJob.LocalRunnerJobPage listJobsWithFilter(RScoredSortedSet<String> runnerJobs,
-            String project, String workspaceId, int page, int size) {
+            UUID projectId, String workspaceId, int page, int size) {
         var allJobIds = runnerJobs.valueRangeReversed(0, -1);
 
         List<LocalRunnerJob> matched = new ArrayList<>();
@@ -475,7 +511,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             if (fields.isEmpty() || !workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
                 continue;
             }
-            if (!project.equals(fields.get(FIELD_PROJECT))) {
+            if (!projectId.toString().equals(fields.get(FIELD_PROJECT_ID))) {
                 continue;
             }
             matched.add(buildRunnerJob(fields));
@@ -490,14 +526,15 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public LocalRunnerJob getJob(@NonNull UUID jobId, @NonNull String workspaceId) {
-        var job = loadValidatedJob(jobId, workspaceId);
+    public LocalRunnerJob getJob(@NonNull UUID jobId, @NonNull String workspaceId, @NonNull String userName) {
+        var job = loadValidatedJob(jobId, workspaceId, userName);
         return buildRunnerJob(job.fields());
     }
 
     @Override
-    public List<LocalRunnerLogEntry> getJobLogs(@NonNull UUID jobId, int offset, @NonNull String workspaceId) {
-        loadValidatedJob(jobId, workspaceId);
+    public List<LocalRunnerLogEntry> getJobLogs(@NonNull UUID jobId, int offset, @NonNull String workspaceId,
+            @NonNull String userName) {
+        loadValidatedJob(jobId, workspaceId, userName);
 
         RList<String> logsList = redisClient.getList(jobLogsKey(jobId), StringCodec.INSTANCE);
         int logSize = logsList.size();
@@ -512,7 +549,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public void appendLogs(@NonNull UUID jobId, @NonNull String workspaceId,
+    public void appendLogs(@NonNull UUID jobId, @NonNull String workspaceId, @NonNull String userName,
             @NonNull List<LocalRunnerLogEntry> entries) {
         if (entries.size() > runnerConfig.getMaxLogEntriesPerBatch()) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
@@ -521,7 +558,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     .build());
         }
 
-        loadValidatedJob(jobId, workspaceId);
+        loadValidatedJob(jobId, workspaceId, userName);
 
         RList<String> logsList = redisClient.getList(jobLogsKey(jobId), StringCodec.INSTANCE);
         List<String> serialized = entries.stream()
@@ -531,7 +568,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public void reportResult(@NonNull UUID jobId, @NonNull String workspaceId,
+    public void reportResult(@NonNull UUID jobId, @NonNull String workspaceId, @NonNull String userName,
             @NonNull LocalRunnerJobResultRequest result) {
         LocalRunnerJobStatus resultStatus = result.status();
         if (!TERMINAL_JOB_STATUSES.contains(resultStatus)) {
@@ -541,7 +578,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     .build());
         }
 
-        var job = loadValidatedJob(jobId, workspaceId);
+        var job = loadValidatedJob(jobId, workspaceId, userName);
         RMap<String, String> jobMap = job.map();
         Map<String, String> fields = job.fields();
 
@@ -576,8 +613,8 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public void cancelJob(@NonNull UUID jobId, @NonNull String workspaceId) {
-        var job = loadValidatedJob(jobId, workspaceId);
+    public void cancelJob(@NonNull UUID jobId, @NonNull String workspaceId, @NonNull String userName) {
+        var job = loadValidatedJob(jobId, workspaceId, userName);
         RMap<String, String> jobMap = job.map();
         Map<String, String> fields = job.fields();
 
@@ -653,27 +690,26 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
         RMap<String, String> runnerMap = redisClient.getMap(
                 runnerKey(runnerId), StringCodec.INSTANCE);
+
+        boolean shouldPurge;
         if (!runnerMap.isExists()) {
-            removeRunnerFromWorkspace(workspaceId, runnerId);
-            return;
+            shouldPurge = true;
+        } else {
+            String disconnectedAt = runnerMap.get(FIELD_DISCONNECTED_AT);
+            if (disconnectedAt == null) {
+                disconnectedAt = Instant.now().toString();
+                runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
+            }
+
+            Instant disconnected = Instant.parse(disconnectedAt);
+            shouldPurge = Duration.between(disconnected, Instant.now()).toSeconds() >= runnerConfig
+                    .getDeadRunnerPurgeTime().toSeconds();
         }
-
-        Map<String, String> runnerFields = runnerMap.readAllMap();
-
-        String disconnectedAt = runnerFields.get(FIELD_DISCONNECTED_AT);
-        if (disconnectedAt == null) {
-            disconnectedAt = Instant.now().toString();
-            runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
-        }
-
-        Instant disconnected = Instant.parse(disconnectedAt);
-        boolean shouldPurge = Duration.between(disconnected, Instant.now()).toSeconds() >= runnerConfig
-                .getDeadRunnerPurgeTime().toSeconds();
 
         failOrphanedJobs(runnerId);
 
         if (shouldPurge) {
-            purgeRunner(runnerId, workspaceId, runnerFields);
+            purgeRunner(runnerId, workspaceId, runnerMap.get(FIELD_USER_NAME));
         }
     }
 
@@ -761,27 +797,41 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         logsList.expire(ttl);
     }
 
-    private void purgeRunner(UUID runnerId, String workspaceId, Map<String, String> runnerFields) {
+    private void purgeRunner(UUID runnerId, String workspaceId, String userName) {
         log.info("Purging dead runner {} from workspace {}", runnerId, workspaceId);
 
-        redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE).delete();
+        RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE);
+        Map<String, String> runnerFields = runnerMap.readAllMap();
+        String projectIdStr = runnerFields.get(FIELD_PROJECT_ID);
+
+        runnerMap.delete();
         redisClient.getMap(runnerAgentsKey(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getBucket(runnerHeartbeatKey(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getScoredSortedSet(runnerJobsKey(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getSet(runnerCancellationsKey(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getList(pendingJobsKey(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getList(activeJobsKey(runnerId), StringCodec.INSTANCE).delete();
 
-        removeRunnerFromWorkspace(workspaceId, runnerId);
-
-        String userName = runnerFields.get(FIELD_USER_NAME);
         if (userName != null) {
-            RBucket<String> userRunnerBucket = redisClient.getBucket(
-                    userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
-            String currentId = userRunnerBucket.get();
-            if (runnerId.toString().equals(currentId)) {
-                userRunnerBucket.delete();
+            removeRunnerFromWorkspace(workspaceId, userName, runnerId);
+
+            if (projectIdStr != null) {
+                UUID projectId = UUID.fromString(projectIdStr);
+                RSet<String> projectRunners = redisClient.getSet(
+                        projectRunnersKey(workspaceId, projectId), StringCodec.INSTANCE);
+                projectRunners.remove(runnerId.toString());
+                if (projectRunners.isEmpty()) {
+                    projectRunners.delete();
+                }
+
+                RBucket<String> userRunnerBucket = redisClient.getBucket(
+                        projectUserRunnerKey(workspaceId, projectId, userName), StringCodec.INSTANCE);
+                String currentId = userRunnerBucket.get();
+                if (runnerId.toString().equals(currentId)) {
+                    userRunnerBucket.delete();
+                }
             }
+        } else {
+            removeRunnerFromWorkspaceOnly(workspaceId, runnerId);
         }
     }
 
@@ -794,7 +844,11 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return sb.toString();
     }
 
-    private UUID claimPairingCode(String code, String workspaceId) {
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    private record PairingCodePayload(UUID runnerId, String workspaceId, UUID projectId, String projectName) {
+    }
+
+    private PairingCodePayload claimPairingCode(String code, String workspaceId) {
         RBucket<String> pairBucket = redisClient.getBucket(pairKey(code), StringCodec.INSTANCE);
         String value = pairBucket.get();
         if (value == null) {
@@ -803,25 +857,22 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     .build());
         }
 
-        String[] parts = value.split(":", 2);
-        if (parts.length != 2) {
-            throw new IllegalStateException("Malformed pairing key value: " + value);
-        }
+        PairingCodePayload payload = JsonUtils.readValue(value, PairingCodePayload.class);
 
-        String storedWorkspaceId = parts[1];
-        if (!workspaceId.equals(storedWorkspaceId)) {
+        if (!workspaceId.equals(payload.workspaceId())) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of("Pairing code belongs to a different workspace")))
                     .build());
         }
 
         pairBucket.delete();
-        return UUID.fromString(parts[0]);
+
+        return payload;
     }
 
-    private void evictExistingRunner(String workspaceId, String userName, UUID newRunnerId) {
+    private void evictExistingRunner(String workspaceId, UUID projectId, String userName, UUID newRunnerId) {
         RBucket<String> userRunnerBucket = redisClient.getBucket(
-                userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
+                projectUserRunnerKey(workspaceId, projectId, userName), StringCodec.INSTANCE);
         String oldRunnerIdStr = userRunnerBucket.get();
 
         if (oldRunnerIdStr != null && !oldRunnerIdStr.equals(newRunnerId.toString())) {
@@ -831,12 +882,13 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         }
     }
 
-    private void setUserRunner(String workspaceId, String userName, UUID runnerId) {
-        redisClient.getBucket(userRunnerKey(workspaceId, userName), StringCodec.INSTANCE)
+    private void setUserRunner(String workspaceId, UUID projectId, String userName, UUID runnerId) {
+        redisClient.getBucket(projectUserRunnerKey(workspaceId, projectId, userName), StringCodec.INSTANCE)
                 .set(runnerId.toString());
     }
 
-    private void activateRunner(UUID runnerId, String workspaceId, String userName, String runnerName) {
+    private void activateRunner(UUID runnerId, String workspaceId, UUID projectId, String userName,
+            String runnerName) {
         RMap<String, String> runnerMap = redisClient.getMap(
                 runnerKey(runnerId), StringCodec.INSTANCE);
         runnerMap.putAll(Map.of(
@@ -844,6 +896,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 FIELD_STATUS, LocalRunnerStatus.CONNECTED.getValue(),
                 FIELD_WORKSPACE_ID, workspaceId,
                 FIELD_USER_NAME, userName,
+                FIELD_PROJECT_ID, projectId.toString(),
                 FIELD_CONNECTED_AT, Instant.now().toString()));
         runnerMap.clearExpire();
         setHeartbeat(runnerId);
@@ -861,15 +914,33 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return heartbeat.isExists();
     }
 
-    private void addRunnerToWorkspace(String workspaceId, UUID runnerId) {
+    private void registerRunnerInSets(String workspaceId, String userName, UUID projectId, UUID runnerId) {
+        double score = Instant.now().toEpochMilli();
+
         RScoredSortedSet<String> workspaceRunners = redisClient.getScoredSortedSet(
                 workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
-        workspaceRunners.add(Instant.now().toEpochMilli(), runnerId.toString());
+        workspaceRunners.add(score, runnerId.toString());
+
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        userRunners.add(score, runnerId.toString());
+
+        RSet<String> projectRunners = redisClient.getSet(
+                projectRunnersKey(workspaceId, projectId), StringCodec.INSTANCE);
+        projectRunners.add(runnerId.toString());
 
         workspacesWithRunners(workspaceId, true);
     }
 
-    private void removeRunnerFromWorkspace(String workspaceId, UUID runnerId) {
+    private void removeRunnerFromWorkspace(String workspaceId, String userName, UUID runnerId) {
+        removeRunnerFromWorkspaceOnly(workspaceId, runnerId);
+
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        userRunners.remove(runnerId.toString());
+    }
+
+    private void removeRunnerFromWorkspaceOnly(String workspaceId, UUID runnerId) {
         RScoredSortedSet<String> workspaceRunners = redisClient.getScoredSortedSet(
                 workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
         workspaceRunners.remove(runnerId.toString());
@@ -918,6 +989,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return LocalRunner.builder()
                 .id(runnerId)
                 .name(fields.get(FIELD_NAME))
+                .projectId(parseUUID(fields.get(FIELD_PROJECT_ID)))
                 .status(status)
                 .connectedAt(connectedAt)
                 .agents(agents)
@@ -953,9 +1025,10 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 .inputs(inputs)
                 .result(result)
                 .error(fields.get(FIELD_ERROR))
-                .project(fields.get(FIELD_PROJECT))
+                .projectId(parseUUID(fields.get(FIELD_PROJECT_ID)))
                 .traceId(parseUUID(fields.get(FIELD_TRACE_ID)))
                 .maskId(parseUUID(fields.get(FIELD_MASK_ID)))
+                .metadata(parseMetadata(fields.get(FIELD_METADATA)))
                 .timeout(parseIntValue(fields.get(FIELD_TIMEOUT)))
                 .createdAt(parseInstant(fields.get(FIELD_CREATED_AT)))
                 .startedAt(parseInstant(fields.get(FIELD_STARTED_AT)))
@@ -995,6 +1068,13 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return UUID.fromString(value);
     }
 
+    private LocalRunnerJobMetadata parseMetadata(String value) {
+        if (value == null) {
+            return null;
+        }
+        return JsonUtils.readValue(value, LocalRunnerJobMetadata.class);
+    }
+
     private LocalRunnerJobStatus parseJobStatus(String value) {
         if (value == null) {
             return null;
@@ -1024,25 +1104,37 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return (int) runnerConfig.getJobTimeout().toSeconds();
     }
 
-    private void validateRunnerWorkspace(UUID runnerId, String workspaceId) {
-        RMap<String, String> runnerMap = redisClient.getMap(
-                runnerKey(runnerId), StringCodec.INSTANCE);
-        String storedWorkspaceId = runnerMap.get(FIELD_WORKSPACE_ID);
-        if (!workspaceId.equals(storedWorkspaceId)) {
+    private void validateRunnerOwnership(UUID runnerId, String workspaceId, String userName) {
+        if (!isRunnerOwnedByUser(runnerId, workspaceId, userName)) {
             throw new NotFoundException("Runner not found: " + runnerId);
         }
+    }
+
+    private boolean isRunnerOwnedByUser(UUID runnerId, String workspaceId, String userName) {
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        return userRunners.contains(runnerId.toString());
     }
 
     private record ValidatedJob(RMap<String, String> map, Map<String, String> fields) {
     }
 
-    private ValidatedJob loadValidatedJob(UUID jobId, String workspaceId) {
+    private ValidatedJob loadValidatedJob(UUID jobId, String workspaceId, String userName) {
         RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
         Map<String, String> fields = jobMap.readAllMap();
         if (fields.isEmpty()) {
             throw new NotFoundException("Job not found: " + jobId);
         }
         if (!workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
+            throw new NotFoundException("Job not found: " + jobId);
+        }
+        String runnerIdStr = fields.get(FIELD_RUNNER_ID);
+        if (runnerIdStr == null) {
+            throw new NotFoundException("Job not found: " + jobId);
+        }
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        if (!userRunners.contains(runnerIdStr)) {
             throw new NotFoundException("Job not found: " + jobId);
         }
         return new ValidatedJob(jobMap, fields);

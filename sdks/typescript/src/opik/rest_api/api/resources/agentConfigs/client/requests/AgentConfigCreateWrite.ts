@@ -9,7 +9,6 @@ import type * as OpikApi from "../../../../index.js";
  *             type: "blueprint",
  *             values: [{
  *                     key: "key",
- *                     value: "value",
  *                     type: "string"
  *                 }]
  *         }

@@ -47,7 +47,7 @@ def agent_config_decorator(
     cls: typing.Optional[type] = None,
     *,
     name: typing.Optional[str] = None,
-    project: typing.Optional[str] = None,
+    project_name: typing.Optional[str] = None,
     workspace: typing.Optional[str] = None,
     env: typing.Optional[str] = None,
     mask_id: typing.Optional[str] = None,
@@ -72,7 +72,7 @@ def agent_config_decorator(
     Args:
         cls: The class being decorated (set automatically).
         name: Prefix used for backend field keys. Defaults to the class name.
-        project: Opik project name. Defaults to the client's default project.
+        project_name: Opik project name. Defaults to the client's default project.
         workspace: Opik workspace. Reserved for future use.
         env: Pin this config instance to a specific environment blueprint.
         mask_id: ID of a mask blueprint to overlay on every attribute read.
@@ -83,27 +83,28 @@ def agent_config_decorator(
         if not dataclasses.is_dataclass(cls):
             cls = dataclasses.dataclass(cls)
 
-        supported_fields = type_helpers.extract_dataclass_fields(cls)
         class_prefix = name or cls.__name__
-
-        fields: typing.Dict[str, ConfigField] = {
-            f_name: ConfigField(
-                prefixed_key=f"{class_prefix}.{f_name}",
-                py_type=f_type,
-                description=desc,
-            )
-            for f_name, f_type, _, desc in supported_fields
-        }
-        prefixed_field_types = {cf.prefixed_key: cf.py_type for cf in fields.values()}
 
         original_init = cls.__init__
 
         def new_init(self: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> None:
             original_init(self, *args, **kwargs)
 
+            fields: typing.Dict[str, ConfigField] = {
+                f_name: ConfigField(
+                    prefixed_key=f"{class_prefix}.{f_name}",
+                    py_type=f_type,
+                    description=desc,
+                )
+                for f_name, f_type, desc in type_helpers.extract_dataclass_fields(cls)
+            }
+            prefixed_field_types = {
+                cf.prefixed_key: cf.py_type for cf in fields.values()
+            }
+
             client = opik_client.get_client_cached()
 
-            resolved_project = project or client.project_name
+            resolved_project = project_name or client.project_name
             agent_config = config.AgentConfig(
                 project_name=resolved_project,
                 rest_client_=client.rest_client,
@@ -129,10 +130,11 @@ def agent_config_decorator(
         original_getattribute = cls.__getattribute__
 
         def new_getattribute(self: typing.Any, attr: str) -> typing.Any:
-            if attr.startswith("_") or attr not in fields:
+            instance: AgentConfigInstance = self
+
+            if attr.startswith("_") or attr not in instance.__opik_fields__:
                 return original_getattribute(self, attr)
 
-            instance: AgentConfigInstance = self
             masked = _get_masked_value(instance, attr)
             if masked is not _MISSING:
                 _inject_trace_metadata(instance, attr, value=masked)
@@ -357,23 +359,37 @@ def _inject_trace_metadata(
         resolved_cache = (
             shared_cache if shared_cache is not None else get_cached_config(instance)
         )
-        prefixed_key = instance.__opik_fields__[attr].prefixed_key
+        config_field = instance.__opik_fields__[attr]
+        prefixed_key = config_field.prefixed_key
 
+        if value is _MISSING:
+            value = resolved_cache.values.get(prefixed_key, _MISSING)
+
+        # Skip injection entirely if we still have nothing to record.
         if value is not _MISSING:
-            values = {prefixed_key: value}
-        elif prefixed_key in resolved_cache.values:
-            values = {prefixed_key: resolved_cache.values[prefixed_key]}
+            field_info: typing.Dict[str, typing.Any] = {
+                "value": type_helpers.python_value_to_metadata_value(
+                    value, config_field.py_type
+                ),
+                "type": type_helpers.python_type_to_backend_type(config_field.py_type),
+                **(
+                    {"description": config_field.description}
+                    if config_field.description is not None
+                    else {}
+                ),
+            }
+            values = {prefixed_key: field_info}
         else:
             values = {}
 
-        config_metadata = {
-            "agent_configuration": {
-                "blueprint_id": resolved_cache.blueprint_id,
-                "values": values,
+        opik_context.update_current_trace(
+            metadata={
+                "agent_configuration": {
+                    "blueprint_id": resolved_cache.blueprint_id,
+                    "values": values,
+                }
             }
-        }
-
-        opik_context.update_current_trace(metadata=config_metadata)
+        )
     except exceptions.OpikException:
         # Happens when there's no trace in the context
         pass

@@ -101,6 +101,7 @@ type AddEditCloneDashboardDialogProps = {
   navigateOnCreate?: boolean;
   defaultProjectId?: string;
   defaultExperimentIds?: string[];
+  defaultExperimentDataSource?: EXPERIMENT_DATA_SOURCE;
 };
 
 const AddEditCloneDashboardDialog: React.FC<
@@ -115,6 +116,7 @@ const AddEditCloneDashboardDialog: React.FC<
   navigateOnCreate = true,
   defaultProjectId,
   defaultExperimentIds,
+  defaultExperimentDataSource,
 }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -339,6 +341,10 @@ const AddEditCloneDashboardDialog: React.FC<
             (defaultExperimentIds && defaultExperimentIds.length > 0
               ? defaultExperimentIds
               : []);
+          if (defaultExperimentDataSource) {
+            dashboardConfig.config.experimentDataSource =
+              defaultExperimentDataSource;
+          }
         }
 
         createMutate(
@@ -369,6 +375,7 @@ const AddEditCloneDashboardDialog: React.FC<
       createMutate,
       defaultProjectId,
       defaultExperimentIds,
+      defaultExperimentDataSource,
       onDashboardCreated,
     ],
   );

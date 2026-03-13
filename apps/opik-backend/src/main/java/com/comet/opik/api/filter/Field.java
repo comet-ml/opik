@@ -43,6 +43,7 @@ public interface Field {
     String GUARDRAILS_QUERY_PARAM = "guardrails";
     String VISIBILITY_MODE_QUERY_PARAM = "visibility_mode";
     String ERROR_INFO_QUERY_PARAM = "error_info";
+    String ERROR_TYPE_QUERY_PARAM = "error_type";
     String STATUS_QUERY_PARAM = "status";
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
@@ -63,6 +64,7 @@ public interface Field {
     String COMMIT_QUERY_PARAM = "commit";
     String TEMPLATE_QUERY_PARAM = "template";
     String CHANGE_DESCRIPTION_QUERY_PARAM = "change_description";
+    String SCOPE_QUERY_PARAM = "scope";
 
     @JsonValue
     String getQueryParamField();

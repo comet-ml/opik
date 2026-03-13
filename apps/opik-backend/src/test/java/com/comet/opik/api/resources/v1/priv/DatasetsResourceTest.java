@@ -9294,22 +9294,19 @@ class DatasetsResourceTest {
     class ExperimentItemsSortingAndFiltering {
 
         @Test
-        @DisplayName("should sort experiment items by total_estimated_cost in descending order")
-        void sortByTotalEstimatedCost__whenDescendingOrder__thenReturnSorted() {
+        @DisplayName("should sort experiment items by avg(total_estimated_cost) across trials in descending order: OPIK-4611")
+        void sortByTotalEstimatedCost__whenDescendingOrder__thenReturnSortedByAverage() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Create project name for traces
             var projectName = RandomStringUtils.randomAlphanumeric(10);
 
-            // Create dataset
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            // Create 3 dataset items
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
@@ -9319,50 +9316,61 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
             var datasetItems = datasetItemBatch.items();
 
-            // Create traces and spans with costs
-            var costValues = List.of(
-                    BigDecimal.valueOf(10.50),
-                    BigDecimal.valueOf(25.75),
-                    BigDecimal.valueOf(5.25));
-
-            // Create traces using PodamFactoryUtils
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .limit(3)
-                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+            // 6 traces (2 trials per dataset item)
+            var traces = IntStream.range(0, 6)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName).build())
                     .toList();
-
             var traceIds = traces.stream()
                     .map(trace -> createTrace(trace, apiKey, workspaceName))
                     .toList();
 
-            // Create spans in batch
-            var spans = IntStream.range(0, 3)
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            // Batch 1 (earlier trials): A=40, B=10, C=30
+            var batch1Costs = List.of(BigDecimal.valueOf(40), BigDecimal.valueOf(10), BigDecimal.valueOf(30));
+            var batch1Spans = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(traceIds.get(i))
-                            .totalEstimatedCost(costValues.get(i))
+                            .totalEstimatedCost(batch1Costs.get(i))
                             .build())
                     .toList();
+            spanResourceClient.batchCreateSpans(batch1Spans, apiKey, workspaceName);
 
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
-
-            // Create experiment items linked to traces
-            var experimentItems = IntStream.range(0, 3)
+            var batch1Items = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experimentId)
                             .datasetItemId(datasetItems.get(i).id())
                             .traceId(traceIds.get(i))
                             .build())
                     .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch1Items)).build(), apiKey, workspaceName);
 
-            var experimentItemsBatch = ExperimentItemsBatch.builder()
-                    .experimentItems(new HashSet<>(experimentItems))
-                    .build();
-            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+            // Batch 2 (later trials): A=5, B=30, C=2
+            // avg: A=(40+5)/2=22.5, B=(10+30)/2=20, C=(30+2)/2=16
+            // DESC by avg: A(22.5), B(20), C(16)
+            var batch2Costs = List.of(BigDecimal.valueOf(5), BigDecimal.valueOf(30), BigDecimal.valueOf(2));
+            var batch2Spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i + 3))
+                            .totalEstimatedCost(batch2Costs.get(i))
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(batch2Spans, apiKey, workspaceName);
 
-            // Query with sorting by total_estimated_cost DESC
+            var batch2Items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i + 3))
+                            .build())
+                    .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch2Items)).build(), apiKey, workspaceName);
+
             var sorting = toURLEncodedQueryParam(
                     List.of(new SortingField("total_estimated_cost", Direction.DESC)));
             var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
@@ -9380,37 +9388,30 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualPage.content()).hasSize(3);
-
-                // Verify sorting order: 25.75, 10.50, 5.25
-                var costs = actualPage.content().stream()
-                        .map(item -> item.experimentItems().get(0).totalEstimatedCost())
-                        .toList();
-
-                assertThat(costs).hasSize(3);
-                assertThat(costs.get(0)).isEqualByComparingTo(BigDecimal.valueOf(25.75));
-                assertThat(costs.get(1)).isEqualByComparingTo(BigDecimal.valueOf(10.50));
-                assertThat(costs.get(2)).isEqualByComparingTo(BigDecimal.valueOf(5.25));
+                // Verify sorted by avg cost DESC: A(22.5), B(20), C(16)
+                assertThat(actualPage.content())
+                        .extracting(DatasetItem::id)
+                        .containsExactly(
+                                datasetItems.get(0).id(),
+                                datasetItems.get(1).id(),
+                                datasetItems.get(2).id());
             }
         }
 
         @Test
-        @DisplayName("should sort experiment items by usage.total_tokens in ascending order")
-        void sortByUsageTotalTokens__whenAscendingOrder__thenReturnSorted() {
+        @DisplayName("should sort experiment items by avgMap(usage.total_tokens) across trials in ascending order: OPIK-4611")
+        void sortByUsageTotalTokens__whenAscendingOrder__thenReturnSortedByAverage() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Create project name for traces
             var projectName = RandomStringUtils.randomAlphanumeric(10);
 
-            // Create dataset
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            // Create 3 dataset items
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
@@ -9420,50 +9421,67 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
             var datasetItems = datasetItemBatch.items();
 
-            // Create traces and spans with usage data
-            var usageValues = List.of(
-                    Map.of("total_tokens", 150, "prompt_tokens", 100, "completion_tokens", 50),
-                    Map.of("total_tokens", 50, "prompt_tokens", 30, "completion_tokens", 20),
-                    Map.of("total_tokens", 100, "prompt_tokens", 60, "completion_tokens", 40));
-
-            // Create traces using PodamFactoryUtils
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .limit(3)
-                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+            // 6 traces (2 trials per dataset item)
+            var traces = IntStream.range(0, 6)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName).build())
                     .toList();
-
             var traceIds = traces.stream()
                     .map(trace -> createTrace(trace, apiKey, workspaceName))
                     .toList();
 
-            // Create spans in batch
-            var spans = IntStream.range(0, 3)
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            // Batch 1 (earlier trials): A=200, B=40, C=120
+            var batch1Usage = List.of(
+                    Map.of("total_tokens", 200, "prompt_tokens", 100, "completion_tokens", 100),
+                    Map.of("total_tokens", 40, "prompt_tokens", 20, "completion_tokens", 20),
+                    Map.of("total_tokens", 120, "prompt_tokens", 60, "completion_tokens", 60));
+            var batch1Spans = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(traceIds.get(i))
-                            .usage(usageValues.get(i))
+                            .usage(batch1Usage.get(i))
                             .build())
                     .toList();
+            spanResourceClient.batchCreateSpans(batch1Spans, apiKey, workspaceName);
 
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
-
-            // Create experiment items linked to traces
-            var experimentItems = IntStream.range(0, 3)
+            var batch1Items = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experimentId)
                             .datasetItemId(datasetItems.get(i).id())
                             .traceId(traceIds.get(i))
                             .build())
                     .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch1Items)).build(), apiKey, workspaceName);
 
-            var experimentItemsBatch = ExperimentItemsBatch.builder()
-                    .experimentItems(new HashSet<>(experimentItems))
-                    .build();
-            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+            // Batch 2 (later trials): A=20, B=160, C=10
+            // avgMap: A=(200+20)/2=110, B=(40+160)/2=100, C=(120+10)/2=65
+            // ASC by avgMap: C(65), B(100), A(110)
+            var batch2Usage = List.of(
+                    Map.of("total_tokens", 20, "prompt_tokens", 10, "completion_tokens", 10),
+                    Map.of("total_tokens", 160, "prompt_tokens", 80, "completion_tokens", 80),
+                    Map.of("total_tokens", 10, "prompt_tokens", 5, "completion_tokens", 5));
+            var batch2Spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i + 3))
+                            .usage(batch2Usage.get(i))
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(batch2Spans, apiKey, workspaceName);
 
-            // Query with sorting by usage.total_tokens ASC
+            var batch2Items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i + 3))
+                            .build())
+                    .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch2Items)).build(), apiKey, workspaceName);
+
             var sorting = toURLEncodedQueryParam(
                     List.of(new SortingField("usage.total_tokens", Direction.ASC)));
             var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
@@ -9481,14 +9499,13 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualPage.content()).hasSize(3);
-
-                // Verify sorting order: 50, 100, 150
-                var tokens = actualPage.content().stream()
-                        .map(item -> item.experimentItems().get(0).usage().get("total_tokens"))
-                        .toList();
-
-                assertThat(tokens).containsExactly(50L, 100L, 150L);
+                // Verify sorted by avg usage ASC: C(65), B(100), A(110)
+                assertThat(actualPage.content())
+                        .extracting(DatasetItem::id)
+                        .containsExactly(
+                                datasetItems.get(2).id(),
+                                datasetItems.get(1).id(),
+                                datasetItems.get(0).id());
             }
         }
 
