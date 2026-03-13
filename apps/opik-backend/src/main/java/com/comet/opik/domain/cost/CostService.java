@@ -165,7 +165,7 @@ public class CostService {
                 .map(cost -> Optional.ofNullable(cost.get("currency"))
                         .map(JsonNode::asText)
                         .filter("USD"::equals)
-                        .map(currency -> cost.get("total_tokens"))
+                        .flatMap(currency -> Optional.ofNullable(cost.get("total_cost")))
                         .map(JsonNode::decimalValue)
                         .orElse(BigDecimal.ZERO))
                 .orElse(BigDecimal.ZERO);
