@@ -413,3 +413,82 @@ class TestAllCommandRegistered:
         result = runner.invoke(cli, ["export", "default"])
         # Non-zero exit or the error message includes "all"
         assert "all" in result.output
+
+
+# ---------------------------------------------------------------------------
+# _export_all_experiments: semaphore callback prevents deadlock
+# ---------------------------------------------------------------------------
+
+
+class TestExportAllExperimentsSemaphore:
+    """Verify the semaphore done_callback in _export_all_experiments prevents deadlock."""
+
+    def test_semaphore_callback_prevents_deadlock__more_than_capacity_experiments__all_exported(
+        self,
+    ):
+        """Submitting N > max_workers*2 experiments must complete without deadlock.
+
+        With max_workers=2 the semaphore capacity is 4.  Submitting 6 experiments
+        would block the submission loop forever (the as_completed drain never
+        starts) unless the done_callback on each future releases the semaphore.
+        """
+        from opik.cli.exports.all import _export_all_experiments
+        from types import SimpleNamespace
+
+        num_experiments = 6
+        max_workers = 2  # semaphore capacity = max_workers * 2 = 4; 6 > 4
+
+        experiments = [
+            SimpleNamespace(id=f"exp-{i}", name=f"experiment-{i}")
+            for i in range(num_experiments)
+        ]
+
+        def fake_export_by_id(*args, **kwargs):
+            return (
+                {
+                    "datasets": 0,
+                    "datasets_skipped": 0,
+                    "prompts": 0,
+                    "prompts_skipped": 0,
+                    "traces": 0,
+                    "traces_skipped": 0,
+                },
+                1,
+                None,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            experiments_dir = workspace_root / "experiments"
+            experiments_dir.mkdir()
+
+            with (
+                patch(
+                    "opik.cli.exports.all._paginate_experiments",
+                    return_value=iter(experiments),
+                ),
+                patch(
+                    "opik.cli.exports.all.export_experiment_by_id",
+                    side_effect=fake_export_by_id,
+                ),
+                patch(
+                    "opik.cli.exports.all.export_collected_trace_ids",
+                    return_value=(0, 0),
+                ),
+            ):
+                exp_exported, exp_skipped, traces_exported, traces_skipped = (
+                    _export_all_experiments(
+                        client=MagicMock(),
+                        workspace_root=workspace_root,
+                        experiments_dir=experiments_dir,
+                        max_results=None,
+                        force=False,
+                        debug=False,
+                        format="json",
+                        max_workers=max_workers,
+                    )
+                )
+
+        # If the semaphore callback was missing the test would hang before this line.
+        assert exp_exported + exp_skipped == num_experiments
+        assert exp_exported == num_experiments

@@ -495,9 +495,15 @@ def export_experiment_by_id(
                     }
                     return (_empty2, 0, manifest)
                 except (OSError, json.JSONDecodeError) as _e:
+                    import traceback
+
+                    console.print(
+                        f"[yellow]Warning: Could not read trace IDs from JSON for "
+                        f"experiment {experiment_id}: {_e}; "
+                        f"falling back to get_items() API call[/yellow]"
+                    )
                     debug_print(
-                        f"Could not read trace IDs from JSON for experiment "
-                        f"{experiment_id}: {_e}; falling back to get_items() API call",
+                        f"Traceback: {traceback.format_exc()}",
                         debug,
                     )
                     # Fall through to full API path
