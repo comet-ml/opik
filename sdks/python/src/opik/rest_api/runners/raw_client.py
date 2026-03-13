@@ -198,20 +198,16 @@ class RawRunnersClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def connect_runner(
-        self,
-        *,
-        runner_name: str,
-        pairing_code: typing.Optional[str] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[LocalRunnerConnectResponse]:
         """
         Exchange a pairing code or API key for local runner credentials
 
         Parameters
         ----------
-        runner_name : str
+        pairing_code : str
 
-        pairing_code : typing.Optional[str]
+        runner_name : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -634,7 +630,7 @@ class RawRunnersClient:
     def list_runners(
         self,
         *,
-        project_id: typing.Optional[str] = None,
+        project_id: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -644,7 +640,7 @@ class RawRunnersClient:
 
         Parameters
         ----------
-        project_id : typing.Optional[str]
+        project_id : str
 
         page : typing.Optional[int]
 
@@ -1053,20 +1049,16 @@ class AsyncRawRunnersClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def connect_runner(
-        self,
-        *,
-        runner_name: str,
-        pairing_code: typing.Optional[str] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[LocalRunnerConnectResponse]:
         """
         Exchange a pairing code or API key for local runner credentials
 
         Parameters
         ----------
-        runner_name : str
+        pairing_code : str
 
-        pairing_code : typing.Optional[str]
+        runner_name : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1489,7 +1481,7 @@ class AsyncRawRunnersClient:
     async def list_runners(
         self,
         *,
-        project_id: typing.Optional[str] = None,
+        project_id: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1499,7 +1491,7 @@ class AsyncRawRunnersClient:
 
         Parameters
         ----------
-        project_id : typing.Optional[str]
+        project_id : str
 
         page : typing.Optional[int]
 
