@@ -13,13 +13,13 @@ import java.time.Duration;
 public class ClickHouseHealthyCheck extends NamedHealthCheck {
 
     private final TransactionTemplateAsync template;
-    private final int healthCheckTimeoutSeconds;
+    private final Duration healthCheckTimeout;
 
     @Inject
     public ClickHouseHealthyCheck(@NonNull TransactionTemplateAsync template,
             @Named("ClickHouse Health Check Timeout Seconds") int healthCheckTimeoutSeconds) {
         this.template = template;
-        this.healthCheckTimeoutSeconds = healthCheckTimeoutSeconds;
+        this.healthCheckTimeout = Duration.ofSeconds(healthCheckTimeoutSeconds);
     }
 
     @Override
@@ -33,7 +33,7 @@ public class ClickHouseHealthyCheck extends NamedHealthCheck {
             return template.nonTransaction(connection -> Mono.from(connection.createStatement("SELECT 1").execute())
                     .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> row.get(0))))
                     .map(o -> Result.healthy()))
-                    .block(Duration.ofSeconds(healthCheckTimeoutSeconds));
+                    .block(healthCheckTimeout);
         } catch (Exception ex) {
             return Result.unhealthy(ex);
         }
