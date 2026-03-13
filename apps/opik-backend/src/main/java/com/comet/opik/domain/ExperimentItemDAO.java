@@ -2,8 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentStatus;
-import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -25,10 +25,14 @@ import reactor.core.publisher.SignalType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.ExperimentAggregationSql.AggregatedExperimentCounts;
+import static com.comet.opik.domain.ExperimentAggregationSql.AggregationBranchCountsCriteria;
+import static com.comet.opik.domain.ExperimentAggregationSql.SELECT_AGGREGATED_EXPERIMENT_IDS;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -106,31 +110,6 @@ class ExperimentItemDAO {
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
-    private static final String SELECT_AGGREGATED_EXPERIMENT_IDS = """
-            SELECT
-                count() AS total,
-                countIf(has_aggregated) AS aggregated,
-                countIf(NOT has_aggregated) AS not_aggregated
-            FROM (
-                SELECT
-                    e.id,
-                    notEmpty(agg.experiment_id) AS has_aggregated
-                FROM experiments e FINAL
-                LEFT JOIN (
-                    SELECT
-                        id,
-                        toString(id) AS experiment_id
-                    FROM experiment_aggregates
-                    WHERE workspace_id = :workspace_id
-                    AND id IN :experiment_ids
-                ) agg ON e.id = agg.id
-                WHERE e.workspace_id = :workspace_id
-                AND e.id IN :experiment_ids
-            )
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -667,7 +646,12 @@ class ExperimentItemDAO {
                     criteria.limit(), criteria.lastRetrievedId());
             return Flux.empty();
         }
-        return Mono.zip(getAggregationBranchCounts(experimentIds), getTargetProjectIds(experimentIds))
+        var aggregationCriteria = AggregationBranchCountsCriteria.builder()
+                .experimentIds(experimentIds)
+                .build();
+
+        return Mono.zip(getAggregationBranchCounts(aggregationCriteria),
+                getTargetProjectIds(experimentIds))
                 .flatMapMany(tuple -> {
                     var counts = tuple.getT1();
                     var targetProjectIds = tuple.getT2();
@@ -678,14 +662,38 @@ class ExperimentItemDAO {
                 });
     }
 
-    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(Set<UUID> experimentIds) {
+    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
+            @NonNull AggregationBranchCountsCriteria criteria) {
         return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
-                    var template = TemplateUtils.newST(SELECT_AGGREGATED_EXPERIMENT_IDS);
-                    template.add("log_comment", "get_aggregation_branch_counts_experiment_items");
+                .flatMap(connection -> Mono.deferContextual(context -> {
+                    String workspaceId = context.get(RequestContext.WORKSPACE_ID);
+                    var template = getSTWithLogComment(SELECT_AGGREGATED_EXPERIMENT_IDS,
+                            "get_aggregation_branch_counts", workspaceId, criteria.datasetId());
 
-                    var statement = connection.createStatement(template.render())
-                            .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+                    Optional.ofNullable(criteria.experimentIds())
+                            .filter(CollectionUtils::isNotEmpty)
+                            .ifPresent(experimentIds -> template.add("experiment_ids", experimentIds));
+                    Optional.ofNullable(criteria.datasetId())
+                            .ifPresent(datasetId -> template.add("dataset_id", datasetId));
+                    Optional.ofNullable(criteria.id())
+                            .ifPresent(id -> template.add("id", id));
+                    Optional.ofNullable(criteria.idsList())
+                            .filter(CollectionUtils::isNotEmpty)
+                            .ifPresent(idsList -> template.add("ids_list", idsList));
+
+                    var statement = connection.createStatement(template.render());
+
+                    Optional.ofNullable(criteria.experimentIds())
+                            .filter(CollectionUtils::isNotEmpty)
+                            .ifPresent(experimentIds -> statement.bind("experiment_ids",
+                                    experimentIds.toArray(UUID[]::new)));
+                    Optional.ofNullable(criteria.datasetId())
+                            .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
+                    Optional.ofNullable(criteria.id())
+                            .ifPresent(id -> statement.bind("id", id));
+                    Optional.ofNullable(criteria.idsList())
+                            .filter(CollectionUtils::isNotEmpty)
+                            .ifPresent(idsList -> statement.bind("ids_list", idsList.toArray(UUID[]::new)));
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                             .flatMap(result -> result.map((row, metadata) -> new AggregatedExperimentCounts(
@@ -693,7 +701,7 @@ class ExperimentItemDAO {
                                     row.get("not_aggregated", Long.class))))
                             .next()
                             .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-                });
+                }));
     }
 
     private Mono<List<UUID>> getTargetProjectIds(Set<UUID> experimentIds) {

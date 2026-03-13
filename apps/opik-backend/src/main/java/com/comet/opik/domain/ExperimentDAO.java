@@ -19,7 +19,6 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
-import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -67,6 +66,9 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.parseCommentsFromJson;
+import static com.comet.opik.domain.ExperimentAggregationSql.AggregatedExperimentCounts;
+import static com.comet.opik.domain.ExperimentAggregationSql.AggregationBranchCountsCriteria;
+import static com.comet.opik.domain.ExperimentAggregationSql.SELECT_AGGREGATED_EXPERIMENT_IDS;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
@@ -231,33 +233,6 @@ class ExperimentDAO {
             ;
             """;
 
-    private static final String SELECT_AGGREGATED_EXPERIMENT_IDS = """
-            SELECT
-                count() AS total,
-                countIf(has_aggregated) AS aggregated,
-                countIf(NOT has_aggregated) AS not_aggregated
-            FROM (
-                SELECT
-                    e.id,
-                    notEmpty(agg.id) AS has_aggregated
-                FROM experiments e FINAL
-                LEFT JOIN (
-                    SELECT
-                        toString(id) AS id
-                    FROM experiment_aggregates
-                    WHERE workspace_id = :workspace_id
-                    <if(experiment_ids)> AND id IN :experiment_ids <endif>
-                    <if(dataset_id)> AND dataset_id = :dataset_id <endif>
-                ) agg ON e.id = agg.id
-                WHERE e.workspace_id = :workspace_id
-                <if(experiment_ids)> AND e.id IN :experiment_ids <endif>
-                <if(dataset_id)> AND e.dataset_id = :dataset_id <endif>
-                <if(id)> AND e.id = :id <endif>
-            )
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
     private static final String FIND = """
             WITH experiments_resolved AS (
                 SELECT
@@ -389,9 +364,8 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -406,9 +380,8 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -800,9 +773,8 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -817,9 +789,8 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1223,9 +1194,8 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -1240,9 +1210,8 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1660,7 +1629,9 @@ class ExperimentDAO {
     Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         var limit = 1;
-        return getAggregationBranchCounts(id)
+        var aggregationCriteria = AggregationBranchCountsCriteria.builder().id(id).build();
+
+        return getAggregationBranchCounts(aggregationCriteria)
                 .flatMap(counts -> {
                     boolean hasAggregated = counts.hasAggregated();
                     boolean hasRaw = counts.hasRaw();
@@ -1685,16 +1656,29 @@ class ExperimentDAO {
     @WithSpan
     Flux<Experiment> getByIds(@NonNull Set<UUID> ids) {
         log.info("Getting experiment by ids '{}'", ids);
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(FIND, "get_experiments_by_ids", workspaceId, ids.size());
-                    template.add("ids_list", ids);
-                    template.add("has_aggregated", true);
-                    template.add("has_raw", true);
-                    return Flux.from(get(template.render(), connection,
-                            statement -> statement.bind("ids_list", ids.toArray(UUID[]::new)).bind("workspace_id",
-                                    workspaceId).bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID)));
-                }))
+
+        var aggregationCriteria = AggregationBranchCountsCriteria.builder()
+                .idsList(ids)
+                .build();
+
+        return getAggregationBranchCounts(aggregationCriteria)
+                .flatMapMany(counts -> {
+                    boolean hasAggregated = counts.hasAggregated();
+                    boolean hasRaw = counts.hasRaw();
+
+                    return Mono.from(connectionFactory.create())
+                            .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                                var template = getSTWithLogComment(FIND, "get_experiments_by_ids", workspaceId,
+                                        ids.size());
+                                template.add("ids_list", ids);
+                                template.add("has_aggregated", hasAggregated);
+                                template.add("has_raw", hasRaw);
+                                return Flux.from(get(template.render(), connection,
+                                        statement -> statement.bind("ids_list", ids.toArray(UUID[]::new))
+                                                .bind("workspace_id", workspaceId)
+                                                .bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID)));
+                            }));
+                })
                 .flatMap(this::mapToDto);
     }
 
@@ -1845,9 +1829,14 @@ class ExperimentDAO {
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         return Mono.deferContextual(ctx -> {
             // Run pre-queries in parallel: target project IDs and aggregated experiment counts
+            var aggregationCriteria = AggregationBranchCountsCriteria.builder()
+                    .experimentIds(experimentSearchCriteria.experimentIds())
+                    .datasetId(experimentSearchCriteria.datasetId())
+                    .build();
+
             var targetProjectIdsMono = getTargetProjectIdsForExperiments(
                     TargetProjectsCriteria.from(experimentSearchCriteria));
-            var branchCountsMono = getAggregationBranchCounts(experimentSearchCriteria);
+            var branchCountsMono = getAggregationBranchCounts(aggregationCriteria);
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
                     .flatMap(preQueryResults -> {
@@ -1960,18 +1949,26 @@ class ExperimentDAO {
         });
     }
 
-    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(ExperimentSearchCriteria criteria) {
+    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
+            @NonNull AggregationBranchCountsCriteria criteria) {
 
         return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
-                    var template = TemplateUtils.newST(SELECT_AGGREGATED_EXPERIMENT_IDS);
+                .flatMap(connection -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+                    var template = getSTWithLogComment(SELECT_AGGREGATED_EXPERIMENT_IDS,
+                            "get_aggregation_branch_counts", workspaceId, criteria.datasetId());
 
                     Optional.ofNullable(criteria.experimentIds())
                             .filter(CollectionUtils::isNotEmpty)
                             .ifPresent(experimentIds -> template.add("experiment_ids", experimentIds));
                     Optional.ofNullable(criteria.datasetId())
                             .ifPresent(datasetId -> template.add("dataset_id", datasetId));
-                    template.add("log_comment", "get_aggregation_branch_counts");
+                    Optional.ofNullable(criteria.id())
+                            .ifPresent(id -> template.add("id", id));
+                    Optional.ofNullable(criteria.idsList())
+                            .filter(CollectionUtils::isNotEmpty)
+                            .ifPresent(idsList -> template.add("ids_list", idsList));
 
                     var statement = connection.createStatement(template.render());
 
@@ -1981,51 +1978,20 @@ class ExperimentDAO {
                                     experimentIds.toArray(UUID[]::new)));
                     Optional.ofNullable(criteria.datasetId())
                             .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
+                    Optional.ofNullable(criteria.id())
+                            .ifPresent(id -> statement.bind("id", id));
+                    Optional.ofNullable(criteria.idsList())
+                            .filter(CollectionUtils::isNotEmpty)
+                            .ifPresent(idsList -> statement.bind("ids_list", idsList.toArray(UUID[]::new)));
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                            .flatMap(result -> result.map((row, metadata) -> new AggregatedExperimentCounts(
-                                    row.get("aggregated", Long.class),
-                                    row.get("not_aggregated", Long.class))))
+                            .flatMap(result -> result
+                                    .map((row, metadata) -> new AggregatedExperimentCounts(
+                                            row.get("aggregated", Long.class),
+                                            row.get("not_aggregated", Long.class))))
                             .next()
                             .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-                });
-    }
-
-    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(@NonNull UUID id) {
-        return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
-                    var template = TemplateUtils.newST(SELECT_AGGREGATED_EXPERIMENT_IDS);
-
-                    template.add("id", id);
-                    template.add("log_comment", "get_aggregation_branch_counts_by_id");
-
-                    var statement = connection.createStatement(template.render())
-                            .bind("id", id);
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                            .flatMap(result -> result.map((row, metadata) -> new AggregatedExperimentCounts(
-                                    row.get("aggregated", Long.class),
-                                    row.get("not_aggregated", Long.class))))
-                            .next()
-                            .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-                });
-    }
-
-    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts() {
-        return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
-                    var template = TemplateUtils.newST(SELECT_AGGREGATED_EXPERIMENT_IDS);
-                    template.add("log_comment", "get_aggregation_branch_counts_workspace");
-
-                    var statement = connection.createStatement(template.render());
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                            .flatMap(result -> result.map((row, metadata) -> new AggregatedExperimentCounts(
-                                    row.get("aggregated", Long.class),
-                                    row.get("not_aggregated", Long.class))))
-                            .next()
-                            .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-                });
+                }));
     }
 
     private ST newFindTemplate(String query, ExperimentSearchCriteria criteria, String queryName, String workspaceId) {
@@ -2312,9 +2278,8 @@ class ExperimentDAO {
         return Flux.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            var targetProjectIdsMono = getTargetProjectIdsForExperiments(
-                    TargetProjectsCriteria.from(criteria));
-            var branchCountsMono = getAggregationBranchCounts();
+            var targetProjectIdsMono = getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(criteria));
+            var branchCountsMono = getAggregationBranchCounts(AggregationBranchCountsCriteria.empty());
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
                     .flatMapMany(preQueryResults -> {
