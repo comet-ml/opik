@@ -1948,7 +1948,7 @@ class AlertResourceTest {
             alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create a prompt to trigger the event
-            var prompt = factory.manufacturePojo(Prompt.class)
+            var prompt = buildPrompt()
                     .toBuilder()
                     .projectId(null)
                     .versionCount(0L)
@@ -2351,7 +2351,7 @@ class AlertResourceTest {
             // Each prompt URL is ~120 characters, so we need ~25 prompts to exceed the limit
             int promptsCnt = 30;
             for (int i = 0; i < promptsCnt; i++) {
-                var prompt = factory.manufacturePojo(Prompt.class)
+                var prompt = buildPrompt()
                         .toBuilder()
                         .versionCount(0L)
                         .projectId(null)

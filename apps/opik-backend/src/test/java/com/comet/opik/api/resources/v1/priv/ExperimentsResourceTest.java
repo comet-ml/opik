@@ -1320,7 +1320,7 @@ class ExperimentsResourceTest {
 
             var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var prompt = podamFactory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt();
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
             PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
@@ -2517,7 +2517,7 @@ class ExperimentsResourceTest {
 
             var dataset = initDataset(experimentCount, expectedMatchCount, apiKey, workspaceName);
 
-            var prompt = podamFactory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt();
 
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
 
@@ -2558,8 +2558,8 @@ class ExperimentsResourceTest {
 
             var dataset = initDataset(experimentCount, expectedMatchCount, apiKey, workspaceName);
 
-            var prompt = podamFactory.manufacturePojo(Prompt.class);
-            var prompt2 = podamFactory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt();
+            var prompt2 = buildPrompt();
 
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
             PromptVersion promptVersion2 = promptResourceClient.createPromptVersion(prompt2, apiKey, workspaceName);
@@ -2934,6 +2934,12 @@ class ExperimentsResourceTest {
         }
     }
 
+    private Prompt buildPrompt() {
+        return podamFactory.manufacturePojo(Prompt.class).toBuilder()
+                .projectId(null)
+                .build();
+    }
+
     private Dataset buildDataset() {
         return podamFactory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
     }
@@ -2981,7 +2987,7 @@ class ExperimentsResourceTest {
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
-                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                var prompt = buildPrompt();
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
                 PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
@@ -3613,7 +3619,7 @@ class ExperimentsResourceTest {
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
-                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                var prompt = buildPrompt();
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
                 PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
@@ -4234,7 +4240,7 @@ class ExperimentsResourceTest {
                         // Only 2 prompt versions per experiment is enough for this test
                         var promptVersions = IntStream.range(0, 2)
                                 .mapToObj(j -> {
-                                    var prompt = podamFactory.manufacturePojo(Prompt.class);
+                                    var prompt = buildPrompt();
                                     var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY,
                                             TEST_WORKSPACE);
                                     return buildVersionLink(promptVersion, prompt.name());

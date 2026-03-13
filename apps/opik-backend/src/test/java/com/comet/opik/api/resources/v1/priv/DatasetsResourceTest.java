@@ -2860,7 +2860,7 @@ class DatasetsResourceTest {
                     .parallel()
                     .forEach(i -> createDatasetWithExperiment(apiKey, workspaceName, null));
 
-            Prompt prompt = factory.manufacturePojo(Prompt.class).toBuilder().latestVersion(null).build();
+            Prompt prompt = buildPrompt().toBuilder().latestVersion(null).build();
 
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
 
@@ -2941,7 +2941,7 @@ class DatasetsResourceTest {
                     .parallel()
                     .forEach(i -> createDatasetWithExperiment(apiKey, workspaceName, null));
 
-            Prompt prompt = factory.manufacturePojo(Prompt.class).toBuilder().latestVersion(null).build();
+            Prompt prompt = buildPrompt().toBuilder().latestVersion(null).build();
 
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
 
@@ -3094,6 +3094,10 @@ class DatasetsResourceTest {
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.DATASET_VIEW.getValue()))));
         }
+    }
+
+    private Prompt buildPrompt() {
+        return factory.manufacturePojo(Prompt.class).toBuilder().projectId(null).build();
     }
 
     private List<Dataset> buildDatasets() {
