@@ -182,6 +182,7 @@ class InProcessRunnerLoop:
                     else:
                         result = await coro
             else:
+
                 def _run_with_mask() -> object:
                     with agent_config_context(mask_id):
                         return func(**inputs)
