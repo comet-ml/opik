@@ -1143,7 +1143,7 @@ class PromptResourceTest {
         Stream<Arguments> when__promptIsInvalid__thenReturnError() {
 
             return Stream.of(
-                    Arguments.of(buildPrompt(), HttpStatus.SC_NOT_FOUND,
+                    Arguments.of(buildPrompt().build(), HttpStatus.SC_NOT_FOUND,
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND, "Prompt not found"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
                     Arguments.of(buildPrompt().name(null).build(),
