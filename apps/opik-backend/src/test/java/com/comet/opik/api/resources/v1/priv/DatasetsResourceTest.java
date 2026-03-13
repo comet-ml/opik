@@ -19,6 +19,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -1730,6 +1731,7 @@ class DatasetsResourceTest {
     private UUID createExperimentForDataset(Dataset dataset, String apiKey, String workspaceName) {
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetName(dataset.name())
+                .status(ExperimentStatus.RUNNING)
                 .build();
         return experimentResourceClient.create(experiment, apiKey, workspaceName);
     }
@@ -6202,7 +6204,7 @@ class DatasetsResourceTest {
 
                         assertThat(actualExperimentItem.feedbackScores())
                                 .usingRecursiveComparison()
-                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                 .ignoringCollectionOrder()
                                 .isEqualTo(expectedExperimentItem.feedbackScores());
 

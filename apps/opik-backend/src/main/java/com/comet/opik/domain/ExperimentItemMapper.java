@@ -9,7 +9,6 @@ import org.reactivestreams.Publisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,8 +47,8 @@ class ExperimentItemMapper {
                         .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromStringWithFallback)
                         .orElse(null))
-                .feedbackScores(getFeedbackScores(row.get("feedback_scores_array", List[].class)))
-                .comments(getComments(row.get("comments_array_agg", List[].class)))
+                .feedbackScores(getFeedbackScores(row.get("feedback_scores_array", String.class)))
+                .comments(getComments(row.get("comments_array_agg", String.class)))
                 .duration(row.get("duration", Double.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                         ? null

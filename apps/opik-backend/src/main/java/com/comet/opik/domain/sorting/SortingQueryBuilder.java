@@ -50,39 +50,48 @@ public class SortingQueryBuilder {
     }
 
     private String getDbField(SortingField sortingField) {
-        // Handle experiment_scores.* fields - use map access from experiment_scores_agg CTE (aliased as 'es')
+        // Handle experiment_scores.* fields - use the output column alias 'experiment_scores_agg'
+        // which is the column exposed by both branches of the UNION ALL in the FIND query
         if (sortingField.field().startsWith(EXPERIMENT_METRICS_PREFIX) && sortingField.isDynamic()) {
             String bindKey = sortingField.bindKey();
-            // Access es.experiment_scores map using key
-            // Use coalesce to handle cases where experiment doesn't have the specific score
             return String.format(
-                    "coalesce(es.experiment_scores[:%s], 0)",
+                    "coalesce(experiment_scores_agg[:%s], 0)",
                     bindKey);
         }
         return sortingField.dbField();
     }
 
     private String transformNullDirection(SortingField sortingField) {
-        // Handle experiment_scores.* fields - use the 'es' alias for the map reference
         if (sortingField.field().startsWith(EXPERIMENT_METRICS_PREFIX) && sortingField.isDynamic()) {
             String bindKey = sortingField.bindKey();
-            return "mapContains(es.experiment_scores, :%s)".formatted(bindKey);
+            return "mapContains(experiment_scores_agg, :%s)".formatted(bindKey);
         }
         return sortingField.handleNullDirection();
     }
 
     public boolean hasDynamicKeys(@NonNull List<SortingField> sorting) {
-        // Only fields with bindKeyParam need dynamic binding
-        // Fields without bindKeyParam use literal keys in field mappings (e.g., JSONExtractRaw)
+        return hasDynamicKeys(sorting, null);
+    }
+
+    public boolean hasDynamicKeys(@NonNull List<SortingField> sorting, Map<String, String> fieldMapping) {
+        // Only fields with bindKeyParam need dynamic binding.
+        // Fields in the fieldMapping use literal SQL expressions (e.g. JSONExtractRaw), so no bind param exists.
         return sorting.stream()
                 .filter(SortingField::isDynamic)
-                .anyMatch(field -> field.bindKeyParam() != null);
+                .filter(field -> field.bindKeyParam() != null)
+                .anyMatch(field -> fieldMapping == null || !fieldMapping.containsKey(field.field()));
     }
 
     public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting) {
+        return bindDynamicKeys(statement, sorting, null);
+    }
+
+    public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting,
+            Map<String, String> fieldMapping) {
         sorting.stream()
                 .filter(SortingField::isDynamic)
                 .filter(sortingField -> sortingField.bindKeyParam() != null)
+                .filter(sortingField -> fieldMapping == null || !fieldMapping.containsKey(sortingField.field()))
                 .forEach(sortingField -> {
                     try {
                         statement.bind(sortingField.bindKey(), sortingField.dynamicKey());
