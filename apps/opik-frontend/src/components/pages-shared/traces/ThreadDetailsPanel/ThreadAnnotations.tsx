@@ -1,4 +1,5 @@
 import React from "react";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -28,6 +29,10 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
   setActiveSection,
   feedbackScores,
 }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
+
   const hasFeedbackScores = Boolean(feedbackScores.length);
 
   const { mutate: setThreadFeedbackScore } =
@@ -86,15 +91,17 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
             </div>
           </>
         )}
-        <FeedbackScoresEditor
-          key={threadId}
-          feedbackScores={feedbackScores}
-          onUpdateFeedbackScore={onUpdateFeedbackScore}
-          onDeleteFeedbackScore={onDeleteFeedbackScore}
-          className="mt-4"
-          header={<FeedbackScoresEditor.Header isThread={true} />}
-          footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
-        />
+        {canAnnotateTraceSpanThread && (
+          <FeedbackScoresEditor
+            key={threadId}
+            feedbackScores={feedbackScores}
+            onUpdateFeedbackScore={onUpdateFeedbackScore}
+            onDeleteFeedbackScore={onDeleteFeedbackScore}
+            className="mt-4"
+            header={<FeedbackScoresEditor.Header isThread={true} />}
+            footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
+          />
+        )}
       </div>
     </DetailsActionSectionLayout>
   );
