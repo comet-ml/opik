@@ -137,14 +137,20 @@ def agent_config_decorator(
 
             masked = _get_masked_value(instance, attr)
             if masked is not _MISSING:
-                _inject_trace_metadata(instance, attr, value=masked)
+                _inject_trace_metadata(
+                    instance, attr, value=masked, mask_id=get_active_config_mask()
+                )
                 return masked
 
             instance_cache = get_cached_config(instance)
             prefixed_key = instance.__opik_fields__[attr].prefixed_key
             value = instance_cache.values.get(prefixed_key, _MISSING)
             _inject_trace_metadata(
-                instance, attr, value=value, shared_cache=instance_cache
+                instance,
+                attr,
+                value=value,
+                shared_cache=instance_cache,
+                mask_id=instance.__opik_mask_id__,
             )
             return value if value is not _MISSING else original_getattribute(self, attr)
 
@@ -344,6 +350,7 @@ def _inject_trace_metadata(
     value: typing.Any = _MISSING,
     *,
     shared_cache: typing.Optional[cache.SharedConfigCache] = None,
+    mask_id: typing.Optional[str] = None,
 ) -> None:
     """Attach the accessed config value to the active trace's metadata.
 
@@ -354,6 +361,7 @@ def _inject_trace_metadata(
         attr: Local (unprefixed) field name being accessed.
         value: The resolved value to record. Falls back to the cached value
             when ``_MISSING``.
+        mask_id: The mask ID used when resolving the value, if any.
     """
     try:
         resolved_cache = (
@@ -382,12 +390,16 @@ def _inject_trace_metadata(
         else:
             values = {}
 
+        agent_config_metadata: typing.Dict[str, typing.Any] = {
+            "blueprint_id": resolved_cache.blueprint_id,
+        }
+        if mask_id is not None:
+            agent_config_metadata["_mask_id"] = mask_id
+        agent_config_metadata["values"] = values
+
         opik_context.update_current_trace(
             metadata={
-                "agent_configuration": {
-                    "blueprint_id": resolved_cache.blueprint_id,
-                    "values": values,
-                }
+                "agent_configuration": agent_config_metadata,
             }
         )
     except exceptions.OpikException:
