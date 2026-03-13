@@ -1389,7 +1389,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     notEmpty(agg.id) AS has_aggregated
                 FROM experiments e FINAL
                 LEFT JOIN (
-                    SELECT
+                    SELECT DISTINCT
                         toString(id) AS id
                     FROM experiment_aggregates
                     WHERE workspace_id = :workspace_id
