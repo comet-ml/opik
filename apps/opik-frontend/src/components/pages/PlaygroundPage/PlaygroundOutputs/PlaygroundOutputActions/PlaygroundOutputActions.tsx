@@ -514,7 +514,7 @@ const PlaygroundOutputActions = ({
                   datasetId={datasetId}
                   onCreateRuleClick={handleCreateRuleClick}
                   workspaceName={workspaceName}
-                  canCreateRules={canUsePlayground}
+                  canUsePlayground={canUsePlayground}
                 />
               </div>
               {datasetId && (
