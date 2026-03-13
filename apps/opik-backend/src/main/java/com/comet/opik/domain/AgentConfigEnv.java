@@ -28,7 +28,5 @@ public record AgentConfigEnv(
         @JsonView({
                 AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({
-                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
-        @JsonView({
-                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt){
+                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant endedAt){
 }
