@@ -39,9 +39,16 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
     * aio.models.generate_content_stream
     """
 
-    def __init__(self, provider: str) -> None:
+    def __init__(
+        self,
+        provider: str,
+        cost_callback: Optional[
+            Callable[[genai_types.GenerateContentResponse], Optional[float]]
+        ] = None,
+    ) -> None:
         super().__init__()
         self.provider = provider
+        self._cost_callback = cost_callback
 
     @override
     def _start_span_inputs_preprocessor(
@@ -112,6 +119,11 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             logger=LOGGER,
             error_message="Failed to log token usage from genai generate_response call",
         )
+
+        total_cost = None
+        if self._cost_callback is not None:
+            total_cost = self._cost_callback(output)
+
         span_name_without_model = current_span_data.name.split(":")[0]  # type: ignore
         result = arguments_helpers.EndSpanParameters(
             name=f"{span_name_without_model}: {model}",
@@ -120,6 +132,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata=metadata,
             model=model,
             provider=self.provider,
+            total_cost=total_cost,
         )
 
         return result
