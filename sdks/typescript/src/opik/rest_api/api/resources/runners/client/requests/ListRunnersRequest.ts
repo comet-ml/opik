@@ -2,10 +2,12 @@
 
 /**
  * @example
- *     {}
+ *     {
+ *         projectId: "project_id"
+ *     }
  */
 export interface ListRunnersRequest {
-    projectId?: string;
+    projectId: string;
     page?: number;
     size?: number;
 }

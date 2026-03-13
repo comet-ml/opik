@@ -405,6 +405,7 @@ from .types import (
     PercentageValues,
     PercentageValuesDetailed,
     PercentageValuesPublic,
+    Permission,
     Project,
     ProjectDetailed,
     ProjectDetailedVisibility,
@@ -574,6 +575,7 @@ from .types import (
     WorkspaceNameHolder,
     WorkspaceSpansCount,
     WorkspaceTraceCount,
+    WorkspaceUserPermissions,
 )
 from .errors import (
     BadGatewayError,
@@ -615,6 +617,7 @@ from . import (
     system_usage,
     traces,
     welcome_wizard,
+    workspace_permissions,
     workspaces,
 )
 from .alerts import GetWebhookExamplesRequestAlertType
@@ -1081,6 +1084,7 @@ __all__ = [
     "PercentageValues",
     "PercentageValuesDetailed",
     "PercentageValuesPublic",
+    "Permission",
     "Project",
     "ProjectDetailed",
     "ProjectDetailedVisibility",
@@ -1263,6 +1267,7 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "WorkspaceUserPermissions",
     "agent_configs",
     "alerts",
     "annotation_queues",
@@ -1289,5 +1294,6 @@ __all__ = [
     "system_usage",
     "traces",
     "welcome_wizard",
+    "workspace_permissions",
     "workspaces",
 ]

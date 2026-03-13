@@ -4,7 +4,6 @@ import type * as OpikApi from "../index.js";
 
 export interface Agent {
     name?: string;
-    projectId?: string;
     description?: string;
     language?: string;
     executable?: string;

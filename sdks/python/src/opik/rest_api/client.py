@@ -33,6 +33,7 @@ from .spans.client import AsyncSpansClient, SpansClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
 from .welcome_wizard.client import AsyncWelcomeWizardClient, WelcomeWizardClient
+from .workspace_permissions.client import AsyncWorkspacePermissionsClient, WorkspacePermissionsClient
 from .workspaces.client import AsyncWorkspacesClient, WorkspacesClient
 
 
@@ -120,6 +121,7 @@ class OpikApi:
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = WelcomeWizardClient(client_wrapper=self._client_wrapper)
+        self.workspace_permissions = WorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
         self.redirect = RedirectClient(client_wrapper=self._client_wrapper)
 
@@ -261,6 +263,7 @@ class AsyncOpikApi:
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = AsyncWelcomeWizardClient(client_wrapper=self._client_wrapper)
+        self.workspace_permissions = AsyncWorkspacePermissionsClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)
         self.redirect = AsyncRedirectClient(client_wrapper=self._client_wrapper)
 
