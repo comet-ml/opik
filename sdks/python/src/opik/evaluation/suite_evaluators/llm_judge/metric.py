@@ -25,14 +25,18 @@ For each assertion, provide:
 """
 
 LLM_JUDGE_USER_TEMPLATE = """## Input
-The INPUT section contains all data that the agent received. This may include the actual user query, conversation history, context, metadata, or other structured information. Identify the core user request within this data.
+All data that the agent received (user query, context, metadata, etc.):
 
+---BEGIN INPUT---
 {input}
+---END INPUT---
 
 ## Output
-The OUTPUT section contains all data produced by the agent. This may include the agent's response text, tool calls, intermediate results, metadata, or other structured information. Focus on the substantive response when evaluating assertions.
+All data produced by the agent (response text, tool calls, metadata, etc.):
 
+---BEGIN OUTPUT---
 {output}
+---END OUTPUT---
 
 ## Assertions
 Evaluate each of the following assertions against the agent's output:
