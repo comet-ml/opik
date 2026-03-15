@@ -1409,12 +1409,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                             // Add sorting if present
                             var finalTemplate = selectTemplate;
+                            var itemFieldMapping = datasetItemSearchCriteria.sortingFields() != null
+                                    ? filterQueryBuilder
+                                            .buildDatasetItemFieldMapping(datasetItemSearchCriteria.sortingFields())
+                                    : null;
+
                             if (datasetItemSearchCriteria.sortingFields() != null) {
                                 Optional.ofNullable(
                                         sortingQueryBuilder.toOrderBySql(datasetItemSearchCriteria.sortingFields(),
-                                                filterQueryBuilder
-                                                        .buildDatasetItemFieldMapping(
-                                                                datasetItemSearchCriteria.sortingFields())))
+                                                itemFieldMapping))
                                         .ifPresent(sortFields -> {
                                             // feedback_scores is now exposed at outer query level via argMax(tfs.feedback_scores, ei.created_at)
                                             // so we don't need to map it to tfs.feedback_scores anymore
@@ -1423,7 +1426,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             }
 
                             var hasDynamicKeys = datasetItemSearchCriteria.sortingFields() != null
-                                    && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields());
+                                    && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields(),
+                                            itemFieldMapping);
 
                             var selectStatement = connection.createStatement(finalTemplate.render())
                                     .bind("datasetId", datasetItemSearchCriteria.datasetId())
@@ -1441,7 +1445,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             // Bind dynamic sorting keys if present
                             if (hasDynamicKeys) {
                                 selectStatement = sortingQueryBuilder.bindDynamicKeys(selectStatement,
-                                        datasetItemSearchCriteria.sortingFields());
+                                        datasetItemSearchCriteria.sortingFields(), itemFieldMapping);
                             }
 
                             bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
