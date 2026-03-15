@@ -162,6 +162,41 @@ def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
     assert not caplog.records
 
 
+def test_litellm_chat_model_clamps_temperature_for_minimax(monkeypatch):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="minimax/MiniMax-M2.5",
+        temperature=0,
+    )
+
+    # Temperature should be clamped to a small positive value
+    assert model._completion_kwargs["temperature"] == 0.01
+
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs["temperature"] == 0.01
+
+
+def test_litellm_chat_model_preserves_valid_temperature_for_minimax(monkeypatch):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="minimax/MiniMax-M2.5",
+        temperature=0.7,
+    )
+
+    assert model._completion_kwargs["temperature"] == 0.7
+
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs["temperature"] == 0.7
+
+
 def test_litellm_chat_model_drops_top_logprobs_for_dashscope(
     monkeypatch,
 ):

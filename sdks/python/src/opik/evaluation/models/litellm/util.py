@@ -48,6 +48,12 @@ def apply_model_specific_filters(
         _apply_gpt5_filters(params, already_warned, warn)
         return
 
+    if normalized_model_name.startswith("minimax/") or normalized_model_name.startswith(
+        "minimax."
+    ):
+        _apply_minimax_filters(params, already_warned, warn)
+        return
+
     if normalized_model_name.startswith("dashscope/"):
         _apply_qwen_dashscope_filters(params, already_warned, warn)
         return
@@ -98,6 +104,28 @@ def _apply_gpt5_filters(
         already_warned,
         warn,
     )
+
+
+def _apply_minimax_filters(
+    params: Dict[str, Any],
+    already_warned: Set[str],
+    warn: Callable[[str, Any], None],
+) -> None:
+    """Apply MiniMax specific parameter filters.
+
+    MiniMax requires temperature to be strictly greater than 0.
+    A temperature of 0 is rejected by the API, so we clamp it to a small
+    positive value to avoid errors.
+    """
+
+    if "temperature" in params:
+        value = params["temperature"]
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            numeric_value = None
+        if numeric_value is not None and numeric_value <= 0.0:
+            params["temperature"] = 0.01
 
 
 def _apply_qwen_dashscope_filters(

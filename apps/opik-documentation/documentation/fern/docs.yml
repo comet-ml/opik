@@ -592,6 +592,9 @@ navigation:
               - page: Groq
                 path: docs/tracing/integrations/groq.mdx
                 slug: groq
+              - page: MiniMax
+                path: docs/tracing/integrations/minimax.mdx
+                slug: minimax
               - page: Mistral AI
                 path: docs/tracing/integrations/mistral.mdx
                 slug: mistral
@@ -1205,6 +1208,9 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/integrations/groq"
     destination: "/docs/opik/integrations/groq"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/minimax"
+    destination: "/docs/opik/integrations/minimax"
     permanent: true
   - source: "/docs/opik/tracing/integrations/adk"
     destination: "/docs/opik/integrations/adk"

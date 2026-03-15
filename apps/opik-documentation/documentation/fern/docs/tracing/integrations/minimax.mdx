@@ -1,0 +1,224 @@
+---
+description: Start here to integrate Opik into your MiniMax-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: MiniMax | Opik Documentation
+og:description: Learn to integrate MiniMax's powerful language models with Opik,
+  enabling seamless API call tracking and evaluation for your projects.
+og:site_name: Opik Documentation
+og:title: Integrate MiniMax with Opik - Opik
+title: Observability for MiniMax with Opik
+---
+
+[MiniMax](https://www.minimax.io/) is a leading AI company providing powerful large language models through an OpenAI-compatible API. Their flagship models, MiniMax-M2.5 and MiniMax-M2.5-highspeed, offer a 204K context window and strong performance across a wide range of tasks.
+
+This guide explains how to integrate Opik with MiniMax using their OpenAI-compatible API endpoints. By using the Opik OpenAI integration, you can easily track and evaluate your MiniMax API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+
+## Getting Started
+
+### Account Setup
+
+First, you'll need a Comet.com account to use Opik. If you don't have one, you can [sign up for free](https://www.comet.com/signup?utm_source=opik&utm_medium=docs&utm_campaign=minimax-integration).
+
+### Installation
+
+Install the required packages:
+
+```bash
+pip install opik openai
+```
+
+### Configuration
+
+Configure Opik to send traces to your Comet project:
+
+```python
+import opik
+
+opik.configure(
+    project_name="your-project-name",
+    workspace="your-workspace-name",
+)
+```
+
+<Tip>
+  Opik is fully open-source and can be run locally or through the Opik Cloud platform. You can learn more about hosting
+  Opik on your own infrastructure in the [self-hosting guide](/self-host/overview).
+</Tip>
+
+### Environment Setup
+
+Set your MiniMax API key as an environment variable:
+
+```bash
+export MINIMAX_API_KEY="your-minimax-api-key"
+```
+
+You can obtain a MiniMax API key from the [MiniMax platform](https://platform.minimaxi.com/).
+
+## Tracking MiniMax calls
+
+### Using the OpenAI Python SDK
+
+The easiest way to call MiniMax with Opik is to use the OpenAI Python SDK and the `track_openai` wrapper. Since MiniMax provides an OpenAI-compatible API, you simply point the OpenAI client to the MiniMax base URL:
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+import os
+
+# Create the OpenAI client that points to MiniMax API
+client = OpenAI(
+    api_key=os.environ.get("MINIMAX_API_KEY"),
+    base_url="https://api.minimax.io/v1",
+)
+
+# Wrap your OpenAI client to track all calls to Opik
+client = track_openai(client, project_name="minimax-demo")
+
+# Call the API
+response = client.chat.completions.create(
+    model="MiniMax-M2.5",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello, what can you help me with?"},
+    ],
+)
+
+print(response.choices[0].message.content)
+```
+
+### Using LiteLLM
+
+You can also use LiteLLM to call MiniMax models with Opik tracking:
+
+```bash
+pip install opik litellm
+```
+
+```python
+from litellm.integrations.opik.opik import OpikLogger
+import litellm
+import os
+
+os.environ["OPIK_PROJECT_NAME"] = "minimax-litellm-demo"
+
+opik_logger = OpikLogger()
+litellm.callbacks = [opik_logger]
+
+response = litellm.completion(
+    model="minimax/MiniMax-M2.5",
+    messages=[{"role": "user", "content": "Write a short story about AI."}],
+)
+
+print(response.choices[0].message.content)
+```
+
+## Advanced Usage
+
+### Using with the @track Decorator
+
+You can combine the tracked client with Opik's `@track` decorator for more comprehensive tracing:
+
+```python
+from opik import track
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+import os
+
+client = OpenAI(
+    api_key=os.environ.get("MINIMAX_API_KEY"),
+    base_url="https://api.minimax.io/v1",
+)
+client = track_openai(client)
+
+@track
+def analyze_text(text: str):
+    response = client.chat.completions.create(
+        model="MiniMax-M2.5",
+        messages=[
+            {"role": "user", "content": f"Analyze this text: {text}"}
+        ],
+    )
+    return response.choices[0].message.content
+
+@track
+def summarize_analysis(analysis: str):
+    response = client.chat.completions.create(
+        model="MiniMax-M2.5-highspeed",
+        messages=[
+            {"role": "user", "content": f"Summarize this analysis: {analysis}"}
+        ],
+    )
+    return response.choices[0].message.content
+
+@track
+def full_pipeline(text: str):
+    analysis = analyze_text(text)
+    summary = summarize_analysis(analysis)
+    return summary
+
+result = full_pipeline("Open source AI models are transforming the industry.")
+```
+
+### Streaming Responses
+
+MiniMax supports streaming responses, which are also tracked by Opik:
+
+```python
+response = client.chat.completions.create(
+    model="MiniMax-M2.5",
+    messages=[
+        {"role": "user", "content": "Explain quantum computing in simple terms."}
+    ],
+    stream=True,
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content is not None:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+### Using MiniMax for Evaluation Metrics
+
+You can use MiniMax models as the LLM judge in Opik's evaluation metrics:
+
+```python
+from opik.evaluation.metrics import Hallucination, AnswerRelevance
+from opik.evaluation.models import LiteLLMChatModel
+
+# Create a MiniMax model for evaluation
+minimax_model = LiteLLMChatModel(model_name="minimax/MiniMax-M2.5")
+
+# Use it as the judge in evaluation metrics
+hallucination_metric = Hallucination(model=minimax_model)
+relevance_metric = AnswerRelevance(model=minimax_model)
+```
+
+## Supported Models
+
+MiniMax provides the following models:
+
+| Model | Context Window | Description |
+|-------|---------------|-------------|
+| `MiniMax-M2.5` | 204K tokens | Flagship model with strong reasoning and generation capabilities |
+| `MiniMax-M2.5-highspeed` | 204K tokens | Optimized for faster inference with comparable quality |
+
+For the latest model information, visit the [MiniMax platform](https://platform.minimaxi.com/).
+
+## Important Notes
+
+- **Temperature**: MiniMax models require temperature to be strictly greater than 0. If you set `temperature=0`, it will be automatically adjusted when using LiteLLM with Opik.
+- **API Compatibility**: MiniMax's API is fully compatible with the OpenAI SDK, so any OpenAI-compatible tool or framework will work with MiniMax.
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash
+# MiniMax Configuration
+export MINIMAX_API_KEY="your-minimax-api-key"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
