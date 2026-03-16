@@ -60,7 +60,7 @@ public interface DashboardService {
 class DashboardServiceImpl implements DashboardService {
 
     private static final String DASHBOARD_NOT_FOUND = "Dashboard not found";
-    private static final String DASHBOARD_ALREADY_EXISTS = "Dashboard with this name already exists";
+    private static final String DASHBOARD_ALREADY_EXISTS = "Dashboard already exists";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull TransactionTemplateAsync templateAsync;
@@ -107,8 +107,7 @@ class DashboardServiceImpl implements DashboardService {
                 return dao.findById(dashboardId, workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.warn("Dashboard already exists with name '{}' in workspace '{}'", dashboard.name(),
-                            workspaceId);
+                    log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
                 } else {
                     throw e;
@@ -202,7 +201,7 @@ class DashboardServiceImpl implements DashboardService {
                 return dao.findById(id, workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.warn("Dashboard already exists with name in workspace '{}'", workspaceId);
+                    log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
                 } else {
                     throw e;

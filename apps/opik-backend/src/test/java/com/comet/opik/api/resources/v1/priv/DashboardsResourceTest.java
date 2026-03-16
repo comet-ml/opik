@@ -206,23 +206,28 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Create dashboard with duplicate name fails")
-        void createDashboardWithDuplicateNameFails() {
+        @DisplayName("Create dashboard with duplicate name succeeds")
+        void createDashboardWithDuplicateNameSucceeds() {
             var dashboardName = "Duplicate Dashboard " + UUID.randomUUID();
             var dashboard1 = dashboardResourceClient.createPartialDashboard()
                     .name(dashboardName)
                     .build();
 
-            dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Try to create another dashboard with the same name
             var dashboard2 = dashboardResourceClient.createPartialDashboard()
                     .name(dashboardName)
                     .build();
 
-            try (var response = dashboardResourceClient.callCreate(dashboard2, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            }
+            var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
+
+            var created1 = dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            var created2 = dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            assertThat(created1.name()).isEqualTo(dashboardName);
+            assertThat(created2.name()).isEqualTo(dashboardName);
+            assertThat(created1.id()).isNotEqualTo(created2.id());
+            assertThat(created1.slug()).isNotEqualTo(created2.slug());
         }
 
         @Test
@@ -745,8 +750,8 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Update dashboard with duplicate name fails")
-        void updateDashboardWithDuplicateNameFails() {
+        @DisplayName("Update dashboard with duplicate name succeeds")
+        void updateDashboardWithDuplicateNameSucceeds() {
             var dashboard1 = dashboardResourceClient.createPartialDashboard()
                     .name("Dashboard One")
                     .build();
@@ -754,17 +759,21 @@ class DashboardsResourceTest {
                     .name("Dashboard Two")
                     .build();
 
-            dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
             var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Try to update dashboard2 to have the same name as dashboard1
             var update = DashboardUpdate.builder()
                     .name("Dashboard One")
                     .build();
 
-            try (var response = dashboardResourceClient.callUpdate(id2, update, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            }
+            dashboardResourceClient.update(id2, update, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            var updated = dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            var original = dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            assertThat(updated.name()).isEqualTo("Dashboard One");
+            assertThat(original.name()).isEqualTo("Dashboard One");
+            assertThat(updated.slug()).isNotEqualTo(original.slug());
         }
 
         @Test
