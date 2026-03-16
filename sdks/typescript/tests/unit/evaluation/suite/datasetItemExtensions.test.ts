@@ -68,6 +68,72 @@ describe("DatasetItem extensions for evaluation suites", () => {
     });
   });
 
+  describe("description field collision", () => {
+    it("should preserve user data description (empty string) in getContent and toApiModel", () => {
+      const item = new DatasetItem({
+        id: "desc-1",
+        input: "test",
+        description: "",
+      });
+
+      expect(item.getContent()).toEqual({ input: "test", description: "" });
+      expect(item.description).toBe("");
+      const api = item.toApiModel();
+      expect(api.data).toEqual({ input: "test", description: "" });
+    });
+
+    it("should not leak metadata-only description into getContent via fromApiModel", () => {
+      const item = DatasetItem.fromApiModel({
+        id: "desc-2",
+        source: DatasetItemWriteSource.Sdk,
+        description: "metadata desc",
+        data: { input: "hello" },
+      });
+
+      expect(item.description).toBe("metadata desc");
+      expect(item.getContent()).toEqual({ input: "hello" });
+      expect(item.getContent()).not.toHaveProperty("description");
+    });
+
+    it("should let user data description win over metadata description in fromApiModel", () => {
+      const item = DatasetItem.fromApiModel({
+        id: "desc-3",
+        source: DatasetItemWriteSource.Sdk,
+        description: "metadata desc",
+        data: { input: "x", description: "user desc" },
+      });
+
+      expect(item.description).toBe("user desc");
+      expect(item.getContent()).toEqual({ input: "x", description: "user desc" });
+    });
+
+    it("should round-trip correctly via toApiModel → fromApiModel", () => {
+      const original = new DatasetItem({
+        id: "desc-4",
+        input: "test",
+        description: "user val",
+      });
+
+      const apiModel = original.toApiModel();
+      const restored = DatasetItem.fromApiModel(apiModel);
+
+      expect(restored.description).toBe("user val");
+      expect(restored.getContent()).toEqual({ input: "test", description: "user val" });
+    });
+
+    it("should produce the same contentHash regardless of metadata description", async () => {
+      const itemA = new DatasetItem({ id: "desc-5a", input: "same" });
+      const itemB = DatasetItem.fromApiModel({
+        id: "desc-5b",
+        source: DatasetItemWriteSource.Sdk,
+        description: "some metadata",
+        data: { input: "same" },
+      });
+
+      expect(await itemA.contentHash()).toBe(await itemB.contentHash());
+    });
+  });
+
   describe("fromApiModel", () => {
     it("should preserve evaluators and executionPolicy", () => {
       const evaluators: EvaluatorItemWrite[] = [

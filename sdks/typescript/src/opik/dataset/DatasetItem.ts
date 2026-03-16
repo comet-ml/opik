@@ -36,7 +36,8 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
       description?: string;
       evaluators?: EvaluatorItemWrite[];
       executionPolicy?: ExecutionPolicyWrite;
-    } & T
+    } & T,
+    metadataDescription?: string
   ) {
     const { id, traceId, spanId, source, description, evaluators, executionPolicy, ...rest } = params;
 
@@ -44,7 +45,7 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
     this.traceId = traceId;
     this.spanId = spanId;
     this.source = source || DatasetItemWriteSource.Sdk;
-    this.description = description;
+    this.description = description ?? metadataDescription;
     this.evaluators = evaluators;
     this.executionPolicy = executionPolicy;
     this.data = {
@@ -112,15 +113,17 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
   public static fromApiModel<T extends DatasetItemData = DatasetItemData>(
     model: DatasetItemWrite
   ): DatasetItem<T> {
-    return new DatasetItem<T>({
-      id: model.id,
-      traceId: model.traceId,
-      spanId: model.spanId,
-      source: model.source,
-      ...(model.description && { description: model.description }),
-      ...(model.evaluators && { evaluators: model.evaluators }),
-      ...(model.executionPolicy && { executionPolicy: model.executionPolicy }),
-      ...(model.data as T),
-    });
+    return new DatasetItem<T>(
+      {
+        id: model.id,
+        traceId: model.traceId,
+        spanId: model.spanId,
+        source: model.source,
+        ...(model.evaluators && { evaluators: model.evaluators }),
+        ...(model.executionPolicy && { executionPolicy: model.executionPolicy }),
+        ...(model.data as T),
+      },
+      model.description
+    );
   }
 }
