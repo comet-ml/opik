@@ -2221,8 +2221,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private BigDecimal getBigDecimal(Row row, String columnName) {
-        Double value = row.get(columnName, Double.class);
-        return value != null ? BigDecimal.valueOf(value) : null;
+        return row.get(columnName, BigDecimal.class);
     }
 
     /**
