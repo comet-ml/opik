@@ -47,7 +47,10 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
     this.description = description;
     this.evaluators = evaluators;
     this.executionPolicy = executionPolicy;
-    this.data = { ...rest } as T;
+    this.data = {
+      ...rest,
+      ...(description !== undefined ? { description } : {}),
+    } as T;
   }
 
   /**
