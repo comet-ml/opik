@@ -302,6 +302,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
             name=None,
             temperature=self._temperature,
             seed=self._seed,
+            custom_parameters={"reasoning_effort": self._reasoning_effort},
         )
 
         messages = [
@@ -375,6 +376,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
         init_kwargs = init_kwargs or {}
         model = init_kwargs.get("model")
 
+        custom = config.model.custom_parameters or {}
+        reasoning_effort = custom.get("reasoning_effort")
+
         return cls(
             assertions=assertion_texts,
             name=config.name,
@@ -383,4 +387,5 @@ class LLMJudge(base.BaseSuiteEvaluator):
             project_name=project_name,
             seed=config.model.seed,
             temperature=config.model.temperature,
+            reasoning_effort=reasoning_effort,
         )

@@ -76,6 +76,7 @@ class TestLLMJudgeToConfig:
         assert config_dict["model"] == {
             "temperature": 0.0,
             "seed": 123,
+            "customParameters": {"reasoning_effort": "low"},
         }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
         # Schema items: name, type, description (matching backend's LlmAsJudgeOutputSchema)
@@ -145,6 +146,7 @@ class TestLLMJudgeSerializedFormat:
             "model": {
                 "temperature": 0.0,
                 "seed": 42,
+                "customParameters": {"reasoning_effort": "low"},
             },
             "messages": [
                 {
@@ -283,4 +285,5 @@ class TestLLMJudgeFromConfig:
         assert new_config_dict["model"] == {
             "temperature": 0.7,
             "seed": 123,
+            "customParameters": {"reasoning_effort": "low"},
         }
