@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset borystkachenko:000056_add_name_to_agent_blueprints
+--changeset borystkachenko:000057_add_name_to_agent_blueprints
 --comment: Add name column to agent_blueprints for versioned naming (v1, v2, ...)
 
 ALTER TABLE agent_blueprints ADD COLUMN name VARCHAR(32) NOT NULL DEFAULT 'v1';
