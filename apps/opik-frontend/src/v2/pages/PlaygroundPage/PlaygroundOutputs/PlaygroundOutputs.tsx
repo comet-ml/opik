@@ -177,7 +177,7 @@ const PlaygroundOutputs = ({
     }
 
     return (
-      <div className="flex w-full gap-[var(--item-gap)] pb-4 pt-2">
+      <div className="flex w-full pb-4 pt-2">
         {promptIds?.map((promptId) => (
           <PlaygroundOutput
             key={`output-${promptId}`}
@@ -194,7 +194,7 @@ const PlaygroundOutputs = ({
   }, [setDatasetVariables, datasetColumns]);
 
   return (
-    <div className="flex min-w-full flex-col">
+    <div className="flex min-w-full flex-col border-r">
       <PlaygroundOutputActions
         datasetId={datasetId}
         versionName={versionName}

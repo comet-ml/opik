@@ -74,7 +74,7 @@ const PlaygroundOutput = ({
   const outputLabel = totalOutputs === 1 ? "Output" : "Outputs";
 
   return (
-    <div className="size-full min-w-[var(--min-prompt-width)]">
+    <div className="min-w-[var(--min-prompt-width)] flex-1 px-4">
       <p className="comet-body-s-accented my-3">{outputLabel}</p>
       <div className="comet-body-s group relative min-h-52 rounded-lg border bg-background p-3">
         {traceId && playgroundProject?.id && (

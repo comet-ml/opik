@@ -1,17 +1,17 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import { Separator } from "@/ui/separator";
 import PlaygroundPrompt from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Button } from "@/ui/button";
-import { Plus, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
 } from "@/constants/llm";
 import {
-  useAddPrompt,
   usePromptCount,
   usePromptIds,
   useSetIsRunning,
@@ -30,19 +30,14 @@ interface PlaygroundPromptsState {
   workspaceName: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
-  onResetHeight: () => void;
-  hasDataset: boolean;
 }
 
 const PlaygroundPrompts = ({
   workspaceName,
   providerKeys,
   isPendingProviderKeys,
-  onResetHeight,
-  hasDataset,
 }: PlaygroundPromptsState) => {
   const promptCount = usePromptCount();
-  const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const setSelectedRuleIds = useSetSelectedRuleIds();
@@ -50,7 +45,6 @@ const PlaygroundPrompts = ({
   const resetDatasetFilters = useResetDatasetFilters();
   const setDatasetVariables = useSetDatasetVariables();
   const resetKeyRef = useRef(0);
-  const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
 
   const promptIds = usePromptIds();
@@ -66,18 +60,6 @@ const PlaygroundPrompts = ({
       defaultValue: null,
     },
   );
-
-  const handleAddPrompt = () => {
-    const newPrompt = generateDefaultPrompt({
-      setupProviders: providerKeys,
-      lastPickedModel,
-      providerResolver: calculateModelProvider,
-      modelResolver: calculateDefaultModel,
-    });
-    addPrompt(newPrompt);
-    scrollToPromptRef.current = newPrompt.id;
-  };
-
   const resetPlayground = useCallback(() => {
     const newPrompt = generateDefaultPrompt({
       setupProviders: providerKeys,
@@ -92,7 +74,6 @@ const PlaygroundPrompts = ({
     setIsRunning(false);
     resetDatasetFilters();
     setDatasetVariables([]);
-    onResetHeight();
   }, [
     providerKeys,
     lastPickedModel,
@@ -105,7 +86,6 @@ const PlaygroundPrompts = ({
     setIsRunning,
     resetDatasetFilters,
     setDatasetVariables,
-    onResetHeight,
   ]);
 
   useEffect(() => {
@@ -116,40 +96,32 @@ const PlaygroundPrompts = ({
   }, [promptCount, isPendingProviderKeys, resetPlayground]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex h-[50vh] shrink-0 flex-col border-b">
+      <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-1">
           <h1 className="comet-title-l">Playground</h1>
           <ExplainerIcon
             {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_playground]}
           />
         </div>
-
-        <div className="sticky right-0 flex gap-2 ">
+        <div className="sticky right-4">
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
+              resetKeyRef.current += 1;
               setOpen(true);
-              resetKeyRef.current = resetKeyRef.current + 1;
             }}
           >
             <RotateCcw className="mr-2 size-4" />
-            Reset playground
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={handleAddPrompt}>
-            <Plus className="mr-2 size-4" />
-            Add prompt
+            Reset
           </Button>
         </div>
       </div>
 
-      <div
-        className={`flex size-full gap-[var(--item-gap)] ${
-          hasDataset ? "h-auto min-h-0 flex-1 overflow-x-auto" : ""
-        }`}
-      >
+      <Separator />
+
+      <div className="flex min-h-0 flex-1">
         {promptIds.map((promptId, idx) => (
           <PlaygroundPrompt
             workspaceName={workspaceName}
@@ -160,10 +132,10 @@ const PlaygroundPrompts = ({
             isPendingProviderKeys={isPendingProviderKeys}
             providerResolver={calculateModelProvider}
             modelResolver={calculateDefaultModel}
-            scrollToPromptRef={scrollToPromptRef}
           />
         ))}
       </div>
+
       <ConfirmDialog
         key={resetKeyRef.current}
         open={Boolean(open)}

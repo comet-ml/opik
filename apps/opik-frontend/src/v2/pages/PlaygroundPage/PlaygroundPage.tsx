@@ -1,15 +1,23 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Loader } from "lucide-react";
 
 import PlaygroundOutputs from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
+import PlaygroundAddVariant from "@/v2/pages/PlaygroundPage/PlaygroundAddVariant";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import ResizablePromptContainer from "@/v2/pages/PlaygroundPage/ResizablePromptContainer";
+import PlaygroundPrompts from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
 import SetupProviderDialog from "@/v2/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import {
   useTriggerProviderValidation,
   useIsRunning,
+  usePromptCount,
 } from "@/store/PlaygroundStore";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
@@ -21,10 +29,11 @@ const PlaygroundPage = () => {
     useState(false);
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
+  const promptCount = usePromptCount();
+  const ref = useRef<HTMLDivElement>(null);
 
   const { datasetId, versionName, versionHash, setDatasetId } =
     usePlaygroundDataset();
-  const hasDataset = !!datasetId;
 
   const { DialogComponent } = useNavigationBlocker({
     condition: isRunning,
@@ -68,34 +77,38 @@ const PlaygroundPage = () => {
   }
 
   return (
-    <>
+    <div ref={ref} className="-mx-6 h-full">
       <div
-        className={`flex h-full w-fit min-w-full flex-col pt-6 ${
-          hasDataset ? "h-auto w-full" : ""
-        }`}
+        className="flex min-h-full w-fit min-w-full"
         style={
           {
-            "--min-prompt-width": "700px",
-            "--item-gap": "1.5rem",
+            "--min-prompt-width": "720px",
+            "--max-prompt-width": "1440px",
           } as React.CSSProperties
         }
       >
-        <ResizablePromptContainer
-          workspaceName={workspaceName}
-          providerKeys={providerKeys}
-          isPendingProviderKeys={isPendingProviderKeys}
-          hasDataset={hasDataset}
-        />
-
-        <div className="flex">
-          <PlaygroundOutputs
-            datasetId={datasetId}
-            versionName={versionName}
-            versionHash={versionHash}
-            onChangeDatasetId={setDatasetId}
+        <div
+          className="flex min-w-0 flex-1 flex-col"
+          style={{ maxWidth: `calc(${promptCount} * var(--max-prompt-width))` }}
+        >
+          <PlaygroundPrompts
             workspaceName={workspaceName}
+            providerKeys={providerKeys}
+            isPendingProviderKeys={isPendingProviderKeys}
           />
+
+          <div className="flex flex-1">
+            <PlaygroundOutputs
+              datasetId={datasetId}
+              versionName={versionName}
+              versionHash={versionHash}
+              onChangeDatasetId={setDatasetId}
+              workspaceName={workspaceName}
+            />
+          </div>
         </div>
+
+        <PlaygroundAddVariant providerKeys={providerKeys} containerRef={ref} />
       </div>
 
       <SetupProviderDialog
@@ -105,7 +118,7 @@ const PlaygroundPage = () => {
       />
 
       {DialogComponent}
-    </>
+    </div>
   );
 };
 

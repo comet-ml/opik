@@ -218,7 +218,7 @@ const LLMPromptMessage = forwardRef<
           })}
         >
           <CardContent className="p-0">
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_hsl(var(--background))] dark:bg-accent-background dark:shadow-none">
+            <div className="flex items-center justify-between gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button

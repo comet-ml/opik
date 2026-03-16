@@ -195,74 +195,67 @@ const LLMPromptMessages = ({
       modifiers={[restrictToVerticalAxis]}
       onDragEnd={handleDragEnd}
     >
-      <div className="comet-no-scrollbar h-[calc(100%-30px)] overflow-y-auto">
-        <SortableContext
-          items={messages}
-          strategy={verticalListSortingStrategy}
-        >
-          <div className="flex flex-col gap-2">
-            {messages.map((message, messageIdx) => (
-              <LLMPromptMessage
-                key={message.id}
-                ref={(handle) =>
-                  handle
-                    ? messageRefsMap.current.set(message.id, handle)
-                    : messageRefsMap.current.delete(message.id)
-                }
-                possibleTypes={possibleTypes}
-                errorText={validationErrors?.[messageIdx]?.content?.message}
-                hideRemoveButton={messages?.length === 1}
-                hideDragButton={messages?.length === 1}
-                hidePromptActions={hidePromptActions}
-                showAlwaysActionsPanel={messageIdx === messages.length - 1}
-                onRemoveMessage={() => handleRemoveMessage(message.id)}
-                onDuplicateMessage={() =>
-                  handleDuplicateMessage(message, messageIdx + 1)
-                }
-                onChangeMessage={(changes) =>
-                  handleChangeMessage(message.id, changes)
-                }
-                onReplaceWithChatPrompt={handleReplaceWithChatPrompt}
-                onClearOtherPromptLinks={handleClearOtherPromptLinks(
-                  message.id,
-                )}
-                onFocus={() => handleMessageFocus(message.id)}
-                message={message}
-                disableMedia={disableMedia}
-                promptVariables={promptVariables}
-                improvePromptConfig={improvePromptConfig}
-                disabled={disabled}
-                jsonTreeData={jsonTreeData}
-              />
-            ))}
-          </div>
-        </SortableContext>
-
-        {promptVariables.length > 0 && (
-          <p className="comet-body-s mt-2 text-light-slate">
-            Use {"{{variable_name}}"} syntax to reference dataset variables in
-            your prompt:{" "}
-            <PromptVariablesList
-              variables={promptVariables}
-              onVariableClick={handleVariableClick}
-              tooltipContent="Click to insert into prompt"
+      <SortableContext items={messages} strategy={verticalListSortingStrategy}>
+        <div className="flex flex-col gap-2">
+          {messages.map((message, messageIdx) => (
+            <LLMPromptMessage
+              key={message.id}
+              ref={(handle) =>
+                handle
+                  ? messageRefsMap.current.set(message.id, handle)
+                  : messageRefsMap.current.delete(message.id)
+              }
+              possibleTypes={possibleTypes}
+              errorText={validationErrors?.[messageIdx]?.content?.message}
+              hideRemoveButton={messages?.length === 1}
+              hideDragButton={messages?.length === 1}
+              hidePromptActions={hidePromptActions}
+              showAlwaysActionsPanel={messageIdx === messages.length - 1}
+              onRemoveMessage={() => handleRemoveMessage(message.id)}
+              onDuplicateMessage={() =>
+                handleDuplicateMessage(message, messageIdx + 1)
+              }
+              onChangeMessage={(changes) =>
+                handleChangeMessage(message.id, changes)
+              }
+              onReplaceWithChatPrompt={handleReplaceWithChatPrompt}
+              onClearOtherPromptLinks={handleClearOtherPromptLinks(message.id)}
+              onFocus={() => handleMessageFocus(message.id)}
+              message={message}
+              disableMedia={disableMedia}
+              promptVariables={promptVariables}
+              improvePromptConfig={improvePromptConfig}
+              disabled={disabled}
+              jsonTreeData={jsonTreeData}
             />
-          </p>
-        )}
+          ))}
+        </div>
+      </SortableContext>
 
-        {!hideAddButton && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={onAddMessage}
-            type="button"
-          >
-            <Plus className="mr-2 size-4" />
-            Message
-          </Button>
-        )}
-      </div>
+      {promptVariables.length > 0 && (
+        <p className="comet-body-s mt-2 text-light-slate">
+          Use {"{{variable_name}}"} syntax to reference dataset variables in
+          your prompt:{" "}
+          <PromptVariablesList
+            variables={promptVariables}
+            onVariableClick={handleVariableClick}
+            tooltipContent="Click to insert into prompt"
+          />
+        </p>
+      )}
+
+      {!hideAddButton && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={onAddMessage}
+          type="button"
+        >
+          <Plus className="mr-2 size-4" />
+          Message
+        </Button>
+      )}
     </DndContext>
   );
 };
