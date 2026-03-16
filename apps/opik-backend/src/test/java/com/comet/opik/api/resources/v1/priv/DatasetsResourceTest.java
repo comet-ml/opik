@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.Comment;
@@ -8,6 +9,7 @@ import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemUpdate;
@@ -16,9 +18,12 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.EvaluationMethod;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -33,6 +38,7 @@ import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -75,6 +81,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -179,6 +186,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.flatMapping;
 import static java.util.stream.Collectors.groupingBy;
@@ -205,7 +213,7 @@ class DatasetsResourceTest {
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName"};
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
+            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId", "runSummariesByExperiment"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
             "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount",
@@ -1678,6 +1686,28 @@ class DatasetsResourceTest {
             assertThat(actualDataset.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
         }
 
+        @Test
+        @DisplayName("Get dataset by id passes required permissions to auth endpoint")
+        void getDatasetByIdPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            var id = createAndAssert(dataset, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.getDatasetById(id, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_VIEW.getValue()))));
+        }
+
     }
 
     private void createScoreAndAssert(FeedbackScoreBatchContainer feedbackScoreBatch, String apiKey,
@@ -1706,6 +1736,7 @@ class DatasetsResourceTest {
     private UUID createExperimentForDataset(Dataset dataset, String apiKey, String workspaceName) {
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetName(dataset.name())
+                .status(ExperimentStatus.RUNNING)
                 .build();
         return experimentResourceClient.create(experiment, apiKey, workspaceName);
     }
@@ -3047,6 +3078,23 @@ class DatasetsResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
             findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
+        }
+
+        @Test
+        @DisplayName("Find datasets passes required permissions to auth endpoint")
+        void findDatasetsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.getDatasets(workspaceName, apiKey);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_VIEW.getValue()))));
         }
     }
 
@@ -6161,7 +6209,7 @@ class DatasetsResourceTest {
 
                         assertThat(actualExperimentItem.feedbackScores())
                                 .usingRecursiveComparison()
-                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                 .ignoringCollectionOrder()
                                 .isEqualTo(expectedExperimentItem.feedbackScores());
 
@@ -7301,6 +7349,478 @@ class DatasetsResourceTest {
             assertDatasetItemPage(actualPage, datasetItems, columns, 1);
 
             return actualPage;
+        }
+    }
+
+    @Nested
+    @DisplayName("Assertion Results in Compare Endpoint:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindDatasetItemsWithExperimentItemsAssertionResults {
+
+        private FeedbackScoreBatchItem regularScore(Trace trace, String name, BigDecimal value) {
+            return factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .value(value)
+                    .categoryName(null)
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
+
+        private FeedbackScoreBatchItem assertionScore(Trace trace, String name, BigDecimal value, String reason) {
+            return factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .categoryName("suite_assertion")
+                    .value(value)
+                    .reason(reason)
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when suite experiment has assertion scores, then compare returns assertionResults and status")
+        void find__suiteExperimentWithAssertions__thenReturnAssertionResultsAndStatus() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var experimentItem = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+            var scores = List.of(
+                    regularScore(trace, "accuracy", BigDecimal.valueOf(0.85)),
+                    assertionScore(trace, "Should link to docs", BigDecimal.ONE, "Links found"),
+                    assertionScore(trace, "Should be concise", BigDecimal.ONE, "Under 200 words"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+            assertThat(actualDatasetItem.id()).isEqualTo(datasetItem.id());
+            assertThat(actualDatasetItem.experimentItems()).hasSize(1);
+
+            var actualExpItem = actualDatasetItem.experimentItems().getFirst();
+            assertThat(actualExpItem.experimentId()).isEqualTo(experimentId);
+
+            assertThat(actualExpItem.assertionResults()).hasSize(2);
+            assertThat(actualExpItem.assertionResults()).allMatch(AssertionResult::passed);
+            assertThat(actualExpItem.status()).isEqualTo(RunStatus.PASSED);
+
+            assertThat(actualExpItem.feedbackScores()).hasSize(1);
+            assertThat(actualExpItem.feedbackScores().getFirst().name()).isEqualTo("accuracy");
+        }
+
+        @Test
+        @DisplayName("when suite experiment has failing assertion, then status=failed")
+        void find__suiteExperimentWithFailingAssertion__thenStatusFailed() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var experimentItem = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+            var scores = List.of(
+                    assertionScore(trace, "Should link to docs", BigDecimal.ONE, "Links found"),
+                    assertionScore(trace, "Should be concise", BigDecimal.ZERO, "Too long"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+            assertThat(actualDatasetItem.id()).isEqualTo(datasetItem.id());
+            var actualExpItem = actualDatasetItem.experimentItems().getFirst();
+            assertThat(actualExpItem.experimentId()).isEqualTo(experimentId);
+
+            assertThat(actualExpItem.assertionResults()).hasSize(2);
+            assertThat(actualExpItem.status()).isEqualTo(RunStatus.FAILED);
+            assertThat(actualExpItem.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("when comparing suite and regular experiments, then only suite items have assertionResults")
+        void find__suiteAndRegularExperiments__thenOnlySuiteHasAssertionResults() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            // Suite experiment
+            var suiteExperiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var suiteExperimentId = experimentResourceClient.create(suiteExperiment, apiKey, workspaceName);
+
+            // Regular experiment
+            var regularExperiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var regularExperimentId = experimentResourceClient.create(regularExperiment, apiKey, workspaceName);
+
+            var suiteTrace = factory.manufacturePojo(Trace.class);
+            var regularTrace = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(suiteTrace, regularTrace), apiKey, workspaceName);
+
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder()
+                            .experimentId(suiteExperimentId)
+                            .datasetItemId(datasetItem.id())
+                            .traceId(suiteTrace.id())
+                            .build(),
+                    ExperimentItem.builder()
+                            .experimentId(regularExperimentId)
+                            .datasetItemId(datasetItem.id())
+                            .traceId(regularTrace.id())
+                            .build()),
+                    apiKey, workspaceName);
+
+            // Suite assertion scores for suite experiment trace
+            var suiteScores = List.of(
+                    assertionScore(suiteTrace, "Should be accurate", BigDecimal.ONE, "Accurate"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(suiteScores).build(), apiKey, workspaceName);
+
+            // Regular score for regular experiment trace
+            var regularScores = List.of(
+                    regularScore(regularTrace, "accuracy", BigDecimal.valueOf(0.9)));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(regularScores).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(suiteExperimentId, regularExperimentId), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+            assertThat(actualDatasetItem.experimentItems()).hasSize(2);
+
+            var suiteItem = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(suiteExperimentId))
+                    .findFirst().orElseThrow();
+            var regularItem = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(regularExperimentId))
+                    .findFirst().orElseThrow();
+
+            // Suite experiment item has assertion results and status
+            assertThat(suiteItem.assertionResults()).hasSize(1);
+            assertThat(suiteItem.assertionResults().getFirst().passed()).isTrue();
+            assertThat(suiteItem.status()).isEqualTo(RunStatus.PASSED);
+            assertThat(suiteItem.feedbackScores()).isNull();
+
+            // Regular experiment item has no assertion results and no status
+            assertThat(regularItem.assertionResults()).isNull();
+            assertThat(regularItem.status()).isNull();
+            assertThat(regularItem.feedbackScores()).hasSize(1);
+            assertThat(regularItem.feedbackScores().getFirst().name()).isEqualTo("accuracy");
+        }
+
+        @Test
+        @DisplayName("when multi-run suite experiment meets pass_threshold, then runSummaries show passed")
+        void find__multiRunSuiteExperiment__passThresholdMet__thenRunSummariesPassed() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            // Set execution_policy with passThreshold=2
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            var version1 = versions.content().getFirst();
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .executionPolicy(new ExecutionPolicy(3, 2))
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // 3 runs (traces) for the same dataset item
+            var trace1 = factory.manufacturePojo(Trace.class);
+            var trace2 = factory.manufacturePojo(Trace.class);
+            var trace3 = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
+
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItem.id()).traceId(trace1.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItem.id()).traceId(trace2.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItem.id()).traceId(trace3.id()).build()),
+                    apiKey, workspaceName);
+
+            // Run 1 passes (all assertions pass), Run 2 passes, Run 3 fails
+            var scores = List.of(
+                    assertionScore(trace1, "check1", BigDecimal.ONE, "ok"),
+                    assertionScore(trace2, "check1", BigDecimal.ONE, "ok"),
+                    assertionScore(trace3, "check1", BigDecimal.ZERO, "failed"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+            assertThat(actualDatasetItem.experimentItems()).hasSize(3);
+
+            // Verify runSummariesByExperiment
+            assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull();
+            assertThat(actualDatasetItem.runSummariesByExperiment()).containsKey(experimentId.toString());
+
+            var summary = actualDatasetItem.runSummariesByExperiment().get(experimentId.toString());
+            assertThat(summary.totalRuns()).isEqualTo(3);
+            assertThat(summary.passedRuns()).isEqualTo(2);
+            assertThat(summary.status()).isEqualTo(RunStatus.PASSED); // 2 >= passThreshold(2)
+        }
+
+        @Test
+        @DisplayName("when multi-run suite experiment fails pass_threshold, then runSummaries show failed")
+        void find__multiRunSuiteExperiment__passThresholdNotMet__thenRunSummariesFailed() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            // Set execution_policy with passThreshold=3 (all 3 must pass)
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            var version1 = versions.content().getFirst();
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .executionPolicy(new ExecutionPolicy(3, 3))
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace1 = factory.manufacturePojo(Trace.class);
+            var trace2 = factory.manufacturePojo(Trace.class);
+            var trace3 = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
+
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItem.id()).traceId(trace1.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItem.id()).traceId(trace2.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItem.id()).traceId(trace3.id()).build()),
+                    apiKey, workspaceName);
+
+            // Only 2 of 3 runs pass → passedRuns=2 < passThreshold=3
+            var scores = List.of(
+                    assertionScore(trace1, "check1", BigDecimal.ONE, "ok"),
+                    assertionScore(trace2, "check1", BigDecimal.ONE, "ok"),
+                    assertionScore(trace3, "check1", BigDecimal.ZERO, "failed"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+
+            // Verify runSummariesByExperiment
+            assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull();
+            var summary = actualDatasetItem.runSummariesByExperiment().get(experimentId.toString());
+            assertThat(summary.totalRuns()).isEqualTo(3);
+            assertThat(summary.passedRuns()).isEqualTo(2);
+            assertThat(summary.status()).isEqualTo(RunStatus.FAILED); // 2 < passThreshold(3)
+        }
+
+        @Test
+        @DisplayName("when comparing two suite experiments with different results, then each has independent runSummaries")
+        void find__twoSuiteExperiments__thenIndependentRunSummaries() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            // Suite experiment A
+            var experimentA = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentIdA = experimentResourceClient.create(experimentA, apiKey, workspaceName);
+
+            // Suite experiment B
+            var experimentB = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentIdB = experimentResourceClient.create(experimentB, apiKey, workspaceName);
+
+            var traceA = factory.manufacturePojo(Trace.class);
+            var traceB = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(traceA, traceB), apiKey, workspaceName);
+
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder().experimentId(experimentIdA)
+                            .datasetItemId(datasetItem.id()).traceId(traceA.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentIdB)
+                            .datasetItemId(datasetItem.id()).traceId(traceB.id()).build()),
+                    apiKey, workspaceName);
+
+            // Experiment A: assertion passes
+            var scoresA = List.of(
+                    assertionScore(traceA, "check1", BigDecimal.ONE, "ok"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scoresA).build(), apiKey, workspaceName);
+
+            // Experiment B: assertion fails
+            var scoresB = List.of(
+                    assertionScore(traceB, "check1", BigDecimal.ZERO, "failed"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scoresB).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentIdA, experimentIdB), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+            assertThat(actualDatasetItem.experimentItems()).hasSize(2);
+
+            // Verify each experiment item has its own status
+            var itemA = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(experimentIdA))
+                    .findFirst().orElseThrow();
+            var itemB = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(experimentIdB))
+                    .findFirst().orElseThrow();
+
+            assertThat(itemA.assertionResults()).hasSize(1);
+            assertThat(itemA.assertionResults().getFirst().passed()).isTrue();
+            assertThat(itemA.status()).isEqualTo(RunStatus.PASSED);
+
+            assertThat(itemB.assertionResults()).hasSize(1);
+            assertThat(itemB.assertionResults().getFirst().passed()).isFalse();
+            assertThat(itemB.status()).isEqualTo(RunStatus.FAILED);
+
+            // runSummariesByExperiment is null for single-run experiments (only populated when group.size() > 1)
+            assertThat(actualDatasetItem.runSummariesByExperiment()).isNull();
         }
     }
 

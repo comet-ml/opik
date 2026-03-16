@@ -20,46 +20,57 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
   entityType,
 }) => {
   const {
-    permissions: { canAnnotateTraceSpanThread },
+    permissions: { canUpdateOnlineEvaluationRules, canAnnotateTraceSpanThread },
   } = usePermissions();
 
   const evaluationDocsLink = buildDocsUrl("/production/rules");
 
   const getDescription = () => {
-    if (canAnnotateTraceSpanThread) {
-      return `Use the SDK or Online evaluation rules to automatically score your
-        ${entityCopy[entityType]}, or manually annotate your
-        ${entityCopy[entityType]} with human review.`;
+    if (canUpdateOnlineEvaluationRules && canAnnotateTraceSpanThread) {
+      return `Use the SDK or Online evaluation rules to automatically score your ${entityCopy[entityType]}, or manually annotate your ${entityCopy[entityType]} with human review.`;
     }
 
-    return `Use Online evaluation rules to automatically score your
-        ${entityCopy[entityType]}.`;
+    if (canAnnotateTraceSpanThread) {
+      return `Use the SDK to automatically score your ${entityCopy[entityType]}, or manually annotate your ${entityCopy[entityType]} with human review.`;
+    }
+
+    if (canUpdateOnlineEvaluationRules) {
+      return `Use Online evaluation rules to automatically score your ${entityCopy[entityType]}.`;
+    }
+
+    return "";
   };
 
   return (
     <div className="flex min-h-48 flex-col items-center justify-center gap-2 bg-background p-6">
       <div>No feedback scores yet</div>
-      <span className="max-w-[500px] whitespace-pre-wrap break-words text-center text-muted-slate">
-        {getDescription()}
-      </span>
-      <div className="flex flex-wrap justify-center gap-2 pt-3">
-        {canAnnotateTraceSpanThread && (
-          <Button variant="outline" size="sm" onClick={onAddHumanReview}>
-            <PenLine className="mr-2 size-4" />
-            Add human review
-          </Button>
-        )}
-        <Button variant="secondary" size="sm" asChild>
-          <a
-            href={evaluationDocsLink}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Book className="mr-2 size-4" />
-            Learn about online evaluation
-          </a>
-        </Button>
-      </div>
+      {(canAnnotateTraceSpanThread || canUpdateOnlineEvaluationRules) && (
+        <>
+          <span className="max-w-[500px] whitespace-pre-wrap break-words text-center text-muted-slate">
+            {getDescription()}
+          </span>
+          <div className="flex flex-wrap justify-center gap-2 pt-3">
+            {canAnnotateTraceSpanThread && (
+              <Button variant="outline" size="sm" onClick={onAddHumanReview}>
+                <PenLine className="mr-2 size-4" />
+                Add human review
+              </Button>
+            )}
+            {canUpdateOnlineEvaluationRules && (
+              <Button variant="secondary" size="sm" asChild>
+                <a
+                  href={evaluationDocsLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Book className="mr-2 size-4" />
+                  Learn about online evaluation
+                </a>
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

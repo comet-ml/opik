@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
@@ -30,6 +31,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -7944,6 +7946,153 @@ class ExperimentsResourceTest {
                     .passRate(BigDecimal.valueOf(0.5))
                     .build();
             getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
+        }
+    }
+
+    @Nested
+    @DisplayName("Assertion Results in Stream Endpoint:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AssertionResults {
+
+        @BeforeEach
+        void setUp() {
+            Mockito.reset(defaultEventBus);
+        }
+
+        private FeedbackScoreBatchItem score(Trace trace, String name, BigDecimal value) {
+            return FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .value(value)
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
+
+        private FeedbackScoreBatchItem assertionScore(Trace trace, String name, BigDecimal value, String reason) {
+            return FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .categoryName("suite_assertion")
+                    .value(value)
+                    .reason(reason)
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when stream has suite_assertion scores, then split into assertion_results and compute status=passed")
+        void streamExperimentItems__suiteAssertionScores__thenReturnAssertionResultsAndStatusPassed() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(
+                    score(trace, "accuracy", BigDecimal.valueOf(0.85)),
+                    assertionScore(trace, "Should link to docs", BigDecimal.ONE, "Links found"),
+                    assertionScore(trace, "Should be concise", BigDecimal.ONE, "Under 200 words"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
+            assertThat(streamedItems).hasSize(1);
+
+            var streamedItem = streamedItems.getFirst();
+            assertThat(streamedItem.assertionResults()).hasSize(2);
+            assertThat(streamedItem.assertionResults()).allMatch(AssertionResult::passed);
+            assertThat(streamedItem.status()).isEqualTo(RunStatus.PASSED);
+            assertThat(streamedItem.feedbackScores()).hasSize(1);
+            assertThat(streamedItem.feedbackScores().getFirst().name()).isEqualTo("accuracy");
+        }
+
+        @Test
+        @DisplayName("when stream has failing suite_assertion, then status=failed")
+        void streamExperimentItems__failingAssertions__thenStatusFailed() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(
+                    assertionScore(trace, "Should link to docs", BigDecimal.ONE, "Links found"),
+                    assertionScore(trace, "Should be concise", BigDecimal.ZERO, "Too long"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
+            assertThat(streamedItems).hasSize(1);
+
+            var streamedItem = streamedItems.getFirst();
+            assertThat(streamedItem.assertionResults()).hasSize(2);
+            assertThat(streamedItem.status()).isEqualTo(RunStatus.FAILED);
+            assertThat(streamedItem.assertionResults().get(0).passed()).isTrue();
+            assertThat(streamedItem.assertionResults().get(1).passed()).isFalse();
+            assertThat(streamedItem.assertionResults().get(1).reason()).isEqualTo("Too long");
+            assertThat(streamedItem.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("when stream has only regular scores (no suite_assertion), then no assertion_results and no status")
+        void streamExperimentItems__regularScoresOnly__thenNoAssertionResults() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(score(trace, "accuracy", BigDecimal.valueOf(0.85)));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
+            assertThat(streamedItems).hasSize(1);
+
+            var streamedItem = streamedItems.getFirst();
+            assertThat(streamedItem.assertionResults()).isNull();
+            assertThat(streamedItem.status()).isNull();
+            assertThat(streamedItem.feedbackScores()).hasSize(1);
         }
     }
 }

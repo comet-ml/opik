@@ -74,7 +74,10 @@ public class CostService {
      * Fixes issue #5018: Handles model names with date suffixes like "gpt-5.2-2025-12-17"
      * by stripping the date suffix and falling back to the base model name.
      *
-     * @param modelName The model name (may contain dots, e.g., "claude-3.5-sonnet")
+     * Fixes issue #5621: Handles model names with provider prefix like "openai/gpt-4o"
+     * sent by LiteLLM via gen_ai.request.model, by stripping the prefix before lookup.
+     *
+     * @param modelName The model name (may contain dots or provider prefix, e.g., "openai/gpt-4o")
      * @param provider The provider name (e.g., "anthropic")
      * @return ModelPrice for the model, or DEFAULT_COST if not found
      */
@@ -82,6 +85,14 @@ public class CostService {
         if (StringUtils.isBlank(modelName) || StringUtils.isBlank(provider)) {
             return DEFAULT_COST;
         }
+
+        // Strip provider prefix if present (e.g. "openai/gpt-4o" -> "gpt-4o").
+        // LiteLLM sends model names with provider prefix via gen_ai.request.model.
+        // This is safe because parseModelPrices() also calls parseModelName() when building
+        // the price map, so stored keys never contain a provider prefix. All subsequent
+        // normalization steps (dot→hyphen, date suffix stripping) are therefore applied to
+        // the same prefix-free name that was used as the key when the map was populated.
+        modelName = parseModelName(modelName);
 
         // Try exact match first (backwards compatibility)
         String exactKey = createModelProviderKey(modelName, provider);
@@ -165,7 +176,7 @@ public class CostService {
                 .map(cost -> Optional.ofNullable(cost.get("currency"))
                         .map(JsonNode::asText)
                         .filter("USD"::equals)
-                        .map(currency -> cost.get("total_tokens"))
+                        .flatMap(currency -> Optional.ofNullable(cost.get("total_cost")))
                         .map(JsonNode::decimalValue)
                         .orElse(BigDecimal.ZERO))
                 .orElse(BigDecimal.ZERO);

@@ -1,10 +1,14 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.r2dbc.spi.Result;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 
 import java.time.Instant;
@@ -15,8 +19,12 @@ import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
+@Slf4j
 @UtilityClass
-class CommentResultMapper {
+public class CommentResultMapper {
+
+    private static final TypeReference<List<Comment>> COMMENT_LIST_TYPE = new TypeReference<>() {
+    };
 
     static Publisher<Comment> mapItem(Result results) {
         return results.map((row, rowMetadata) -> Comment.builder()
@@ -32,6 +40,9 @@ class CommentResultMapper {
     static List<Comment> getComments(Object commentsRaw) {
         if (commentsRaw instanceof List[] commentsArray) {
             return getComments(commentsArray);
+        }
+        if (commentsRaw instanceof String json) {
+            return parseCommentsFromJson(json);
         }
         return null;
     }
@@ -56,5 +67,19 @@ class CommentResultMapper {
                 .toList();
 
         return commentItems.isEmpty() ? null : commentItems;
+    }
+
+    public static List<Comment> parseCommentsFromJson(String json) {
+        if (StringUtils.isBlank(json) || "[]".equals(json)) {
+            return null;
+        }
+
+        List<Comment> comments = JsonUtils.readValue(json, COMMENT_LIST_TYPE);
+        return CollectionUtils.isEmpty(comments)
+                ? null
+                : comments
+                        .stream()
+                        .sorted(Comparator.comparing(Comment::id))
+                        .toList();
     }
 }

@@ -479,11 +479,14 @@ def test_evaluation_suite__assertion_fails__item_fails(
         expected_score_names={failing_assertion},
     )
 
-    # Additionally verify the score value indicates failure
+    # Additionally verify the assertion result indicates failure
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    score = retrieved_experiment.get_items()[0].feedback_scores[0]
-    assert score["value"] in [0.0, False], (
-        f"Expected failing score (0.0 or False), got {score['value']}"
+    items = retrieved_experiment.get_items()
+    assert len(items) > 0, "Expected at least 1 experiment item"
+    assert len(items[0].assertion_results) > 0, "Expected at least 1 assertion result"
+    assertion = items[0].assertion_results[0]
+    assert assertion["passed"] is False, (
+        f"Expected failing assertion (passed=False), got {assertion['passed']}"
     )
 
 
@@ -594,16 +597,16 @@ def test_evaluation_suite__multiple_assertions_multiple_runs__pass_threshold_log
     assert item_result.runs_passed >= 2
     assert item_result.passed is True
 
-    # Verify each experiment item has exactly 3 scores (one per assertion)
+    # Verify each experiment item has exactly 3 assertion results (one per assertion)
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     for exp_item in retrieved_experiment.get_items():
-        assert exp_item.feedback_scores is not None
-        assert len(exp_item.feedback_scores) == 3, (
-            f"Expected 3 feedback scores per run, got {len(exp_item.feedback_scores)}"
+        assert exp_item.assertion_results is not None
+        assert len(exp_item.assertion_results) == 3, (
+            f"Expected 3 assertion results per run, got {len(exp_item.assertion_results)}"
         )
-        score_names = {s["name"] for s in exp_item.feedback_scores}
-        assert score_names == {assertion_1, assertion_2, assertion_3}, (
-            f"Expected all 3 assertion names on each run, got {score_names}"
+        assertion_names = {ar["value"] for ar in exp_item.assertion_results}
+        assert assertion_names == {assertion_1, assertion_2, assertion_3}, (
+            f"Expected all 3 assertion names on each run, got {assertion_names}"
         )
 
 
@@ -971,6 +974,31 @@ def test_evaluation_suite__update_policy_only__keeps_existing_assertions(
         "Response is helpful",
         "Response is accurate",
     }
+
+
+def test_evaluation_suite__update_with_empty_assertions__clears_assertions(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that update(assertions=[]) clears all suite-level assertions.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test clearing assertions",
+        assertions=["Response is helpful", "Response is accurate"],
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+
+    assert len(suite.get_assertions()) == 2
+
+    suite.update(assertions=[])
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+    assert retrieved.get_assertions() == []
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 1
+    assert policy["pass_threshold"] == 1
 
 
 # =============================================================================

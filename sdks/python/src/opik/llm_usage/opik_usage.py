@@ -67,7 +67,28 @@ class OpikUsage(pydantic.BaseModel):
     def from_unknown_usage_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
         provider_usage = unknown_usage.UnknownUsage.from_original_usage_dict(usage)
 
-        return cls(provider_usage=provider_usage)
+        try:
+            raw = usage.get("prompt_tokens")
+            prompt_tokens: Optional[int] = int(raw) if raw is not None else None
+        except (ValueError, TypeError):
+            prompt_tokens = None
+
+        try:
+            raw = usage.get("completion_tokens")
+            completion_tokens: Optional[int] = int(raw) if raw is not None else None
+        except (ValueError, TypeError):
+            completion_tokens = None
+
+        total_tokens = None
+        if prompt_tokens is not None and completion_tokens is not None:
+            total_tokens = prompt_tokens + completion_tokens
+
+        return cls(
+            completion_tokens=completion_tokens,
+            prompt_tokens=prompt_tokens,
+            total_tokens=total_tokens,
+            provider_usage=provider_usage,
+        )
 
     @classmethod
     def from_openai_completions_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":

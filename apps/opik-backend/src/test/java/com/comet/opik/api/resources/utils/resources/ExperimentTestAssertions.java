@@ -24,7 +24,7 @@ public class ExperimentTestAssertions {
 
         assertThat(actual)
                 .usingRecursiveComparison()
-                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
                 .ignoringCollectionOrderInFields("feedbackScores", "comments")
                 .ignoringFields(ignoringFields)

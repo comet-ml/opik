@@ -41,6 +41,8 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.FileNameUtils;
 import com.comet.opik.utils.RetryUtils;
@@ -122,6 +124,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetById", summary = "Get dataset by id", description = "Get dataset by id", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = Dataset.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(Dataset.View.Public.class)
     public Response getDatasetById(@PathParam("id") UUID id) {
 
@@ -138,6 +141,7 @@ public class DatasetsResource {
     @Operation(operationId = "findDatasets", summary = "Find datasets", description = "Find datasets", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = DatasetPage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(Dataset.View.Public.class)
     public Response findDatasets(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,

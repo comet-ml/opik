@@ -4821,6 +4821,26 @@ class TracesResourceTest {
 
             createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
+            // Create a suite_assertion score on the main project to verify default exclusion
+            String suiteThreadId = UUID.randomUUID().toString();
+            Trace suiteTrace = createTrace().toBuilder()
+                    .projectName(project.name())
+                    .threadId(suiteThreadId)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(suiteTrace), apiKey, workspaceName);
+            Mono.delay(Duration.ofMillis(500)).block();
+            traceResourceClient.closeTraceThread(suiteThreadId, project.id(), null, apiKey, workspaceName);
+            traceResourceClient.threadFeedbackScores(List.of(
+                    FeedbackScoreBatchItemThread.builder()
+                            .projectName(project.name())
+                            .threadId(suiteThreadId)
+                            .name("suite_assertion_score")
+                            .categoryName("suite_assertion")
+                            .value(BigDecimal.ONE)
+                            .source(ScoreSource.SDK)
+                            .build()),
+                    apiKey, workspaceName);
+
             // when
             FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(
                     useProjectId ? projectId : null, apiKey,
@@ -4829,7 +4849,7 @@ class TracesResourceTest {
             List<String> allNames = new ArrayList<>(names);
             allNames.addAll(otherNames);
 
-            // then
+            // then — suite_assertion_score should be excluded by default
             assertFeedbackScoreNames(actualNames, useProjectId ? names : allNames);
         }
     }

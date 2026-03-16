@@ -430,6 +430,67 @@ class EvaluationSuite:
             >>> print(f"Suite passed: {result.passed}")
             >>> print(f"Items passed: {result.items_passed}/{result.items_total}")
         """
+        return self.__internal_api__run_optimization_suite__(
+            task=task,
+            experiment_name_prefix=experiment_name_prefix,
+            experiment_name=experiment_name,
+            project_name=project_name,
+            experiment_config=experiment_config,
+            prompts=prompts,
+            experiment_tags=experiment_tags,
+            verbose=verbose,
+            worker_threads=worker_threads,
+            model=model,
+        )
+
+    def __internal_api__run_optimization_suite__(
+        self,
+        task: LLMTask,
+        *,
+        experiment_name_prefix: Optional[str] = None,
+        experiment_name: Optional[str] = None,
+        project_name: Optional[str] = None,
+        experiment_config: Optional[Dict[str, Any]] = None,
+        prompts: Optional[List[base_prompt.BasePrompt]] = None,
+        experiment_tags: Optional[List[str]] = None,
+        verbose: int = 2,
+        worker_threads: int = 16,
+        model: Optional[str] = None,
+        optimization_id: Optional[str] = None,
+        experiment_type: Optional[str] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        dataset_filter_string: Optional[str] = None,
+        client: Optional[Any] = None,
+    ) -> suite_types.EvaluationSuiteResult:
+        """
+        Run the evaluation suite with optimization-specific parameters.
+
+        This is the internal entry point used by the optimizer framework.
+        It extends the public ``run()`` method with parameters for linking
+        experiments to optimization runs, filtering dataset items, and
+        injecting a pre-configured Opik client.
+
+        Args:
+            task: A callable that takes a dict (the item's data) and returns
+                a dict with "input" and "output" keys.
+            experiment_name_prefix: Optional prefix for auto-generated experiment name.
+            experiment_name: Optional explicit name for the experiment.
+            project_name: Optional project name for tracking.
+            experiment_config: Optional configuration dict for the experiment.
+            prompts: Optional list of Prompt objects to associate with the experiment.
+            experiment_tags: Optional list of tags to associate with the experiment.
+            verbose: Verbosity level. 0=silent, 1=summary only, 2=detailed (default).
+            worker_threads: Number of threads for parallel task execution.
+            model: Optional model name to use for checking assertions.
+            optimization_id: Optimization ID to link the experiment to.
+            experiment_type: Experiment type (e.g. "trial", "mini-batch").
+            dataset_item_ids: Subset of dataset item IDs to evaluate.
+            dataset_filter_string: OQL filter string to filter dataset items.
+            client: Opik client instance. If not provided, uses the cached client.
+
+        Returns:
+            EvaluationSuiteResult with pass/fail status based on execution policy.
+        """
         from opik.evaluation import evaluator as opik_evaluator
 
         @functools.wraps(task)
@@ -439,6 +500,9 @@ class EvaluationSuite:
         return opik_evaluator.evaluate_suite(
             dataset=self._dataset,
             task=_validated_task,
+            client=client,
+            dataset_item_ids=dataset_item_ids,
+            dataset_filter_string=dataset_filter_string,
             experiment_name_prefix=experiment_name_prefix,
             experiment_name=experiment_name,
             project_name=project_name,
@@ -448,4 +512,6 @@ class EvaluationSuite:
             verbose=verbose,
             task_threads=worker_threads,
             evaluator_model=model,
+            optimization_id=optimization_id,
+            experiment_type=experiment_type,
         )

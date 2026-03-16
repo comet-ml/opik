@@ -316,6 +316,9 @@ def evaluate_suite(
     dataset: dataset.Dataset,
     task: LLMTask,
     *,
+    client: Optional[opik_client.Opik] = None,
+    dataset_item_ids: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
     experiment_name_prefix: Optional[str] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
@@ -325,6 +328,8 @@ def evaluate_suite(
     verbose: int = 1,
     task_threads: int = 16,
     evaluator_model: Optional[str] = None,
+    optimization_id: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> "suite_types.EvaluationSuiteResult":
     """
     Run evaluation on a dataset configured as an evaluation suite.
@@ -339,14 +344,15 @@ def evaluate_suite(
     Returns:
         EvaluationSuiteResult with pass/fail status for each item and the suite.
     """
-    client = opik_client.get_client_cached()
+    if client is None:
+        client = opik_client.get_client_cached()
 
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
         experiment_name_prefix=experiment_name_prefix,
     )
 
-    experiment_ = client.create_experiment(
+    create_experiment_kwargs: Dict[str, Any] = dict(
         name=experiment_name,
         dataset_name=dataset.name,
         experiment_config=experiment_config,
@@ -355,6 +361,11 @@ def evaluate_suite(
         tags=experiment_tags,
         dataset_version_id=None,
     )
+    if optimization_id is not None:
+        create_experiment_kwargs["type"] = experiment_type or "trial"
+        create_experiment_kwargs["optimization_id"] = optimization_id
+
+    experiment_ = client.create_experiment(**create_experiment_kwargs)
 
     eval_result, total_time = _evaluate_suite_task(
         client=client,
@@ -365,6 +376,8 @@ def evaluate_suite(
         verbose=verbose,
         task_threads=task_threads,
         evaluator_model=evaluator_model,
+        dataset_item_ids=dataset_item_ids,
+        dataset_filter_string=dataset_filter_string,
     )
 
     suite_result = suite_result_constructor.build_suite_result(eval_result)
@@ -485,6 +498,8 @@ def _evaluate_suite_task(
     verbose: int,
     task_threads: int,
     evaluator_model: Optional[str],
+    dataset_item_ids: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
 ) -> Tuple[evaluation_result.EvaluationResult, float]:
     start_time = time.time()
 
@@ -493,9 +508,9 @@ def _evaluate_suite_task(
         execution_policy = dataset.get_execution_policy()
         items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
             nb_samples=None,
-            dataset_item_ids=None,
+            dataset_item_ids=dataset_item_ids,
             batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
-            filter_string=None,
+            filter_string=dataset_filter_string,
         )
         total = dataset.dataset_items_count
 

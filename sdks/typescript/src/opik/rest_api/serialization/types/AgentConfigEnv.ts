@@ -12,8 +12,7 @@ export const AgentConfigEnv: core.serialization.ObjectSchema<serializers.AgentCo
         blueprintId: core.serialization.property("blueprint_id", core.serialization.string()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
-        lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
-        lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+        endedAt: core.serialization.property("ended_at", core.serialization.date().optional()),
     });
 
 export declare namespace AgentConfigEnv {
@@ -24,7 +23,6 @@ export declare namespace AgentConfigEnv {
         blueprint_id: string;
         created_by?: string | null;
         created_at?: string | null;
-        last_updated_by?: string | null;
-        last_updated_at?: string | null;
+        ended_at?: string | null;
     }
 }

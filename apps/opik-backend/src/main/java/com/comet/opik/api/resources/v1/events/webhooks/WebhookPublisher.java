@@ -6,6 +6,7 @@ import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -13,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -85,12 +85,8 @@ public class WebhookPublisher {
                     webhookConfig.getStreamName(),
                     webhookConfig.getCodec());
 
-            var streamAddArgs = StreamAddArgs
-                    .<String, WebhookEvent<?>>entry(WebhookConfig.PAYLOAD_FIELD, webhookEvent)
-                    .trimNonStrict()
-                    .maxLen(webhookConfig.getStreamMaxLen())
-                    .limit(webhookConfig.getStreamTrimLimit());
-            return stream.add(streamAddArgs)
+            return stream.add(RedisStreamUtils.buildAddArgs(
+                    WebhookConfig.PAYLOAD_FIELD, webhookEvent, webhookConfig))
                     .map(streamMessageId -> {
                         log.debug("Webhook event published successfully: id='{}', streamMessageId='{}'",
                                 eventId, streamMessageId);

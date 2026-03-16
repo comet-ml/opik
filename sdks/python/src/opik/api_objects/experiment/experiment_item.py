@@ -4,6 +4,8 @@ from typing import Dict, Any, List, Optional
 from opik.types import FeedbackScoreDict
 from opik.rest_api.types import experiment_item_compare
 
+AssertionResultDict = Dict[str, Any]
+
 
 @dataclasses.dataclass
 class ExperimentItemReferences:
@@ -20,6 +22,9 @@ class ExperimentItemContent:
     dataset_item_data: Optional[Dict[str, Any]]
     evaluation_task_output: Optional[Dict[str, Any]]
     feedback_scores: List[FeedbackScoreDict]
+    assertion_results: List[AssertionResultDict] = dataclasses.field(
+        default_factory=list
+    )
 
     @classmethod
     def from_rest_experiment_item_compare(
@@ -40,6 +45,11 @@ class ExperimentItemContent:
                 for rest_feedback_score in value.feedback_scores
             ]
 
+        raw_assertions = _extract_extra_field(value, "assertion_results")
+        assertion_results: List[AssertionResultDict] = (
+            raw_assertions if raw_assertions else []
+        )
+
         return ExperimentItemContent(
             id=value.id,
             trace_id=value.trace_id,
@@ -47,4 +57,11 @@ class ExperimentItemContent:
             dataset_item_data=dataset_item_data if dataset_item_data else value.input,
             evaluation_task_output=value.output,
             feedback_scores=feedback_scores,
+            assertion_results=assertion_results,
         )
+
+
+def _extract_extra_field(model: Any, field_name: str) -> Any:
+    if hasattr(model, "model_extra") and model.model_extra:
+        return model.model_extra.get(field_name)
+    return getattr(model, field_name, None)

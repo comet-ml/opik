@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.jobs;
 import com.comet.opik.api.events.ExperimentAggregationMessage;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -13,7 +14,6 @@ import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.quartz.UnableToInterruptJobException;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -154,7 +154,8 @@ public class ExperimentDenormalizationJob extends Job implements InterruptableJo
 
         var bucket = redisClient.<String, String>getMap(ExperimentDenormalizationConfig.EXPERIMENT_KEY_PREFIX + member);
         var index = redisClient.getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY);
-        var stream = redisClient.getStream(config.getStreamName(), config.getCodec());
+        var stream = redisClient.<String, ExperimentAggregationMessage>getStream(
+                config.getStreamName(), config.getCodec());
 
         return bucket.get(ExperimentDenormalizationConfig.USER_NAME_FIELD)
                 .flatMap(userName -> {
@@ -164,7 +165,8 @@ public class ExperimentDenormalizationJob extends Job implements InterruptableJo
                             .userName(userName)
                             .build();
 
-                    return stream.add(StreamAddArgs.entry(ExperimentDenormalizationConfig.PAYLOAD_FIELD, message))
+                    return stream.add(RedisStreamUtils.buildAddArgs(
+                            ExperimentDenormalizationConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> log.info(
                                     "Enqueued aggregation message for experiment '{}' with stream id '{}'",
                                     experimentIdStr, id))
