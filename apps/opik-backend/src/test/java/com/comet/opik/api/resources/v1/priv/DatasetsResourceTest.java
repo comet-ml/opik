@@ -7406,7 +7406,7 @@ class DatasetsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -7469,7 +7469,7 @@ class DatasetsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -7526,7 +7526,7 @@ class DatasetsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -7616,7 +7616,7 @@ class DatasetsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -7692,7 +7692,7 @@ class DatasetsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -7764,7 +7764,7 @@ class DatasetsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
