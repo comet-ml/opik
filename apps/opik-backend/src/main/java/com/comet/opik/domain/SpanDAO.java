@@ -1031,7 +1031,7 @@ class SpanDAO {
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
-                ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
+                ORDER BY <if(sort_fields)> <sort_fields>, id DESC, last_updated_at DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             )
@@ -1053,7 +1053,7 @@ class SpanDAO {
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
-            ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
+            ORDER BY <if(sort_fields)> <sort_fields>, id DESC, last_updated_at DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
