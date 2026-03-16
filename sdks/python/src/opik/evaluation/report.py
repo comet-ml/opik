@@ -195,7 +195,7 @@ def display_suite_results(
 
     if experiment_url is not None:
         link_text = text.Text.from_markup(
-            f"[link={experiment_url}]View results in Opik dashboard[/link]"
+            f"[bold cyan][link={experiment_url}]View results in Opik dashboard[/link][/bold cyan]"
         )
         content.add_row(align.Align.left(link_text))
         content.add_row(text.Text(""))
@@ -264,6 +264,14 @@ def display_experiment_link(experiment_url: str) -> None:
 
     console_container.print(
         f"View the results [link={experiment_url}]in your Opik dashboard[/link]."
+    )
+
+
+def display_evaluation_in_progress(experiment_url: str) -> None:
+    console_container = console.Console()
+    console_container.print(
+        f"Running evaluation suite, results will be available in "
+        f"[bold cyan][link={experiment_url}]Opik dashboard[/link][/bold cyan]."
     )
 
 

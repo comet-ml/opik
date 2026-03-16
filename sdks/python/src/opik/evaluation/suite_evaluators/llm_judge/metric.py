@@ -137,7 +137,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self._temperature = temperature
         self._reasoning_effort = reasoning_effort
         self._model_name: str = model or llm_judge_config.DEFAULT_MODEL_NAME
-        self._reasoning_effort = reasoning_effort or llm_judge_config.DEFAULT_REASONING_EFFORT
+        self._reasoning_effort = (
+            reasoning_effort or llm_judge_config.DEFAULT_REASONING_EFFORT
+        )
         self._init_model()
 
     @property

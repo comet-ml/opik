@@ -367,6 +367,14 @@ def evaluate_suite(
 
     experiment_ = client.create_experiment(**create_experiment_kwargs)
 
+    if verbose >= 1:
+        experiment_url = url_helpers.get_experiment_url_by_id(
+            experiment_id=experiment_.id,
+            dataset_id=dataset.id,
+            url_override=client.config.url_override,
+        )
+        report.display_evaluation_in_progress(experiment_url)
+
     eval_result, total_time = _evaluate_suite_task(
         client=client,
         experiment=experiment_,
