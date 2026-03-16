@@ -594,7 +594,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 created_at,
                 last_updated_at,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                execution_policy
             FROM experiment_items FINAL
             WHERE workspace_id = :workspace_id
             AND experiment_id = :experiment_id
@@ -950,7 +951,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 created_at,
                 last_updated_at,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                execution_policy
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -977,7 +979,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     parseDateTime64BestEffort(:created_at<item.index>, 9),
                     parseDateTime64BestEffort(:last_updated_at<item.index>, 9),
                     :created_by<item.index>,
-                    :last_updated_by<item.index>
+                    :last_updated_by<item.index>,
+                    :execution_policy<item.index>
                 )
                 <if(item.hasNext)>,<endif>
             }>
@@ -1227,7 +1230,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                            eia.usage,
                            eia.visibility_mode,
                            eia.metadata,
-                           di.description
+                           di.description,
+                           eia.execution_policy
                 )) AS experiment_items_array
             FROM experiment_item_aggregates eia FINAL
             INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
@@ -1877,7 +1881,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("created_at" + i, item.createdAt().toString())
                     .bind("last_updated_at" + i, item.lastUpdatedAt().toString())
                     .bind("created_by" + i, item.createdBy())
-                    .bind("last_updated_by" + i, item.lastUpdatedBy());
+                    .bind("last_updated_by" + i, item.lastUpdatedBy())
+                    .bind("execution_policy" + i,
+                            Optional.ofNullable(item.executionPolicy())
+                                    .filter(StringUtils::isNotBlank)
+                                    .orElse(""));
 
             // Bind array parameters only if maps are not empty
             var usageArrays = mapToArrays(usageMap, String[]::new, Long[]::new, Long::longValue);
@@ -2038,6 +2046,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
+                .executionPolicy(row.get("execution_policy", String.class))
                 .build();
     }
 

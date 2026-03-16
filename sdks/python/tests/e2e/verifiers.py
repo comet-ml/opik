@@ -60,7 +60,7 @@ def verify_trace(
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
-        lambda: (opik_client.get_trace_content(id=trace_id) is not None),
+        lambda: opik_client.get_trace_content(id=trace_id) is not None,
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get trace with id {trace_id}.")
@@ -140,7 +140,7 @@ def verify_span(
     total_cost: Optional[float] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
-        lambda: (opik_client.get_span_content(id=span_id) is not None),
+        lambda: opik_client.get_span_content(id=span_id) is not None,
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get span with id {span_id}.")
@@ -194,7 +194,7 @@ def verify_dataset(
     dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
 ):
     if not synchronization.until(
-        lambda: (opik_client.get_dataset(name=name) is not None),
+        lambda: opik_client.get_dataset(name=name) is not None,
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get dataset with name {name}.")
@@ -242,7 +242,7 @@ def verify_experiment(
     rest_client.datasets.find_dataset_items_with_experiment_items
 
     if not synchronization.until(
-        lambda: (rest_client.experiments.get_experiment_by_id(id) is not None),
+        lambda: rest_client.experiments.get_experiment_by_id(id) is not None,
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get experiment with id {id}.")
@@ -373,16 +373,18 @@ def _wait_for_attachments_list(
     url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
 
     if not synchronization.until(
-        lambda: len(
-            _get_attachments(
-                opik_client=opik_client,
-                project_id=trace_or_span.project_id,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                url_override_path=url_override_path,
+        lambda: (
+            len(
+                _get_attachments(
+                    opik_client=opik_client,
+                    project_id=trace_or_span.project_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    url_override_path=url_override_path,
+                )
             )
-        )
-        == expected_size,
+            == expected_size
+        ),
         allow_errors=True,
         max_try_seconds=timeout,
     ):
@@ -527,7 +529,7 @@ def verify_optimization(
     objective_name: Optional[str] = mock.ANY,  # type: ignore
 ) -> None:
     if not synchronization.until(
-        lambda: (opik_client.get_optimization_by_id(optimization_id) is not None),
+        lambda: opik_client.get_optimization_by_id(optimization_id) is not None,
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get optimization with id {optimization_id}.")
@@ -586,7 +588,7 @@ def verify_thread(
 
     if feedback_scores is not mock.ANY:
         # wait for feedback scores to propagate
-        if not synchronization.until(lambda: (_get_feedback_scores() is not None)):
+        if not synchronization.until(lambda: _get_feedback_scores() is not None):
             raise AssertionError(
                 f"Failed to get feedback scores for thread with id '{thread_id}'."
             )
@@ -736,7 +738,7 @@ def verify_traces_annotation_queue(
     instructions: Optional[str] = mock.ANY,  # type: ignore
 ) -> None:
     if not synchronization.until(
-        lambda: (opik_client.get_traces_annotation_queue(queue_id) is not None),
+        lambda: opik_client.get_traces_annotation_queue(queue_id) is not None,
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
@@ -759,7 +761,7 @@ def verify_threads_annotation_queue(
     instructions: Optional[str] = mock.ANY,  # type: ignore
 ) -> None:
     if not synchronization.until(
-        lambda: (opik_client.get_threads_annotation_queue(queue_id) is not None),
+        lambda: opik_client.get_threads_annotation_queue(queue_id) is not None,
         allow_errors=True,
     ):
         raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
@@ -836,6 +838,9 @@ def verify_evaluation_suite_result(
         if exp_item.feedback_scores:
             all_scores.extend(exp_item.feedback_scores)
             all_score_names.update(s["name"] for s in exp_item.feedback_scores)
+        if exp_item.assertion_results:
+            all_scores.extend(exp_item.assertion_results)
+            all_score_names.update(ar["value"] for ar in exp_item.assertion_results)
 
     if total_feedback_scores is not mock.ANY:
         assert len(all_scores) == total_feedback_scores, (
