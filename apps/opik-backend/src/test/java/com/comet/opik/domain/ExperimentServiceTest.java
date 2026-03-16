@@ -492,6 +492,7 @@ class ExperimentServiceTest {
 
             verify(experimentDAO).getByIds(ids);
             verify(experimentAggregationPublisher).publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME);
+        }
     }
 
     @Nested
