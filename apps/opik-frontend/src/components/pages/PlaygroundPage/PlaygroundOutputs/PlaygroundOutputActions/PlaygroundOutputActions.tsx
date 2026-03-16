@@ -506,19 +506,17 @@ const PlaygroundOutputActions = ({
                   />
                 </div>
               )}
-              {(canUsePlayground || !!rules.length) && (
-                <div className="mt-2.5 flex">
-                  <MetricSelector
-                    rules={rules}
-                    selectedRuleIds={selectedRuleIds}
-                    onSelectionChange={setSelectedRuleIds}
-                    datasetId={datasetId}
-                    onCreateRuleClick={handleCreateRuleClick}
-                    workspaceName={workspaceName}
-                    canCreateRules={canUsePlayground}
-                  />
-                </div>
-              )}
+              <div className="mt-2.5 flex">
+                <MetricSelector
+                  rules={rules}
+                  selectedRuleIds={selectedRuleIds}
+                  onSelectionChange={setSelectedRuleIds}
+                  datasetId={datasetId}
+                  onCreateRuleClick={handleCreateRuleClick}
+                  workspaceName={workspaceName}
+                  canUsePlayground={canUsePlayground}
+                />
+              </div>
               {datasetId && (
                 <div className="mt-2.5 flex h-8 items-center justify-center">
                   <Separator orientation="vertical" className="mr-2 h-4" />
