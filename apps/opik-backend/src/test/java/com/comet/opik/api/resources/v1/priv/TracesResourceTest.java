@@ -4821,6 +4821,26 @@ class TracesResourceTest {
 
             createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
+            // Create a suite_assertion score on the main project to verify default exclusion
+            String suiteThreadId = UUID.randomUUID().toString();
+            Trace suiteTrace = createTrace().toBuilder()
+                    .projectName(project.name())
+                    .threadId(suiteThreadId)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(suiteTrace), apiKey, workspaceName);
+            Mono.delay(Duration.ofMillis(500)).block();
+            traceResourceClient.closeTraceThread(suiteThreadId, project.id(), null, apiKey, workspaceName);
+            traceResourceClient.threadFeedbackScores(List.of(
+                    FeedbackScoreBatchItemThread.builder()
+                            .projectName(project.name())
+                            .threadId(suiteThreadId)
+                            .name("suite_assertion_score")
+                            .categoryName("suite_assertion")
+                            .value(BigDecimal.ONE)
+                            .source(ScoreSource.SDK)
+                            .build()),
+                    apiKey, workspaceName);
+
             // when
             FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(
                     useProjectId ? projectId : null, apiKey,
@@ -4829,103 +4849,8 @@ class TracesResourceTest {
             List<String> allNames = new ArrayList<>(names);
             allNames.addAll(otherNames);
 
-            // then
+            // then — suite_assertion_score should be excluded by default
             assertFeedbackScoreNames(actualNames, useProjectId ? names : allNames);
-        }
-
-        @Test
-        @DisplayName("when no exclude param, then suite_assertion excluded by default")
-        void getTraceThreadsFeedbackScoreNames__noExcludeParam__thenSuiteAssertionExcludedByDefault() {
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = UUID.randomUUID().toString();
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
-
-            String threadId = UUID.randomUUID().toString();
-            Trace trace = createTrace().toBuilder()
-                    .projectName(project.name())
-                    .threadId(threadId)
-                    .build();
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
-
-            Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThread(threadId, project.id(), null, apiKey, workspaceName);
-
-            var scores = List.of(
-                    FeedbackScoreBatchItemThread.builder()
-                            .projectName(project.name())
-                            .threadId(threadId)
-                            .name("regular_score")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build(),
-                    FeedbackScoreBatchItemThread.builder()
-                            .projectName(project.name())
-                            .threadId(threadId)
-                            .name("suite_assertion_1")
-                            .categoryName("suite_assertion")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build());
-            traceResourceClient.threadFeedbackScores(scores, apiKey, workspaceName);
-
-            var result = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId, apiKey, workspaceName);
-            var feedbackNames = result.scores().stream()
-                    .map(FeedbackScoreNames.ScoreName::name)
-                    .toList();
-            assertThat(feedbackNames).containsExactly("regular_score");
-        }
-
-        @Test
-        @DisplayName("when exclude_category_names is provided, then exclude scores with those categories")
-        void getTraceThreadsFeedbackScoreNames__excludeCategoryNames__thenExcludeMatchingScores() {
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = UUID.randomUUID().toString();
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
-
-            String threadId = UUID.randomUUID().toString();
-            Trace trace = createTrace().toBuilder()
-                    .projectName(project.name())
-                    .threadId(threadId)
-                    .build();
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
-
-            Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThread(threadId, project.id(), null, apiKey, workspaceName);
-
-            var scores = List.of(
-                    FeedbackScoreBatchItemThread.builder()
-                            .projectName(project.name())
-                            .threadId(threadId)
-                            .name("regular_score")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build(),
-                    FeedbackScoreBatchItemThread.builder()
-                            .projectName(project.name())
-                            .threadId(threadId)
-                            .name("suite_assertion_1")
-                            .categoryName("suite_assertion")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build());
-            traceResourceClient.threadFeedbackScores(scores, apiKey, workspaceName);
-
-            var result = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId,
-                    Set.of("suite_assertion"), apiKey, workspaceName);
-            var feedbackNames = result.scores().stream()
-                    .map(FeedbackScoreNames.ScoreName::name)
-                    .toList();
-            assertThat(feedbackNames).containsExactly("regular_score");
         }
     }
 

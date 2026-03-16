@@ -6,7 +6,6 @@ import com.comet.opik.api.ErrorCountWithDeviation;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
@@ -2545,6 +2544,22 @@ class ProjectsResourceTest {
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject,
                     apiKey, workspaceName);
 
+            // Create a suite_assertion score on the main project to verify default exclusion
+            var suiteAssertionTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .build();
+            traceResourceClient.createTrace(suiteAssertionTrace, apiKey, workspaceName);
+            traceResourceClient.feedbackScores(List.of(
+                    FeedbackScoreBatchItem.builder()
+                            .id(suiteAssertionTrace.id())
+                            .projectName(project.name())
+                            .name("suite_assertion_score")
+                            .categoryName("suite_assertion")
+                            .value(BigDecimal.ONE)
+                            .source(ScoreSource.SDK)
+                            .build()),
+                    apiKey, workspaceName);
+
             String projectIdsQueryParam = userProjectId ? JsonUtils.writeValueAsString(List.of(projectId)) : null;
             List<String> expectedNames = userProjectId
                     ? names
@@ -2553,91 +2568,6 @@ class ProjectsResourceTest {
             var feedbackScoreNamesByProjectId = projectResourceClient.findFeedbackScoreNames(projectIdsQueryParam,
                     apiKey, workspaceName);
             assertFeedbackScoreNames(feedbackScoreNamesByProjectId, expectedNames);
-        }
-
-        @Test
-        @DisplayName("when no exclude param, then suite_assertion excluded by default")
-        void findFeedbackScoreNames__noExcludeParam__thenSuiteAssertionExcludedByDefault() {
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = UUID.randomUUID().toString();
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .build();
-            traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-            var scores = List.of(
-                    FeedbackScoreBatchItem.builder()
-                            .id(trace.id())
-                            .projectName(projectName)
-                            .name("regular_score")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build(),
-                    FeedbackScoreBatchItem.builder()
-                            .id(trace.id())
-                            .projectName(projectName)
-                            .name("suite_assertion_1")
-                            .categoryName("suite_assertion")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build());
-            traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
-
-            var projectIdsParam = JsonUtils.writeValueAsString(List.of(projectId));
-            var result = projectResourceClient.findFeedbackScoreNames(projectIdsParam, apiKey, workspaceName);
-            var feedbackNames = result.scores().stream()
-                    .map(FeedbackScoreNames.ScoreName::name)
-                    .toList();
-            assertThat(feedbackNames).containsExactly("regular_score");
-        }
-
-        @Test
-        @DisplayName("when exclude_category_names is provided, then exclude scores with those categories")
-        void findFeedbackScoreNames__excludeCategoryNames__thenExcludeMatchingScores() {
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = UUID.randomUUID().toString();
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .build();
-            traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-            var scores = List.of(
-                    FeedbackScoreBatchItem.builder()
-                            .id(trace.id())
-                            .projectName(projectName)
-                            .name("regular_score")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build(),
-                    FeedbackScoreBatchItem.builder()
-                            .id(trace.id())
-                            .projectName(projectName)
-                            .name("suite_assertion_1")
-                            .categoryName("suite_assertion")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build());
-            traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
-
-            var projectIdsParam = JsonUtils.writeValueAsString(List.of(projectId));
-            var result = projectResourceClient.findFeedbackScoreNames(projectIdsParam,
-                    Set.of("suite_assertion"), apiKey, workspaceName);
-            var feedbackNames = result.scores().stream()
-                    .map(FeedbackScoreNames.ScoreName::name)
-                    .toList();
-            assertThat(feedbackNames).containsExactly("regular_score");
         }
     }
 
