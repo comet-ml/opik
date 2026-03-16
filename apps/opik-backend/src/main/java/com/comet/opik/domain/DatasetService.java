@@ -56,7 +56,6 @@ import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
-import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 
@@ -145,9 +144,7 @@ class DatasetServiceImpl implements DatasetService {
                 .lastUpdatedBy(userName);
 
         if (StringUtils.isNotEmpty(dataset.projectName()) && dataset.projectId() == null) {
-            var project = projectService.getOrCreate(dataset.projectName())
-                    .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
-                    .block();
+            var project = projectService.getOrCreate(workspaceId, dataset.projectName(), userName);
             builder.projectId(project.id());
         }
 

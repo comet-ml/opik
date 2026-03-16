@@ -50,7 +50,6 @@ import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(PromptServiceImpl.class)
@@ -132,9 +131,7 @@ class PromptServiceImpl implements PromptService {
                 .lastUpdatedBy(userName);
 
         if (StringUtils.isNotEmpty(promptRequest.projectName()) && promptRequest.projectId() == null) {
-            var project = projectService.getOrCreate(promptRequest.projectName())
-                    .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
-                    .block();
+            var project = projectService.getOrCreate(workspaceId, promptRequest.projectName(), userName);
             builder.projectId(project.id());
         }
 

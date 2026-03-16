@@ -36,7 +36,6 @@ import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
-import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @ImplementedBy(DashboardServiceImpl.class)
 public interface DashboardService {
@@ -85,9 +84,7 @@ class DashboardServiceImpl implements DashboardService {
 
         final UUID resolvedProjectId;
         if (StringUtils.isNotEmpty(dashboard.projectName()) && dashboard.projectId() == null) {
-            var project = projectService.getOrCreate(dashboard.projectName())
-                    .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
-                    .block();
+            var project = projectService.getOrCreate(workspaceId, dashboard.projectName(), userName);
             resolvedProjectId = project.id();
         } else {
             resolvedProjectId = dashboard.projectId();

@@ -7,7 +7,6 @@ import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.Visibility;
-import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.Direction;
@@ -91,6 +90,8 @@ public interface ProjectService {
     Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
 
     Mono<Project> getOrCreate(String projectName);
+
+    Project getOrCreate(String workspaceId, String projectName, String userName);
 
     Project retrieveByName(String projectName);
 
@@ -243,7 +244,7 @@ class ProjectServiceImpl implements ProjectService {
     @Override
     public void validateProjectIdExists(UUID projectId, String workspaceId) {
         if (projectId != null && findByIds(workspaceId, Set.of(projectId)).isEmpty()) {
-            throw new ConflictException("Project not found with id '%s'".formatted(projectId));
+            throw ErrorUtils.failWithNotFound("Project", projectId);
         }
     }
 
@@ -538,7 +539,8 @@ class ProjectServiceImpl implements ProjectService {
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private Project getOrCreate(String workspaceId, String projectName, String userName) {
+    @Override
+    public Project getOrCreate(String workspaceId, String projectName, String userName) {
 
         return findByNames(workspaceId, List.of(projectName))
                 .stream()

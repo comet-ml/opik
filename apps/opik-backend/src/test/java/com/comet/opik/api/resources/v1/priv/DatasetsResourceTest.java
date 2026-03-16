@@ -10149,7 +10149,7 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("Create dataset with non-existing project_id returns conflict")
+        @DisplayName("Create dataset with non-existing project_id returns not found")
         void createDatasetWithNonExistingProjectId() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = UUID.randomUUID().toString();
@@ -10162,7 +10162,7 @@ class DatasetsResourceTest {
                     .build();
 
             try (var response = datasetResourceClient.callCreateDataset(dataset, apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
 

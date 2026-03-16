@@ -961,7 +961,7 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Create dashboard with non-existing project_id returns conflict")
+        @DisplayName("Create dashboard with non-existing project_id returns not found")
         void createDashboardWithNonExistingProjectId() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
@@ -973,7 +973,7 @@ class DashboardsResourceTest {
                     .build();
 
             try (var response = dashboardResourceClient.callCreate(dashboard, apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
 
