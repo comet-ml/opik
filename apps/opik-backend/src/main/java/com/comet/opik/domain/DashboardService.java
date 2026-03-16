@@ -83,7 +83,7 @@ class DashboardServiceImpl implements DashboardService {
         IdGenerator.validateVersion(dashboardId, "dashboard");
 
         final UUID resolvedProjectId;
-        if (StringUtils.isNotEmpty(dashboard.projectName()) && dashboard.projectId() == null) {
+        if (StringUtils.isNotBlank(dashboard.projectName()) && dashboard.projectId() == null) {
             var project = projectService.getOrCreate(workspaceId, dashboard.projectName(), userName);
             resolvedProjectId = project.id();
         } else {

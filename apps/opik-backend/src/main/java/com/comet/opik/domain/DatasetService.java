@@ -143,7 +143,7 @@ class DatasetServiceImpl implements DatasetService {
                 .createdBy(userName)
                 .lastUpdatedBy(userName);
 
-        if (StringUtils.isNotEmpty(dataset.projectName()) && dataset.projectId() == null) {
+        if (StringUtils.isNotBlank(dataset.projectName()) && dataset.projectId() == null) {
             var project = projectService.getOrCreate(workspaceId, dataset.projectName(), userName);
             builder.projectId(project.id());
         }

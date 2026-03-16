@@ -130,7 +130,7 @@ class PromptServiceImpl implements PromptService {
                 .createdBy(userName)
                 .lastUpdatedBy(userName);
 
-        if (StringUtils.isNotEmpty(promptRequest.projectName()) && promptRequest.projectId() == null) {
+        if (StringUtils.isNotBlank(promptRequest.projectName()) && promptRequest.projectId() == null) {
             var project = projectService.getOrCreate(workspaceId, promptRequest.projectName(), userName);
             builder.projectId(project.id());
         }
