@@ -64,7 +64,7 @@ public class ExperimentAggregatesService {
      */
     private Mono<Void> populateAggregations(@NonNull UUID experimentId, int batchSize) {
 
-        // First, populate experiment-level aggregates
+        // First, populate experiment item aggregates in batches, then experiment-level aggregates
         return Mono.deferContextual(ctx -> {
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -72,12 +72,10 @@ public class ExperimentAggregatesService {
             log.info("Starting aggregation population for experiment: '{}' in workspace: '{}', batchSize: '{}'",
                     experimentId, workspaceId, batchSize);
 
-            return experimentAggregatesDAO.populateExperimentAggregate(experimentId)
+            return populateExperimentItemsInBatches(experimentId, batchSize)
+                    .then(Mono.defer(() -> experimentAggregatesDAO.populateExperimentAggregate(experimentId)))
                     .doOnSuccess(v -> log.info(
                             "Experiment-level aggregates populated for experiment: '{}'", experimentId))
-                    .then(Mono.defer(() ->
-            // Then, populate experiment item aggregates in batches using cursor pagination
-            populateExperimentItemsInBatches(experimentId, batchSize)))
                     .doOnSuccess(v -> log.info(
                             "All aggregations populated successfully for experiment: '{}' in workspace: '{}'",
                             experimentId, workspaceId))
