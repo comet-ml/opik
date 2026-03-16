@@ -416,7 +416,7 @@ class EvaluationSuite:
                 (default).
             worker_threads: Number of threads for parallel task execution.
             model: Optional model name to use for checking assertions.
-                If not provided, uses the default model.
+                If not provided, uses the default model (gpt-5-nano).
 
         Returns:
             EvaluationSuiteResult with pass/fail status based on execution policy.
