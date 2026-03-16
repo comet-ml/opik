@@ -25,7 +25,12 @@ import java.util.UUID;
 public record Experiment(
         @JsonView( {
                 Experiment.View.Public.class, Experiment.View.Write.class}) UUID id,
-        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) @NotBlank String datasetName,
+        /* We need to ensure that datasetName is not null or blank for public write views.
+        But at the same time allow it to be null for public read views. Otherwise, generated client
+        classes for the Python SDK will throw a validation error in case if the dataset associated with the experiment
+        was deleted. See: https://comet-ml.atlassian.net/browse/OPIK-4632 */
+        @JsonView({Experiment.View.Public.class,
+                Experiment.View.Write.class}) @NotBlank @Schema(nullable = true, requiredMode = Schema.RequiredMode.NOT_REQUIRED) String datasetName,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String projectName,
