@@ -4,4 +4,6 @@
 
 ALTER TABLE dashboards DROP INDEX dashboards_workspace_name_uk;
 
---rollback ALTER TABLE dashboards ADD CONSTRAINT dashboards_workspace_name_uk UNIQUE (workspace_id, name);
+--rollback -- Rollback is intentionally a no-op. Reinstating the unique constraint is unsafe because
+--rollback -- duplicate dashboard names may have been created after this migration ran.
+--rollback -- Manual cleanup of duplicates is required before restoring the constraint.
