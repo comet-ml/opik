@@ -376,7 +376,8 @@ class TracesResourceTest {
             traceResourceClient.openTraceThread(threadId, projectId, DEFAULT_PROJECT, apiKey, workspaceName);
 
             wireMock.server().resetRequests();
-            traceResourceClient.closeTraceThread(threadId, projectId, DEFAULT_PROJECT, apiKey, workspaceName);
+            traceResourceClient.closeTraceThreads(Set.of(threadId), projectId, DEFAULT_PROJECT, apiKey,
+                    workspaceName);
 
             wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
