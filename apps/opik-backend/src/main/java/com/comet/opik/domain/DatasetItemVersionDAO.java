@@ -717,8 +717,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :datasetId
                 <if(experiment_ids)>AND id IN :experiment_ids<endif>
-                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ),
             experiment_items_scope AS (
                 SELECT
@@ -727,8 +725,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM experiment_items ei
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
-                ORDER BY ei.id DESC, ei.last_updated_at DESC
-                LIMIT 1 BY ei.id
             )
             SELECT
                 mapFromArrays(
