@@ -9,6 +9,7 @@ import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -16,7 +17,6 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -87,12 +87,8 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         var stream = redisClient.getStream(config.getStreamName(), codec);
         Flux.fromIterable(messages)
                 .flatMap(message -> {
-                    var streamAddArgs = StreamAddArgs
-                            .<Object, Object>entry(OnlineScoringConfig.PAYLOAD_FIELD, message)
-                            .trimNonStrict()
-                            .maxLen(config.getStreamMaxLen())
-                            .limit(config.getStreamTrimLimit());
-                    return stream.add(streamAddArgs)
+                    return stream.add(RedisStreamUtils.buildAddArgs(
+                            OnlineScoringConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> log.debug("Message sent with ID: '{}' into stream '{}'",
                                     id, config.getStreamName()))
                             .doOnError(throwable -> log.error("Error sending message", throwable));

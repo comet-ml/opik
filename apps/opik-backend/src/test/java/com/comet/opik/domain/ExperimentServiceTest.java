@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -38,12 +39,14 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ExperimentServiceTest {
 
     private static final String TEST_WORKSPACE_ID = "test-workspace-id";
+    private static final String TEST_WORKSPACE_NAME = "test-workspace-name";
     private static final String TEST_USER_NAME = "test-user";
 
     private ExperimentService experimentService;
@@ -402,6 +405,93 @@ class ExperimentServiceTest {
 
             verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
+        }
+    }
+
+    @Nested
+    @DisplayName("Finish Experiments:")
+    class FinishExperiments {
+
+        @Test
+        @DisplayName("when finishing experiments, then aggregation publisher is called")
+        void finishExperiments() {
+            // given
+            var experimentId = UUID.randomUUID();
+            var ids = Set.of(experimentId);
+            var experiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getByIds(ids))
+                    .thenReturn(Flux.just(experiment));
+            when(experimentAggregationPublisher.publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME))
+                    .thenReturn(Mono.empty());
+
+            // when & then
+            StepVerifier.create(experimentService.finishExperiments(ids)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.WORKSPACE_NAME, TEST_WORKSPACE_NAME)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO).getByIds(ids);
+            verify(eventBus).post(any());
+            verify(experimentAggregationPublisher).publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME);
+        }
+
+        @Test
+        @DisplayName("when no experiments found, then publisher is still called")
+        void finishExperimentsWhenNoExperimentsFoundStillPublishes() {
+            // given
+            var experimentId = UUID.randomUUID();
+            var ids = Set.of(experimentId);
+
+            when(experimentDAO.getByIds(ids))
+                    .thenReturn(Flux.empty());
+            when(experimentAggregationPublisher.publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME))
+                    .thenReturn(Mono.empty());
+
+            // when & then
+            StepVerifier.create(experimentService.finishExperiments(ids)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.WORKSPACE_NAME, TEST_WORKSPACE_NAME)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO).getByIds(ids);
+            verifyNoInteractions(eventBus);
+            verify(experimentAggregationPublisher).publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME);
+        }
+
+        @Test
+        @DisplayName("when publisher fails, then error is swallowed and operation completes")
+        void finishExperimentsWhenPublisherFailsThenErrorIsSwallowed() {
+            // given
+            var experimentId = UUID.randomUUID();
+            var ids = Set.of(experimentId);
+            var experiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getByIds(ids))
+                    .thenReturn(Flux.just(experiment));
+            when(experimentAggregationPublisher.publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME))
+                    .thenReturn(Mono.error(new RuntimeException("Redis error")));
+
+            // when & then
+            StepVerifier.create(experimentService.finishExperiments(ids)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.WORKSPACE_NAME, TEST_WORKSPACE_NAME)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO).getByIds(ids);
+            verify(experimentAggregationPublisher).publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME);
         }
     }
 
