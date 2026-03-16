@@ -6,6 +6,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchStreamRequest;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Operator;
@@ -3959,6 +3960,72 @@ class FindSpansResourceTest {
 
             var actualEntity = actualResponse.readEntity(Span.SpanPage.class);
             assertThat(actualEntity).isNotNull();
+        }
+
+        @Test
+        void whenSortingByUsageTotalTokens__afterUpdate__thenReturnLatestVersion() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traceId = generator.generate();
+            var spanId = generator.generate();
+
+            var originalInput = JsonUtils.getJsonNodeFromString("{\"message\": \"original input\"}");
+            var updatedInput = JsonUtils.getJsonNodeFromString("{\"message\": \"updated input\"}");
+
+            var span = Span.builder()
+                    .id(spanId)
+                    .traceId(traceId)
+                    .projectName(projectName)
+                    .name("dedup-test-span")
+                    .type(SpanType.llm)
+                    .startTime(Instant.now().truncatedTo(ChronoUnit.MILLIS))
+                    .endTime(Instant.now().plus(1, ChronoUnit.SECONDS).truncatedTo(ChronoUnit.MILLIS))
+                    .input(originalInput)
+                    .output(JsonUtils.getJsonNodeFromString("{\"message\": \"original output\"}"))
+                    .usage(Map.of("total_tokens", 9999, "prompt_tokens", 5000, "completion_tokens", 4999))
+                    .build();
+
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .traceId(traceId)
+                    .projectName(projectName)
+                    .input(updatedInput)
+                    .output(JsonUtils.getJsonNodeFromString("{\"message\": \"updated output\"}"))
+                    .usage(Map.of("total_tokens", 5, "prompt_tokens", 3, "completion_tokens", 2))
+                    .build();
+
+            spanResourceClient.updateSpan(span.id(), spanUpdate, apiKey, workspaceName);
+
+            var sorting = List.of(
+                    SortingField.builder()
+                            .field("usage.total_tokens")
+                            .direction(Direction.DESC)
+                            .build());
+
+            var actualPage = spanResourceClient.findSpans(
+                    workspaceName,
+                    apiKey,
+                    projectName,
+                    null,
+                    1,
+                    10,
+                    null,
+                    null,
+                    List.of(),
+                    sorting,
+                    List.of());
+
+            assertThat(actualPage.content()).hasSize(1);
+
+            var returnedSpan = actualPage.content().getFirst();
+            assertThat(returnedSpan.usage().get("total_tokens")).isEqualTo(5);
+            assertThat(returnedSpan.input()).isEqualTo(updatedInput);
         }
 
         @ParameterizedTest
