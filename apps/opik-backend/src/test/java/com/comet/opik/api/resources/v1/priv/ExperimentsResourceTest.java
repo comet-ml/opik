@@ -8055,9 +8055,16 @@ class ExperimentsResourceTest {
             var streamedItem = streamedItems.getFirst();
             assertThat(streamedItem.assertionResults()).hasSize(2);
             assertThat(streamedItem.status()).isEqualTo(RunStatus.FAILED);
-            assertThat(streamedItem.assertionResults().get(0).passed()).isTrue();
-            assertThat(streamedItem.assertionResults().get(1).passed()).isFalse();
-            assertThat(streamedItem.assertionResults().get(1).reason()).isEqualTo("Too long");
+            assertThat(streamedItem.assertionResults())
+                    .anySatisfy(r -> {
+                        assertThat(r.value()).isEqualTo("Should link to docs");
+                        assertThat(r.passed()).isTrue();
+                    })
+                    .anySatisfy(r -> {
+                        assertThat(r.value()).isEqualTo("Should be concise");
+                        assertThat(r.passed()).isFalse();
+                        assertThat(r.reason()).isEqualTo("Too long");
+                    });
             assertThat(streamedItem.feedbackScores()).isNull();
         }
 
