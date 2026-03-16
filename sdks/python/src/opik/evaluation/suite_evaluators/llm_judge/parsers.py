@@ -10,7 +10,8 @@ each assertion produces {"score": <bool/int/float>, "reason": "..."}.
 
 import json
 import logging
-from typing import Any, List, Type
+import re
+from typing import Any, Dict, List, Tuple, Type
 
 import pydantic
 
@@ -32,40 +33,67 @@ class AssertionResultItem(pydantic.BaseModel):
     confidence: float = pydantic.Field(ge=0.0, le=1.0)
 
 
+def _sanitize_field_name(name: str) -> str:
+    """Convert an arbitrary string into a valid Python / JSON-schema identifier.
+
+    Replaces non-alphanumeric characters with underscores, collapses runs of
+    underscores, and strips leading/trailing underscores.  Prepends ``a_`` if
+    the result starts with a digit.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9]", "_", name)
+    sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+    if not sanitized or sanitized[0].isdigit():
+        sanitized = f"a_{sanitized}"
+    return sanitized
+
+
+def _build_field_mapping(assertions: List[str]) -> Dict[str, str]:
+    """Return a mapping from sanitized field name → original assertion text.
+
+    Appends a numeric suffix when two assertions sanitize to the same key.
+    """
+    mapping: Dict[str, str] = {}
+    for assertion in assertions:
+        base = _sanitize_field_name(assertion)
+        key = base
+        counter = 2
+        while key in mapping:
+            key = f"{base}_{counter}"
+            counter += 1
+        mapping[key] = assertion
+    return mapping
+
+
 def build_response_format_model(
     assertions: List[str],
-) -> Type[pydantic.BaseModel]:
+) -> Tuple[Type[pydantic.BaseModel], Dict[str, str]]:
     """
     Dynamically build a Pydantic model for structured output based on assertions.
 
-    Creates a model with one field per assertion, using the assertion text as the
-    field name. This ensures the LLM returns exactly one result per assertion
-    with the correct name.
+    Field names are sanitized to alphanumeric identifiers so the schema is
+    compatible with all LLM providers (OpenAI, Anthropic, etc.).
 
     Args:
         assertions: List of assertion strings to create fields for.
 
     Returns:
-        A dynamically created Pydantic model class with one field per assertion.
+        A tuple of (model_class, field_mapping) where field_mapping maps
+        sanitized field names back to original assertion text.
 
     Example:
-        >>> model = build_response_format_model(["Response is accurate", "Response is helpful"])
-        >>> instance = model(**{
-        ...     "Response is accurate": {"score": True, "reason": "Correct"},
-        ...     "Response is helpful": {"score": True, "reason": "Helpful"},
-        ... })
-        >>> getattr(instance, "Response is accurate").score
-        True
+        >>> model, mapping = build_response_format_model(["Response is accurate"])
+        >>> list(mapping.values())
+        ['Response is accurate']
     """
-    fields: dict[str, Any] = {
-        assertion: (AssertionResultItem, ...) for assertion in assertions
-    }
-    return pydantic.create_model("LLMJudgeResponse", **fields)
+    field_mapping = _build_field_mapping(assertions)
+    fields: dict[str, Any] = {key: (AssertionResultItem, ...) for key in field_mapping}
+    return pydantic.create_model("LLMJudgeResponse", **fields), field_mapping
 
 
 def parse_model_output(
     content: str,
     assertions: List[str],
+    field_mapping: Dict[str, str],
 ) -> List[score_result.ScoreResult]:
     """
     Parse the LLM model output JSON into a list of ScoreResult objects.
@@ -76,28 +104,22 @@ def parse_model_output(
     Args:
         content: The raw JSON string output from the LLM.
         assertions: List of assertion strings that were evaluated.
+        field_mapping: Mapping from sanitized field names to original assertion text.
 
     Returns:
         List of ScoreResult objects, one per assertion in the same order.
         If parsing fails, returns ScoreResult objects with scoring_failed=True.
-
-    Example:
-        >>> content = '{"Response is accurate": {"score": true, "reason": "Correct"}}'
-        >>> results = parse_model_output(content, ["Response is accurate"])
-        >>> results[0].name
-        'Response is accurate'
-        >>> results[0].value
-        True
     """
     results: List[score_result.ScoreResult] = []
-    response_model = build_response_format_model(assertions)
+    response_model, _ = build_response_format_model(assertions)
+    key_to_assertion = field_mapping
 
     try:
         parsed = json.loads(content)
         validated = response_model(**parsed)
 
-        for assertion in assertions:
-            item: AssertionResultItem = getattr(validated, assertion)
+        for field_key, assertion in key_to_assertion.items():
+            item: AssertionResultItem = getattr(validated, field_key)
             results.append(
                 score_result.ScoreResult(
                     name=assertion,

@@ -39,7 +39,8 @@ All data produced by the agent (response text, tool calls, metadata, etc.):
 ---END OUTPUT---
 
 ## Assertions
-Evaluate each of the following assertions against the agent's output:
+Evaluate each of the following assertions against the agent's output.
+Use the provided field key as the JSON property name for each assertion result.
 
 {assertions}
 """
@@ -57,14 +58,16 @@ def _format_value(value: Any) -> str:
 def _generate_prompt(
     input: Any,
     output: Any,
-    assertions: List[str],
+    field_mapping: Dict[str, str],
 ) -> str:
     """Generate the LLM query for evaluating assertions.
 
     Combines the system prompt and user template into a single string
     because the model's generate_string API accepts only one input string.
     """
-    assertions_str = "\n".join(f"- {assertion}" for assertion in assertions)
+    assertions_str = "\n".join(
+        f"- `{key}`: {assertion}" for key, assertion in field_mapping.items()
+    )
 
     user_content = LLM_JUDGE_USER_TEMPLATE.format(
         input=_format_value(input),
@@ -227,12 +230,14 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
         """
+        response_format, field_mapping = parsers.build_response_format_model(
+            self._assertions
+        )
         llm_query = _generate_prompt(
             input=input,
             output=output,
-            assertions=self._assertions,
+            field_mapping=field_mapping,
         )
-        response_format = parsers.build_response_format_model(self._assertions)
         model_output = self._model.generate_string(
             input=llm_query, response_format=response_format
         )
@@ -240,6 +245,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         return parsers.parse_model_output(
             content=model_output,
             assertions=self._assertions,
+            field_mapping=field_mapping,
         )
 
     async def ascore(
@@ -261,12 +267,14 @@ class LLMJudge(base.BaseSuiteEvaluator):
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
         """
+        response_format, field_mapping = parsers.build_response_format_model(
+            self._assertions
+        )
         llm_query = _generate_prompt(
             input=input,
             output=output,
-            assertions=self._assertions,
+            field_mapping=field_mapping,
         )
-        response_format = parsers.build_response_format_model(self._assertions)
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=response_format
         )
@@ -274,6 +282,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         return parsers.parse_model_output(
             content=model_output,
             assertions=self._assertions,
+            field_mapping=field_mapping,
         )
 
     def to_config(self) -> llm_judge_config.LLMJudgeConfig:
