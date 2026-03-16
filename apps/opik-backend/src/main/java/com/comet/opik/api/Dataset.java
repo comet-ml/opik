@@ -26,6 +26,7 @@ public record Dataset(
                 Dataset.View.Public.class, Dataset.View.Write.class}) UUID id,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) @NotBlank String name,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) @Nullable UUID projectId,
+        @JsonView({Dataset.View.Write.class}) @Nullable String projectName,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) DatasetType type,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Visibility visibility,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Set<String> tags,

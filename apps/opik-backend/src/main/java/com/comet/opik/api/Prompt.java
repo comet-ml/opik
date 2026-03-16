@@ -30,6 +30,7 @@ public record Prompt(
                 Prompt.View.Updatable.class}) @NotBlank String name,
         @JsonView({Prompt.View.Public.class, Prompt.View.Write.class,
                 Prompt.View.Detail.class}) @Nullable UUID projectId,
+        @JsonView({Prompt.View.Write.class}) @Nullable String projectName,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
                 Prompt.View.Detail.class,

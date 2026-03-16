@@ -36,6 +36,7 @@ import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @ImplementedBy(DashboardServiceImpl.class)
 public interface DashboardService {
@@ -82,7 +83,17 @@ class DashboardServiceImpl implements DashboardService {
         var dashboardId = dashboard.id() != null ? dashboard.id() : idGenerator.generateId();
         IdGenerator.validateVersion(dashboardId, "dashboard");
 
-        projectService.validateProjectIdExists(dashboard.projectId(), workspaceId);
+        final UUID resolvedProjectId;
+        if (StringUtils.isNotEmpty(dashboard.projectName()) && dashboard.projectId() == null) {
+            var project = projectService.getOrCreate(dashboard.projectName())
+                    .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
+                    .block();
+            resolvedProjectId = project.id();
+        } else {
+            resolvedProjectId = dashboard.projectId();
+        }
+
+        projectService.validateProjectIdExists(resolvedProjectId, workspaceId);
 
         // Generate slug from name
         String baseSlug = SlugUtils.generateSlug(dashboard.name());
@@ -97,6 +108,7 @@ class DashboardServiceImpl implements DashboardService {
             // Build the complete dashboard
             var newDashboard = dashboard.toBuilder()
                     .id(dashboardId)
+                    .projectId(resolvedProjectId)
                     .workspaceId(workspaceId)
                     .slug(uniqueSlug)
                     .type(Optional.ofNullable(dashboard.type()).orElse(DashboardType.MULTI_PROJECT))

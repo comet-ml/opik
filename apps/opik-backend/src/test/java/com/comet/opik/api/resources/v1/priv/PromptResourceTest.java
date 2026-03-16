@@ -124,7 +124,7 @@ class PromptResourceTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
     public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "requestedVersion", "template", "metadata",
-            "changeDescription", "type"};
+            "changeDescription", "type", "projectName"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -4496,6 +4496,60 @@ class PromptResourceTest {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
             }
+        }
+
+        @Test
+        @DisplayName("Create prompt with project_name of existing project resolves project_id")
+        void createPromptWithExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var prompt = buildPrompt()
+                    .projectName(projectName)
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var id = createPrompt(prompt, apiKey, workspaceName);
+            var fetchedPrompt = promptResourceClient.getPrompt(id, apiKey, workspaceName);
+
+            assertPrompt(fetchedPrompt, prompt.toBuilder().id(id).projectId(projectId).build());
+        }
+
+        @Test
+        @DisplayName("Create prompt with project_name of non-existing project creates project and resolves project_id")
+        void createPromptWithNonExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "new-project-" + UUID.randomUUID();
+
+            var prompt = buildPrompt()
+                    .projectName(projectName)
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var id = createPrompt(prompt, apiKey, workspaceName);
+            var fetchedPrompt = promptResourceClient.getPrompt(id, apiKey, workspaceName);
+
+            // Verify the project was created and the projectId was resolved
+            assertThat(fetchedPrompt.projectId()).isNotNull();
+
+            assertPrompt(fetchedPrompt, prompt.toBuilder().id(id).projectId(fetchedPrompt.projectId()).build());
         }
 
         @Test

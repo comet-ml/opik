@@ -50,6 +50,7 @@ import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(PromptServiceImpl.class)
@@ -125,13 +126,21 @@ class PromptServiceImpl implements PromptService {
         String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
-        projectService.validateProjectIdExists(promptRequest.projectId(), workspaceId);
-
-        var newPrompt = promptRequest.toBuilder()
+        var builder = promptRequest.toBuilder()
                 .id(promptRequest.id() == null ? idGenerator.generateId() : promptRequest.id())
                 .createdBy(userName)
-                .lastUpdatedBy(userName)
-                .build();
+                .lastUpdatedBy(userName);
+
+        if (StringUtils.isNotEmpty(promptRequest.projectName()) && promptRequest.projectId() == null) {
+            var project = projectService.getOrCreate(promptRequest.projectName())
+                    .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
+                    .block();
+            builder.projectId(project.id());
+        }
+
+        var newPrompt = builder.build();
+
+        projectService.validateProjectIdExists(newPrompt.projectId(), workspaceId);
 
         Prompt createdPrompt = EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))

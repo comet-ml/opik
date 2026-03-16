@@ -25,6 +25,7 @@ public record Dashboard(
         @JsonView({Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String workspaceId,
         @JsonView({Dashboard.View.Public.class,
                 Dashboard.View.Write.class}) @Nullable UUID projectId,
+        @JsonView({Dashboard.View.Write.class}) @Nullable String projectName,
         @JsonView({Dashboard.View.Public.class,
                 Dashboard.View.Write.class}) @NotBlank @Size(min = 1, max = 120, message = "name must be between 1 and 120 characters") String name,
         @JsonView({Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String slug,

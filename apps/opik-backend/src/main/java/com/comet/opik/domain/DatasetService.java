@@ -36,6 +36,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
@@ -55,6 +56,7 @@ import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 
@@ -141,6 +143,13 @@ class DatasetServiceImpl implements DatasetService {
         builder
                 .createdBy(userName)
                 .lastUpdatedBy(userName);
+
+        if (StringUtils.isNotEmpty(dataset.projectName()) && dataset.projectId() == null) {
+            var project = projectService.getOrCreate(dataset.projectName())
+                    .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
+                    .block();
+            builder.projectId(project.id());
+        }
 
         var newDataset = builder.build();
 
