@@ -321,11 +321,7 @@ class DailyUsageReportJobTest {
         }
 
         private void setUpData(String apiKey, String workspaceName, String workspaceId) {
-            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
-                    .map(dataset -> dataset.toBuilder()
-                            .projectId(null)
-                            .build())
-                    .toList();
+            List<Dataset> datasets = DatasetResourceClient.buildDatasetList(factory);
 
             datasets.parallelStream().forEach(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);

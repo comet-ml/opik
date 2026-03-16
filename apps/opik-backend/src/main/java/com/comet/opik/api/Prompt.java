@@ -29,7 +29,9 @@ public record Prompt(
         @JsonView({Prompt.View.Public.class, Prompt.View.Write.class, Prompt.View.Detail.class,
                 Prompt.View.Updatable.class}) @NotBlank String name,
         @JsonView({Prompt.View.Public.class, Prompt.View.Write.class,
-                Prompt.View.Detail.class}) @Nullable UUID projectId,
+                Prompt.View.Detail.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") @Nullable UUID projectId,
+        @JsonView({
+                Prompt.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the prompt is created at workspace level.") @Nullable String projectName,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
                 Prompt.View.Detail.class,

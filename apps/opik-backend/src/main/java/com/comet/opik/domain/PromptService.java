@@ -125,13 +125,19 @@ class PromptServiceImpl implements PromptService {
         String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
-        projectService.validateProjectIdExists(promptRequest.projectId(), workspaceId);
-
-        var newPrompt = promptRequest.toBuilder()
+        var builder = promptRequest.toBuilder()
                 .id(promptRequest.id() == null ? idGenerator.generateId() : promptRequest.id())
                 .createdBy(userName)
-                .lastUpdatedBy(userName)
-                .build();
+                .lastUpdatedBy(userName);
+
+        if (StringUtils.isNotBlank(promptRequest.projectName()) && promptRequest.projectId() == null) {
+            var project = projectService.getOrCreate(workspaceId, promptRequest.projectName(), userName);
+            builder.projectId(project.id());
+        }
+
+        var newPrompt = builder.build();
+
+        projectService.validateProjectIdExists(newPrompt.projectId(), workspaceId);
 
         Prompt createdPrompt = EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))

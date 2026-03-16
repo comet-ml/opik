@@ -72,8 +72,8 @@ import static org.assertj.core.api.Assertions.within;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class DashboardsResourceTest {
 
-    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "slug", "createdAt", "lastUpdatedAt",
-            "createdBy", "lastUpdatedBy"};
+    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "slug", "projectName", "createdAt",
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -961,7 +961,7 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Create dashboard with non-existing project_id returns conflict")
+        @DisplayName("Create dashboard with non-existing project_id returns not found")
         void createDashboardWithNonExistingProjectId() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
@@ -973,8 +973,56 @@ class DashboardsResourceTest {
                     .build();
 
             try (var response = dashboardResourceClient.callCreate(dashboard, apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
+        }
+
+        @Test
+        @DisplayName("Create dashboard with project_name of existing project resolves project_id")
+        void createDashboardWithExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectName(projectName)
+                    .build();
+
+            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
+
+            var expectedDashboard = dashboard.toBuilder()
+                    .projectId(projectId)
+                    .build();
+            assertDashboard(expectedDashboard, createdDashboard);
+        }
+
+        @Test
+        @DisplayName("Create dashboard with project_name of non-existing project creates project and resolves project_id")
+        void createDashboardWithNonExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "new-project-" + UUID.randomUUID();
+
+            var dashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectName(projectName)
+                    .build();
+
+            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
+
+            // Verify the project was created and the projectId was resolved
+            assertThat(createdDashboard.projectId()).isNotNull();
+
+            var expectedDashboard = dashboard.toBuilder()
+                    .projectId(createdDashboard.projectId())
+                    .build();
+            assertDashboard(expectedDashboard, createdDashboard);
         }
 
         @Test

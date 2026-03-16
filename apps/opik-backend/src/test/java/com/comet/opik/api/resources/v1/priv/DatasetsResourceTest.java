@@ -216,7 +216,7 @@ class DatasetsResourceTest {
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
             "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId", "runSummariesByExperiment"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
+            "lastUpdatedBy", "projectName", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
             "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount",
             "status", "latestVersion"};
 
@@ -3106,10 +3106,7 @@ class DatasetsResourceTest {
     }
 
     private List<Dataset> buildDatasets() {
-        return PodamFactoryUtils.manufacturePojoList(factory, Dataset.class)
-                .stream()
-                .map(dataset -> dataset.toBuilder().projectId(null).build())
-                .toList();
+        return DatasetResourceClient.buildDatasetList(factory);
     }
 
     private Experiment getExperiment(String apiKey, String workspaceName, Experiment experiment) {
@@ -10152,7 +10149,7 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("Create dataset with non-existing project_id returns conflict")
+        @DisplayName("Create dataset with non-existing project_id returns not found")
         void createDatasetWithNonExistingProjectId() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = UUID.randomUUID().toString();
@@ -10165,8 +10162,60 @@ class DatasetsResourceTest {
                     .build();
 
             try (var response = datasetResourceClient.callCreateDataset(dataset, apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
+        }
+
+        @Test
+        @DisplayName("Create dataset with project_name of existing project resolves project_id")
+        void createDatasetWithExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .projectName(projectName)
+                    .build();
+
+            var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+            var fetchedDataset = datasetResourceClient.getDatasetById(id, apiKey, workspaceName);
+
+            var expectedDataset = dataset.toBuilder()
+                    .projectId(projectId)
+                    .build();
+            assertDataset(fetchedDataset, expectedDataset);
+        }
+
+        @Test
+        @DisplayName("Create dataset with project_name of non-existing project creates project and resolves project_id")
+        void createDatasetWithNonExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "new-project-" + UUID.randomUUID();
+
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .projectName(projectName)
+                    .build();
+
+            var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+            var fetchedDataset = datasetResourceClient.getDatasetById(id, apiKey, workspaceName);
+
+            // Verify the project was created and the projectId was resolved
+            assertThat(fetchedDataset.projectId()).isNotNull();
+
+            var expectedDataset = dataset.toBuilder()
+                    .projectId(fetchedDataset.projectId())
+                    .build();
+            assertDataset(fetchedDataset, expectedDataset);
         }
 
         @Test

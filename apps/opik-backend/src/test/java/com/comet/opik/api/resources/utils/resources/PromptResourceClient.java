@@ -8,6 +8,7 @@ import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -33,7 +34,13 @@ public class PromptResourceClient {
     private final PodamFactory podamFactory;
 
     public static Prompt buildPrompt(PodamFactory factory) {
-        return factory.manufacturePojo(Prompt.class).toBuilder().projectId(null).build();
+        return factory.manufacturePojo(Prompt.class).toBuilder().projectId(null).projectName(null).build();
+    }
+
+    public static List<Prompt> buildPromptList(PodamFactory factory) {
+        return PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
+                .map(prompt -> prompt.toBuilder().projectId(null).projectName(null).build())
+                .toList();
     }
 
     public UUID createPrompt(Prompt prompt, String apiKey, String workspaceName) {

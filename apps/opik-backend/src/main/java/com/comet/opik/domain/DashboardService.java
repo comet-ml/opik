@@ -82,7 +82,15 @@ class DashboardServiceImpl implements DashboardService {
         var dashboardId = dashboard.id() != null ? dashboard.id() : idGenerator.generateId();
         IdGenerator.validateVersion(dashboardId, "dashboard");
 
-        projectService.validateProjectIdExists(dashboard.projectId(), workspaceId);
+        final UUID resolvedProjectId;
+        if (StringUtils.isNotBlank(dashboard.projectName()) && dashboard.projectId() == null) {
+            var project = projectService.getOrCreate(workspaceId, dashboard.projectName(), userName);
+            resolvedProjectId = project.id();
+        } else {
+            resolvedProjectId = dashboard.projectId();
+        }
+
+        projectService.validateProjectIdExists(resolvedProjectId, workspaceId);
 
         // Generate slug from name
         String baseSlug = SlugUtils.generateSlug(dashboard.name());
@@ -97,6 +105,7 @@ class DashboardServiceImpl implements DashboardService {
             // Build the complete dashboard
             var newDashboard = dashboard.toBuilder()
                     .id(dashboardId)
+                    .projectId(resolvedProjectId)
                     .workspaceId(workspaceId)
                     .slug(uniqueSlug)
                     .type(Optional.ofNullable(dashboard.type()).orElse(DashboardType.MULTI_PROJECT))
