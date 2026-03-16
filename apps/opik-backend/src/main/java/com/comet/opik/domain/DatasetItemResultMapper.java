@@ -41,6 +41,8 @@ import static java.util.stream.Collectors.toMap;
 public class DatasetItemResultMapper {
 
     private static final int COMMENT_INDEX = 11;
+    /** Tuple index for execution_policy, added after description (index 17) in the experiment_items_array */
+    private static final int EXECUTION_POLICY_INDEX = 18;
 
     private DatasetItemResultMapper() {
     }
@@ -78,7 +80,14 @@ public class DatasetItemResultMapper {
                                 .map(Object::toString)
                                 .filter(StringUtils::isNotBlank)
                                 .orElse(null))
+                        .executionPolicy(experimentItem.size() > EXECUTION_POLICY_INDEX
+                                ? ExecutionPolicyMapper.fromJson(
+                                        Optional.ofNullable(experimentItem.get(EXECUTION_POLICY_INDEX))
+                                                .map(Object::toString)
+                                                .orElse(null))
+                                : null)
                         .build())
+                .map(AssertionResultMapper::enrichWithAssertions)
                 .toList();
 
         return experimentItems.isEmpty() ? null : experimentItems;
@@ -154,6 +163,8 @@ public class DatasetItemResultMapper {
                     .orElse(null);
         }
 
+        var experimentItems = getExperimentItems(row.get("experiment_items_array", List[].class));
+
         return DatasetItem.builder()
                 .id(row.get("id", UUID.class))
                 .data(data)
@@ -180,7 +191,8 @@ public class DatasetItemResultMapper {
                 .evaluators(getEvaluators(row, rowMetadata))
                 .executionPolicy(getExecutionPolicy(row, rowMetadata))
                 .datasetItemId(datasetItemId)
-                .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
+                .experimentItems(experimentItems)
+                .runSummariesByExperiment(AssertionResultMapper.computeRunSummaries(experimentItems))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))

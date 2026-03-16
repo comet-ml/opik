@@ -5,6 +5,7 @@ import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.JobTimeoutConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -14,7 +15,6 @@ import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -130,12 +130,8 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                     return traceThreadService.addToPendingQueue(message.projectId())
                             .flatMap(pending -> {
                                 if (Boolean.TRUE.equals(pending)) {
-                                    var streamAddArgs = StreamAddArgs
-                                            .<Object, Object>entry(TraceThreadConfig.PAYLOAD_FIELD, message)
-                                            .trimNonStrict()
-                                            .maxLen(traceThreadConfig.getStreamMaxLen())
-                                            .limit(traceThreadConfig.getStreamTrimLimit());
-                                    return stream.add(streamAddArgs);
+                                    return stream.add(RedisStreamUtils.buildAddArgs(
+                                            TraceThreadConfig.PAYLOAD_FIELD, message, traceThreadConfig));
                                 } else {
                                     log.info("Project {} is already in the pending closure list, skipping enqueue",
                                             message.projectId());
