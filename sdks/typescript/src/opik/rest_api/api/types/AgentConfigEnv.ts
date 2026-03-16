@@ -7,6 +7,5 @@ export interface AgentConfigEnv {
     blueprintId: string;
     createdBy?: string;
     createdAt?: Date;
-    lastUpdatedBy?: string;
-    lastUpdatedAt?: Date;
+    endedAt?: Date;
 }
