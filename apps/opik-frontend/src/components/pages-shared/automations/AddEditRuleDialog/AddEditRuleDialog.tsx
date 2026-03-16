@@ -91,6 +91,7 @@ import {
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: {
@@ -153,7 +154,7 @@ type AddEditRuleDialogProps = {
 };
 
 const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
-  open,
+  open: initialOpen,
   setOpen,
   projectId,
   rule: defaultRule,
@@ -163,6 +164,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   defaultScope,
   mode,
 }) => {
+  const {
+    permissions: { canUpdateOnlineEvaluationRules },
+  } = usePermissions();
+
+  const open = initialOpen && canUpdateOnlineEvaluationRules;
+
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
   );

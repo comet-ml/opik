@@ -20,20 +20,20 @@ public enum GeminiModelName implements StructuredOutputSupported {
     GEMINI_1_5_FLASH_LATEST("gemini-1.5-flash-latest", true),
     GEMINI_1_5_PRO_LATEST("gemini-1.5-pro-latest", true),
     GEMINI_2_0_FLASH("gemini-2.0-flash", true),
+    GEMINI_2_0_FLASH_LITE("gemini-2.0-flash-lite", true),
     GEMINI_2_5_FLASH("gemini-2.5-flash", true),
+    GEMINI_2_5_FLASH_IMAGE("gemini-2.5-flash-image", true),
     GEMINI_2_5_FLASH_LITE("gemini-2.5-flash-lite", true),
     GEMINI_2_5_PRO("gemini-2.5-pro", true),
     GEMINI_3_FLASH("gemini-3-flash-preview", true),
-    GEMINI_3_PRO("gemini-3-pro-preview", true),
-    GEMINI_3_1_PRO("gemini-3.1-pro-preview", true),
-    GEMINI_PRO_VISION("gemini-pro-vision", false),
-    TEXT_EMBEDDING("text-embedding-004", false),
-    GEMINI_2_0_FLASH_LITE("gemini-2.0-flash-lite", true),
-    GEMINI_2_5_FLASH_IMAGE("gemini-2.5-flash-image", true),
     GEMINI_3_PRO_IMAGE_PREVIEW("gemini-3-pro-image-preview", true),
+    GEMINI_3_PRO("gemini-3-pro-preview", true),
     GEMINI_3_1_FLASH_IMAGE_PREVIEW("gemini-3.1-flash-image-preview", true),
     GEMINI_3_1_FLASH_LITE_PREVIEW("gemini-3.1-flash-lite-preview", true),
-    NANO_BANANA_PRO_PREVIEW("nano-banana-pro-preview", false);
+    GEMINI_3_1_PRO("gemini-3.1-pro-preview", true),
+    GEMINI_PRO_VISION("gemini-pro-vision", false),
+    NANO_BANANA_PRO_PREVIEW("nano-banana-pro-preview", false),
+    TEXT_EMBEDDING("text-embedding-004", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find GeminiModelName with value '{}'";
 

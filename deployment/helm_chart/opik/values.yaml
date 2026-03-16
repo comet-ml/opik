@@ -237,6 +237,8 @@ component:
       PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
       PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
       PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
+      # PYTHON_CODE_EXECUTOR_CPU_LIMIT: "0.5"  # Hard CPU limit per executor container (in CPUs, e.g. "0.5" = half a core). Unset by default — no hard limit.
+      PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS: "60"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
       OTEL_SERVICE_NAME: "opik-python-backend"
       OTEL_METRIC_EXPORT_INTERVAL: "60000"

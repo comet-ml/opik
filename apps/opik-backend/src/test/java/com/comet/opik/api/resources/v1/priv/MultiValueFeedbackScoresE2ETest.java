@@ -969,7 +969,9 @@ class MultiValueFeedbackScoresE2ETest {
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
         assertThat(valueByAuthor.get(author).categoryName()).isEqualTo(expected.categoryName());
-        assertThat(valueByAuthor.get(author).value()).isEqualByComparingTo(expected.value());
+        assertThat(valueByAuthor.get(author).value())
+                .usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(expected.value());
         assertThat(valueByAuthor.get(author).reason()).isEqualTo(expected.reason());
         assertThat(valueByAuthor.get(author).source()).isEqualTo(expected.source());
     }

@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, ChevronDown, Plus } from "lucide-react";
 import {
   Dialog,
@@ -20,9 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import { cn } from "@/lib/utils";
-import useRulesList from "@/api/automations/useRulesList";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
-import useAppStore from "@/store/AppStore";
 import {
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
@@ -30,10 +21,9 @@ import {
 } from "@/types/automations";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ManualEvaluationEntityType = "trace" | "thread" | "span";
-
-const STALE_TIME = 5 * 60 * 1000; // 5 minutes - rules don't change frequently
 
 type RunEvaluationDialogProps = {
   open: boolean;
@@ -41,12 +31,17 @@ type RunEvaluationDialogProps = {
   projectId: string;
   entityIds: string[];
   entityType: ManualEvaluationEntityType;
+  rules: EvaluatorsRule[];
+  isLoading: boolean;
 };
 
 const RunEvaluationDialog: React.FunctionComponent<
   RunEvaluationDialogProps
-> = ({ open, setOpen, projectId, entityIds, entityType }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+> = ({ open, setOpen, projectId, entityIds, entityType, rules, isLoading }) => {
+  const {
+    permissions: { canUpdateOnlineEvaluationRules },
+  } = usePermissions();
+
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(
     new Set(),
   );
@@ -57,51 +52,7 @@ const RunEvaluationDialog: React.FunctionComponent<
     useState<boolean>(false);
   const hasPreSelectedRef = useRef(false);
 
-  const { data, isLoading } = useRulesList(
-    {
-      workspaceName,
-      projectId,
-      page: 1,
-      size: 1000, // Load all rules in the workspace
-    },
-    {
-      enabled: open,
-      placeholderData: keepPreviousData,
-      staleTime: STALE_TIME,
-    },
-  );
-
   const manualEvaluationMutation = useManualEvaluationMutation();
-
-  // Filter rules based on entity type
-  // Trace rules: llm_as_judge, user_defined_metric_python
-  // Thread rules: trace_thread_llm_as_judge, trace_thread_user_defined_metric_python
-  // Span rules: span_llm_as_judge, span_user_defined_metric_python
-  const rules = useMemo(() => {
-    const allRules = data?.content || [];
-
-    if (entityType === "trace") {
-      return allRules.filter(
-        (rule) =>
-          rule.type === EVALUATORS_RULE_TYPE.llm_judge ||
-          rule.type === EVALUATORS_RULE_TYPE.python_code,
-      );
-    } else if (entityType === "thread") {
-      return allRules.filter(
-        (rule) =>
-          rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge ||
-          rule.type === EVALUATORS_RULE_TYPE.thread_python_code,
-      );
-    } else if (entityType === "span") {
-      return allRules.filter(
-        (rule) =>
-          rule.type === EVALUATORS_RULE_TYPE.span_llm_judge ||
-          rule.type === EVALUATORS_RULE_TYPE.span_python_code,
-      );
-    } else {
-      throw new Error(`Unknown entity type: ${entityType}`);
-    }
-  }, [data?.content, entityType]);
 
   // Pre-select all rules when dialog opens and rules are loaded (only once per dialog opening)
   useEffect(() => {
@@ -333,7 +284,7 @@ const RunEvaluationDialog: React.FunctionComponent<
               selected {entityLabel}. Each rule will generate new scores based
               on its configuration.
             </p>
-            {rules.length > 0 && (
+            {canUpdateOnlineEvaluationRules && rules.length > 0 && (
               <div className="mb-4 flex justify-end">
                 <Button variant="ghost" size="sm" onClick={handleCreateRule}>
                   <Plus className="mr-1 size-4" />

@@ -1168,7 +1168,7 @@ class SpansResourceTest {
                             "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
             String metadataWithCost = """
                     {"cost": {
-                        "total_tokens": %s,
+                        "total_cost": %s,
                         "currency": "%s"
                       }}""";
 
@@ -2122,7 +2122,7 @@ class SpansResourceTest {
         Stream<Arguments> update__whenCostIsChanged__thenAcceptUpdate() {
             String metadataWithCost = """
                     {"cost": {
-                        "total_tokens": %s,
+                        "total_cost": %s,
                         "currency": "%s"
                       }}""";
 

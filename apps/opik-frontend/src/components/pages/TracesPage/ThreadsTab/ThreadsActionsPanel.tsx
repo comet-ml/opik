@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, Brain, Tag } from "lucide-react";
+import { Trash, Tag } from "lucide-react";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,9 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
+import EvaluateButton from "@/components/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
+import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
 import AddTagDialog, {
   TAG_ENTITY_TYPE,
 } from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
@@ -40,6 +42,11 @@ const ThreadsActionsPanel: React.FunctionComponent<
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !selectedRows?.length;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+
+  const { rules, isLoading: isRulesLoading } = useFilteredRulesList({
+    projectId,
+    entityType: "thread",
+  });
 
   const deleteThreadsHandler = useCallback(() => {
     mutate({
@@ -87,6 +94,8 @@ const ThreadsActionsPanel: React.FunctionComponent<
         projectId={projectId}
         entityIds={selectedRows.map((row) => row.thread_model_id)}
         entityType="thread"
+        rules={rules}
+        isLoading={isRulesLoading}
       />
       <AddToDropdown
         getDataForExport={getDataForExport}
@@ -107,19 +116,14 @@ const ThreadsActionsPanel: React.FunctionComponent<
           <Tag />
         </Button>
       </TooltipWrapper>
-      <TooltipWrapper content="Evaluate">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={() => {
-            setOpen(4);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Brain />
-        </Button>
-      </TooltipWrapper>
+      <EvaluateButton
+        isNoRules={!rules?.length}
+        disabled={disabled}
+        onClick={() => {
+          setOpen(4);
+          resetKeyRef.current = resetKeyRef.current + 1;
+        }}
+      />
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}

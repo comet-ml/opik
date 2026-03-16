@@ -2,6 +2,7 @@ package com.comet.opik.domain.experiments.aggregations;
 
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
 
@@ -59,5 +60,21 @@ public class ExperimentAggregatesModel {
             UUID experimentId,
             Map<String, Map<String, Double>> feedbackScoresPercentiles,
             Map<String, Double> feedbackScoresAvg) {
+    }
+
+    /**
+     * Aggregated pass rate metrics for an evaluation suite experiment.
+     *
+     * @param experimentId The experiment ID
+     * @param passRate     The pass rate (passed / total), zero if not applicable
+     * @param passedCount  Number of dataset items that passed
+     * @param totalCount   Total number of dataset items evaluated
+     */
+    @Builder
+    public record PassRateAggregation(
+            UUID experimentId,
+            BigDecimal passRate,
+            long passedCount,
+            long totalCount) {
     }
 }

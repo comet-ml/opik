@@ -809,6 +809,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "minimax/minimax-m2.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_5_FREE,
+      label: "minimax/minimax-m2.5:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
       label: "mistralai/codestral-2501",
     },
@@ -1827,6 +1831,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5,
       label: "z-ai/glm-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_TURBO,
+      label: "z-ai/glm-5-turbo",
     },
   ],
 
