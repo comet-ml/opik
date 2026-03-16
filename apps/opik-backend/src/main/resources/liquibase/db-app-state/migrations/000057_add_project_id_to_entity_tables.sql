@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000056_add_project_id_to_entity_tables
+--changeset thiagohora:000057_add_project_id_to_entity_tables
 --comment: Add nullable project_id columns to datasets, prompts, and dashboards tables for project-scoped operations
 
 ALTER TABLE datasets
