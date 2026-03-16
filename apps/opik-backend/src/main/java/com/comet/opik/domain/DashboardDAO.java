@@ -62,9 +62,6 @@ public interface DashboardDAO {
     @SqlQuery("SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId")
     Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND name = :name")
-    Optional<Dashboard> findByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name);
-
     @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND slug = :slug")
     Optional<Dashboard> findBySlug(@Bind("workspaceId") String workspaceId, @Bind("slug") String slug);
 
