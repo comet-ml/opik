@@ -12,6 +12,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceSearchStreamRequest;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
@@ -4608,6 +4609,57 @@ class GetTracesByProjectResourceTest {
 
             var actualEntity = actualResponse.readEntity(Trace.TracePage.class);
             assertThat(actualEntity).isNotNull();
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByName__afterUpdate__thenReturnLatestVersion() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var originalInput = JsonUtils.getJsonNodeFromString("{\"message\": \"original input\"}");
+            var updatedInput = JsonUtils.getJsonNodeFromString("{\"message\": \"updated input\"}");
+
+            var trace = Trace.builder()
+                    .id(idGenerator.generateId())
+                    .projectName(projectName)
+                    .name("ZZZ-original-name")
+                    .startTime(Instant.now().truncatedTo(ChronoUnit.MILLIS))
+                    .endTime(Instant.now().plus(1, ChronoUnit.SECONDS).truncatedTo(ChronoUnit.MILLIS))
+                    .input(originalInput)
+                    .output(JsonUtils.getJsonNodeFromString("{\"message\": \"original output\"}"))
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(projectName)
+                    .name("AAA-updated-name")
+                    .input(updatedInput)
+                    .output(JsonUtils.getJsonNodeFromString("{\"message\": \"updated output\"}"))
+                    .build();
+
+            traceResourceClient.updateTrace(trace.id(), traceUpdate, apiKey, workspaceName);
+
+            var sorting = List.of(
+                    SortingField.builder()
+                            .field(SortableFields.NAME)
+                            .direction(Direction.DESC)
+                            .build());
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName,
+                    List.of(), sorting, 10, Map.of());
+
+            assertThat(actualPage.content()).hasSize(1);
+
+            var returnedTrace = actualPage.content().getFirst();
+            assertThat(returnedTrace.name()).isEqualTo("AAA-updated-name");
+            assertThat(returnedTrace.input()).isEqualTo(updatedInput);
         }
 
         @ParameterizedTest
