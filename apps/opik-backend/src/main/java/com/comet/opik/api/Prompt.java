@@ -30,7 +30,8 @@ public record Prompt(
                 Prompt.View.Updatable.class}) @NotBlank String name,
         @JsonView({Prompt.View.Public.class, Prompt.View.Write.class,
                 Prompt.View.Detail.class}) @Nullable UUID projectId,
-        @JsonView({Prompt.View.Write.class}) @Nullable String projectName,
+        @JsonView({
+                Prompt.View.Write.class}) @Schema(description = "For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. If neither is provided, the prompt is created at workspace level.") @Nullable String projectName,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
                 Prompt.View.Detail.class,
