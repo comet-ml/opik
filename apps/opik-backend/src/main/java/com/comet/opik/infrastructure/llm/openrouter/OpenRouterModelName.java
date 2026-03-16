@@ -186,6 +186,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MINIMAX_MINIMAX_M2_HER("minimax/minimax-m2-her"),
     MINIMAX_MINIMAX_M2_1("minimax/minimax-m2.1"),
     MINIMAX_MINIMAX_M2_5("minimax/minimax-m2.5"),
+    MINIMAX_MINIMAX_M2_5_FREE("minimax/minimax-m2.5:free"),
     MISTRALAI_CODESTRAL_2501("mistralai/codestral-2501"),
     MISTRALAI_CODESTRAL_2508("mistralai/codestral-2508"),
     MISTRALAI_DEVSTRAL_2512("mistralai/devstral-2512"),
@@ -440,7 +441,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_4_6V("z-ai/glm-4.6v"),
     Z_AI_GLM_4_7("z-ai/glm-4.7"),
     Z_AI_GLM_4_7_FLASH("z-ai/glm-4.7-flash"),
-    Z_AI_GLM_5("z-ai/glm-5");
+    Z_AI_GLM_5("z-ai/glm-5"),
+    Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 

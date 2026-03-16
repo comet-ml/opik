@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
@@ -26,6 +27,8 @@ import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -46,6 +49,7 @@ import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.context.ContextView;
 
 import java.time.Instant;
 import java.util.List;
@@ -85,6 +89,8 @@ public class ExperimentService {
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull OpikConfiguration config;
     private final @NonNull ExperimentGroupEnricher experimentGroupEnricher;
+    private final @NonNull ExperimentAggregatesService experimentAggregatesService;
+    private final @NonNull ExperimentAggregationPublisher experimentAggregationPublisher;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -324,9 +330,46 @@ public class ExperimentService {
     @WithSpan
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
-        return enrichExperiment(
-                experimentDAO.getById(id),
-                "Not found experiment with id '%s'".formatted(id));
+        return enrichExperiment(experimentDAO.getById(id), "Not found experiment with id '%s'".formatted(id))
+                .doOnEach(signal -> {
+                    if (signal.isOnNext()) {
+                        var experiment = signal.get();
+                        triggerLazyAggregationIfNeeded(experiment.id(), experiment.status(),
+                                signal.getContextView());
+                    }
+                });
+    }
+
+    private void triggerLazyAggregationIfNeeded(UUID experimentId, ExperimentStatus status, ContextView ctx) {
+        if (status != ExperimentStatus.COMPLETED && status != ExperimentStatus.CANCELLED) {
+            return;
+        }
+
+        try {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            log.debug("Checking if lazy aggregation trigger needed for experiment: '{}', workspaceId: '{}'",
+                    experimentId, workspaceId);
+
+            experimentAggregatesService.getExperimentFromAggregates(experimentId)
+                    .hasElement()
+                    .filter(inAggregates -> !inAggregates)
+                    .flatMap(__ -> {
+                        log.info("Triggering lazy aggregation for experiment: '{}', workspaceId: '{}'",
+                                experimentId, workspaceId);
+                        return experimentAggregationPublisher.publish(Set.of(experimentId), workspaceId,
+                                userName);
+                    })
+                    .contextWrite(ctx)
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .subscribe(
+                            null,
+                            error -> log.error("Failed lazy aggregation trigger for experiment: '{}'",
+                                    experimentId, error));
+        } catch (Exception e) {
+            log.warn("Could not trigger lazy aggregation for experiment '{}': missing request context", experimentId);
+        }
     }
 
     @WithSpan
@@ -717,7 +760,12 @@ public class ExperimentService {
                                     .build());
                         }
                     })
-                    .then();
+                    .then(Mono.defer(() -> experimentAggregationPublisher.publish(ids, workspaceId, userName)
+                            .onErrorResume(error -> {
+                                log.error("Failed to publish aggregation for finished experiments, workspaceId '{}'",
+                                        workspaceId, error);
+                                return Mono.empty();
+                            })));
         });
     }
 

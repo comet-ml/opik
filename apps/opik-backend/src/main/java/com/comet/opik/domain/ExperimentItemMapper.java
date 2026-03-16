@@ -33,36 +33,42 @@ class ExperimentItemMapper {
     }
 
     public static Publisher<ExperimentItem> mapToExperimentItemFullContent(Result result) {
-        return result.map((row, rowMetadata) -> ExperimentItem.builder()
-                .id(row.get("id", UUID.class))
-                .experimentId(row.get("experiment_id", UUID.class))
-                .datasetItemId(row.get("dataset_item_id", UUID.class))
-                .traceId(row.get("trace_id", UUID.class))
-                .projectId(row.get("project_id", UUID.class))
-                .input(Optional.ofNullable(row.get("input", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                        .orElse(null))
-                .output(Optional.ofNullable(row.get("output", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                        .orElse(null))
-                .feedbackScores(getFeedbackScores(row.get("feedback_scores_array", String.class)))
-                .comments(getComments(row.get("comments_array_agg", String.class)))
-                .duration(row.get("duration", Double.class))
-                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
-                        ? null
-                        : row.get("total_estimated_cost", BigDecimal.class))
-                .usage(row.get("usage", Map.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .traceVisibilityMode(row.get("trace_visibility_mode", String.class) == null
-                        ? null
-                        : VisibilityMode.fromString(row.get("trace_visibility_mode", String.class))
-                                .orElse(null))
-                .build());
+        return result.map((row, rowMetadata) -> {
+            var item = ExperimentItem.builder()
+                    .id(row.get("id", UUID.class))
+                    .experimentId(row.get("experiment_id", UUID.class))
+                    .datasetItemId(row.get("dataset_item_id", UUID.class))
+                    .traceId(row.get("trace_id", UUID.class))
+                    .projectId(row.get("project_id", UUID.class))
+                    .input(Optional.ofNullable(row.get("input", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                            .orElse(null))
+                    .output(Optional.ofNullable(row.get("output", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                            .orElse(null))
+                    .feedbackScores(getFeedbackScores(row.get("feedback_scores_array", String.class)))
+                    .comments(getComments(row.get("comments_array_agg", String.class)))
+                    .duration(row.get("duration", Double.class))
+                    .totalEstimatedCost(
+                            row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
+                                    ? null
+                                    : row.get("total_estimated_cost", BigDecimal.class))
+                    .usage(row.get("usage", Map.class))
+                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                    .createdAt(row.get("created_at", Instant.class))
+                    .createdBy(row.get("created_by", String.class))
+                    .lastUpdatedBy(row.get("last_updated_by", String.class))
+                    .traceVisibilityMode(row.get("trace_visibility_mode", String.class) == null
+                            ? null
+                            : VisibilityMode.fromString(row.get("trace_visibility_mode", String.class))
+                                    .orElse(null))
+                    .executionPolicy(ExecutionPolicyMapper.fromJson(
+                            row.get("execution_policy", String.class)))
+                    .build();
+            return AssertionResultMapper.enrichWithAssertions(item);
+        });
     }
 
 }

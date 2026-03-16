@@ -7011,10 +7011,7 @@ components:
           type: string
           format: date-time
           readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        last_updated_at:
+        ended_at:
           type: string
           format: date-time
           readOnly: true

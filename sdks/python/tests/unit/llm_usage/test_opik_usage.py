@@ -114,6 +114,82 @@ def test_opik_usage__to_backend_compatible_full_usage_dict__anthropic_source():
     }
 
 
+def test_opik_usage__from_unknown_usage_dict__both_tokens_present__total_is_calculated():
+    usage_data = {
+        "prompt_tokens": 200,
+        "completion_tokens": 100,
+    }
+    usage = OpikUsage.from_unknown_usage_dict(usage_data)
+    assert usage.prompt_tokens == 200
+    assert usage.completion_tokens == 100
+    assert usage.total_tokens == 300
+
+
+def test_opik_usage__from_unknown_usage_dict__only_prompt_tokens__total_is_none():
+    usage_data = {
+        "prompt_tokens": 200,
+    }
+    usage = OpikUsage.from_unknown_usage_dict(usage_data)
+    assert usage.prompt_tokens == 200
+    assert usage.completion_tokens is None
+    assert usage.total_tokens is None
+
+
+def test_opik_usage__from_unknown_usage_dict__only_completion_tokens__total_is_none():
+    usage_data = {
+        "completion_tokens": 100,
+    }
+    usage = OpikUsage.from_unknown_usage_dict(usage_data)
+    assert usage.prompt_tokens is None
+    assert usage.completion_tokens == 100
+    assert usage.total_tokens is None
+
+
+def test_opik_usage__from_unknown_usage_dict__empty_dict__all_none():
+    usage = OpikUsage.from_unknown_usage_dict({})
+    assert usage.prompt_tokens is None
+    assert usage.completion_tokens is None
+    assert usage.total_tokens is None
+
+
+def test_opik_usage__to_backend_compatible_full_usage_dict__unknown_source__total_tokens_present():
+    usage_data = {
+        "prompt_tokens": 200,
+        "completion_tokens": 100,
+    }
+    usage = OpikUsage.from_unknown_usage_dict(usage_data)
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+    assert full_dict == {
+        "completion_tokens": 100,
+        "prompt_tokens": 200,
+        "total_tokens": 300,
+        "original_usage.prompt_tokens": 200,
+        "original_usage.completion_tokens": 100,
+    }
+
+
+def test_opik_usage__from_unknown_usage_dict__string_tokens__coerced_to_int():
+    usage_data = {
+        "prompt_tokens": "200",
+        "completion_tokens": "100",
+    }
+    usage = OpikUsage.from_unknown_usage_dict(usage_data)
+    assert usage.prompt_tokens == 200
+    assert usage.completion_tokens == 100
+    assert usage.total_tokens == 300
+
+
+def test_opik_usage__from_unknown_usage_dict__invalid_token_values__total_is_none():
+    usage_data = {
+        "prompt_tokens": "not-a-number",
+        "completion_tokens": "also-invalid",
+    }
+    usage = OpikUsage.from_unknown_usage_dict(usage_data)
+    assert usage.prompt_tokens is None
+    assert usage.completion_tokens is None
+    assert usage.total_tokens is None
+
+
 def test_opik_usage__invalid_data_passed__validation_error_is_raised():
     usage_data = {"a": 123}
     with pytest.raises(pydantic.ValidationError):

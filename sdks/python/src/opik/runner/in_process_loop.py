@@ -10,6 +10,7 @@ import threading
 import time
 from typing import Callable, Optional
 
+from ..api_objects.agent_config.context import agent_config_context
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
@@ -162,6 +163,7 @@ class InProcessRunnerLoop:
             return
 
         func: Callable = entry["func"]
+        mask_id = job.mask_id
 
         if job.trace_id:
             opik_args = inputs.setdefault("opik_args", {})
@@ -173,26 +175,28 @@ class InProcessRunnerLoop:
         try:
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
-                coro = func(**inputs)
-                if timeout:
-                    result = await asyncio.wait_for(coro, timeout=timeout)
-                else:
-                    result = await coro
+                with agent_config_context(mask_id):
+                    coro = func(**inputs)
+                    if timeout:
+                        result = await asyncio.wait_for(coro, timeout=timeout)
+                    else:
+                        result = await coro
             else:
-                # NOTE: For sync functions, asyncio.wait_for raises TimeoutError
-                # but the underlying executor thread continues running — Python
-                # threads cannot be forcibly interrupted. The timeout status is
-                # reported correctly, but the thread will linger until completion.
+
+                def _run_with_mask() -> object:
+                    with agent_config_context(mask_id):
+                        return func(**inputs)
+
                 if timeout:
                     result = await asyncio.wait_for(
                         asyncio.get_running_loop().run_in_executor(
-                            None, lambda: func(**inputs)
+                            None, _run_with_mask
                         ),
                         timeout=timeout,
                     )
                 else:
                     result = await asyncio.get_running_loop().run_in_executor(
-                        None, lambda: func(**inputs)
+                        None, _run_with_mask
                     )
 
             if not isinstance(result, (dict, str, int, float, bool, list, type(None))):

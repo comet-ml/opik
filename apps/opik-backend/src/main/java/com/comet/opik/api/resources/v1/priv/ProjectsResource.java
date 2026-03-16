@@ -57,6 +57,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.Project.ProjectPage;
@@ -256,7 +257,9 @@ public class ProjectsResource {
     @Operation(operationId = "findFeedbackScoreNamesByProjectIds", summary = "Find Feedback Score names By Project Ids", description = "Find Feedback Score names By Project Ids", responses = {
             @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
-    public Response findFeedbackScoreNames(@QueryParam("project_ids") String projectIdsQueryParam) {
+    public Response findFeedbackScoreNames(
+            @QueryParam("project_ids") String projectIdsQueryParam,
+            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
 
         var projectIds = Optional.ofNullable(projectIdsQueryParam)
                 .map(ParamsValidator::getIds)
@@ -267,7 +270,7 @@ public class ProjectsResource {
         log.info("Find feedback score names by project_ids '{}', on workspaceId '{}'",
                 projectIds, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getProjectsFeedbackScoreNames(projectIds)
+                .getProjectsFeedbackScoreNames(projectIds, excludeCategoryNames)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by project_ids '{}', on workspaceId '{}'",
