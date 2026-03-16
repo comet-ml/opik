@@ -417,9 +417,6 @@ class DatasetsResourceTest {
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
-            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
-
             wireMock.server().resetRequests();
             datasetResourceClient.callDeleteDatasetItems(List.of(), apiKey, workspaceName).close();
 
