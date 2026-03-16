@@ -26,6 +26,7 @@ import { SpansClient } from "./api/resources/spans/client/Client.js";
 import { SystemUsageClient } from "./api/resources/systemUsage/client/Client.js";
 import { TracesClient } from "./api/resources/traces/client/Client.js";
 import { WelcomeWizardClient } from "./api/resources/welcomeWizard/client/Client.js";
+import { WorkspacePermissionsClient } from "./api/resources/workspacePermissions/client/Client.js";
 import { WorkspacesClient } from "./api/resources/workspaces/client/Client.js";
 import type { BaseClientOptions, BaseRequestOptions } from "./BaseClient.js";
 import { type NormalizedClientOptions, normalizeClientOptions } from "./BaseClient.js";
@@ -68,6 +69,7 @@ export class OpikApiClient {
     protected _spans: SpansClient | undefined;
     protected _traces: TracesClient | undefined;
     protected _welcomeWizard: WelcomeWizardClient | undefined;
+    protected _workspacePermissions: WorkspacePermissionsClient | undefined;
     protected _workspaces: WorkspacesClient | undefined;
     protected _redirect: RedirectClient | undefined;
 
@@ -173,6 +175,10 @@ export class OpikApiClient {
 
     public get welcomeWizard(): WelcomeWizardClient {
         return (this._welcomeWizard ??= new WelcomeWizardClient(this._options));
+    }
+
+    public get workspacePermissions(): WorkspacePermissionsClient {
+        return (this._workspacePermissions ??= new WorkspacePermissionsClient(this._options));
     }
 
     public get workspaces(): WorkspacesClient {

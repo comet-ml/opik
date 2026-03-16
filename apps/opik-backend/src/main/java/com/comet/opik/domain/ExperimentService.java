@@ -345,24 +345,31 @@ public class ExperimentService {
             return;
         }
 
-        log.debug("Checking if lazy aggregation trigger needed for experiment: '{}'", experimentId);
+        try {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-        String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-        String userName = ctx.get(RequestContext.USER_NAME);
+            log.debug("Checking if lazy aggregation trigger needed for experiment: '{}', workspaceId: '{}'",
+                    experimentId, workspaceId);
 
-        experimentAggregatesService.getExperimentFromAggregates(experimentId)
-                .hasElement()
-                .filter(inAggregates -> !inAggregates)
-                .flatMap(__ -> {
-                    log.info("Triggering lazy aggregation for experiment: '{}'", experimentId);
-                    return experimentAggregationPublisher.publish(Set.of(experimentId), workspaceId, userName);
-                })
-                .contextWrite(ctx)
-                .subscribeOn(Schedulers.boundedElastic())
-                .subscribe(
-                        null,
-                        error -> log.error("Failed lazy aggregation trigger for experiment: '{}'", experimentId,
-                                error));
+            experimentAggregatesService.getExperimentFromAggregates(experimentId)
+                    .hasElement()
+                    .filter(inAggregates -> !inAggregates)
+                    .flatMap(__ -> {
+                        log.info("Triggering lazy aggregation for experiment: '{}', workspaceId: '{}'",
+                                experimentId, workspaceId);
+                        return experimentAggregationPublisher.publish(Set.of(experimentId), workspaceId,
+                                userName);
+                    })
+                    .contextWrite(ctx)
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .subscribe(
+                            null,
+                            error -> log.error("Failed lazy aggregation trigger for experiment: '{}'",
+                                    experimentId, error));
+        } catch (Exception e) {
+            log.warn("Could not trigger lazy aggregation for experiment '{}': missing request context", experimentId);
+        }
     }
 
     @WithSpan

@@ -61,13 +61,13 @@ public interface FeedbackScoreService {
     Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
             Set<String> excludeCategoryNames);
 
-    Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
+    Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds, Set<String> excludeCategoryNames);
 
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
 
     Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names, String author);
 
-    Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
+    Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId, Set<String> excludeCategoryNames);
 
     Mono<Void> deleteByTraceIds(Set<UUID> traceIds, UUID projectId);
 
@@ -291,8 +291,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds) {
-        return dao.getProjectsFeedbackScoreNames(projectIds)
+    public Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds,
+            @NonNull Set<String> excludeCategoryNames) {
+        return dao.getProjectsFeedbackScoreNames(projectIds, excludeCategoryNames)
                 .map(names -> names.stream()
                         .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
                         .toList())
@@ -332,8 +333,10 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId) {
-        return dao.getProjectsTraceThreadsFeedbackScoreNames(projectId == null ? List.of() : List.of(projectId))
+    public Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId,
+            @NonNull Set<String> excludeCategoryNames) {
+        return dao.getProjectsTraceThreadsFeedbackScoreNames(projectId == null ? List.of() : List.of(projectId),
+                excludeCategoryNames)
                 .map(names -> names.stream()
                         .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
                         .toList())

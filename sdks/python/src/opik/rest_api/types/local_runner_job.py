@@ -18,7 +18,7 @@ class LocalRunnerJob(UniversalBaseModel):
     inputs: typing.Optional[JsonNode] = None
     result: typing.Optional[JsonNode] = None
     error: typing.Optional[str] = None
-    project: typing.Optional[str] = None
+    project_id: typing.Optional[str] = None
     trace_id: typing.Optional[str] = None
     mask_id: typing.Optional[str] = None
     metadata: typing.Optional[LocalRunnerJobMetadata] = None

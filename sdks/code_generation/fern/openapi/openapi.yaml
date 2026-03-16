@@ -85,6 +85,8 @@ tags:
   description: Trace related resources
 - name: Welcome Wizard
   description: Welcome wizard tracking resources
+- name: Workspace permissions
+  description: Workspace permissions related resources
 - name: Workspaces
   description: Workspace related resources
 - name: Redirect
@@ -3476,6 +3478,10 @@ paths:
             Location:
               description: URI of the runner
               style: simple
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerConnectResponse"
         "400":
           description: Bad request
           content:
@@ -3526,6 +3532,11 @@ paths:
       summary: Generate a pairing code
       description: Generate a pairing code for a local runner in the current workspace
       operationId: generatePairingCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRunnerPairRequest"
       responses:
         "201":
           description: Pairing code generated
@@ -3644,10 +3655,11 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: project
+      - name: project_id
         in: query
         schema:
           type: string
+          format: uuid
       - name: page
         in: query
         schema:
@@ -3683,6 +3695,12 @@ paths:
       description: List local runners owned by the current user in the workspace
       operationId: listRunners
       parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
       - name: page
         in: query
         schema:
@@ -6460,6 +6478,32 @@ paths:
       responses:
         "204":
           description: Welcome wizard submitted successfully
+  /v1/private/workspace-permissions:
+    get:
+      tags:
+      - Workspace permissions
+      summary: Get workspace permissions for the authenticated user
+      description: Get workspace permissions for the authenticated user
+      operationId: getWorkspaceUserPermissions
+      responses:
+        "200":
+          description: Workspace Permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceUserPermissions"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/costs/summaries:
     post:
       tags:
@@ -6967,10 +7011,7 @@ components:
           type: string
           format: date-time
           readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        last_updated_at:
+        ended_at:
           type: string
           format: date-time
           readOnly: true
@@ -14179,12 +14220,27 @@ components:
         text:
           minLength: 1
           type: string
+    LocalRunnerConnectResponse:
+      type: object
+      properties:
+        runner_id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
     LocalRunnerConnectRequest:
       required:
+      - pairing_code
       - runner_name
       type: object
       properties:
         pairing_code:
+          minLength: 1
           type: string
         runner_name:
           minLength: 1
@@ -14192,6 +14248,7 @@ components:
     CreateLocalRunnerJobRequest:
       required:
       - agent_name
+      - project_id
       type: object
       properties:
         agent_name:
@@ -14199,9 +14256,7 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/JsonNode"
-        project:
-          type: string
-        runner_id:
+        project_id:
           type: string
           format: uuid
         mask_id:
@@ -14235,6 +14290,14 @@ components:
         expires_in_seconds:
           type: integer
           format: int32
+    LocalRunnerPairRequest:
+      required:
+      - project_id
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
     LocalRunnerJob:
       type: object
       properties:
@@ -14260,8 +14323,9 @@ components:
           $ref: "#/components/schemas/JsonNode"
         error:
           type: string
-        project:
+        project_id:
           type: string
+          format: uuid
         trace_id:
           type: string
           format: uuid
@@ -14287,8 +14351,6 @@ components:
       properties:
         name:
           type: string
-        project:
-          type: string
         description:
           type: string
         language:
@@ -14312,6 +14374,9 @@ components:
           format: uuid
         name:
           type: string
+        project_id:
+          type: string
+          format: uuid
         status:
           type: string
           enum:
@@ -17292,6 +17357,24 @@ components:
         join_beta_program:
           type: boolean
           description: Whether user wants to join beta programs
+    Permission:
+      type: object
+      properties:
+        permissionName:
+          type: string
+        permissionValue:
+          type: string
+    WorkspaceUserPermissions:
+      type: object
+      properties:
+        userName:
+          type: string
+        workspaceName:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
     Result:
       type: object
       properties:

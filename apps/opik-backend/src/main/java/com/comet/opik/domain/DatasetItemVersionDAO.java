@@ -13,6 +13,8 @@ import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
+import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -48,6 +50,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -1905,9 +1908,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -1922,9 +1924,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <else>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 <endif>
+                AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -2289,6 +2290,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
 
     @Override
     @WithSpan
@@ -2472,11 +2474,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
+            var aggregationCriteria = AggregationBranchCountsCriteria.builder()
+                    .datasetId(criteria.datasetId())
+                    .experimentIds(criteria.experimentIds())
+                    .build();
+
             // Run pre-queries in parallel: target project IDs and aggregated experiment IDs
-            var targetProjectIdsMono = getTargetProjectIds(workspaceId, criteria.datasetId(),
-                    criteria.experimentIds());
-            var branchCountsMono = getAggregationBranchCounts(workspaceId, criteria.datasetId(),
-                    criteria.experimentIds());
+            var targetProjectIdsMono = getTargetProjectIds(workspaceId, criteria.datasetId(), criteria.experimentIds());
+            var branchCountsMono = getAggregationBranchCounts(aggregationCriteria);
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
                     .flatMap(preQueryResults -> {
@@ -2610,13 +2615,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      */
     private Mono<List<UUID>> getTargetProjectIds(String workspaceId, UUID datasetId, Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = TemplateUtils.newST(SELECT_TARGET_PROJECTS);
+            ST template = getSTWithLogComment(SELECT_TARGET_PROJECTS, "get_target_project_ids", workspaceId, datasetId);
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", true);
             }
-
-            template.add("log_comment", "get_target_project_ids:workspace_id:" + workspaceId);
 
             String query = template.render();
 
@@ -2634,33 +2637,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
-    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(String workspaceId, UUID datasetId,
-            Set<UUID> experimentIds) {
-        return asyncTemplate.nonTransaction(connection -> {
-            ST template = TemplateUtils.newST(SELECT_AGGREGATED_EXPERIMENT_IDS);
-
-            if (CollectionUtils.isNotEmpty(experimentIds)) {
-                template.add("experiment_ids", experimentIds);
-            }
-
-            template.add("log_comment",
-                    "get_aggregation_branch_counts:workspace_id:" + workspaceId + ":dataset_id:" + datasetId);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("datasetId", datasetId);
-
-            if (CollectionUtils.isNotEmpty(experimentIds)) {
-                statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
-            }
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> new AggregatedExperimentCounts(
-                            row.get("aggregated", Long.class),
-                            row.get("not_aggregated", Long.class))))
-                    .next()
-                    .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-        });
+    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
+            @NonNull AggregationBranchCountsCriteria criteria) {
+        return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
     }
 
     @Override
@@ -3673,8 +3652,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
+            var aggregationCriteria = AggregationBranchCountsCriteria.builder()
+                    .datasetId(datasetId)
+                    .experimentIds(experimentIds)
+                    .build();
             var targetProjectIdsMono = getTargetProjectIds(workspaceId, datasetId, experimentIds);
-            var branchCountsMono = getAggregationBranchCounts(workspaceId, datasetId, experimentIds);
+            var branchCountsMono = getAggregationBranchCounts(aggregationCriteria);
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
                     .flatMap(preQueryResults -> {

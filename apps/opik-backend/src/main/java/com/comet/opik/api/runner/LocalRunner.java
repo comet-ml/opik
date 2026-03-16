@@ -18,6 +18,7 @@ import java.util.UUID;
 public record LocalRunner(
         UUID id,
         String name,
+        UUID projectId,
         LocalRunnerStatus status,
         Instant connectedAt,
         List<Agent> agents) {
@@ -27,7 +28,6 @@ public record LocalRunner(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Agent(
             String name,
-            String project,
             String description,
             String language,
             String executable,

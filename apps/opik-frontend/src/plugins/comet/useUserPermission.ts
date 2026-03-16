@@ -172,8 +172,24 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canUpdateOnlineEvaluationRules = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.ONLINE_EVALUATION_RULE_UPDATE,
+      ),
+    [checkNullablePermission],
+  );
+
   const canUpdateAlerts = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.ALERT_UPDATE),
+    [checkNullablePermission],
+  );
+
+  const canAnnotateTraceSpanThread = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.TRACE_SPAN_THREAD_ANNOTATE,
+      ),
     [checkNullablePermission],
   );
 
@@ -195,7 +211,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateAIProviders,
     canCreateProjects,
     canWriteComments,
+    canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
+    canAnnotateTraceSpanThread,
     isPending: isEnabled && isPending,
   };
 };

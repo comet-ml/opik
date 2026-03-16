@@ -10,6 +10,8 @@ public enum WorkspaceUserPermission {
 
     DASHBOARD_VIEW("dashboard_view"),
     EXPERIMENT_VIEW("experiment_view"),
+    DATASET_VIEW("dataset_view"),
+    ANNOTATION_QUEUE_VIEW("annotation_queue_view"),
     TRACE_SPAN_THREAD_LOG("trace_span_thread_log");
 
     @JsonValue

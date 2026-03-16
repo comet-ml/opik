@@ -5,14 +5,14 @@ import type * as OpikApi from "../../../../index.js";
 /**
  * @example
  *     {
- *         agentName: "agent_name"
+ *         agentName: "agent_name",
+ *         projectId: "project_id"
  *     }
  */
 export interface CreateLocalRunnerJobRequest {
     agentName: string;
     inputs?: OpikApi.JsonNode;
-    project?: string;
-    runnerId?: string;
+    projectId: string;
     maskId?: string;
     metadata?: OpikApi.LocalRunnerJobMetadata;
 }

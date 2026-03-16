@@ -14,7 +14,9 @@ export interface Permissions {
   canUpdateAIProviders: boolean;
   canCreateProjects: boolean;
   canWriteComments: boolean;
+  canUpdateOnlineEvaluationRules: boolean;
   canUpdateAlerts: boolean;
+  canAnnotateTraceSpanThread: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -39,7 +41,9 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canUpdateAIProviders: true,
     canCreateProjects: true,
     canWriteComments: true,
+    canUpdateOnlineEvaluationRules: true,
     canUpdateAlerts: true,
+    canAnnotateTraceSpanThread: true,
   },
   isPending: false,
 };

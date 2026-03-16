@@ -207,6 +207,41 @@ class TestOpikArgsWithTrackDecorator:
         )
 
 
+class TestPresetTraceId:
+    def test_track__preset_trace_id__uses_provided_id(self, fake_backend):
+        @tracker.track
+        def my_agent(x: str):
+            return "result"
+
+        my_agent("input", opik_args={"trace": {"id": "runner-trace-abc"}})
+        tracker.flush_tracker()
+
+        assert len(fake_backend.trace_trees) == 1
+        assert fake_backend.trace_trees[0].id == "runner-trace-abc"
+
+    def test_track__preset_trace_id_with_other_opik_args__all_applied(
+        self, fake_backend
+    ):
+        @tracker.track
+        def my_agent(x: str):
+            return "result"
+
+        my_agent(
+            "input",
+            opik_args={
+                "trace": {"id": "runner-trace-123", "tags": ["runner"]},
+                "span": {"metadata": {"source": "runner"}},
+            },
+        )
+        tracker.flush_tracker()
+
+        assert len(fake_backend.trace_trees) == 1
+        trace_tree = fake_backend.trace_trees[0]
+        assert trace_tree.id == "runner-trace-123"
+        assert "runner" in trace_tree.tags
+        assert trace_tree.spans[0].metadata == {"source": "runner"}
+
+
 class TestOpikArgs:
     """Test the opik_args parameter functionality."""
 
@@ -254,6 +289,14 @@ class TestOpikArgs:
         assert result.trace_args.tags == ["trace_tag"]
         assert result.trace_args.metadata == {"trace_key": "trace_value"}
         assert result.span_args is None
+
+    def test_opik_args_from_dict__trace_with_preset_id(self):
+        args_dict = {"trace": {"id": "preset-trace-123"}}
+        result = opik_args.OpikArgs.from_dict(args_dict)
+
+        assert result is not None
+        assert result.trace_args is not None
+        assert result.trace_args.id == "preset-trace-123"
 
     def test_opik_args_from_dict__both_span_and_trace__happy_flow(self):
         """Test OpikArgs.from_dict with both span and trace args."""

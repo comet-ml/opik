@@ -13,6 +13,8 @@ import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.AnnotationQueueService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -68,6 +70,7 @@ public class AnnotationQueuesResource {
     @Operation(operationId = "findAnnotationQueues", summary = "Find annotation queues", description = "Find annotation queues with filtering and sorting", responses = {
             @ApiResponse(responseCode = "200", description = "Annotation queues page", content = @Content(schema = @Schema(implementation = AnnotationQueue.AnnotationQueuePage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_VIEW)
     @JsonView(AnnotationQueue.View.Public.class)
     public Response findAnnotationQueues(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -100,6 +103,7 @@ public class AnnotationQueuesResource {
             @ApiResponse(responseCode = "200", description = "Annotation queue resource", content = @Content(schema = @Schema(implementation = AnnotationQueue.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_VIEW)
     @JsonView(AnnotationQueue.View.Public.class)
     public Response getAnnotationQueueById(@PathParam("id") UUID id) {
 

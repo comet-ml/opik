@@ -16,6 +16,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface MetricSelectorProps {
   rules: EvaluatorsRule[];
@@ -24,7 +25,7 @@ interface MetricSelectorProps {
   datasetId: string | null;
   onCreateRuleClick: () => void;
   workspaceName: string;
-  canCreateRules: boolean;
+  canUsePlayground: boolean;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -34,10 +35,14 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   datasetId,
   onCreateRuleClick,
   workspaceName,
-  canCreateRules,
+  canUsePlayground,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+
+  const {
+    permissions: { canUpdateOnlineEvaluationRules },
+  } = usePermissions();
 
   const isAllSelected =
     selectedRuleIds === null || selectedRuleIds.length === rules.length;
@@ -219,7 +224,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               <div className="comet-body-s-accented pb-1 text-foreground">
                 No metrics available
               </div>
-              {canCreateRules && (
+              {canUsePlayground && canUpdateOnlineEvaluationRules && (
                 <div className="comet-body-s text-muted-slate">
                   Create an online evaluation rule for the Playground project to
                   generate metrics for your outputs.
@@ -252,7 +257,11 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                         asChild
                       >
                         <Link
-                          to={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
+                          to={`/${workspaceName}/online-evaluation?${
+                            canUpdateOnlineEvaluationRules
+                              ? `editRule=${rule.id}&`
+                              : ""
+                          }search=${rule.id}&filters=[]`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
@@ -292,7 +301,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               </div>
             </>
           )}
-          {canCreateRules && (
+          {canUsePlayground && canUpdateOnlineEvaluationRules && (
             <>
               <Separator className="my-1" />
               <ListAction

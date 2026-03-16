@@ -15,6 +15,9 @@ DEFAULT_CPU_SHARES = 512
 # Memory limit for executor containers
 # Uses Docker SDK format: number followed by single letter unit (b/k/m/g)
 DEFAULT_MEM_LIMIT = "256m"
+# CPU hard limit for executor containers (in fractional CPUs, e.g. "0.5" = half a CPU core)
+# None means no hard limit (only cpu_shares soft priority applies)
+DEFAULT_CPU_LIMIT = None
 
 @dataclass
 class ExecutionResult:

@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 
 import { Span, Trace } from "@/types/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import {
   DetailsActionSection,
@@ -20,6 +21,9 @@ type TraceDataViewerActionsPanelProps = {
 const TraceDataViewerActionsPanel: React.FunctionComponent<
   TraceDataViewerActionsPanelProps
 > = ({ data, activeSection, setActiveSection, layoutSize }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
   const rows = useMemo(() => (data ? [data] : []), [data]);
 
   const annotationCount = data.feedback_scores?.length;
@@ -43,13 +47,15 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         count={commentsCount}
         type={DetailsActionSection.Comments}
       />
-      <DetailsActionSectionToggle
-        activeSection={activeSection}
-        setActiveSection={setActiveSection}
-        layoutSize={layoutSize}
-        count={annotationCount}
-        type={DetailsActionSection.Annotations}
-      />
+      {canAnnotateTraceSpanThread && (
+        <DetailsActionSectionToggle
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+          layoutSize={layoutSize}
+          count={annotationCount}
+          type={DetailsActionSection.Annotations}
+        />
+      )}
     </>
   );
 };

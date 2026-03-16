@@ -287,20 +287,21 @@ export class RunnersClient {
      *
      * @example
      *     await client.runners.connectRunner({
+     *         pairingCode: "pairing_code",
      *         runnerName: "runner_name"
      *     })
      */
     public connectRunner(
         request: OpikApi.LocalRunnerConnectRequest,
         requestOptions?: RunnersClient.RequestOptions,
-    ): core.HttpResponsePromise<void> {
+    ): core.HttpResponsePromise<OpikApi.LocalRunnerConnectResponse> {
         return core.HttpResponsePromise.fromPromise(this.__connectRunner(request, requestOptions));
     }
 
     private async __connectRunner(
         request: OpikApi.LocalRunnerConnectRequest,
         requestOptions?: RunnersClient.RequestOptions,
-    ): Promise<core.WithRawResponse<void>> {
+    ): Promise<core.WithRawResponse<OpikApi.LocalRunnerConnectResponse>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
             mergeOnlyDefinedHeaders({
@@ -332,7 +333,16 @@ export class RunnersClient {
             logging: this._options.logging,
         });
         if (_response.ok) {
-            return { data: undefined, rawResponse: _response.rawResponse };
+            return {
+                data: serializers.LocalRunnerConnectResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
@@ -369,7 +379,8 @@ export class RunnersClient {
      *
      * @example
      *     await client.runners.createJob({
-     *         agentName: "agent_name"
+     *         agentName: "agent_name",
+     *         projectId: "project_id"
      *     })
      */
     public createJob(
@@ -443,20 +454,25 @@ export class RunnersClient {
     /**
      * Generate a pairing code for a local runner in the current workspace
      *
+     * @param {OpikApi.LocalRunnerPairRequest} request
      * @param {RunnersClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.runners.generatePairingCode()
+     *     await client.runners.generatePairingCode({
+     *         projectId: "project_id"
+     *     })
      */
     public generatePairingCode(
+        request: OpikApi.LocalRunnerPairRequest,
         requestOptions?: RunnersClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.LocalRunnerPairResponse> {
-        return core.HttpResponsePromise.fromPromise(this.__generatePairingCode(requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__generatePairingCode(request, requestOptions));
     }
 
     private async __generatePairingCode(
+        request: OpikApi.LocalRunnerPairRequest,
         requestOptions?: RunnersClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.LocalRunnerPairResponse>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
@@ -475,7 +491,13 @@ export class RunnersClient {
             ),
             method: "POST",
             headers: _headers,
+            contentType: "application/json",
             queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.LocalRunnerPairRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
             timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
             maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
             withCredentials: true,
@@ -803,9 +825,9 @@ export class RunnersClient {
         request: OpikApi.ListJobsRequest = {},
         requestOptions?: RunnersClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.LocalRunnerJobPage>> {
-        const { project, page, size } = request;
+        const { projectId, page, size } = request;
         const _queryParams: Record<string, unknown> = {
-            project,
+            project_id: projectId,
             page,
             size,
         };
@@ -876,21 +898,24 @@ export class RunnersClient {
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.runners.listRunners()
+     *     await client.runners.listRunners({
+     *         projectId: "project_id"
+     *     })
      */
     public listRunners(
-        request: OpikApi.ListRunnersRequest = {},
+        request: OpikApi.ListRunnersRequest,
         requestOptions?: RunnersClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.LocalRunnerPage> {
         return core.HttpResponsePromise.fromPromise(this.__listRunners(request, requestOptions));
     }
 
     private async __listRunners(
-        request: OpikApi.ListRunnersRequest = {},
+        request: OpikApi.ListRunnersRequest,
         requestOptions?: RunnersClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.LocalRunnerPage>> {
-        const { page, size } = request;
+        const { projectId, page, size } = request;
         const _queryParams: Record<string, unknown> = {
+            project_id: projectId,
             page,
             size,
         };

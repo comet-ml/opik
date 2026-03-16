@@ -22,7 +22,7 @@ public record LocalRunnerJob(
         JsonNode inputs,
         JsonNode result,
         String error,
-        String project,
+        UUID projectId,
         UUID traceId,
         UUID maskId,
         LocalRunnerJobMetadata metadata,
