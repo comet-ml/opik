@@ -195,7 +195,7 @@ class RedirectResourceTest {
     @MethodSource("parameters")
     @DisplayName("Create dataset redirect URL")
     void datasetsRedirectTest(String workspaceName, String workspaceNameForRedirectRequest, int expectedStatus) {
-        var dataset = factory.manufacturePojo(Dataset.class);
+        var dataset = buildDataset();
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
         var redirectURL = redirectResourceClient.datasetsRedirect(datasetId, UUID.randomUUID().toString(),
@@ -207,6 +207,10 @@ class RedirectResourceTest {
         }
     }
 
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
+    }
+
     @Test
     void datasetsRedirectUrlNoDataset() {
         redirectResourceClient.datasetsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), null, "path", 404);
@@ -216,7 +220,7 @@ class RedirectResourceTest {
     @MethodSource("parameters")
     @DisplayName("Create experiment redirect URL")
     void experimentsRedirectTest(String workspaceName, String workspaceNameForRedirectRequest, int expectedStatus) {
-        var dataset = factory.manufacturePojo(Dataset.class);
+        var dataset = buildDataset();
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
         var experimentId = UUID.randomUUID();
@@ -234,7 +238,7 @@ class RedirectResourceTest {
     @MethodSource("parameters")
     @DisplayName("Create optimization redirect URL")
     void optimizationsRedirectTest(String workspaceName, String workspaceNameForRedirectRequest, int expectedStatus) {
-        var dataset = factory.manufacturePojo(Dataset.class);
+        var dataset = buildDataset();
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
         var optimizationId = UUID.randomUUID();

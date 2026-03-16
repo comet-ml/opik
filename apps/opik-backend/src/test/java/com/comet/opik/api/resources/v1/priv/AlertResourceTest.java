@@ -1106,7 +1106,7 @@ class AlertResourceTest {
                     HttpStatus.SC_CREATED);
 
             // Create a prompt to trigger the event
-            var expectedPrompt = factory.manufacturePojo(Prompt.class)
+            var expectedPrompt = buildPrompt()
                     .toBuilder()
                     .versionCount(0L)
                     .createdBy(USER)
@@ -1145,9 +1145,10 @@ class AlertResourceTest {
                     HttpStatus.SC_CREATED);
 
             // Create a prompt to trigger the event
-            var prompt = factory.manufacturePojo(Prompt.class)
+            var prompt = buildPrompt()
                     .toBuilder()
                     .versionCount(0L)
+                    .projectId(null)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
                     .build();
@@ -1198,7 +1199,7 @@ class AlertResourceTest {
                     HttpStatus.SC_CREATED);
 
             // Create a prompt and commit to trigger the event
-            var expectedPrompt = factory.manufacturePojo(Prompt.class);
+            var expectedPrompt = buildPrompt();
             var expectedPromptVersion = promptResourceClient.createPromptVersion(expectedPrompt, mock.getLeft(),
                     mock.getRight());
 
@@ -1486,7 +1487,7 @@ class AlertResourceTest {
             var mock = prepareMockWorkspace();
 
             // Create a dataset
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             UUID datasetId = datasetResourceClient.createDataset(dataset, mock.getLeft(), mock.getRight());
 
             // Create alert with webhook
@@ -1756,6 +1757,14 @@ class AlertResourceTest {
         }
     }
 
+    private Prompt buildPrompt() {
+        return PromptResourceClient.buildPrompt(factory);
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
+    }
+
     @Nested
     @DisplayName("Test Alert Events for Native Integrations:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1937,8 +1946,9 @@ class AlertResourceTest {
             alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create a prompt to trigger the event
-            var prompt = factory.manufacturePojo(Prompt.class)
+            var prompt = buildPrompt()
                     .toBuilder()
+                    .projectId(null)
                     .versionCount(0L)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
@@ -1968,7 +1978,7 @@ class AlertResourceTest {
             alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create and delete prompts to trigger the event
-            var prompt1 = factory.manufacturePojo(Prompt.class)
+            var prompt1 = buildPrompt()
                     .toBuilder()
                     .versionCount(0L)
                     .createdBy(USER)
@@ -1976,7 +1986,7 @@ class AlertResourceTest {
                     .build();
             var promptId1 = promptResourceClient.createPrompt(prompt1, mock.getLeft(), mock.getRight());
 
-            var prompt2 = factory.manufacturePojo(Prompt.class)
+            var prompt2 = buildPrompt()
                     .toBuilder()
                     .versionCount(0L)
                     .createdBy(USER)
@@ -2006,7 +2016,7 @@ class AlertResourceTest {
             alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create a prompt and commit to trigger the event
-            var expectedPrompt = factory.manufacturePojo(Prompt.class);
+            var expectedPrompt = buildPrompt();
             var expectedPromptVersion = promptResourceClient.createPromptVersion(expectedPrompt, mock.getLeft(),
                     mock.getRight());
 
@@ -2234,7 +2244,7 @@ class AlertResourceTest {
             var mock = prepareMockWorkspace();
 
             // Create a dataset
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             UUID datasetId = datasetResourceClient.createDataset(dataset, mock.getLeft(), mock.getRight());
 
             // Create alert with webhook
@@ -2339,9 +2349,10 @@ class AlertResourceTest {
             // Each prompt URL is ~120 characters, so we need ~25 prompts to exceed the limit
             int promptsCnt = 30;
             for (int i = 0; i < promptsCnt; i++) {
-                var prompt = factory.manufacturePojo(Prompt.class)
+                var prompt = buildPrompt()
                         .toBuilder()
                         .versionCount(0L)
+                        .projectId(null)
                         .createdBy(USER)
                         .lastUpdatedBy(USER)
                         .build();
@@ -2375,7 +2386,7 @@ class AlertResourceTest {
             // Each commit URL is ~140 characters, so we need ~25 commits to exceed the limit
             int commitsCnt = 30;
             for (int i = 0; i < commitsCnt; i++) {
-                var prompt = factory.manufacturePojo(Prompt.class);
+                var prompt = buildPrompt();
                 promptResourceClient.createPromptVersion(prompt, mock.getLeft(), mock.getRight());
             }
 

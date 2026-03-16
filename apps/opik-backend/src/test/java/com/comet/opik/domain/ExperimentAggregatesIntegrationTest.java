@@ -871,7 +871,7 @@ class ExperimentAggregatesIntegrationTest {
     }
 
     private Dataset createDataset(String apiKey, String workspaceName) {
-        var dataset = factory.manufacturePojo(Dataset.class);
+        var dataset = DatasetResourceClient.buildDataset(factory);
         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
         return dataset;
     }

@@ -286,7 +286,7 @@ class OptimizationsResourceTest {
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
             // Create dataset
-            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            Dataset dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE_NAME);
 
             List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
@@ -383,6 +383,10 @@ class OptimizationsResourceTest {
                     .isEqualTo(optimization);
         }
 
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(podamFactory);
     }
 
     @Test
@@ -528,7 +532,7 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create dataset
-            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            Dataset dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             // Create optimization with specific dataset ID
@@ -614,7 +618,7 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create dataset
-            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            Dataset dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
@@ -1066,10 +1070,10 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create datasets
-            var dataset1 = podamFactory.manufacturePojo(Dataset.class).toBuilder().build();
+            var dataset1 = buildDataset().toBuilder().build();
             var dataset1Id = datasetResourceClient.createDataset(dataset1, apiKey, workspaceName);
 
-            var dataset2 = podamFactory.manufacturePojo(Dataset.class).toBuilder().build();
+            var dataset2 = buildDataset().toBuilder().build();
             var dataset2Id = datasetResourceClient.createDataset(dataset2, apiKey, workspaceName);
 
             // Create optimizations for different datasets

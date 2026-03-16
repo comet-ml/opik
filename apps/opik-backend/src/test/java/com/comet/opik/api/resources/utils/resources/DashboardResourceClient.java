@@ -94,12 +94,21 @@ public class DashboardResourceClient {
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
             List<SortingField> sorting, List<DashboardFilter> filters, int expectedStatus) {
+        return find(apiKey, workspaceName, page, size, name, null, sorting, filters, expectedStatus);
+    }
+
+    public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
+            UUID projectId, List<SortingField> sorting, List<DashboardFilter> filters, int expectedStatus) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
 
         if (name != null) {
             target = target.queryParam("name", name);
+        }
+
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
         }
 
         if (CollectionUtils.isNotEmpty(sorting)) {

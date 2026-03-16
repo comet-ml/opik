@@ -110,6 +110,7 @@ public class PromptResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") @Schema(description = "Filter prompts by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -120,7 +121,7 @@ public class PromptResource {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
         var promptFilters = filtersFactory.newFilters(filters, PromptFilter.LIST_TYPE_REFERENCE);
-        PromptPage promptPage = promptService.find(name, page, size, sortingFields, promptFilters);
+        PromptPage promptPage = promptService.find(name, projectId, page, size, sortingFields, promptFilters);
 
         log.info("Got prompts by name '{}', count '{}' on workspace_id '{}', count '{}'", name, promptPage.size(),
                 workspaceId, promptPage.size());

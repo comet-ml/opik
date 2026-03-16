@@ -131,7 +131,7 @@ class DatasetsResourceCreateFromTracesTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         // Create traces with spans
@@ -277,6 +277,10 @@ class DatasetsResourceCreateFromTracesTest {
         assertThat(usageNode.isObject()).isTrue();
     }
 
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
+    }
+
     @Test
     @DisplayName("Success - create dataset items with no enrichment options")
     void createDatasetItemsFromTraces__withNoEnrichmentOptions__success() {
@@ -287,7 +291,7 @@ class DatasetsResourceCreateFromTracesTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         // Create trace
@@ -357,7 +361,7 @@ class DatasetsResourceCreateFromTracesTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
@@ -383,7 +387,7 @@ class DatasetsResourceCreateFromTracesTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         // Create simple trace with only input and output, no tags, metadata, usage, etc.

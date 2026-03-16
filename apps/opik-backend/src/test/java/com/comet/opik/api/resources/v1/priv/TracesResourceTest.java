@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
-import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.ErrorInfo;
@@ -6471,7 +6470,7 @@ class TracesResourceTest {
             UUID projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
 
             var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(10);
-            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+            var dataset = DatasetResourceClient.buildDataset(factory).toBuilder()
                     .name(datasetName)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);

@@ -138,7 +138,7 @@ class DatasetsResourceCreateFromSpansTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         // Create trace and spans
@@ -262,6 +262,10 @@ class DatasetsResourceCreateFromSpansTest {
         assertThat(usageNode.isObject()).isTrue();
     }
 
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
+    }
+
     @Test
     @DisplayName("Success - create dataset items with no enrichment options")
     void createDatasetItemsFromSpans__withNoEnrichmentOptions__success() {
@@ -272,7 +276,7 @@ class DatasetsResourceCreateFromSpansTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         // Create trace and span WITH metadata
@@ -375,7 +379,7 @@ class DatasetsResourceCreateFromSpansTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         var request = CreateDatasetItemsFromSpansRequest.builder()
@@ -401,7 +405,7 @@ class DatasetsResourceCreateFromSpansTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Create dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+        var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
         // Create trace and simple span with only input and output, no tags, metadata, usage, etc.

@@ -144,7 +144,7 @@ class DatasetsCsvUploadResourceTest {
     @DisplayName("Upload CSV file successfully - should return 202 Accepted and process items asynchronously")
     void uploadCsvFile__success() {
         // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        Dataset dataset = buildDataset().toBuilder()
                 .id(null)
                 .createdBy(null)
                 .lastUpdatedBy(null)
@@ -210,11 +210,15 @@ class DatasetsCsvUploadResourceTest {
                 });
     }
 
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
+    }
+
     @Test
     @DisplayName("Upload CSV file with large batch - should process in batches")
     void uploadCsvFile__largeBatch() {
         // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        Dataset dataset = buildDataset().toBuilder()
                 .id(null)
                 .createdBy(null)
                 .lastUpdatedBy(null)
@@ -257,7 +261,7 @@ class DatasetsCsvUploadResourceTest {
     @DisplayName("Upload CSV file with special characters - should handle correctly")
     void uploadCsvFile__specialCharacters() {
         // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        Dataset dataset = buildDataset().toBuilder()
                 .id(null)
                 .createdBy(null)
                 .lastUpdatedBy(null)
@@ -313,7 +317,7 @@ class DatasetsCsvUploadResourceTest {
     @DisplayName("Upload CSV file with UTF-8 BOM - should strip BOM and create items with clean headers (OPIK-3747)")
     void uploadCsvFile__withBom() throws Exception {
         // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        Dataset dataset = buildDataset().toBuilder()
                 .id(null)
                 .createdBy(null)
                 .lastUpdatedBy(null)
@@ -383,7 +387,7 @@ class DatasetsCsvUploadResourceTest {
     @MethodSource("provideInvalidCsvHeaders")
     void uploadCsvFile__invalidHeaders(String csvContent, String testDescription) {
         // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        Dataset dataset = buildDataset().toBuilder()
                 .id(null)
                 .createdBy(null)
                 .lastUpdatedBy(null)

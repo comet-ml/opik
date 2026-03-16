@@ -159,12 +159,16 @@ class DatasetVersionResourceTest {
     }
 
     private UUID createDataset(String name) {
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        var dataset = buildDataset().toBuilder()
                 .id(null)
                 .name(name)
                 .build();
 
         return datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     private void createDatasetItems(UUID datasetId, int count) {
