@@ -40,6 +40,18 @@ class TestBuildFieldMapping:
         assert keys[1] == "a_b_2"
         assert list(mapping.values()) == ["a!b", "a@b"]
 
+    def test_underscore_vs_space__no_silent_collision(self):
+        mapping = llm_judge_parsers._build_field_mapping(
+            ["Response is accurate", "Response_is_accurate"]
+        )
+        keys = list(mapping.keys())
+        assert keys[0] == "Response_is_accurate"
+        assert keys[1] == "Response_is_accurate_2"
+        assert list(mapping.values()) == [
+            "Response is accurate",
+            "Response_is_accurate",
+        ]
+
 
 class TestBuildResponseFormatModel:
     def test_build_response_format_model__single_assertion__creates_model_with_one_field(
