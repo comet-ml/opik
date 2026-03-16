@@ -3106,10 +3106,7 @@ class DatasetsResourceTest {
     }
 
     private List<Dataset> buildDatasets() {
-        return PodamFactoryUtils.manufacturePojoList(factory, Dataset.class)
-                .stream()
-                .map(dataset -> dataset.toBuilder().projectId(null).build())
-                .toList();
+        return DatasetResourceClient.buildDatasetList(factory);
     }
 
     private Experiment getExperiment(String apiKey, String workspaceName, Experiment experiment) {
