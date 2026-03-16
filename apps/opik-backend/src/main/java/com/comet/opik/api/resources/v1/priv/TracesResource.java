@@ -954,7 +954,9 @@ public class TracesResource {
             @ApiResponse(responseCode = "200", description = "Find Trace Threads Feedback Score names", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
-    public Response findTraceThreadsFeedbackScoreNames(@QueryParam("project_id") UUID projectId) {
+    public Response findTraceThreadsFeedbackScoreNames(
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -962,7 +964,7 @@ public class TracesResource {
                 projectId, workspaceId);
 
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getTraceThreadsFeedbackScoreNames(projectId)
+                .getTraceThreadsFeedbackScoreNames(projectId, excludeCategoryNames)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
