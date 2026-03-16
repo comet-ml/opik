@@ -30,6 +30,8 @@ public record AgentBlueprint(
                 AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) UUID id,
         @Schema(hidden = true) UUID projectId,
+        @JsonView({AgentConfig.View.Public.class,
+                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String name,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotNull BlueprintType type,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,

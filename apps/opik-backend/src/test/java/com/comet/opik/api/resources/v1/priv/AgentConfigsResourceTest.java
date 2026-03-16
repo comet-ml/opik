@@ -984,7 +984,7 @@ class AgentConfigsResourceTest {
     class GetBlueprintHistory {
 
         private static final String[] BLUEPRINT_IGNORED_FIELDS = new String[]{
-                "id", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
+                "id", "name", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
 
         @Test
         @DisplayName("Success: get paginated history with tagged blueprints and delta values, excludes masks")
