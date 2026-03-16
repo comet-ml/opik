@@ -69,18 +69,19 @@ public class ExperimentAggregatesService {
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            log.info("Starting aggregation population for experiment: '{}' in workspace: '{}', batchSize: '{}'",
+            log.info("Starting aggregation population for experiment: '{}' in workspaceId: '{}', batchSize: '{}'",
                     experimentId, workspaceId, batchSize);
 
             return populateExperimentItemsInBatches(experimentId, batchSize)
+                    .doOnSuccess(v -> log.info(
+                            "Experiment item aggregates populated for experiment: '{}' in workspaceId: '{}'",
+                            experimentId, workspaceId))
                     .then(Mono.defer(() -> experimentAggregatesDAO.populateExperimentAggregate(experimentId)))
                     .doOnSuccess(v -> log.info(
-                            "Experiment-level aggregates populated for experiment: '{}'", experimentId))
-                    .doOnSuccess(v -> log.info(
-                            "All aggregations populated successfully for experiment: '{}' in workspace: '{}'",
+                            "All aggregations populated successfully for experiment: '{}' in workspaceId: '{}'",
                             experimentId, workspaceId))
                     .doOnError(error -> log.error(
-                            "Failed to populate aggregations for experiment: '{}' in workspace: '{}'",
+                            "Failed to populate aggregations for experiment: '{}' in workspaceId: '{}'",
                             experimentId, workspaceId, error));
         });
     }
