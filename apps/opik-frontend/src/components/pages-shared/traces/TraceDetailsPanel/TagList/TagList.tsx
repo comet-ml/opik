@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import useTraceUpdateMutation from "@/api/traces/useTraceUpdateMutation";
 import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
 import useAppStore from "@/store/AppStore";
@@ -70,16 +69,12 @@ const TagList: React.FunctionComponent<TagListProps> = ({
     mutateTags(tags.filter((t) => t !== tag));
   };
 
-  const tagsProps = useMemo(() => {
-    if (!isMutable) {
-      return {
+  const tagsProps = isMutable
+    ? { tags }
+    : {
         tags: [],
         immutableTags: tags,
       };
-    }
-
-    return { tags };
-  }, [isMutable, tags]);
 
   return (
     <TagListRenderer
