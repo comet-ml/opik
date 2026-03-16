@@ -168,7 +168,7 @@ class DatasetVersionResourceTest {
     }
 
     private Dataset buildDataset() {
-        return factory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     private void createDatasetItems(UUID datasetId, int count) {

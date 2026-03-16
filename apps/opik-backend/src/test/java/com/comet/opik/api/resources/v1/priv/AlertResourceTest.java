@@ -1758,13 +1758,11 @@ class AlertResourceTest {
     }
 
     private Prompt buildPrompt() {
-        return factory.manufacturePojo(Prompt.class).toBuilder()
-                .projectId(null)
-                .build();
+        return PromptResourceClient.buildPrompt(factory);
     }
 
     private Dataset buildDataset() {
-        return factory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     @Nested

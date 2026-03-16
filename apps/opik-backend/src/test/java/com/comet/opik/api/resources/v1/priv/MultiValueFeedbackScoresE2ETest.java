@@ -648,7 +648,7 @@ class MultiValueFeedbackScoresE2ETest {
     }
 
     private Dataset buildDataset() {
-        return factory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     @Test

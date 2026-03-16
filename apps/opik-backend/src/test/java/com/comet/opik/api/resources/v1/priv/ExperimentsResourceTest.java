@@ -2935,13 +2935,11 @@ class ExperimentsResourceTest {
     }
 
     private Prompt buildPrompt() {
-        return podamFactory.manufacturePojo(Prompt.class).toBuilder()
-                .projectId(null)
-                .build();
+        return PromptResourceClient.buildPrompt(podamFactory);
     }
 
     private Dataset buildDataset() {
-        return podamFactory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+        return DatasetResourceClient.buildDataset(podamFactory);
     }
 
     @Nested
@@ -3503,9 +3501,7 @@ class ExperimentsResourceTest {
     }
 
     private List<Dataset> getDatasets() {
-        return PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class).stream()
-                .map(dataset -> dataset.toBuilder().projectId(null).build())
-                .toList();
+        return DatasetResourceClient.buildDatasetList(podamFactory);
     }
 
     @Nested

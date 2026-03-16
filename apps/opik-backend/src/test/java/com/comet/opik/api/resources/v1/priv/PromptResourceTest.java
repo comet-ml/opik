@@ -1141,7 +1141,6 @@ class PromptResourceTest {
         }
 
         Stream<Arguments> when__promptIsInvalid__thenReturnError() {
-
             return Stream.of(
                     Arguments.of(buildPrompt().build(), HttpStatus.SC_NOT_FOUND,
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND, "Prompt not found"),
@@ -4433,7 +4432,7 @@ class PromptResourceTest {
     }
 
     private Prompt.PromptBuilder buildPrompt() {
-        return factory.manufacturePojo(Prompt.class).toBuilder().projectId(null);
+        return PromptResourceClient.buildPrompt(factory).toBuilder();
     }
 
     @Nested

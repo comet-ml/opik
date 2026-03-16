@@ -32,6 +32,10 @@ public class PromptResourceClient {
     private final String baseURI;
     private final PodamFactory podamFactory;
 
+    public static Prompt buildPrompt(PodamFactory factory) {
+        return factory.manufacturePojo(Prompt.class).toBuilder().projectId(null).build();
+    }
+
     public UUID createPrompt(Prompt prompt, String apiKey, String workspaceName) {
 
         try (var response = client.target(PROMPT_PATH.formatted(baseURI))

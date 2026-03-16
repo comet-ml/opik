@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -327,7 +328,7 @@ class DatasetExperimentE2ETest {
     }
 
     private Dataset buildDataset() {
-        return factory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     private Experiment generateExperiment(Dataset dataset) {

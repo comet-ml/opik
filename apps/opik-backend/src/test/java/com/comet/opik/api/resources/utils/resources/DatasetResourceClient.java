@@ -19,6 +19,7 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
@@ -30,6 +31,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +52,16 @@ public class DatasetResourceClient {
 
     private final ClientSupport client;
     private final String baseURI;
+
+    public static Dataset buildDataset(PodamFactory factory) {
+        return factory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+    }
+
+    public static List<Dataset> buildDatasetList(PodamFactory factory) {
+        return PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
+                .map(dataset -> dataset.toBuilder().projectId(null).build())
+                .toList();
+    }
 
     public Response callCreateDataset(Dataset dataset, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))

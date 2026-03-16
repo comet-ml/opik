@@ -309,9 +309,7 @@ class DatasetExportJobSubscriberResourceTest {
     }
 
     private Dataset buildDataset() {
-        return podamFactory.manufacturePojo(Dataset.class).toBuilder()
-                .projectId(null)
-                .build();
+        return DatasetResourceClient.buildDataset(podamFactory);
     }
 
     @Nested

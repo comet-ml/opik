@@ -3097,7 +3097,7 @@ class DatasetsResourceTest {
     }
 
     private Prompt buildPrompt() {
-        return factory.manufacturePojo(Prompt.class).toBuilder().projectId(null).build();
+        return PromptResourceClient.buildPrompt(factory);
     }
 
     private List<Dataset> buildDatasets() {
@@ -7338,7 +7338,7 @@ class DatasetsResourceTest {
     }
 
     private Dataset buildDataset() {
-        return factory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     private DatasetItemPage assertDatasetExperimentPage(UUID datasetId, UUID experimentId,
