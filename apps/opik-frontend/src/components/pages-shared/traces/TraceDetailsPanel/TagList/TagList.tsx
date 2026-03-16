@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import useTraceUpdateMutation from "@/api/traces/useTraceUpdateMutation";
 import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
 import useAppStore from "@/store/AppStore";
 import { Span, Trace } from "@/types/traces";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TagListProps = {
   tags: string[];
@@ -25,8 +27,14 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   const traceUpdateMutation = useTraceUpdateMutation();
   const spanUpdateMutation = useSpanUpdateMutation();
 
+  const isSpan = !!spanId;
+
+  const {
+    permissions: { canTagTrace },
+  } = usePermissions();
+
   const mutateTags = (newTags: string[]) => {
-    if (spanId) {
+    if (isSpan) {
       const parentId = (data as Span).parent_span_id;
 
       spanUpdateMutation.mutate({
@@ -61,13 +69,25 @@ const TagList: React.FunctionComponent<TagListProps> = ({
     mutateTags(tags.filter((t) => t !== tag));
   };
 
+  const tagsProps = useMemo(() => {
+    if (!isSpan && !canTagTrace) {
+      return {
+        tags: [],
+        immutableTags: tags,
+      };
+    }
+
+    return { tags };
+  }, [isSpan, canTagTrace, tags]);
+
   return (
     <TagListRenderer
-      tags={tags}
+      {...tagsProps}
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
       size="sm"
       className={className}
+      canAdd={isSpan || canTagTrace}
     />
   );
 };
