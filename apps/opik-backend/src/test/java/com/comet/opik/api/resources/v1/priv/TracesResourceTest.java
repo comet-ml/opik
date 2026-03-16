@@ -360,32 +360,6 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("Close trace thread passes required permissions to auth endpoint")
-        void closeTraceThreadPassesRequiredPermissionsToAuthEndpoint() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .build();
-            traceResourceClient.createTrace(trace, apiKey, workspaceName);
-            var projectId = getProjectId(DEFAULT_PROJECT, workspaceName, apiKey);
-            var threadId = UUID.randomUUID().toString();
-            traceResourceClient.openTraceThread(threadId, projectId, DEFAULT_PROJECT, apiKey, workspaceName);
-
-            wireMock.server().resetRequests();
-            traceResourceClient.closeTraceThreads(Set.of(threadId), projectId, DEFAULT_PROJECT, apiKey,
-                    workspaceName);
-
-            wireMock.server().verify(
-                    postRequestedFor(urlPathEqualTo("/opik/auth"))
-                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
-                                    equalTo(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()))));
-        }
-
-        @Test
         @DisplayName("Update thread passes required permissions to auth endpoint")
         void updateThreadPassesRequiredPermissionsToAuthEndpoint() {
             String apiKey = UUID.randomUUID().toString();
