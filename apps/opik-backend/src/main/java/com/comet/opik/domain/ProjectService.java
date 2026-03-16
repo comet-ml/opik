@@ -107,11 +107,7 @@ public interface ProjectService {
 
     Mono<Project> getOrFail(@NonNull UUID id);
 
-    default void validateProjectIdExists(UUID projectId, String workspaceId) {
-        if (projectId != null && findByIds(workspaceId, Set.of(projectId)).isEmpty()) {
-            throw new ConflictException("Project not found with id '%s'".formatted(projectId));
-        }
-    }
+    void validateProjectIdExists(UUID projectId, String workspaceId);
 
     static Map<String, Project> groupByName(List<Project> projects) {
         return projects.stream().collect(Collectors.toMap(
@@ -242,6 +238,13 @@ class ProjectServiceImpl implements ProjectService {
                     .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", id)))
                     .subscribeOn(Schedulers.boundedElastic());
         });
+    }
+
+    @Override
+    public void validateProjectIdExists(UUID projectId, String workspaceId) {
+        if (projectId != null && findByIds(workspaceId, Set.of(projectId)).isEmpty()) {
+            throw new ConflictException("Project not found with id '%s'".formatted(projectId));
+        }
     }
 
     @Override
