@@ -438,32 +438,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
               <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             """;
 
-    private static final String SELECT_AGGREGATED_EXPERIMENT_IDS = """
-            SELECT
-                count() AS total,
-                countIf(has_aggregated) AS aggregated,
-                countIf(NOT has_aggregated) AS not_aggregated
-            FROM (
-                SELECT
-                    e.id,
-                    notEmpty(agg.id) AS has_aggregated
-                FROM experiments e FINAL
-                LEFT JOIN (
-                    SELECT
-                        toString(id) AS id
-                    FROM experiment_aggregates
-                    WHERE workspace_id = :workspace_id
-                    AND dataset_id = :datasetId
-                    <if(experiment_ids)> AND id IN :experiment_ids <endif>
-                ) agg ON e.id = agg.id
-                WHERE e.workspace_id = :workspace_id
-                AND e.dataset_id = :datasetId
-                <if(experiment_ids)> AND e.id IN :experiment_ids <endif>
-            )
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
     /**
      * Counts dataset items with experiment items, applying all filters from search criteria.
      * This ensures pagination totals match the filtered results.

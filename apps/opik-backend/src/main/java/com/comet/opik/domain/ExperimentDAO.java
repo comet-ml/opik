@@ -233,33 +233,6 @@ class ExperimentDAO {
             ;
             """;
 
-    private static final String SELECT_AGGREGATED_EXPERIMENT_IDS = """
-            SELECT
-                count() AS total,
-                countIf(has_aggregated) AS aggregated,
-                countIf(NOT has_aggregated) AS not_aggregated
-            FROM (
-                SELECT
-                    e.id,
-                    notEmpty(agg.id) AS has_aggregated
-                FROM experiments e FINAL
-                LEFT JOIN (
-                    SELECT
-                        toString(id) AS id
-                    FROM experiment_aggregates
-                    WHERE workspace_id = :workspace_id
-                    <if(experiment_ids)> AND id IN :experiment_ids <endif>
-                    <if(dataset_id)> AND dataset_id = :dataset_id <endif>
-                ) agg ON e.id = agg.id
-                WHERE e.workspace_id = :workspace_id
-                <if(experiment_ids)> AND e.id IN :experiment_ids <endif>
-                <if(dataset_id)> AND e.dataset_id = :dataset_id <endif>
-                <if(id)> AND e.id = :id <endif>
-            )
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
     private static final String FIND = """
             WITH experiments_resolved AS (
                 SELECT
