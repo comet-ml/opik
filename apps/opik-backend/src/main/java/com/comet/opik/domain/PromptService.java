@@ -116,6 +116,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingFactoryPrompts sortingFactory;
     private final @NonNull SortingFactoryPromptVersions sortingFactoryPromptVersions;
     private final @NonNull EventBus eventBus;
+    private final @NonNull ProjectService projectService;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -123,6 +124,8 @@ class PromptServiceImpl implements PromptService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
+
+        projectService.validateProjectIdExists(promptRequest.projectId(), workspaceId);
 
         var newPrompt = promptRequest.toBuilder()
                 .id(promptRequest.id() == null ? idGenerator.generateId() : promptRequest.id())
@@ -242,7 +245,7 @@ class PromptServiceImpl implements PromptService {
     private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
             TemplateStructure templateStructure) {
 
-        Prompt prompt = findByName(workspaceId, name);
+        Prompt prompt = findByName(workspaceId, name, null);
 
         if (prompt != null) {
             // For existing prompts, ignore the templateStructure parameter and use the existing prompt's structure.
@@ -264,29 +267,16 @@ class PromptServiceImpl implements PromptService {
 
         return EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .onErrorDo(() -> findByName(workspaceId, name));
-    }
-
-    private Prompt findByName(String workspaceId, String name) {
-        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptDAO promptDAO = handle.attach(PromptDAO.class);
-
-            return promptDAO.findByName(name, workspaceId);
-        });
+                .onErrorDo(() -> findByName(workspaceId, name, null));
     }
 
     private Prompt findByName(String workspaceId, String name, UUID projectId) {
-        if (projectId == null) {
-            return findByName(workspaceId, name);
-        }
-
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            // Project-scoped first, then workspace-wide fallback
-            Prompt prompt = promptDAO.findByNameAndProjectId(name, workspaceId, projectId);
-            if (prompt == null) {
-                prompt = promptDAO.findByName(name, workspaceId);
+            Prompt prompt = promptDAO.findByName(name, workspaceId, projectId);
+            if (prompt == null && projectId != null) {
+                prompt = promptDAO.findByName(name, workspaceId, null);
             }
             return prompt;
         });
@@ -801,4 +791,5 @@ class PromptServiceImpl implements PromptService {
                 .payload(prompts)
                 .build());
     }
+
 }

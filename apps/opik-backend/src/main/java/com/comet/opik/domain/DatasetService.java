@@ -122,6 +122,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull ProjectService projectService;
 
     private static String formatDatasetAlreadyExistsMessage(String datasetName) {
         return "Dataset already exists with name '%s'".formatted(datasetName);
@@ -145,6 +146,8 @@ class DatasetServiceImpl implements DatasetService {
 
         IdGenerator.validateVersion(newDataset.id(), "dataset");
 
+        projectService.validateProjectIdExists(newDataset.projectId(), workspaceId);
+
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
@@ -166,7 +169,7 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public UUID getOrCreate(@NonNull String workspaceId, @NonNull String name, @NonNull String userName) {
         var dataset = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(DatasetDAO.class).findByName(workspaceId, name));
+                handle -> handle.attach(DatasetDAO.class).findByName(workspaceId, name, null));
 
         if (dataset.isEmpty()) {
 
@@ -299,7 +302,7 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            Dataset d = dao.findByName(workspaceId, name).orElseThrow(this::newNotFoundException);
+            Dataset d = dao.findByName(workspaceId, name, null).orElseThrow(this::newNotFoundException);
 
             log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, d.id(), workspaceId);
             return d;
@@ -311,16 +314,11 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public Dataset findByName(@NonNull String workspaceId, @NonNull String name, UUID projectId,
             Visibility visibility) {
-        if (projectId == null) {
-            return findByName(workspaceId, name, visibility);
-        }
-
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            // Project-scoped first, then workspace-wide fallback
-            return dao.findByNameAndProjectId(workspaceId, name, projectId)
-                    .or(() -> dao.findByName(workspaceId, name))
+            return dao.findByName(workspaceId, name, projectId)
+                    .or(() -> projectId != null ? dao.findByName(workspaceId, name, null) : Optional.empty())
                     .orElseThrow(this::newNotFoundException);
         });
 

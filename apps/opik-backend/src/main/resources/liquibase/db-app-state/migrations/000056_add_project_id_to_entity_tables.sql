@@ -3,17 +3,21 @@
 --comment: Add nullable project_id columns to datasets, prompts, and dashboards tables for project-scoped operations
 
 ALTER TABLE datasets
-    ADD COLUMN project_id CHAR(36) NULL DEFAULT NULL,
-    ADD CONSTRAINT fk_datasets_project_id FOREIGN KEY (project_id) REFERENCES projects(id);
+    ADD COLUMN project_id CHAR(36) NULL DEFAULT NULL;
 
 ALTER TABLE prompts
-    ADD COLUMN project_id CHAR(36) NULL DEFAULT NULL,
-    ADD CONSTRAINT fk_prompts_project_id FOREIGN KEY (project_id) REFERENCES projects(id);
+    ADD COLUMN project_id CHAR(36) NULL DEFAULT NULL;
 
 ALTER TABLE dashboards
-    ADD COLUMN project_id CHAR(36) NULL DEFAULT NULL,
-    ADD CONSTRAINT fk_dashboards_project_id FOREIGN KEY (project_id) REFERENCES projects(id);
+    ADD COLUMN project_id CHAR(36) NULL DEFAULT NULL;
 
---rollback ALTER TABLE datasets DROP FOREIGN KEY fk_datasets_project_id, DROP COLUMN project_id;
---rollback ALTER TABLE prompts DROP FOREIGN KEY fk_prompts_project_id, DROP COLUMN project_id;
---rollback ALTER TABLE dashboards DROP FOREIGN KEY fk_dashboards_project_id, DROP COLUMN project_id;
+CREATE INDEX datasets_workspace_project_idx ON datasets (workspace_id, project_id);
+CREATE INDEX prompts_workspace_project_idx ON prompts (workspace_id, project_id);
+CREATE INDEX dashboards_workspace_project_idx ON dashboards (workspace_id, project_id);
+
+--rollback DROP INDEX dashboards_workspace_project_idx ON dashboards;
+--rollback DROP INDEX prompts_workspace_project_idx ON prompts;
+--rollback DROP INDEX datasets_workspace_project_idx ON datasets;
+--rollback ALTER TABLE datasets DROP COLUMN project_id;
+--rollback ALTER TABLE prompts DROP COLUMN project_id;
+--rollback ALTER TABLE dashboards DROP COLUMN project_id;

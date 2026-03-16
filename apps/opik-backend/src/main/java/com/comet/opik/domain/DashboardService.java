@@ -44,7 +44,7 @@ public interface DashboardService {
 
     Dashboard findById(@NonNull UUID id);
 
-    Dashboard findByName(@NonNull String name, UUID projectId);
+    Dashboard findByName(String name, UUID projectId);
 
     DashboardPage find(int page, int size, String name, UUID projectId, List<SortingField> sortingFields,
             List<? extends Filter> filters);
@@ -71,6 +71,7 @@ class DashboardServiceImpl implements DashboardService {
     private final @NonNull SortingFactoryDashboards sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull ProjectService projectService;
 
     @Override
     public Dashboard create(@NonNull Dashboard dashboard) {
@@ -80,6 +81,8 @@ class DashboardServiceImpl implements DashboardService {
         // Generate ID if not provided
         var dashboardId = dashboard.id() != null ? dashboard.id() : idGenerator.generateId();
         IdGenerator.validateVersion(dashboardId, "dashboard");
+
+        projectService.validateProjectIdExists(dashboard.projectId(), workspaceId);
 
         // Generate slug from name
         String baseSlug = SlugUtils.generateSlug(dashboard.name());
@@ -142,19 +145,12 @@ class DashboardServiceImpl implements DashboardService {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
-            Optional<Dashboard> dashboard;
-            if (projectId != null) {
-                // Project-scoped first, then workspace-wide fallback
-                dashboard = dao.findByNameAndProjectId(workspaceId, name, projectId)
-                        .or(() -> dao.findByName(workspaceId, name));
-            } else {
-                dashboard = dao.findByName(workspaceId, name);
-            }
-
-            return dashboard.orElseThrow(() -> {
-                log.warn("Dashboard not found with name '{}' in workspace '{}'", name, workspaceId);
-                return new NotFoundException(DASHBOARD_NOT_FOUND);
-            });
+            return dao.findByName(workspaceId, name, projectId)
+                    .or(() -> projectId != null ? dao.findByName(workspaceId, name, null) : Optional.empty())
+                    .orElseThrow(() -> {
+                        log.info("Dashboard not found with name '{}' in workspace '{}'", name, workspaceId);
+                        return new NotFoundException(DASHBOARD_NOT_FOUND);
+                    });
         });
     }
 
@@ -276,4 +272,5 @@ class DashboardServiceImpl implements DashboardService {
 
         log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", ids.size(), workspaceId);
     }
+
 }
