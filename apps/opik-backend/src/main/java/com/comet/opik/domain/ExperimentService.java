@@ -345,17 +345,19 @@ public class ExperimentService {
             return;
         }
 
-        log.debug("Checking if lazy aggregation trigger needed for experiment: '{}'", experimentId);
-
         try {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
+
+            log.debug("Checking if lazy aggregation trigger needed for experiment: '{}', workspaceId: '{}'",
+                    experimentId, workspaceId);
 
             experimentAggregatesService.getExperimentFromAggregates(experimentId)
                     .hasElement()
                     .filter(inAggregates -> !inAggregates)
                     .flatMap(__ -> {
-                        log.info("Triggering lazy aggregation for experiment: '{}'", experimentId);
+                        log.info("Triggering lazy aggregation for experiment: '{}', workspaceId: '{}'",
+                                experimentId, workspaceId);
                         return experimentAggregationPublisher.publish(Set.of(experimentId), workspaceId,
                                 userName);
                     })
