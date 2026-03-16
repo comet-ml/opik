@@ -123,7 +123,7 @@ def export_traces(
         )
 
     # Validate filter syntax before using it
-    if filter_string:
+    if filter_string and filter_string.strip():
         _validate_filter_syntax(filter_string)
 
     exported_count = 0
@@ -389,7 +389,7 @@ def export_project_by_name(
             debug_print(f"Exporting project: {name}", debug)
 
         # Validate filter syntax before doing anything else
-        if filter_string:
+        if filter_string and filter_string.strip():
             _validate_filter_syntax(filter_string)
 
         # Initialize client
