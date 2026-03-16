@@ -71,7 +71,7 @@ public interface DatasetItemVersionDAO {
     Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria searchCriteria, int page, int size,
             UUID versionId);
 
-    Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds, UUID versionId);
+    Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
     Mono<ProjectStats> getExperimentItemsStats(UUID datasetId, UUID versionId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
@@ -643,8 +643,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
             WITH experiments_resolved AS (
                 SELECT
-                    id,
-                    COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
+                    id
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :datasetId
@@ -2144,9 +2143,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     @Override
-    public Mono<List<Column>> getExperimentItemsOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds,
-            @NonNull UUID versionId) {
-        log.debug("Getting experiment items output columns for dataset '{}', versionId '{}'", datasetId, versionId);
+    public Mono<List<Column>> getExperimentItemsOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
+        log.debug("Getting experiment items output columns for dataset '{}'", datasetId);
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2160,8 +2158,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 var statement = connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
-                        .bind("datasetId", datasetId)
-                        .bind("versionId", versionId.toString());
+                        .bind("datasetId", datasetId);
 
                 if (CollectionUtils.isNotEmpty(experimentIds)) {
                     statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
