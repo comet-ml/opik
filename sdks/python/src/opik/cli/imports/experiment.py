@@ -204,7 +204,9 @@ def _build_dataset_item_id_map(
     dataset_stats["datasets_skipped"] = dataset_import_stats.get("datasets_skipped", 0)
     dataset_stats["datasets_errors"] = dataset_import_stats.get("datasets_errors", 0)
 
-    if dataset_import_stats.get("datasets", 0) == 0:
+    skipped = dataset_import_stats.get("datasets_skipped", 0)
+    imported = dataset_import_stats.get("datasets", 0)
+    if imported == 0 and skipped == 0:
         console.print(
             f"[yellow]Warning: No datasets were imported from {datasets_dir}[/yellow]"
         )
@@ -219,9 +221,12 @@ def _build_dataset_item_id_map(
     # Flush to ensure datasets are persisted
     if not dry_run:
         client.flush()
-        console.print(
-            f"[green]Imported {dataset_import_stats.get('datasets', 0)} dataset(s)[/green]"
-        )
+        if imported > 0:
+            console.print(f"[green]Imported {imported} dataset(s)[/green]")
+        elif skipped > 0:
+            console.print(
+                f"[green]{skipped} dataset(s) already imported (skipped)[/green]"
+            )
 
     # Step 3: Get all imported dataset items and match by content
     dataset_files = list(datasets_dir.glob("dataset_*.json"))
