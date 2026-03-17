@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sortCandidates } from "./useOptimizationData";
+import { sortCandidates } from "@/lib/optimizations";
 import { AggregatedCandidate } from "@/types/optimizations";
 
 const makeCandidate = (

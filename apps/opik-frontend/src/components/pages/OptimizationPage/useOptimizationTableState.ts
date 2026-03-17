@@ -6,7 +6,7 @@ import { StringParam, useQueryParam } from "use-query-params";
 
 import { COLUMN_ID_ID, COLUMN_NAME_ID, ROW_HEIGHT } from "@/types/shared";
 import { AggregatedCandidate } from "@/types/optimizations";
-import { sortCandidates } from "./useOptimizationExperiments";
+import { sortCandidates } from "@/lib/optimizations";
 
 const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns-v3";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";

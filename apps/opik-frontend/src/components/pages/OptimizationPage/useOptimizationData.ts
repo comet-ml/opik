@@ -1,11 +1,11 @@
 import { useOptimizationExperiments } from "./useOptimizationExperiments";
 import { useOptimizationTableState } from "./useOptimizationTableState";
 
-export { MAX_EXPERIMENTS_LOADED } from "@/lib/optimizations";
 export {
+  MAX_EXPERIMENTS_LOADED,
   CANDIDATE_SORT_FIELD_MAP,
   sortCandidates,
-} from "./useOptimizationExperiments";
+} from "@/lib/optimizations";
 
 export const useOptimizationData = () => {
   const experimentsData = useOptimizationExperiments();
