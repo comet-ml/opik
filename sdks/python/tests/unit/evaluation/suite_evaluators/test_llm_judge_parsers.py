@@ -249,6 +249,94 @@ class TestResponseSchema:
         for i in range(1, 8):
             assert f"- `assertion_{i}`: Check item {i}" in formatted
 
+    def test_json_schema__single_assertion__matches_expected_structure(self):
+        schema = llm_judge_parsers.ResponseSchema(["Response is factually accurate"])
+
+        assert schema.response_format.model_json_schema() == {
+            "$defs": {
+                "AssertionResultItem": {
+                    "description": (
+                        "Result for a single assertion evaluation.\n"
+                        "\n"
+                        'Extends the backend\'s expected format {"score": <value>, "reason": "..."}\n'
+                        "with an additional ``confidence`` field used by the SDK.\n"
+                        "The backend ignores extra fields, so this is forward-compatible."
+                    ),
+                    "properties": {
+                        "score": {"title": "Score", "type": "boolean"},
+                        "reason": {"title": "Reason", "type": "string"},
+                        "confidence": {
+                            "maximum": 1.0,
+                            "minimum": 0.0,
+                            "title": "Confidence",
+                            "type": "number",
+                        },
+                    },
+                    "required": ["score", "reason", "confidence"],
+                    "title": "AssertionResultItem",
+                    "type": "object",
+                }
+            },
+            "properties": {
+                "assertion_1": {
+                    "$ref": "#/$defs/AssertionResultItem",
+                    "description": "Response is factually accurate",
+                }
+            },
+            "required": ["assertion_1"],
+            "title": "LLMJudgeResponse",
+            "type": "object",
+        }
+
+    def test_json_schema__multiple_assertions__matches_expected_structure(self):
+        schema = llm_judge_parsers.ResponseSchema(
+            [
+                "Response is factually accurate",
+                "Response does not contain hallucinations",
+                "Response directly answers the user's question",
+            ]
+        )
+
+        json_schema = schema.response_format.model_json_schema()
+
+        assert json_schema["title"] == "LLMJudgeResponse"
+        assert json_schema["type"] == "object"
+        assert json_schema["required"] == [
+            "assertion_1",
+            "assertion_2",
+            "assertion_3",
+        ]
+        assert json_schema["properties"] == {
+            "assertion_1": {
+                "$ref": "#/$defs/AssertionResultItem",
+                "description": "Response is factually accurate",
+            },
+            "assertion_2": {
+                "$ref": "#/$defs/AssertionResultItem",
+                "description": "Response does not contain hallucinations",
+            },
+            "assertion_3": {
+                "$ref": "#/$defs/AssertionResultItem",
+                "description": "Response directly answers the user's question",
+            },
+        }
+
+    def test_json_schema__long_assertion__key_stays_short_description_has_full_text(
+        self,
+    ):
+        long_assertion = (
+            "The response must thoroughly address all aspects of the user's "
+            "multi-part question, including historical context, current state, "
+            "and future projections, without introducing any fabricated details"
+        )
+        schema = llm_judge_parsers.ResponseSchema([long_assertion])
+
+        json_schema = schema.response_format.model_json_schema()
+
+        prop = json_schema["properties"]["assertion_1"]
+        assert prop["description"] == long_assertion
+        assert len("assertion_1") < 64
+
     def test_parse__assertion_with_special_characters__handles_correctly(self):
         assertion = 'Response doesn\'t contain "quotes" or special chars: {}/\\'
         schema = llm_judge_parsers.ResponseSchema([assertion])
