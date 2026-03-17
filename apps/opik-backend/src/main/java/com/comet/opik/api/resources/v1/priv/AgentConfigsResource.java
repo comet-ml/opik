@@ -27,6 +27,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -121,7 +122,7 @@ public class AgentConfigsResource {
     }
 
     @GET
-    @Path("/blueprints/names/{name}/projects/{project_id}")
+    @Path("/blueprints/projects/{project_id}/names/{name}")
     @JsonView(AgentConfig.View.Public.class)
     @Operation(operationId = "getBlueprintByName", summary = "Retrieve blueprint by name", description = "Retrieves a specific blueprint by its name within a project", responses = {
             @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
@@ -194,20 +195,22 @@ public class AgentConfigsResource {
         return Response.noContent().build();
     }
 
-    @POST
-    @Path("/blueprints/environments/names")
+    @PUT
+    @Path("/blueprints/environments/{env_name}/projects/{project_id}")
     @Operation(operationId = "setEnvByBlueprintName", summary = "Set environment by blueprint name", description = "Sets an environment to point to a blueprint identified by name", responses = {
             @ApiResponse(responseCode = "204", description = "Environment updated"),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response setEnvByBlueprintName(
+            @PathParam("env_name") String envName,
+            @Parameter(required = true) @PathParam("project_id") UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigEnvSetByName.class))) @NotNull @Valid AgentConfigEnvSetByName request) {
 
         log.info("Setting environment '{}' to blueprint '{}' for project '{}'",
-                request.envName(), request.blueprintName(), request.projectId());
+                envName, request.blueprintName(), projectId);
 
-        agentConfigService.setEnvByBlueprintName(request.projectId(), request.envName(), request.blueprintName());
+        agentConfigService.setEnvByBlueprintName(projectId, envName, request.blueprintName());
 
         return Response.noContent().build();
     }

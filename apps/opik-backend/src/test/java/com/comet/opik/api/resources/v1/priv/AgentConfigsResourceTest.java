@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigEnvSetByName;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -1038,10 +1039,8 @@ class AgentConfigsResourceTest {
 
             assertConfigValues(expectedValues, blueprint.values());
 
-            agentConfigsResourceClient.setEnvByBlueprintName(
-                    com.comet.opik.api.AgentConfigEnvSetByName.builder()
-                            .projectId(setup.projectId())
-                            .envName("staging")
+            agentConfigsResourceClient.setEnvByBlueprintName("staging", setup.projectId(),
+                    AgentConfigEnvSetByName.builder()
                             .blueprintName("v2")
                             .build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
@@ -1116,10 +1115,8 @@ class AgentConfigsResourceTest {
                             .build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-            agentConfigsResourceClient.setEnvByBlueprintName(
-                    com.comet.opik.api.AgentConfigEnvSetByName.builder()
-                            .projectId(projectId)
-                            .envName("prod")
+            agentConfigsResourceClient.setEnvByBlueprintName("prod", projectId,
+                    AgentConfigEnvSetByName.builder()
                             .blueprintName("nonexistent")
                             .build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
