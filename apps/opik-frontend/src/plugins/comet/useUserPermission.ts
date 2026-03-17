@@ -185,6 +185,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canTagTrace = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.TRACE_TAG),
+    [checkNullablePermission],
+  );
+
   const canAnnotateTraceSpanThread = useMemo(
     () =>
       checkNullablePermission(
@@ -214,6 +219,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
+    canTagTrace,
     isPending: isEnabled && isPending,
   };
 };

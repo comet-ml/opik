@@ -17,6 +17,7 @@ export interface Permissions {
   canUpdateOnlineEvaluationRules: boolean;
   canUpdateAlerts: boolean;
   canAnnotateTraceSpanThread: boolean;
+  canTagTrace: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -44,6 +45,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canUpdateOnlineEvaluationRules: true,
     canUpdateAlerts: true,
     canAnnotateTraceSpanThread: true,
+    canTagTrace: true,
   },
   isPending: false,
 };
