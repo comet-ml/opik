@@ -59,6 +59,32 @@ function extractAssertions(evaluators: EvaluatorItemLike[] | undefined): string[
   return judges.flatMap((judge) => judge.assertions);
 }
 
+function prepareDatasetItemData(
+  data: Record<string, unknown>,
+  options?: { assertions?: string[]; description?: string; executionPolicy?: ExecutionPolicy }
+): DatasetItemData {
+  if (options?.executionPolicy) {
+    validateExecutionPolicy(options.executionPolicy, "item-level execution policy");
+  }
+
+  const resolvedEvaluators = resolveEvaluators(
+    options?.assertions,
+    undefined,
+    "item-level assertions"
+  );
+
+  const evaluators = resolvedEvaluators
+    ? serializeEvaluators(resolvedEvaluators)
+    : undefined;
+
+  return {
+    ...data,
+    ...(options?.description && { description: options.description }),
+    ...(evaluators && { evaluators }),
+    ...(options?.executionPolicy && { executionPolicy: options.executionPolicy }),
+  };
+}
+
 function validateTaskResult(
   result: unknown
 ): Record<string, unknown> {
@@ -204,59 +230,13 @@ export class EvaluationSuite {
     data: Record<string, unknown>,
     options?: AddItemOptions
   ): Promise<void> {
-    const resolvedEvaluators = resolveEvaluators(
-      options?.assertions,
-      undefined,
-      "item-level assertions"
-    );
-
-    if (options?.executionPolicy) {
-      validateExecutionPolicy(
-        options.executionPolicy,
-        "item-level execution policy"
-      );
-    }
-
-    const evaluators = resolvedEvaluators
-      ? serializeEvaluators(resolvedEvaluators)
-      : undefined;
-
-    const itemData: DatasetItemData = {
-      ...data,
-      ...(options?.description && { description: options.description }),
-      ...(evaluators && { evaluators }),
-      ...(options?.executionPolicy && { executionPolicy: options.executionPolicy }),
-    };
-
-    await this.dataset.insert([itemData]);
+    await this.dataset.insert([prepareDatasetItemData(data, options)]);
   }
 
   async addItems(items: EvaluationSuiteItem[]): Promise<void> {
-    const datasetItems: DatasetItemData[] = items.map((item) => {
-      if (item.executionPolicy) {
-        validateExecutionPolicy(
-          item.executionPolicy,
-          "item-level execution policy"
-        );
-      }
-
-      const evaluators = resolveEvaluators(
-        item.assertions,
-        undefined,
-        "item-level assertions"
-      );
-
-      const serializedEvaluators = evaluators
-        ? serializeEvaluators(evaluators)
-        : undefined;
-
-      return {
-        ...item.data,
-        ...(item.description && { description: item.description }),
-        ...(serializedEvaluators && { evaluators: serializedEvaluators }),
-        ...(item.executionPolicy && { executionPolicy: item.executionPolicy }),
-      };
-    });
+    const datasetItems: DatasetItemData[] = items.map((item) =>
+      prepareDatasetItemData(item.data, item)
+    );
 
     await this.dataset.insert(datasetItems);
   }
