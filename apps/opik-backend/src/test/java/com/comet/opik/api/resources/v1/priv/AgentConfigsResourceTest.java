@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigEnvSetByName;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -365,6 +366,60 @@ class AgentConfigsResourceTest {
             assertThat(retrievedValue.value()).isEqualTo(value);
         }
 
+        @Test
+        @DisplayName("Success: blueprint names auto-increment as v1, v2, v3")
+        void createAgentConfig__nameAutoIncrements() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description("First")
+                                    .values(List.of(AgentConfigValue.builder()
+                                            .key("model").value("gpt-4").type(ValueType.STRING).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var blueprint2Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description("Second")
+                                    .values(List.of(AgentConfigValue.builder()
+                                            .key("temperature").value("0.5").type(ValueType.FLOAT).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var blueprint3Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description("Third")
+                                    .values(List.of(AgentConfigValue.builder()
+                                            .key("max_tokens").value("2048").type(ValueType.INTEGER).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var bp1 = agentConfigsResourceClient.getBlueprintById(blueprint1Id, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            var bp2 = agentConfigsResourceClient.getBlueprintById(blueprint2Id, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            var bp3 = agentConfigsResourceClient.getBlueprintById(blueprint3Id, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(bp1.name()).isEqualTo("v1");
+            assertThat(bp2.name()).isEqualTo("v2");
+            assertThat(bp3.name()).isEqualTo("v3");
+        }
+
         Stream<Arguments> createAgentConfig__perValueType() {
             return Stream.of(
                     arguments(ValueType.STRING, RandomStringUtils.insecure().nextAlphanumeric(10)),
@@ -488,6 +543,7 @@ class AgentConfigsResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint3Id());
+            assertThat(blueprint.name()).isEqualTo("v3");
             assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
@@ -514,6 +570,7 @@ class AgentConfigsResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.name()).isEqualTo("v2");
             assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
@@ -565,6 +622,7 @@ class AgentConfigsResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.name()).isEqualTo("v2");
             assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
@@ -618,6 +676,7 @@ class AgentConfigsResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.name()).isEqualTo("v2");
             assertThat(blueprint.values()).hasSize(1);
 
             var expectedValues = List.of(
@@ -955,6 +1014,115 @@ class AgentConfigsResourceTest {
         }
 
         @Test
+        @DisplayName("Success: retrieve blueprint by name and set environment by blueprint name")
+        void retrieveBlueprintByName__andSetEnvByName() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigsResourceClient.getBlueprintByName("v2", setup.projectId(), null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.name()).isEqualTo("v2");
+            assertThat(blueprint.values()).hasSize(6);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING)
+                            .description("LLM model to use").build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
+                    AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
+                            .build(),
+                    AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                            .type(ValueType.PROMPT_COMMIT).build());
+
+            assertConfigValues(expectedValues, blueprint.values());
+
+            agentConfigsResourceClient.setEnvByBlueprintName("staging", setup.projectId(),
+                    AgentConfigEnvSetByName.builder()
+                            .blueprintName("v2")
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var envBlueprint = agentConfigsResourceClient.getBlueprintByEnv("staging", setup.projectId(), null,
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(envBlueprint).isNotNull();
+            assertThat(envBlueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(envBlueprint.name()).isEqualTo("v2");
+            assertConfigValues(expectedValues, envBlueprint.values());
+        }
+
+        @Test
+        @DisplayName("Success: retrieve blueprint by name with mask applied")
+        void retrieveBlueprintByNameWithMask() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigsResourceClient.getBlueprintByName("v2", setup.projectId(), setup.maskId(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.values()).hasSize(7);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
+                    AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
+                            .build(),
+                    AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                            .type(ValueType.PROMPT_COMMIT).build(),
+                    AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.FLOAT).build());
+
+            assertConfigValues(expectedValues, blueprint.values());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when retrieving blueprint by name fails, then return expected error")
+        void retrieveBlueprintByName__whenError__thenReturnExpectedStatus(
+                String name, UUID projectId, UUID maskId, int expectedStatus) {
+
+            agentConfigsResourceClient.getBlueprintByName(name, projectId, maskId, API_KEY, TEST_WORKSPACE,
+                    expectedStatus);
+        }
+
+        Stream<Arguments> retrieveBlueprintByName__whenError__thenReturnExpectedStatus() {
+            return Stream.of(
+                    arguments("nonexistent", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
+                    arguments("v1", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
+                    arguments("nonexistent", UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("when setting env by non-existing blueprint name, then return 404")
+        void setEnvByBlueprintName__whenBlueprintNotFound__thenReturn404() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description("Test")
+                                    .values(List.of(AgentConfigValue.builder()
+                                            .key("model").value("gpt-4").type(ValueType.STRING).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.setEnvByBlueprintName("prod", projectId,
+                    AgentConfigEnvSetByName.builder()
+                            .blueprintName("nonexistent")
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
         @DisplayName("when request contains duplicate env names, then return 400")
         void createOrUpdateEnvs__whenDuplicateEnvNames__thenReturn400() {
             var projectName = UUID.randomUUID().toString();
@@ -984,7 +1152,7 @@ class AgentConfigsResourceTest {
     class GetBlueprintHistory {
 
         private static final String[] BLUEPRINT_IGNORED_FIELDS = new String[]{
-                "id", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
+                "id", "name", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
 
         @Test
         @DisplayName("Success: get paginated history with tagged blueprints and delta values, excludes masks")
@@ -1086,9 +1254,6 @@ class AgentConfigsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class AutomaticBlueprintUpdates {
 
-        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
-                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
-
         static Stream<Arguments> excludeProjectIdsForAutoUpdate() {
             return Stream.of(
                     arguments(null, "null exclude set"),
@@ -1136,6 +1301,7 @@ class AgentConfigsResourceTest {
 
                 assertThat(latestBlueprint).isNotNull();
                 assertThat(latestBlueprint.id()).isNotEqualTo(blueprint1Id);
+                assertThat(latestBlueprint.name()).isEqualTo("v2");
                 assertThat(latestBlueprint.values()).hasSize(2);
 
                 var expectedValues = List.of(
@@ -1190,6 +1356,7 @@ class AgentConfigsResourceTest {
                         TEST_WORKSPACE, HttpStatus.SC_OK);
 
                 assertThat(latestBlueprint).isNotNull();
+                assertThat(latestBlueprint.name()).isEqualTo("v2");
                 assertThat(latestBlueprint.values()).hasSize(2);
 
                 var expectedValues = List.of(
@@ -1233,6 +1400,7 @@ class AgentConfigsResourceTest {
 
                 assertThat(latestBlueprint).isNotNull();
                 assertThat(latestBlueprint.id()).isEqualTo(blueprint1Id);
+                assertThat(latestBlueprint.name()).isEqualTo("v1");
             });
         }
 
@@ -1334,12 +1502,14 @@ class AgentConfigsResourceTest {
                         TEST_WORKSPACE, HttpStatus.SC_OK);
                 assertThat(project1Latest).isNotNull();
                 assertThat(project1Latest.id()).isNotEqualTo(blueprint1Id);
+                assertThat(project1Latest.name()).isEqualTo("v2");
                 assertThat(project1Latest.values().get(0).value()).isEqualTo(commit2);
 
                 var project2Latest = agentConfigsResourceClient.getLatestBlueprint(project2Id, null, API_KEY,
                         TEST_WORKSPACE, HttpStatus.SC_OK);
                 assertThat(project2Latest).isNotNull();
                 assertThat(project2Latest.id()).isEqualTo(blueprint2Id);
+                assertThat(project2Latest.name()).isEqualTo("v1");
             });
         }
 
@@ -1382,6 +1552,7 @@ class AgentConfigsResourceTest {
 
             assertThat(latestBlueprint).isNotNull();
             assertThat(latestBlueprint.id()).isEqualTo(blueprint1Id);
+            assertThat(latestBlueprint.name()).isEqualTo("v1");
             assertThat(latestBlueprint.values()).hasSize(2);
 
             var expectedValues = List.of(

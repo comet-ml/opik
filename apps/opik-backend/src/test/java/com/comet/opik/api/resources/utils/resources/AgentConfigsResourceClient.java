@@ -24,7 +24,9 @@ public class AgentConfigsResourceClient {
     private static final String BLUEPRINT_BY_ID_PATH = RESOURCE_PATH + "/blueprints/%s";
     private static final String BLUEPRINT_BY_ENV_PATH = RESOURCE_PATH + "/blueprints/environments/%s/projects/%s";
     private static final String DELTA_PATH = RESOURCE_PATH + "/blueprints/%s/deltas";
+    private static final String BLUEPRINT_BY_NAME_PATH = RESOURCE_PATH + "/blueprints/projects/%s/names/%s";
     private static final String ENVIRONMENTS_PATH = RESOURCE_PATH + "/blueprints/environments";
+    private static final String ENVIRONMENTS_BY_NAME_PATH = RESOURCE_PATH + "/blueprints/environments/%s/projects/%s";
     private static final String HISTORY_PATH = RESOURCE_PATH + "/blueprints/history/projects/%s";
 
     private final ClientSupport client;
@@ -176,6 +178,45 @@ public class AgentConfigsResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public AgentBlueprint getBlueprintByName(String name, UUID projectId, UUID maskId, String apiKey,
+            String workspaceName, int expectedStatus) {
+        var target = client.target(BLUEPRINT_BY_NAME_PATH.formatted(baseURI, projectId, name));
+
+        if (maskId != null) {
+            target = target.queryParam("mask_id", maskId);
+        }
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return actualResponse.readEntity(AgentBlueprint.class);
+            }
+
+            return null;
+        }
+    }
+
+    public void setEnvByBlueprintName(String envName, UUID projectId,
+            com.comet.opik.api.AgentConfigEnvSetByName request, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var actualResponse = client
+                .target(ENVIRONMENTS_BY_NAME_PATH.formatted(baseURI, envName, projectId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(request))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
         }
