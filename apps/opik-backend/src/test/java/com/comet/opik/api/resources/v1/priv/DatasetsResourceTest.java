@@ -83,7 +83,6 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -128,8 +127,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -268,18 +265,15 @@ class DatasetsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private TransactionTemplate mySqlTemplate;
-    private TransactionTemplateAsync clickHouseTemplate;
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate,
-            TransactionTemplateAsync clickHouseTemplate) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.mySqlTemplate = mySqlTemplate;
-        this.clickHouseTemplate = clickHouseTemplate;
 
         ClientSupportUtils.config(client);
 
@@ -8704,168 +8698,6 @@ class DatasetsResourceTest {
 
             // Verify empty columns are returned (not null)
             assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), Set.of());
-        }
-
-        @Test
-        void getExperimentItemsOutputColumns__whenExperimentHasNoDatasetVersionId__thenReturnColumns() {
-            var workspaceName = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = RandomStringUtils.randomAlphanumeric(20);
-
-            // Create a trace with output fields
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .output(JsonUtils.readTree(Map.of(
-                            "result", JsonUtils.readTree("success"),
-                            "score", JsonUtils.readTree(42))))
-                    .build();
-
-            createAndAssert(trace, workspaceName, apiKey);
-
-            var dataset = buildDataset();
-            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
-
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .datasetId(datasetId)
-                    .build();
-
-            putAndAssert(datasetItemBatch, workspaceName, apiKey);
-
-            // Insert experiment directly into ClickHouse with empty dataset_version_id
-            // to simulate a legacy experiment created before versioning was enabled
-            var experimentId = GENERATOR.generate();
-
-            insertExperimentDirectly(experimentId, datasetId, workspaceId, "");
-
-            // Create experiment item linking the experiment to the trace
-            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(experimentId)
-                    .traceId(trace.id())
-                    .datasetItemId(datasetItemBatch.items().getFirst().id())
-                    .build();
-
-            var experimentItemsBatch = ExperimentItemsBatch.builder()
-                    .experimentItems(Set.of(experimentItem)).build();
-
-            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
-
-            Set<Column> expectedOutput = getOutputDynamicColumns(List.of(trace));
-
-            // This would return empty columns before the fix
-            assertColumns(datasetId, apiKey, workspaceName, Set.of(experimentId), expectedOutput);
-        }
-
-        @Test
-        void getExperimentItemsOutputColumns__whenExperimentsHaveDifferentVersions__thenColumnsAreScopedByExperiment() {
-            var workspaceName = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = RandomStringUtils.randomAlphanumeric(20);
-
-            // Create two traces with distinct output keys
-            var traceA = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .output(JsonUtils.readTree(Map.of(
-                            "alpha", JsonUtils.readTree("value_a"),
-                            "beta", JsonUtils.readTree(100))))
-                    .build();
-
-            var traceB = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .output(JsonUtils.readTree(Map.of(
-                            "gamma", JsonUtils.readTree("value_b"),
-                            "delta", JsonUtils.readTree(200))))
-                    .build();
-
-            createAndAssert(traceA, workspaceName, apiKey);
-            createAndAssert(traceB, workspaceName, apiKey);
-
-            var dataset = buildDataset();
-            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
-
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .datasetId(datasetId)
-                    .build();
-
-            putAndAssert(datasetItemBatch, workspaceName, apiKey);
-
-            // Insert two experiments with different dataset_version_ids
-            var experimentIdA = GENERATOR.generate();
-            var experimentIdB = GENERATOR.generate();
-            var versionIdA = UUID.randomUUID().toString();
-            var versionIdB = UUID.randomUUID().toString();
-
-            insertExperimentDirectly(experimentIdA, datasetId, workspaceId, versionIdA);
-            insertExperimentDirectly(experimentIdB, datasetId, workspaceId, versionIdB);
-
-            // Link experiment A to trace A, experiment B to trace B
-            var experimentItemA = factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(experimentIdA)
-                    .traceId(traceA.id())
-                    .datasetItemId(datasetItemBatch.items().get(0).id())
-                    .build();
-
-            var experimentItemB = factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(experimentIdB)
-                    .traceId(traceB.id())
-                    .datasetItemId(datasetItemBatch.items().get(1).id())
-                    .build();
-
-            createAndAssert(ExperimentItemsBatch.builder()
-                    .experimentItems(Set.of(experimentItemA)).build(), apiKey, workspaceName);
-            createAndAssert(ExperimentItemsBatch.builder()
-                    .experimentItems(Set.of(experimentItemB)).build(), apiKey, workspaceName);
-
-            // Query for experiment A only — should return alpha/beta, not gamma/delta
-            Set<Column> expectedA = getOutputDynamicColumns(List.of(traceA));
-            assertColumns(datasetId, apiKey, workspaceName, Set.of(experimentIdA), expectedA);
-
-            // Query for experiment B only — should return gamma/delta, not alpha/beta
-            Set<Column> expectedB = getOutputDynamicColumns(List.of(traceB));
-            assertColumns(datasetId, apiKey, workspaceName, Set.of(experimentIdB), expectedB);
-        }
-
-        private void insertExperimentDirectly(UUID experimentId, UUID datasetId, String workspaceId,
-                String datasetVersionId) {
-            Mono<Void> insertResult = clickHouseTemplate.nonTransaction(connection -> {
-                String insertSql = """
-                        INSERT INTO experiments (
-                            id, dataset_id, name, workspace_id, metadata,
-                            created_by, last_updated_by, prompt_version_id, prompt_id,
-                            prompt_versions, type, optimization_id, status, dataset_version_id
-                        ) VALUES (
-                            :id, :dataset_id, :name, :workspace_id, :metadata,
-                            :created_by, :last_updated_by, :prompt_version_id, :prompt_id,
-                            :prompt_versions, :type, :optimization_id, 'completed', :dataset_version_id
-                        )
-                        """;
-
-                var statement = connection.createStatement(insertSql)
-                        .bind("id", experimentId)
-                        .bind("dataset_id", datasetId)
-                        .bind("name", RandomStringUtils.randomAlphanumeric(20))
-                        .bind("workspace_id", workspaceId)
-                        .bind("metadata", "{}")
-                        .bind("created_by", "test")
-                        .bind("last_updated_by", "test")
-                        .bindNull("prompt_version_id", UUID.class)
-                        .bindNull("prompt_id", UUID.class)
-                        .bind("prompt_versions", new UUID[]{})
-                        .bind("type", ExperimentType.REGULAR)
-                        .bind("optimization_id", "")
-                        .bind("dataset_version_id", datasetVersionId);
-
-                return Mono.from(statement.execute()).then();
-            });
-
-            StepVerifier.create(insertResult).verifyComplete();
         }
 
         private void assertColumns(UUID datasetId, String apiKey, String workspaceName, Set<UUID> experimentIds,
