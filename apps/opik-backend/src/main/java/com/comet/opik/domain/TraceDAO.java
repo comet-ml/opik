@@ -1203,7 +1203,7 @@ class TraceDAOImpl implements TraceDAO {
                  HAVING <span_feedback_scores_empty_filters>
              )
             <endif>
-            , traces_final AS (
+            , traces_deduped AS (
                 SELECT
                     t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                     truncated_input,
@@ -1214,15 +1214,6 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces t
                 <if(guardrails_filters)>
                     LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
-                <endif>
-                <if(sort_has_feedback_scores)>
-                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
-                <endif>
-                <if(sort_has_span_statistics)>
-                LEFT JOIN spans_agg s ON t.id = s.trace_id
-                <endif>
-                <if(sort_has_experiment)>
-                LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
                 <endif>
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = t.id
@@ -1291,9 +1282,22 @@ class TraceDAOImpl implements TraceDAO {
                     id NOT IN (SELECT trace_id FROM sfsc)
                  )
                  <endif>
-                 ORDER BY <if(sort_fields)> <sort_fields>, id DESC, last_updated_at DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
+                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                  LIMIT 1 BY id
-                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            ), traces_final AS (
+                SELECT td.*
+                FROM traces_deduped td
+                <if(sort_has_feedback_scores)>
+                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = td.id
+                <endif>
+                <if(sort_has_span_statistics)>
+                LEFT JOIN spans_agg s ON td.id = s.trace_id
+                <endif>
+                <if(sort_has_experiment)>
+                LEFT JOIN experiments_agg eaag ON eaag.trace_id = td.id
+                <endif>
+                ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT :limit <if(offset)>OFFSET :offset <endif>
             )
             SELECT
                   t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
@@ -1323,7 +1327,7 @@ class TraceDAOImpl implements TraceDAO {
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
              <if(sort_has_experiment || !exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
-             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
+             ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
