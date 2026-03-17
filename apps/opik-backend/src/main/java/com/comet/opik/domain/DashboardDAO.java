@@ -36,9 +36,9 @@ import java.util.UUID;
 @RegisterConstructorMapper(Dashboard.class)
 public interface DashboardDAO {
 
-    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, name, slug, description, config, type, scope, created_by, last_updated_by) "
+    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, project_id, name, slug, description, config, type, scope, created_by, last_updated_by) "
             +
-            "VALUES (:dashboard.id, :workspaceId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.type, :dashboard.scope, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
+            "VALUES (:dashboard.id, :workspaceId, :dashboard.projectId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.type, :dashboard.scope, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
     void save(@BindMethods("dashboard") Dashboard dashboard, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
@@ -62,8 +62,14 @@ public interface DashboardDAO {
     @SqlQuery("SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId")
     Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND name = :name")
-    Optional<Dashboard> findByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name);
+    @SqlQuery("""
+            SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND name = :name
+            <if(project_id)> AND project_id = :projectId <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Optional<Dashboard> findByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name,
+            @Define("project_id") @Bind("projectId") UUID projectId);
 
     @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND slug = :slug")
     Optional<Dashboard> findBySlug(@Bind("workspaceId") String workspaceId, @Bind("slug") String slug);
@@ -74,17 +80,20 @@ public interface DashboardDAO {
     @SqlQuery("SELECT COUNT(id) FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif>" +
+            "<if(project_id)> AND project_id = :projectId <endif>" +
             "<if(filters)> AND <filters> <endif>")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
+            @Define("project_id") @Bind("projectId") UUID projectId,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("SELECT * FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
+            "<if(project_id)> AND project_id = :projectId <endif>" +
             "<if(filters)> AND <filters> <endif> " +
             "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             "LIMIT :limit OFFSET :offset")
@@ -92,6 +101,7 @@ public interface DashboardDAO {
     @AllowUnusedBindings
     List<Dashboard> find(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
+            @Define("project_id") @Bind("projectId") UUID projectId,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping,
             @Define("sort_fields") String sortingFields,

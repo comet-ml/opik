@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -71,8 +72,8 @@ import static org.assertj.core.api.Assertions.within;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class DashboardsResourceTest {
 
-    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "slug", "createdAt", "lastUpdatedAt",
-            "createdBy", "lastUpdatedBy"};
+    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "slug", "projectName", "createdAt",
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -118,6 +119,7 @@ class DashboardsResourceTest {
     private String baseURI;
     private ClientSupport client;
     private DashboardResourceClient dashboardResourceClient;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client) {
@@ -127,6 +129,7 @@ class DashboardsResourceTest {
         ClientSupportUtils.config(client);
 
         this.dashboardResourceClient = new DashboardResourceClient(this.client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID);
     }
@@ -206,23 +209,28 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Create dashboard with duplicate name fails")
-        void createDashboardWithDuplicateNameFails() {
+        @DisplayName("Create dashboard with duplicate name succeeds")
+        void createDashboardWithDuplicateNameSucceeds() {
             var dashboardName = "Duplicate Dashboard " + UUID.randomUUID();
             var dashboard1 = dashboardResourceClient.createPartialDashboard()
                     .name(dashboardName)
                     .build();
 
-            dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Try to create another dashboard with the same name
             var dashboard2 = dashboardResourceClient.createPartialDashboard()
                     .name(dashboardName)
                     .build();
 
-            try (var response = dashboardResourceClient.callCreate(dashboard2, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            }
+            var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
+
+            var created1 = dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            var created2 = dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            assertThat(created1.name()).isEqualTo(dashboardName);
+            assertThat(created2.name()).isEqualTo(dashboardName);
+            assertThat(created1.id()).isNotEqualTo(created2.id());
+            assertThat(created1.slug()).isNotEqualTo(created2.slug());
         }
 
         @Test
@@ -745,8 +753,8 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Update dashboard with duplicate name fails")
-        void updateDashboardWithDuplicateNameFails() {
+        @DisplayName("Update dashboard with duplicate name succeeds")
+        void updateDashboardWithDuplicateNameSucceeds() {
             var dashboard1 = dashboardResourceClient.createPartialDashboard()
                     .name("Dashboard One")
                     .build();
@@ -754,17 +762,21 @@ class DashboardsResourceTest {
                     .name("Dashboard Two")
                     .build();
 
-            dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
             var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Try to update dashboard2 to have the same name as dashboard1
             var update = DashboardUpdate.builder()
                     .name("Dashboard One")
                     .build();
 
-            try (var response = dashboardResourceClient.callUpdate(id2, update, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            }
+            dashboardResourceClient.update(id2, update, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            var updated = dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            var original = dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            assertThat(updated.name()).isEqualTo("Dashboard One");
+            assertThat(original.name()).isEqualTo("Dashboard One");
+            assertThat(updated.slug()).isNotEqualTo(original.slug());
         }
 
         @Test
@@ -923,6 +935,128 @@ class DashboardsResourceTest {
             dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
             dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
         }
+    }
+
+    @Nested
+    @DisplayName("Project-scoped dashboard operations")
+    class ProjectScopedDashboards {
+
+        @Test
+        @DisplayName("Create dashboard with project_id persists and returns project_id")
+        void createDashboardWithProjectId() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+
+            var dashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectId(projectId)
+                    .build();
+
+            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
+
+            assertDashboard(dashboard, createdDashboard);
+        }
+
+        @Test
+        @DisplayName("Create dashboard with non-existing project_id returns not found")
+        void createDashboardWithNonExistingProjectId() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectId(podamFactory.manufacturePojo(UUID.class))
+                    .build();
+
+            try (var response = dashboardResourceClient.callCreate(dashboard, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Create dashboard with project_name of existing project resolves project_id")
+        void createDashboardWithExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectName(projectName)
+                    .build();
+
+            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
+
+            var expectedDashboard = dashboard.toBuilder()
+                    .projectId(projectId)
+                    .build();
+            assertDashboard(expectedDashboard, createdDashboard);
+        }
+
+        @Test
+        @DisplayName("Create dashboard with project_name of non-existing project creates project and resolves project_id")
+        void createDashboardWithNonExistingProjectName() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "new-project-" + UUID.randomUUID();
+
+            var dashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectName(projectName)
+                    .build();
+
+            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
+
+            // Verify the project was created and the projectId was resolved
+            assertThat(createdDashboard.projectId()).isNotNull();
+
+            var expectedDashboard = dashboard.toBuilder()
+                    .projectId(createdDashboard.projectId())
+                    .build();
+            assertDashboard(expectedDashboard, createdDashboard);
+        }
+
+        @Test
+        @DisplayName("Find dashboards filtered by project_id returns only project dashboards")
+        void findDashboardsByProjectId() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+            var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            var projectDashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectId(projectId)
+                    .build();
+            dashboardResourceClient.createAndGet(projectDashboard, apiKey, workspaceName);
+
+            var otherProjectDashboard = dashboardResourceClient.createPartialDashboard()
+                    .projectId(otherProjectId)
+                    .build();
+            dashboardResourceClient.createAndGet(otherProjectDashboard, apiKey, workspaceName);
+
+            var workspaceDashboard = dashboardResourceClient.createPartialDashboard().build();
+            dashboardResourceClient.createAndGet(workspaceDashboard, apiKey, workspaceName);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 100, null, projectId,
+                    null, null, HttpStatus.SC_OK);
+
+            assertThat(page.content()).hasSize(1);
+            assertDashboard(projectDashboard, page.content().getFirst());
+        }
+
     }
 
     private void assertDashboard(Dashboard expected, Dashboard actual) {

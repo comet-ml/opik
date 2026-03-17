@@ -117,6 +117,7 @@ public class DashboardsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") @Schema(description = "Filter dashboards by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -127,7 +128,7 @@ public class DashboardsResource {
         log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}', sorting '{}'",
                 workspaceId, page, size, name, sorting);
 
-        DashboardPage dashboardPage = service.find(page, size, name, sortingFields, dashboardFilters);
+        DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters);
 
         log.info("Found '{}' dashboards in workspace '{}'", dashboardPage.total(), workspaceId);
         return Response.ok(dashboardPage).build();

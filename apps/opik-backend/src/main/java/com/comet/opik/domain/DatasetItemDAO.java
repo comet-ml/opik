@@ -660,7 +660,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     tfs.total_estimated_cost,
                     tfs.usage,
                     tfs.visibility_mode,
-                    tfs.metadata
+                    tfs.metadata,
+                    '' AS description,
+                    ei.execution_policy
                 )) AS experiment_items_array
             FROM experiment_items_final AS ei
             LEFT JOIN dataset_items_final AS di ON di.id = ei.dataset_item_id

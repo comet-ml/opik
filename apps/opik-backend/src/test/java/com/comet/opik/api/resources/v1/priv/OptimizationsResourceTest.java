@@ -36,6 +36,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -84,6 +85,10 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
@@ -234,6 +239,30 @@ class OptimizationsResourceTest {
     }
 
     @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Delete optimizations passes required permissions to auth endpoint")
+        void deleteOptimizationsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.delete(Set.of(id), apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_DELETE.getValue()))));
+        }
+    }
+
+    @Nested
     @DisplayName("Get optimizer by id")
     class GetOptimizerById {
 
@@ -286,7 +315,7 @@ class OptimizationsResourceTest {
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
             // Create dataset
-            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            Dataset dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE_NAME);
 
             List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
@@ -383,6 +412,10 @@ class OptimizationsResourceTest {
                     .isEqualTo(optimization);
         }
 
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(podamFactory);
     }
 
     @Test
@@ -528,7 +561,7 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create dataset
-            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            Dataset dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             // Create optimization with specific dataset ID
@@ -614,7 +647,7 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create dataset
-            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            Dataset dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
@@ -1066,10 +1099,10 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create datasets
-            var dataset1 = podamFactory.manufacturePojo(Dataset.class).toBuilder().build();
+            var dataset1 = buildDataset().toBuilder().build();
             var dataset1Id = datasetResourceClient.createDataset(dataset1, apiKey, workspaceName);
 
-            var dataset2 = podamFactory.manufacturePojo(Dataset.class).toBuilder().build();
+            var dataset2 = buildDataset().toBuilder().build();
             var dataset2Id = datasetResourceClient.createDataset(dataset2, apiKey, workspaceName);
 
             // Create optimizations for different datasets

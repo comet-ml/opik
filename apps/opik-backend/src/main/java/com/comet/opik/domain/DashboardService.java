@@ -44,7 +44,9 @@ public interface DashboardService {
 
     Dashboard findById(@NonNull UUID id);
 
-    DashboardPage find(int page, int size, String name, List<SortingField> sortingFields,
+    Dashboard findByName(String name, UUID projectId);
+
+    DashboardPage find(int page, int size, String name, UUID projectId, List<SortingField> sortingFields,
             List<? extends Filter> filters);
 
     Dashboard update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate);
@@ -60,7 +62,7 @@ public interface DashboardService {
 class DashboardServiceImpl implements DashboardService {
 
     private static final String DASHBOARD_NOT_FOUND = "Dashboard not found";
-    private static final String DASHBOARD_ALREADY_EXISTS = "Dashboard with this name already exists";
+    private static final String DASHBOARD_ALREADY_EXISTS = "Dashboard already exists";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull TransactionTemplateAsync templateAsync;
@@ -69,6 +71,7 @@ class DashboardServiceImpl implements DashboardService {
     private final @NonNull SortingFactoryDashboards sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull ProjectService projectService;
 
     @Override
     public Dashboard create(@NonNull Dashboard dashboard) {
@@ -78,6 +81,16 @@ class DashboardServiceImpl implements DashboardService {
         // Generate ID if not provided
         var dashboardId = dashboard.id() != null ? dashboard.id() : idGenerator.generateId();
         IdGenerator.validateVersion(dashboardId, "dashboard");
+
+        final UUID resolvedProjectId;
+        if (StringUtils.isNotBlank(dashboard.projectName()) && dashboard.projectId() == null) {
+            var project = projectService.getOrCreate(workspaceId, dashboard.projectName(), userName);
+            resolvedProjectId = project.id();
+        } else {
+            resolvedProjectId = dashboard.projectId();
+        }
+
+        projectService.validateProjectIdExists(resolvedProjectId, workspaceId);
 
         // Generate slug from name
         String baseSlug = SlugUtils.generateSlug(dashboard.name());
@@ -92,6 +105,7 @@ class DashboardServiceImpl implements DashboardService {
             // Build the complete dashboard
             var newDashboard = dashboard.toBuilder()
                     .id(dashboardId)
+                    .projectId(resolvedProjectId)
                     .workspaceId(workspaceId)
                     .slug(uniqueSlug)
                     .type(Optional.ofNullable(dashboard.type()).orElse(DashboardType.MULTI_PROJECT))
@@ -107,8 +121,7 @@ class DashboardServiceImpl implements DashboardService {
                 return dao.findById(dashboardId, workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.warn("Dashboard already exists with name '{}' in workspace '{}'", dashboard.name(),
-                            workspaceId);
+                    log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
                 } else {
                     throw e;
@@ -133,7 +146,24 @@ class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public DashboardPage find(int page, int size, String name, List<SortingField> sortingFields,
+    public Dashboard findByName(@NonNull String name, UUID projectId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding dashboard by name '{}' in workspace '{}', projectId '{}'", name, workspaceId, projectId);
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DashboardDAO.class);
+
+            return dao.findByName(workspaceId, name, projectId)
+                    .or(() -> projectId != null ? dao.findByName(workspaceId, name, null) : Optional.empty())
+                    .orElseThrow(() -> {
+                        log.info("Dashboard not found with name '{}' in workspace '{}'", name, workspaceId);
+                        return new NotFoundException(DASHBOARD_NOT_FOUND);
+                    });
+        });
+    }
+
+    @Override
+    public DashboardPage find(int page, int size, String name, UUID projectId, List<SortingField> sortingFields,
             List<? extends Filter> filters) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
@@ -155,8 +185,8 @@ class DashboardServiceImpl implements DashboardService {
             String nameTerm = StringUtils.isNotBlank(name) ? name.trim() : null;
             int offset = (page - 1) * size;
 
-            long total = dao.findCount(workspaceId, nameTerm, filtersSql, filterMapping);
-            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, filtersSql, filterMapping,
+            long total = dao.findCount(workspaceId, nameTerm, projectId, filtersSql, filterMapping);
+            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, projectId, filtersSql, filterMapping,
                     sortingFieldsSql, size, offset);
 
             log.info("Found '{}' dashboards in workspace '{}'", total, workspaceId);
@@ -202,7 +232,7 @@ class DashboardServiceImpl implements DashboardService {
                 return dao.findById(id, workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.warn("Dashboard already exists with name in workspace '{}'", workspaceId);
+                    log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
                 } else {
                     throw e;
@@ -250,4 +280,5 @@ class DashboardServiceImpl implements DashboardService {
 
         log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", ids.size(), workspaceId);
     }
+
 }

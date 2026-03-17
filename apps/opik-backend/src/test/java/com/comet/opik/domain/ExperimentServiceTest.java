@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
@@ -16,6 +17,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import jakarta.ws.rs.NotFoundException;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,10 +25,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -38,12 +42,14 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ExperimentServiceTest {
 
     private static final String TEST_WORKSPACE_ID = "test-workspace-id";
+    private static final String TEST_WORKSPACE_NAME = "test-workspace-name";
     private static final String TEST_USER_NAME = "test-user";
 
     private ExperimentService experimentService;
@@ -406,6 +412,93 @@ class ExperimentServiceTest {
     }
 
     @Nested
+    @DisplayName("Finish Experiments:")
+    class FinishExperiments {
+
+        @Test
+        @DisplayName("when finishing experiments, then aggregation publisher is called")
+        void finishExperiments() {
+            // given
+            var experimentId = UUID.randomUUID();
+            var ids = Set.of(experimentId);
+            var experiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getByIds(ids))
+                    .thenReturn(Flux.just(experiment));
+            when(experimentAggregationPublisher.publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME))
+                    .thenReturn(Mono.empty());
+
+            // when & then
+            StepVerifier.create(experimentService.finishExperiments(ids)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.WORKSPACE_NAME, TEST_WORKSPACE_NAME)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO).getByIds(ids);
+            verify(eventBus).post(any());
+            verify(experimentAggregationPublisher).publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME);
+        }
+
+        @Test
+        @DisplayName("when no experiments found, then publisher is still called")
+        void finishExperimentsWhenNoExperimentsFoundStillPublishes() {
+            // given
+            var experimentId = UUID.randomUUID();
+            var ids = Set.of(experimentId);
+
+            when(experimentDAO.getByIds(ids))
+                    .thenReturn(Flux.empty());
+            when(experimentAggregationPublisher.publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME))
+                    .thenReturn(Mono.empty());
+
+            // when & then
+            StepVerifier.create(experimentService.finishExperiments(ids)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.WORKSPACE_NAME, TEST_WORKSPACE_NAME)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO).getByIds(ids);
+            verifyNoInteractions(eventBus);
+            verify(experimentAggregationPublisher).publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME);
+        }
+
+        @Test
+        @DisplayName("when publisher fails, then error is swallowed and operation completes")
+        void finishExperimentsWhenPublisherFailsThenErrorIsSwallowed() {
+            // given
+            var experimentId = UUID.randomUUID();
+            var ids = Set.of(experimentId);
+            var experiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getByIds(ids))
+                    .thenReturn(Flux.just(experiment));
+            when(experimentAggregationPublisher.publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME))
+                    .thenReturn(Mono.error(new RuntimeException("Redis error")));
+
+            // when & then
+            StepVerifier.create(experimentService.finishExperiments(ids)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.WORKSPACE_NAME, TEST_WORKSPACE_NAME)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO).getByIds(ids);
+            verify(experimentAggregationPublisher).publish(ids, TEST_WORKSPACE_ID, TEST_USER_NAME);
+        }
+    }
+
+    @Nested
     @DisplayName("GetById Lazy Aggregation:")
     class GetByIdLazyAggregation {
 
@@ -497,6 +590,105 @@ class ExperimentServiceTest {
                     .verifyComplete();
 
             verify(experimentAggregationPublisher, never()).publish(any(), any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Enrich Experiments (find):")
+    class EnrichExperiments {
+
+        private final ExperimentSearchCriteria criteria = ExperimentSearchCriteria.builder()
+                .entityType(EntityType.TRACE)
+                .build();
+
+        @Test
+        @DisplayName("when dataset is deleted, then dataset_name is null")
+        void enrichExperiments_whenDatasetDeleted_thenDatasetNameIsNull() {
+            var datasetId = UUID.randomUUID();
+            var experiment = Experiment.builder().id(UUID.randomUUID()).datasetId(datasetId).build();
+            var experimentPage = Experiment.ExperimentPage.builder()
+                    .page(1).size(1).total(1).content(List.of(experiment)).sortableBy(List.of()).build();
+
+            when(experimentDAO.find(1, 10, criteria)).thenReturn(Mono.just(experimentPage));
+            when(promptService.getVersionsInfoByVersionsIds(any())).thenReturn(Mono.just(Map.of()));
+            when(datasetService.findByIds(Set.of(datasetId), TEST_WORKSPACE_ID)).thenReturn(List.of());
+            when(datasetVersionService.findByIds(any(), any())).thenReturn(List.of());
+            when(projectService.findByIds(any(), any())).thenReturn(List.of());
+
+            StepVerifier.create(experimentService.find(1, 10, criteria)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .assertNext(page -> Assertions.assertThat(page.content().getFirst().datasetName()).isNull())
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("when dataset exists, then dataset_name is populated")
+        void enrichExperiments_whenDatasetExists_thenDatasetNameIsPopulated() {
+            var datasetId = UUID.randomUUID();
+            var dataset = Dataset.builder().id(datasetId).name("My Dataset").build();
+            var experiment = Experiment.builder().id(UUID.randomUUID()).datasetId(datasetId).build();
+            var experimentPage = Experiment.ExperimentPage.builder()
+                    .page(1).size(1).total(1).content(List.of(experiment)).sortableBy(List.of()).build();
+
+            when(experimentDAO.find(1, 10, criteria)).thenReturn(Mono.just(experimentPage));
+            when(promptService.getVersionsInfoByVersionsIds(any())).thenReturn(Mono.just(Map.of()));
+            when(datasetService.findByIds(Set.of(datasetId), TEST_WORKSPACE_ID)).thenReturn(List.of(dataset));
+            when(datasetVersionService.findByIds(any(), any())).thenReturn(List.of());
+            when(projectService.findByIds(any(), any())).thenReturn(List.of());
+
+            StepVerifier.create(experimentService.find(1, 10, criteria)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .assertNext(page -> Assertions.assertThat(page.content().getFirst().datasetName())
+                            .isEqualTo("My Dataset"))
+                    .verifyComplete();
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Experiment By Id:")
+    class GetExperimentById {
+
+        @Test
+        @DisplayName("when dataset is deleted, then dataset_name is null")
+        void getById_whenDatasetDeleted_thenDatasetNameIsNull() {
+            var datasetId = UUID.randomUUID();
+            var experimentId = UUID.randomUUID();
+            var experiment = Experiment.builder().id(experimentId).datasetId(datasetId).build();
+
+            when(experimentDAO.getById(experimentId)).thenReturn(Mono.just(experiment));
+            when(promptService.getVersionsInfoByVersionsIds(any())).thenReturn(Mono.just(Map.of()));
+            when(datasetService.getById(datasetId, TEST_WORKSPACE_ID)).thenReturn(Optional.empty());
+
+            StepVerifier.create(experimentService.getById(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .assertNext(e -> Assertions.assertThat(e.datasetName()).isNull())
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("when dataset exists, then dataset_name is populated")
+        void getById_whenDatasetExists_thenDatasetNameIsPopulated() {
+            var datasetId = UUID.randomUUID();
+            var experimentId = UUID.randomUUID();
+            var dataset = Dataset.builder().id(datasetId).name("My Dataset").build();
+            var experiment = Experiment.builder().id(experimentId).datasetId(datasetId).build();
+
+            when(experimentDAO.getById(experimentId)).thenReturn(Mono.just(experiment));
+            when(promptService.getVersionsInfoByVersionsIds(any())).thenReturn(Mono.just(Map.of()));
+            when(datasetService.getById(datasetId, TEST_WORKSPACE_ID)).thenReturn(Optional.of(dataset));
+
+            StepVerifier.create(experimentService.getById(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .assertNext(e -> Assertions.assertThat(e.datasetName()).isEqualTo("My Dataset"))
+                    .verifyComplete();
         }
     }
 }

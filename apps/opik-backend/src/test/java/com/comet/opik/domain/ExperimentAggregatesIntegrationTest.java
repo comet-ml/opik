@@ -108,7 +108,7 @@ class ExperimentAggregatesIntegrationTest {
             "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
 
     public static final String[] IGNORED_FIELDS_EXPERIMENT_ITEM = {"createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments", "projectName"};
+            "lastUpdatedBy", "comments", "projectName", "executionPolicy", "assertionResults", "status"};
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -871,7 +871,7 @@ class ExperimentAggregatesIntegrationTest {
     }
 
     private Dataset createDataset(String apiKey, String workspaceName) {
-        var dataset = factory.manufacturePojo(Dataset.class);
+        var dataset = DatasetResourceClient.buildDataset(factory);
         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
         return dataset;
     }

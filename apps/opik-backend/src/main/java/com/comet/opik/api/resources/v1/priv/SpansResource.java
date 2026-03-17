@@ -29,6 +29,8 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -205,6 +207,7 @@ public class SpansResource {
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     @UsageLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
@@ -226,6 +229,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     @UsageLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response createSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(View.Write.class) @NotNull @Valid SpanBatch spans) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -243,6 +247,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response batchUpdate(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatchUpdate.class))) @Valid @NotNull SpanBatchUpdate batchUpdate) {
 
@@ -266,6 +271,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "404", description = "Not found")})
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanUpdate.class))) @NotNull @Valid SpanUpdate spanUpdate) {
 

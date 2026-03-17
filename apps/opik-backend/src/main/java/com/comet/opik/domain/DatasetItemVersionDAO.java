@@ -1130,7 +1130,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         ei.usage,
                         ei.visibility_mode,
                         ei.metadata,
-                        di.description
+                        di.description,
+                        ei.execution_policy
                     )) AS experiment_items_array
                 FROM (
                     SELECT
@@ -1154,7 +1155,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         eia.last_updated_by,
                         eia.metadata,
                         eia.feedback_scores,
-                        eia.comments_array_agg
+                        eia.comments_array_agg,
+                        eia.execution_policy
                     FROM experiment_item_aggregates AS eia FINAL
                     WHERE eia.workspace_id = :workspace_id
                     AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
@@ -1242,7 +1244,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         tfs.usage,
                         tfs.visibility_mode,
                         tfs.metadata,
-                        di.description
+                        di.description,
+                        ei.execution_policy
                     )) AS experiment_items_array
                 FROM experiment_items_final AS ei
                 LEFT JOIN dataset_items_resolved AS di ON di.id = ei.dataset_item_id

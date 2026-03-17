@@ -64,25 +64,24 @@ public class ExperimentAggregatesService {
      */
     private Mono<Void> populateAggregations(@NonNull UUID experimentId, int batchSize) {
 
-        // First, populate experiment-level aggregates
+        // First, populate experiment item aggregates in batches, then experiment-level aggregates
         return Mono.deferContextual(ctx -> {
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            log.info("Starting aggregation population for experiment: '{}' in workspace: '{}', batchSize: '{}'",
+            log.info("Starting aggregation population for experiment: '{}' in workspaceId: '{}', batchSize: '{}'",
                     experimentId, workspaceId, batchSize);
 
-            return experimentAggregatesDAO.populateExperimentAggregate(experimentId)
+            return populateExperimentItemsInBatches(experimentId, batchSize)
                     .doOnSuccess(v -> log.info(
-                            "Experiment-level aggregates populated for experiment: '{}'", experimentId))
-                    .then(Mono.defer(() ->
-            // Then, populate experiment item aggregates in batches using cursor pagination
-            populateExperimentItemsInBatches(experimentId, batchSize)))
+                            "Experiment item aggregates populated for experiment: '{}' in workspaceId: '{}'",
+                            experimentId, workspaceId))
+                    .then(Mono.defer(() -> experimentAggregatesDAO.populateExperimentAggregate(experimentId)))
                     .doOnSuccess(v -> log.info(
-                            "All aggregations populated successfully for experiment: '{}' in workspace: '{}'",
+                            "All aggregations populated successfully for experiment: '{}' in workspaceId: '{}'",
                             experimentId, workspaceId))
                     .doOnError(error -> log.error(
-                            "Failed to populate aggregations for experiment: '{}' in workspace: '{}'",
+                            "Failed to populate aggregations for experiment: '{}' in workspaceId: '{}'",
                             experimentId, workspaceId, error));
         });
     }

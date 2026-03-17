@@ -12,6 +12,8 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.OptimizationSearchCriteria;
 import com.comet.opik.domain.OptimizationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -172,6 +174,7 @@ public class OptimizationsResource {
     @Path("/delete")
     @Operation(operationId = "deleteOptimizationsById", summary = "Delete optimizations by id", description = "Delete optimizations by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_RUN_DELETE)
     public Response deleteOptimizationsById(
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid DeleteIdsHolder request) {
         log.info("Deleting optimizations, count '{}'", request.ids().size());

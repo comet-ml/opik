@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
@@ -30,6 +31,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -1320,7 +1322,7 @@ class ExperimentsResourceTest {
 
             var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var prompt = podamFactory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt();
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
             PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
@@ -1804,7 +1806,7 @@ class ExperimentsResourceTest {
             var project2Id = projectResourceClient.createProject(project2, apiKey, workspaceName);
 
             // Create a dataset for the experiments
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             // Create two experiments
@@ -1879,7 +1881,7 @@ class ExperimentsResourceTest {
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             // Create a dataset for the experiment
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             // Create an experiment
@@ -2214,7 +2216,7 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+            var datasets = getDatasets();
             datasets.forEach(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
@@ -2238,7 +2240,7 @@ class ExperimentsResourceTest {
             IntStream.range(0, experimentCount)
                     .parallel()
                     .forEach(i -> {
-                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        var dataset = buildDataset();
                         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                         datasets.add(dataset);
                         var experimentId = createAndAssert(
@@ -2283,7 +2285,7 @@ class ExperimentsResourceTest {
             IntStream.range(0, unexpectedDatasetCount)
                     .parallel()
                     .forEach(i -> {
-                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        var dataset = buildDataset();
                         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                         createAndAssert(
                                 experimentResourceClient.createPartialExperiment().datasetName(dataset.name()).build(),
@@ -2295,7 +2297,7 @@ class ExperimentsResourceTest {
             IntStream.range(0, expectedMatchCount)
                     .parallel()
                     .forEach(experiment -> {
-                        var dataset = podamFactory.manufacturePojo(Dataset.class);
+                        var dataset = buildDataset();
                         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                         datasets.add(dataset);
                         var expectedExperiment = createExperimentWithFeedbackScores(
@@ -2332,7 +2334,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
@@ -2417,7 +2419,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
             var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
@@ -2517,7 +2519,7 @@ class ExperimentsResourceTest {
 
             var dataset = initDataset(experimentCount, expectedMatchCount, apiKey, workspaceName);
 
-            var prompt = podamFactory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt();
 
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
 
@@ -2558,8 +2560,8 @@ class ExperimentsResourceTest {
 
             var dataset = initDataset(experimentCount, expectedMatchCount, apiKey, workspaceName);
 
-            var prompt = podamFactory.manufacturePojo(Prompt.class);
-            var prompt2 = podamFactory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt();
+            var prompt2 = buildPrompt();
 
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
             PromptVersion promptVersion2 = promptResourceClient.createPromptVersion(prompt2, apiKey, workspaceName);
@@ -2934,6 +2936,14 @@ class ExperimentsResourceTest {
         }
     }
 
+    private Prompt buildPrompt() {
+        return PromptResourceClient.buildPrompt(podamFactory);
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(podamFactory);
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GroupExperimentsAggregations {
@@ -2949,7 +2959,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+            var datasets = getDatasets();
             Random random = new Random();
 
             List<String> metadatas = List.of("{\"provider\":\"openai\",\"model\":\"gpt-4\"}",
@@ -2977,7 +2987,7 @@ class ExperimentsResourceTest {
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
-                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                var prompt = buildPrompt();
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
                 PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
@@ -3347,8 +3357,8 @@ class ExperimentsResourceTest {
             var validProjectId = projectResourceClient.createProject(validProject, apiKey, workspaceName);
 
             // Create datasets for experiments
-            var dataset1 = podamFactory.manufacturePojo(Dataset.class);
-            var dataset2 = podamFactory.manufacturePojo(Dataset.class);
+            var dataset1 = buildDataset();
+            var dataset2 = buildDataset();
             datasetResourceClient.createDataset(dataset1, apiKey, workspaceName);
             datasetResourceClient.createDataset(dataset2, apiKey, workspaceName);
 
@@ -3492,6 +3502,10 @@ class ExperimentsResourceTest {
         }
     }
 
+    private List<Dataset> getDatasets() {
+        return DatasetResourceClient.buildDatasetList(podamFactory);
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GroupExperiments {
@@ -3507,7 +3521,7 @@ class ExperimentsResourceTest {
 
             Random random = new Random();
 
-            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+            var datasets = getDatasets();
 
             List<Set<String>> tagsList = List.of(
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
@@ -3593,7 +3607,7 @@ class ExperimentsResourceTest {
 
             Random random = new Random();
 
-            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+            var datasets = getDatasets();
 
             List<Set<String>> tagsList = List.of(
                     PodamFactoryUtils.manufacturePojoSet(podamFactory, String.class),
@@ -3603,7 +3617,7 @@ class ExperimentsResourceTest {
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
-                var prompt = podamFactory.manufacturePojo(Prompt.class);
+                var prompt = buildPrompt();
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
                 PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
@@ -3653,7 +3667,7 @@ class ExperimentsResourceTest {
 
             Random random = new Random();
 
-            var datasets = PodamFactoryUtils.manufacturePojoList(podamFactory, Dataset.class);
+            var datasets = getDatasets();
 
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
@@ -3923,7 +3937,7 @@ class ExperimentsResourceTest {
     }
 
     private Dataset initDataset(int experimentCount, int expectedMatchCount, String apiKey, String workspaceName) {
-        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        var dataset = buildDataset();
         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
         IntStream.range(0, experimentCount - expectedMatchCount)
@@ -4224,7 +4238,7 @@ class ExperimentsResourceTest {
                         // Only 2 prompt versions per experiment is enough for this test
                         var promptVersions = IntStream.range(0, 2)
                                 .mapToObj(j -> {
-                                    var prompt = podamFactory.manufacturePojo(Prompt.class);
+                                    var prompt = buildPrompt();
                                     var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY,
                                             TEST_WORKSPACE);
                                     return buildVersionLink(promptVersion, prompt.name());
@@ -4786,7 +4800,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
             var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
@@ -6139,7 +6153,7 @@ class ExperimentsResourceTest {
         @Test
         void experimentItemsBulk__whenProcessingValidBatch__thenReturnNoContent() {
             // given
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
             var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
@@ -6251,7 +6265,7 @@ class ExperimentsResourceTest {
         @Test
         void experimentItemsBulk__whenProcessingBatchWithNoTraceButWithFeedbackScores__thenReturnNoContent() {
             // given
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
             var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
@@ -6306,7 +6320,7 @@ class ExperimentsResourceTest {
         @Test
         void experimentItemsBulk__whenProcessingBatchWithExceedLimit__thenReturnBadRequest() {
             // given
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
             var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
@@ -6462,7 +6476,7 @@ class ExperimentsResourceTest {
         @Test
         void experimentItemsBulk__whenBothEvaluateTaskResultAndTraceProvided__thenReturnBadRequest() {
             // given
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
             var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
@@ -6505,7 +6519,7 @@ class ExperimentsResourceTest {
         @Test
         void experimentItemsBulk__whenOnlyEvaluateTaskResultProvided__thenSucceed() {
             // given
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
             var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
@@ -6563,7 +6577,7 @@ class ExperimentsResourceTest {
         @DisplayName("Should add items to same experiment when same experiment ID used across multiple uploads")
         void experimentItemsBulk__whenUsingSameExperimentIdAcrossMultipleUploads__thenAllItemsAddedToSameExperiment() {
             // given
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
             // Create multiple dataset items for the test
@@ -6653,7 +6667,7 @@ class ExperimentsResourceTest {
         @DisplayName("Should fail when using same experiment ID with different dataset")
         void experimentItemsBulk__whenUsingSameExperimentIdWithDifferentDataset__thenReturnConflict() {
             // given - Create first dataset and experiment
-            var dataset1 = podamFactory.manufacturePojo(Dataset.class);
+            var dataset1 = buildDataset();
             var dataset1Id = datasetResourceClient.createDataset(dataset1, API_KEY, TEST_WORKSPACE);
 
             var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -6689,7 +6703,7 @@ class ExperimentsResourceTest {
                     .build();
 
             // Create second dataset
-            var dataset2 = podamFactory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             var dataset2Id = datasetResourceClient.createDataset(dataset2, API_KEY, TEST_WORKSPACE);
 
             var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -6748,7 +6762,7 @@ class ExperimentsResourceTest {
         @DisplayName("Should ignore different name when using same experiment ID with a different experiment name")
         void experimentItemsBulk__whenUsingSameExperimentIdWithDifferentName__ignoreTheNewName() {
             // given
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
             // Create multiple dataset items for the test
@@ -7171,7 +7185,7 @@ class ExperimentsResourceTest {
         @DisplayName("when updating experiment with scores, then dataset_version_id is preserved")
         void updateExperiment_whenExperimentScoresUpdated_thenDatasetVersionIdPreserved() {
             // given - create a dataset with items so a version exists
-            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
             var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -7675,7 +7689,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create dataset with one item
-            var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+            var dataset = buildDataset().toBuilder()
                     .id(null)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
@@ -7764,7 +7778,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create dataset with one item
-            var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+            var dataset = buildDataset().toBuilder()
                     .id(null)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
@@ -7853,7 +7867,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // Create dataset with two items
-            var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+            var dataset = buildDataset().toBuilder()
                     .id(null)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
@@ -7944,6 +7958,160 @@ class ExperimentsResourceTest {
                     .passRate(BigDecimal.valueOf(0.5))
                     .build();
             getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
+        }
+    }
+
+    @Nested
+    @DisplayName("Assertion Results in Stream Endpoint:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AssertionResults {
+
+        @BeforeEach
+        void setUp() {
+            Mockito.reset(defaultEventBus);
+        }
+
+        private FeedbackScoreBatchItem score(Trace trace, String name, BigDecimal value) {
+            return FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .value(value)
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
+
+        private FeedbackScoreBatchItem assertionScore(Trace trace, String name, BigDecimal value, String reason) {
+            return FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .categoryName("suite_assertion")
+                    .value(value)
+                    .reason(reason)
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when stream has suite_assertion scores, then split into assertion_results and compute status=passed")
+        void streamExperimentItems__suiteAssertionScores__thenReturnAssertionResultsAndStatusPassed() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(
+                    score(trace, "accuracy", BigDecimal.valueOf(0.85)),
+                    assertionScore(trace, "Should link to docs", BigDecimal.ONE, "Links found"),
+                    assertionScore(trace, "Should be concise", BigDecimal.ONE, "Under 200 words"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
+            assertThat(streamedItems).hasSize(1);
+
+            var streamedItem = streamedItems.getFirst();
+            assertThat(streamedItem.assertionResults()).hasSize(2);
+            assertThat(streamedItem.assertionResults()).allMatch(AssertionResult::passed);
+            assertThat(streamedItem.status()).isEqualTo(RunStatus.PASSED);
+            assertThat(streamedItem.feedbackScores()).hasSize(1);
+            assertThat(streamedItem.feedbackScores().getFirst().name()).isEqualTo("accuracy");
+        }
+
+        @Test
+        @DisplayName("when stream has failing suite_assertion, then status=failed")
+        void streamExperimentItems__failingAssertions__thenStatusFailed() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(
+                    assertionScore(trace, "Should link to docs", BigDecimal.ONE, "Links found"),
+                    assertionScore(trace, "Should be concise", BigDecimal.ZERO, "Too long"));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
+            assertThat(streamedItems).hasSize(1);
+
+            var streamedItem = streamedItems.getFirst();
+            assertThat(streamedItem.assertionResults()).hasSize(2);
+            assertThat(streamedItem.status()).isEqualTo(RunStatus.FAILED);
+            assertThat(streamedItem.assertionResults())
+                    .anySatisfy(r -> {
+                        assertThat(r.value()).isEqualTo("Should link to docs");
+                        assertThat(r.passed()).isTrue();
+                    })
+                    .anySatisfy(r -> {
+                        assertThat(r.value()).isEqualTo("Should be concise");
+                        assertThat(r.passed()).isFalse();
+                        assertThat(r.reason()).isEqualTo("Too long");
+                    });
+            assertThat(streamedItem.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("when stream has only regular scores (no suite_assertion), then no assertion_results and no status")
+        void streamExperimentItems__regularScoresOnly__thenNoAssertionResults() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(score(trace, "accuracy", BigDecimal.valueOf(0.85)));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
+            assertThat(streamedItems).hasSize(1);
+
+            var streamedItem = streamedItems.getFirst();
+            assertThat(streamedItem.assertionResults()).isNull();
+            assertThat(streamedItem.status()).isNull();
+            assertThat(streamedItem.feedbackScores()).hasSize(1);
         }
     }
 }

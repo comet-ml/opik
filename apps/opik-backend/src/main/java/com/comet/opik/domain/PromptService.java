@@ -56,7 +56,8 @@ import static java.util.stream.Collectors.toMap;
 public interface PromptService {
     Prompt create(Prompt promptRequest);
 
-    PromptPage find(String name, int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
+    PromptPage find(String name, UUID projectId, int page, int size, List<SortingField> sortingFields,
+            List<? extends Filter> filters);
 
     PromptVersion createPromptVersion(CreatePromptVersion promptVersion);
 
@@ -86,6 +87,8 @@ public interface PromptService {
 
     PromptVersion retrievePromptVersion(String name, String commit);
 
+    PromptVersion retrievePromptVersion(String name, String commit, UUID projectId);
+
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
@@ -113,6 +116,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingFactoryPrompts sortingFactory;
     private final @NonNull SortingFactoryPromptVersions sortingFactoryPromptVersions;
     private final @NonNull EventBus eventBus;
+    private final @NonNull ProjectService projectService;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -121,11 +125,19 @@ class PromptServiceImpl implements PromptService {
         String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
-        var newPrompt = promptRequest.toBuilder()
+        var builder = promptRequest.toBuilder()
                 .id(promptRequest.id() == null ? idGenerator.generateId() : promptRequest.id())
                 .createdBy(userName)
-                .lastUpdatedBy(userName)
-                .build();
+                .lastUpdatedBy(userName);
+
+        if (StringUtils.isNotBlank(promptRequest.projectName()) && promptRequest.projectId() == null) {
+            var project = projectService.getOrCreate(workspaceId, promptRequest.projectName(), userName);
+            builder.projectId(project.id());
+        }
+
+        var newPrompt = builder.build();
+
+        projectService.validateProjectIdExists(newPrompt.projectId(), workspaceId);
 
         Prompt createdPrompt = EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
@@ -201,7 +213,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptPage find(String name, int page, int size, List<SortingField> sortingFields,
+    public PromptPage find(String name, UUID projectId, int page, int size, List<SortingField> sortingFields,
             List<? extends Filter> filters) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -218,11 +230,12 @@ class PromptServiceImpl implements PromptService {
         return transactionTemplate.inTransaction(handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            long total = promptDAO.count(name, workspaceId, filtersSQL, filterMapping);
+            long total = promptDAO.count(name, workspaceId, projectId, filtersSQL, filterMapping);
 
             var offset = (page - 1) * size;
 
-            List<Prompt> content = promptDAO.find(name, workspaceId, offset, size, sortingFieldsSql, filtersSQL,
+            List<Prompt> content = promptDAO.find(name, workspaceId, projectId, offset, size, sortingFieldsSql,
+                    filtersSQL,
                     filterMapping);
 
             return PromptPage.builder()
@@ -238,7 +251,7 @@ class PromptServiceImpl implements PromptService {
     private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
             TemplateStructure templateStructure) {
 
-        Prompt prompt = findByName(workspaceId, name);
+        Prompt prompt = findByName(workspaceId, name, null);
 
         if (prompt != null) {
             // For existing prompts, ignore the templateStructure parameter and use the existing prompt's structure.
@@ -260,14 +273,18 @@ class PromptServiceImpl implements PromptService {
 
         return EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .onErrorDo(() -> findByName(workspaceId, name));
+                .onErrorDo(() -> findByName(workspaceId, name, null));
     }
 
-    private Prompt findByName(String workspaceId, String name) {
+    private Prompt findByName(String workspaceId, String name, UUID projectId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            return promptDAO.findByName(name, workspaceId);
+            Prompt prompt = promptDAO.findByName(name, workspaceId, projectId);
+            if (prompt == null && projectId != null) {
+                prompt = promptDAO.findByName(name, workspaceId, null);
+            }
+            return prompt;
         });
     }
 
@@ -603,13 +620,18 @@ class PromptServiceImpl implements PromptService {
 
     @Override
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
+        return retrievePromptVersion(name, commit, null);
+    }
+
+    @Override
+    public PromptVersion retrievePromptVersion(@NonNull String name, String commit, UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            Prompt prompt = promptDAO.findByName(name, workspaceId);
+            Prompt prompt = findByName(workspaceId, name, projectId);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
@@ -775,4 +797,5 @@ class PromptServiceImpl implements PromptService {
                 .payload(prompts)
                 .build());
     }
+
 }

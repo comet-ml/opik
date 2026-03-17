@@ -91,6 +91,8 @@ public interface ProjectService {
 
     Mono<Project> getOrCreate(String projectName);
 
+    Project getOrCreate(String workspaceId, String projectName, String userName);
+
     Project retrieveByName(String projectName);
 
     Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames);
@@ -105,6 +107,8 @@ public interface ProjectService {
             @NonNull List<SortingField> sortingFields);
 
     Mono<Project> getOrFail(@NonNull UUID id);
+
+    void validateProjectIdExists(UUID projectId, String workspaceId);
 
     static Map<String, Project> groupByName(List<Project> projects) {
         return projects.stream().collect(Collectors.toMap(
@@ -235,6 +239,13 @@ class ProjectServiceImpl implements ProjectService {
                     .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", id)))
                     .subscribeOn(Schedulers.boundedElastic());
         });
+    }
+
+    @Override
+    public void validateProjectIdExists(UUID projectId, String workspaceId) {
+        if (projectId != null && findByIds(workspaceId, Set.of(projectId)).isEmpty()) {
+            throw ErrorUtils.failWithNotFound("Project", projectId);
+        }
     }
 
     @Override
@@ -528,7 +539,8 @@ class ProjectServiceImpl implements ProjectService {
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private Project getOrCreate(String workspaceId, String projectName, String userName) {
+    @Override
+    public Project getOrCreate(String workspaceId, String projectName, String userName) {
 
         return findByNames(workspaceId, List.of(projectName))
                 .stream()

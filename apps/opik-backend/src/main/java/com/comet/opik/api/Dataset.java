@@ -25,6 +25,10 @@ public record Dataset(
         @JsonView( {
                 Dataset.View.Public.class, Dataset.View.Write.class}) UUID id,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) @NotBlank String name,
+        @JsonView({Dataset.View.Public.class,
+                Dataset.View.Write.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") @Nullable UUID projectId,
+        @JsonView({
+                Dataset.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created at workspace level.") @Nullable String projectName,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) DatasetType type,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Visibility visibility,
         @JsonView({Dataset.View.Public.class, Dataset.View.Write.class}) Set<String> tags,

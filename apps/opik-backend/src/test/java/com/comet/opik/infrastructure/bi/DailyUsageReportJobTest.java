@@ -321,7 +321,7 @@ class DailyUsageReportJobTest {
         }
 
         private void setUpData(String apiKey, String workspaceName, String workspaceId) {
-            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+            List<Dataset> datasets = DatasetResourceClient.buildDatasetList(factory);
 
             datasets.parallelStream().forEach(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
@@ -458,7 +458,7 @@ class DailyUsageReportJobTest {
         }
 
         private void setUpData(String apiKey, String workspaceName, String workspaceId) {
-            List<Dataset> datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+            List<Dataset> datasets = DatasetResourceClient.buildDatasetList(factory);
 
             datasets.parallelStream().forEach(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
@@ -493,7 +493,7 @@ class DailyUsageReportJobTest {
          * demo datasets have consistent names and are idempotent by design.
          */
         private void createDemoDataset(String datasetName, String apiKey, String workspaceName) {
-            Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+            Dataset dataset = DatasetResourceClient.buildDataset(factory).toBuilder()
                     .name(datasetName)
                     .build();
 

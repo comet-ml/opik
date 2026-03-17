@@ -37,9 +37,9 @@ import java.util.UUID;
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 public interface DatasetDAO {
 
-    @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, type, workspace_id, created_by, last_updated_by, tags) "
+    @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, type, workspace_id, project_id, created_by, last_updated_by, tags) "
             +
-            "VALUES (:dataset.id, :dataset.name, :dataset.description, COALESCE(:dataset.visibility, 'private'), COALESCE(:dataset.type, 'dataset'), :workspace_id, :dataset.createdBy, :dataset.lastUpdatedBy, :dataset.tags)")
+            "VALUES (:dataset.id, :dataset.name, :dataset.description, COALESCE(:dataset.visibility, 'private'), COALESCE(:dataset.type, 'dataset'), :workspace_id, :dataset.projectId, :dataset.createdBy, :dataset.lastUpdatedBy, :dataset.tags)")
     void save(@BindMethods("dataset") Dataset dataset, @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
@@ -78,6 +78,7 @@ public interface DatasetDAO {
             SELECT COUNT(id) FROM datasets
             WHERE workspace_id = :workspace_id
             <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(project_id)> AND project_id = :project_id <endif>
             <if(filters)> AND <filters> <endif>
             <if(visibility)> AND visibility = :visibility <endif>
             <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>
@@ -86,6 +87,7 @@ public interface DatasetDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
+            @Define("project_id") @Bind("project_id") UUID projectId,
             @Define("with_experiments_only") boolean withExperimentsOnly,
             @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("visibility") @Bind("visibility") Visibility visibility,
@@ -166,6 +168,7 @@ public interface DatasetDAO {
             SELECT * FROM datasets
             WHERE workspace_id = :workspace_id
             <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(project_id)> AND project_id = :project_id <endif>
             <if(filters)> AND <filters> <endif>
             <if(visibility)> AND visibility = :visibility <endif>
             <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>
@@ -179,6 +182,7 @@ public interface DatasetDAO {
             @Bind("offset") int offset,
             @Bind("workspace_id") String workspaceId,
             @Define("name") @Bind("name") String name,
+            @Define("project_id") @Bind("project_id") UUID projectId,
             @Define("with_experiments_only") boolean withExperimentsOnly,
             @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
@@ -186,8 +190,12 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
-    Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
+    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
+            " <if(project_id)> AND project_id = :project_id <endif>")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
+            @Define("project_id") @Bind("project_id") UUID projectId);
 
     @SqlBatch("UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,

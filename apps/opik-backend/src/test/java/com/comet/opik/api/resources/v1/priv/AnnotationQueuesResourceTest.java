@@ -152,6 +152,71 @@ class AnnotationQueuesResourceTest {
     }
 
     @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Delete annotation queue batch passes required permissions to auth endpoint")
+        void deleteAnnotationQueueBatchPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .id(null)
+                    .projectId(projectId)
+                    .build();
+
+            var id = annotationQueuesResourceClient.createAnnotationQueue(annotationQueue, apiKey, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            wireMock.server().resetRequests();
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(Set.of(id), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.ANNOTATION_QUEUE_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Remove items from annotation queue passes required permissions to auth endpoint")
+        void removeItemsFromAnnotationQueuePassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .id(null)
+                    .projectId(projectId)
+                    .build();
+
+            var queueId = annotationQueuesResourceClient.createAnnotationQueue(annotationQueue, apiKey, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            wireMock.server().resetRequests();
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(queueId, Set.of(UUID.randomUUID()),
+                    apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.ANNOTATION_QUEUE_DELETE.getValue()))));
+        }
+    }
+
+    @Nested
     @DisplayName("Create Annotation Queue Batch")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateAnnotationQueueBatch {

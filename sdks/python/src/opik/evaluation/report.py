@@ -123,6 +123,7 @@ def display_suite_results(
     total_time: float,
     suite_result: suite_types.EvaluationSuiteResult,
     verbose: int = 2,
+    experiment_url: Optional[str] = None,
 ) -> None:
     test_results = [
         tr
@@ -191,6 +192,14 @@ def display_suite_results(
 
     content = table.Table.grid()
     content.add_row(text.Text(""))
+
+    if experiment_url is not None:
+        link_text = text.Text.from_markup(
+            f"[bold cyan][link={experiment_url}]View results in Opik dashboard[/link][/bold cyan]"
+        )
+        content.add_row(align.Align.left(link_text))
+        content.add_row(text.Text(""))
+
     content.add_row(time_text)
     content.add_row(nb_samples_text)
     content.add_row(pass_text)
@@ -248,7 +257,6 @@ def display_suite_results(
 
     console_container = console.Console()
     console_container.print(panel_content)
-    console_container.print("Uploading results to Opik ... ")
 
 
 def display_experiment_link(experiment_url: str) -> None:
@@ -256,6 +264,14 @@ def display_experiment_link(experiment_url: str) -> None:
 
     console_container.print(
         f"View the results [link={experiment_url}]in your Opik dashboard[/link]."
+    )
+
+
+def display_evaluation_in_progress(experiment_url: str) -> None:
+    console_container = console.Console()
+    console_container.print(
+        f"Running evaluation suite, results will be available in "
+        f"[bold cyan][link={experiment_url}]Opik dashboard[/link][/bold cyan]."
     )
 
 

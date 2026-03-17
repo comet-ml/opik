@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -200,7 +201,7 @@ class DatasetEventListenerTest {
         @Test
         @DisplayName("when a new experiment is created, it should be saved in the database")
         void when__newExperimentIsCreated__shouldBeSavedInTheDatabase() {
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = DatasetEventListenerTest.this.buildDataset();
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -216,6 +217,10 @@ class DatasetEventListenerTest {
                         .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
             });
         }
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     private Experiment generateExperiment(Dataset dataset) {
@@ -237,10 +242,10 @@ class DatasetEventListenerTest {
         @Test
         @DisplayName("when an experiment is deleted, the last created experiment date should be updated")
         void when__experimentIsDeleted__lastCreatedExperimentDateShouldBeUpdated() {
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             var datasetId2 = createAndAssert(dataset2, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -295,7 +300,7 @@ class DatasetEventListenerTest {
         @Test
         @DisplayName("when an experiment is deleted, the last created experiment date should be updated")
         void when__experimentIsDeleted__lastCreatedExperimentDateShouldBeUpdated_() {
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -324,7 +329,7 @@ class DatasetEventListenerTest {
     @Test
     @DisplayName("when a new optimization is created, it should be saved in the database")
     void when__newOptimizationIsCreated__shouldBeSavedInTheDatabase() {
-        var dataset = factory.manufacturePojo(Dataset.class);
+        var dataset = buildDataset();
         var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
         var expectedOptimization = generateOptimization(dataset);
@@ -343,7 +348,7 @@ class DatasetEventListenerTest {
     @Test
     @DisplayName("when an optimization is deleted, the last created optimization date should be updated")
     void when__optimizationIsDeleted__lastCreatedOptimizationDateShouldBeUpdated_() {
-        var dataset = factory.manufacturePojo(Dataset.class);
+        var dataset = buildDataset();
         var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
         var expectedOptimization = generateOptimization(dataset);

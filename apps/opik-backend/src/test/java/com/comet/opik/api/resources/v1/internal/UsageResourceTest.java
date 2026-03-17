@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.internal;
 
 import com.comet.opik.api.BiInformationResponse;
-import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.Trace;
@@ -15,6 +14,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -261,8 +261,7 @@ class UsageResourceTest {
         @Test
         @DisplayName("Get datasets daily info for BI events, no Auth")
         void datasetBiInfoTest() {
-            var datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class)
-                    .stream()
+            var datasets = DatasetResourceClient.buildDatasetList(factory).stream()
                     .map(e -> e.toBuilder()
                             .id(null)
                             .build())

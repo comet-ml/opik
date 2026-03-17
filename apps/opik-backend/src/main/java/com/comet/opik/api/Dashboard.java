@@ -9,12 +9,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -23,6 +26,10 @@ public record Dashboard(
         @JsonView( {
                 Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String workspaceId,
+        @JsonView({Dashboard.View.Public.class,
+                Dashboard.View.Write.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") @Nullable UUID projectId,
+        @JsonView({
+                Dashboard.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dashboard is created at workspace level.") @Nullable String projectName,
         @JsonView({Dashboard.View.Public.class,
                 Dashboard.View.Write.class}) @NotBlank @Size(min = 1, max = 120, message = "name must be between 1 and 120 characters") String name,
         @JsonView({Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String slug,

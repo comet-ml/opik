@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -210,13 +211,13 @@ class DatasetExperimentE2ETest {
 
             mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             createAndAssert(dataset2, apiKey, testWorkspace);
 
-            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var dataset3 = buildDataset();
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -243,13 +244,13 @@ class DatasetExperimentE2ETest {
 
             mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             createAndAssert(dataset2, apiKey, testWorkspace);
 
-            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var dataset3 = buildDataset();
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -281,13 +282,13 @@ class DatasetExperimentE2ETest {
 
             mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             var datasetId2 = createAndAssert(dataset2, apiKey, testWorkspace);
 
-            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var dataset3 = buildDataset();
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
             var experiment = generateExperiment(dataset);
@@ -324,6 +325,10 @@ class DatasetExperimentE2ETest {
 
             assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
         }
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     private Experiment generateExperiment(Dataset dataset) {
