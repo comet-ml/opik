@@ -8726,7 +8726,7 @@ class DatasetsResourceTest {
 
             createAndAssert(trace, workspaceName, apiKey);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -8787,7 +8787,7 @@ class DatasetsResourceTest {
             createAndAssert(traceA, workspaceName, apiKey);
             createAndAssert(traceB, workspaceName, apiKey);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
