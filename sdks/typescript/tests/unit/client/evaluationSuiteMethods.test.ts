@@ -32,13 +32,16 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", () => {
   return { LLMJudge: MockLLMJudge };
 });
 
-vi.mock("@/evaluation/suite_evaluators/validators", () => ({
-  validateEvaluators: vi.fn(),
-  validateExecutionPolicy: vi.fn(),
-}));
-
-import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
-import { validateEvaluators } from "@/evaluation/suite_evaluators/validators";
+vi.mock("@/evaluation/suite_evaluators/validators", async (importOriginal) => {
+  const original = await importOriginal<
+    typeof import("@/evaluation/suite_evaluators/validators")
+  >();
+  return {
+    ...original,
+    validateEvaluators: vi.fn(),
+    validateExecutionPolicy: vi.fn(),
+  };
+});
 
 describe("EvaluationSuite static methods", () => {
   let opikClient: OpikClient;
@@ -97,23 +100,14 @@ describe("EvaluationSuite static methods", () => {
       expect(applyChangesSpy).not.toHaveBeenCalled();
     });
 
-    it("should create initial version when evaluators are provided", async () => {
-      const mockEvaluator = new LLMJudge({
-        assertions: ["is accurate"],
-        name: "accuracy-judge",
-      });
-
+    it("should create initial version when assertions are provided", async () => {
       const suite = await EvaluationSuite.create(opikClient, {
         name: "my-suite",
-        evaluators: [mockEvaluator],
+        assertions: ["is accurate"],
         executionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });
 
       expect(suite).toBeInstanceOf(EvaluationSuite);
-      expect(validateEvaluators).toHaveBeenCalledWith(
-        [mockEvaluator],
-        "suite-level evaluators"
-      );
       expect(applyChangesSpy).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -121,7 +115,7 @@ describe("EvaluationSuite static methods", () => {
           body: expect.objectContaining({
             evaluators: [
               expect.objectContaining({
-                name: "accuracy-judge",
+                name: "llm_judge",
                 type: "llm_judge",
               }),
             ],
@@ -131,22 +125,45 @@ describe("EvaluationSuite static methods", () => {
       );
     });
 
-    it("should validate evaluators before creation", async () => {
-      const mockValidateEvaluators = vi.mocked(validateEvaluators);
-      mockValidateEvaluators.mockImplementation(() => {
-        throw new TypeError("Only LLMJudge evaluators are supported");
+    it("should create suite with assertions shorthand", async () => {
+      const suite = await EvaluationSuite.create(opikClient, {
+        name: "my-suite",
+        assertions: ["is accurate", "is concise"],
+        executionPolicy: { runsPerItem: 2, passThreshold: 1 },
       });
 
-      const invalidEvaluator = { name: "invalid" } as unknown as LLMJudge;
-
-      await expect(
-        EvaluationSuite.create(opikClient, {
-          name: "my-suite",
-          evaluators: [invalidEvaluator],
+      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(applyChangesSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          override: true,
+          body: expect.objectContaining({
+            evaluators: [
+              expect.objectContaining({
+                name: "llm_judge",
+                type: "llm_judge",
+              }),
+            ],
+            execution_policy: { runs_per_item: 2, pass_threshold: 1 },
+          }),
         })
-      ).rejects.toThrow(TypeError);
+      );
+    });
 
-      expect(createDatasetSpy).not.toHaveBeenCalled();
+    it("should pass tags to createDataset", async () => {
+      const suite = await EvaluationSuite.create(opikClient, {
+        name: "my-suite",
+        tags: ["prod", "v2"],
+      });
+
+      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(createDatasetSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "my-suite",
+          tags: ["prod", "v2"],
+          type: "evaluation_suite",
+        })
+      );
     });
   });
 
@@ -213,6 +230,28 @@ describe("EvaluationSuite static methods", () => {
       expect(suite.name).toBe("test-suite");
       // Should not have created a new dataset
       expect(createDatasetSpy).not.toHaveBeenCalled();
+    });
+
+    it("should call update() when existing suite found and options have assertions/tags/executionPolicy", async () => {
+      const updateSpy = vi
+        .spyOn(EvaluationSuite.prototype, "update")
+        .mockResolvedValue(undefined);
+
+      const suite = await EvaluationSuite.getOrCreate(opikClient, {
+        name: "test-suite",
+        assertions: ["is accurate"],
+        tags: ["prod"],
+        executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+      });
+
+      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite.name).toBe("test-suite");
+      expect(createDatasetSpy).not.toHaveBeenCalled();
+      expect(updateSpy).toHaveBeenCalledWith({
+        assertions: ["is accurate"],
+        tags: ["prod"],
+        executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+      });
     });
 
     it("should create new suite when not found (404)", async () => {

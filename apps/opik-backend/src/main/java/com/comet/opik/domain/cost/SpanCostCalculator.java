@@ -11,6 +11,9 @@ class SpanCostCalculator {
     private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
     private static final String ORIGINAL_INPUT_CHARACTERS_KEY = "original_usage.input_characters";
     private static final String INPUT_CHARACTERS_KEY = "input_characters";
+    // OTel GenAI semantic convention keys (bare, without original_usage. prefix)
+    private static final String CACHE_READ_INPUT_TOKENS_KEY = "cache_read_input_tokens";
+    private static final String CACHE_CREATION_INPUT_TOKENS_KEY = "cache_creation_input_tokens";
 
     public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
@@ -27,8 +30,9 @@ class SpanCostCalculator {
         // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens)
         int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", usage.getOrDefault("prompt_tokens", 0));
 
-        // Get the cached read input tokens
-        int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens", 0);
+        // Get the cached read input tokens; fall back to OTel bare key for LiteLLM/OTel spans
+        int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens",
+                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0));
 
         // If we got cached tokens, substract them from the input tokens count
         if (cachedReadInputTokens > 0) {
@@ -83,9 +87,11 @@ class SpanCostCalculator {
                         .multiply(BigDecimal.valueOf(
                                 usage.getOrDefault(outputTokensKey, usage.getOrDefault("completion_tokens", 0)))))
                 .add(modelPrice.cacheCreationInputTokenPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheCreationInputTokensKey, 0))))
+                        .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheCreationInputTokensKey,
+                                usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_KEY, 0)))))
                 .add(modelPrice.cacheReadInputTokenPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheReadInputTokensKey, 0))));
+                        .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheReadInputTokensKey,
+                                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0)))));
     }
 
     public static BigDecimal defaultCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {

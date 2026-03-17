@@ -5,7 +5,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { EvaluationSuite } from "@/evaluation/suite/EvaluationSuite";
-import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import { searchAndWaitForDone } from "@/utils/searchHelpers";
 import {
   shouldRunIntegrationTests,
@@ -15,15 +14,8 @@ import {
 const shouldRunApiTests = shouldRunIntegrationTests();
 const WAIT_OPTIONS = { timeout: 15000, interval: 1000 };
 
-function createTestEvaluator(name = "test-judge"): LLMJudge {
-  return new LLMJudge({
-    name,
-    assertions: ["Response is helpful"],
-    model: "gpt-5-nano",
-  });
-}
-
 const echoTask = async (item: Record<string, unknown>) => ({
+  input: item.input,
   output: `Echo: ${item.input}`,
 });
 
@@ -78,11 +70,9 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-crud-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const judge = createTestEvaluator();
-
         const suite = await EvaluationSuite.create(client, {
           name: suiteName,
-          evaluators: [judge],
+          assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
 
@@ -91,9 +81,9 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
 
         await waitForSuiteItems(suite, 2);
 
-        const evaluators = await suite.getEvaluators();
-        expect(evaluators).toHaveLength(1);
-        expect(evaluators[0].name).toBe("test-judge");
+        const assertions = await suite.getAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is helpful");
 
         const policy = await suite.getExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 2, passThreshold: 1 });
@@ -114,6 +104,62 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
     );
   });
 
+  describe("Assertions Shorthand", () => {
+    it(
+      "should create suite with assertions shorthand and run evaluation",
+      async () => {
+        const suiteName = `test-suite-assertions-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await EvaluationSuite.create(client, {
+          name: suiteName,
+          assertions: ["Response is helpful"],
+          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        const assertions = await suite.getAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is helpful");
+
+        await suite.addItem({ input: "Hello", expected: "Hi" });
+        await waitForSuiteItems(suite, 1);
+
+        const result = await suite.run(echoTask);
+
+        expect(result.experimentId).toBeDefined();
+        expect(result.itemsTotal).toBe(1);
+      },
+      60000
+    );
+
+    it(
+      "should add item with assertions shorthand",
+      async () => {
+        const suiteName = `test-suite-item-assertions-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await EvaluationSuite.create(client, {
+          name: suiteName,
+          assertions: ["Response is helpful"],
+          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.addItem(
+          { input: "Explain gravity", expected: "A force" },
+          { assertions: ["Response is concise"] }
+        );
+
+        await waitForSuiteItems(suite, 1);
+
+        const items = await suite.getItems();
+        expect(items).toHaveLength(1);
+        expect(items[0].assertions).toHaveLength(1);
+        expect(items[0].assertions[0]).toBe("Response is concise");
+      },
+      60000
+    );
+  });
+
   describe("Get and GetOrCreate", () => {
     it(
       "should get existing suite by name",
@@ -123,7 +169,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
 
         const created = await EvaluationSuite.create(client, {
           name: suiteName,
-          evaluators: [createTestEvaluator()],
+          assertions: ["Response is helpful"],
         });
 
         const fetched = await EvaluationSuite.get(client, suiteName);
@@ -142,7 +188,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
 
         const suite1 = await EvaluationSuite.getOrCreate(client, {
           name: suiteName,
-          evaluators: [createTestEvaluator()],
+          assertions: ["Response is helpful"],
         });
 
         expect(suite1.name).toBe(suiteName);
@@ -166,7 +212,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
 
         const suite = await EvaluationSuite.create(client, {
           name: suiteName,
-          evaluators: [createTestEvaluator()],
+          assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
@@ -213,7 +259,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
 
         const suite = await EvaluationSuite.create(client, {
           name: suiteName,
-          evaluators: [createTestEvaluator()],
+          assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
 
@@ -242,25 +288,18 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
 
         const suite = await EvaluationSuite.create(client, {
           name: suiteName,
-          evaluators: [createTestEvaluator("judge-a")],
+          assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        const evaluatorB = new LLMJudge({
-          name: "judge-b",
-          assertions: ["Response is concise"],
-          model: "gpt-5-nano",
-        });
-
         await suite.update({
-          evaluators: [evaluatorB],
+          assertions: ["Response is concise"],
           executionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });
 
-        const evaluators = await suite.getEvaluators();
-        expect(evaluators).toHaveLength(1);
-        expect(evaluators[0].name).toBe("judge-b");
-        expect(evaluators[0].assertions).toEqual(["Response is concise"]);
+        const assertions = await suite.getAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is concise");
 
         const policy = await suite.getExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 3, passThreshold: 2 });
@@ -276,27 +315,15 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-item-eval-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suiteJudge = new LLMJudge({
-          name: "suite-judge",
-          assertions: ["Response is helpful"],
-          model: "gpt-5-nano",
-        });
-
         const suite = await EvaluationSuite.create(client, {
           name: suiteName,
-          evaluators: [suiteJudge],
+          assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
-        });
-
-        const itemJudge = new LLMJudge({
-          name: "item-judge",
-          assertions: ["Response is concise"],
-          model: "gpt-5-nano",
         });
 
         await suite.addItem(
           { input: "Explain gravity", expected: "A force of attraction" },
-          { evaluators: [itemJudge] }
+          { assertions: ["Response is concise"] }
         );
 
         await waitForSuiteItems(suite, 1);
