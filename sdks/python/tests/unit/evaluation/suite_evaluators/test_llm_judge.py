@@ -164,14 +164,14 @@ class TestLLMJudgeSerializedFormat:
                     "role": "USER",
                     "content": (
                         "## Input\n"
-                        "All data that the agent received (user query, context, metadata, etc.):\n"
+                        "The INPUT section contains all data that the agent received. This may include the actual user query, conversation history, context, metadata, or other structured information. Identify the core user request within this data.\n"
                         "\n"
                         "---BEGIN INPUT---\n"
                         "{input}\n"
                         "---END INPUT---\n"
                         "\n"
                         "## Output\n"
-                        "All data produced by the agent (response text, tool calls, metadata, etc.):\n"
+                        "The OUTPUT section contains all data produced by the agent. This may include the agent's response text, tool calls, intermediate results, metadata, or other structured information. Focus on the substantive response when evaluating assertions.\n"
                         "\n"
                         "---BEGIN OUTPUT---\n"
                         "{output}\n"
