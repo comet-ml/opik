@@ -67,6 +67,11 @@ export enum DATASET_ITEM_DRAFT_STATUS {
   // deleted items are filtered out, not shown
 }
 
+export interface ExecutionPolicy {
+  runs_per_item?: number;
+  pass_threshold?: number;
+}
+
 export interface DatasetItem {
   id: string;
   data: object;
@@ -74,6 +79,7 @@ export interface DatasetItem {
   trace_id?: string;
   span_id?: string;
   tags?: string[];
+  execution_policy?: ExecutionPolicy;
   created_at: string;
   last_updated_at: string;
 }
@@ -105,6 +111,7 @@ export enum EXPERIMENT_TYPE {
   REGULAR = "regular",
   TRIAL = "trial",
   MINI_BATCH = "mini-batch",
+  MUTATION = "mutation",
 }
 
 export interface Experiment {
@@ -130,11 +137,29 @@ export interface Experiment {
   prompt_version?: ExperimentPromptVersion;
   prompt_versions?: ExperimentPromptVersion[];
   trace_count: number;
+  pass_rate?: number;
+  passed_count?: number;
+  total_count?: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
+  evaluation_method?: string;
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
+}
+
+export interface AssertionResult {
+  value: string;
+  passed: boolean;
+  reason?: string;
+}
+
+export type RunStatus = "passed" | "failed";
+
+export interface ExperimentRunSummary {
+  passed_runs: number;
+  total_runs: number;
+  status: RunStatus;
 }
 
 export interface ExperimentItem {
@@ -146,6 +171,8 @@ export interface ExperimentItem {
   input: object;
   output: object;
   feedback_scores?: TraceFeedbackScore[];
+  assertion_results?: AssertionResult[];
+  status?: RunStatus;
   duration?: number;
   usage?: UsageData;
   total_estimated_cost?: number;
@@ -156,6 +183,7 @@ export interface ExperimentItem {
 
 export interface ExperimentsCompare extends DatasetItem {
   experiment_items: ExperimentItem[];
+  run_summaries_by_experiment?: Record<string, ExperimentRunSummary>;
 }
 
 export interface ExperimentsAggregations {

@@ -148,6 +148,100 @@ def test_experiment_item_message__project_name_optional():
     assert msg.project_name is None
 
 
+def test_evaluate_llm_task_context__experiment_item_includes_execution_policy():
+    """
+    Verify that when execution_policy is provided, it is included
+    in the ExperimentItemReferences passed to experiment.insert().
+    """
+    dataset_item_id = "dataset-item-ep-1"
+    execution_policy = {"runs_per_item": 3, "pass_threshold": 2}
+
+    trace = trace_data.TraceData(
+        name="test-trace",
+        project_name="test-project",
+    )
+
+    mock_experiment = mock.Mock()
+    mock_experiment.insert = mock.Mock()
+    mock_client = mock.Mock(spec=opik.Opik)
+
+    with helpers.evaluate_llm_task_context(
+        experiment=mock_experiment,
+        dataset_item_id=dataset_item_id,
+        trace_data=trace,
+        client=mock_client,
+        execution_policy=execution_policy,
+    ):
+        pass
+
+    mock_experiment.insert.assert_called_once()
+    call_args = mock_experiment.insert.call_args
+    experiment_items = call_args.kwargs["experiment_items_references"]
+
+    assert len(experiment_items) == 1
+    exp_item = experiment_items[0]
+    assert exp_item.execution_policy == execution_policy
+
+
+def test_evaluate_llm_task_context__experiment_item_execution_policy_none_by_default():
+    """
+    Verify that execution_policy defaults to None when not provided.
+    """
+    dataset_item_id = "dataset-item-ep-2"
+
+    trace = trace_data.TraceData(
+        name="test-trace",
+        project_name="test-project",
+    )
+
+    mock_experiment = mock.Mock()
+    mock_experiment.insert = mock.Mock()
+    mock_client = mock.Mock(spec=opik.Opik)
+
+    with helpers.evaluate_llm_task_context(
+        experiment=mock_experiment,
+        dataset_item_id=dataset_item_id,
+        trace_data=trace,
+        client=mock_client,
+    ):
+        pass
+
+    call_args = mock_experiment.insert.call_args
+    experiment_items = call_args.kwargs["experiment_items_references"]
+    assert experiment_items[0].execution_policy is None
+
+
+def test_experiment_item_message__includes_execution_policy():
+    """
+    Verify that ExperimentItemMessage correctly stores execution_policy.
+    """
+    policy = {"runs_per_item": 3, "pass_threshold": 2}
+
+    msg = messages.ExperimentItemMessage(
+        id="exp-item-ep-1",
+        experiment_id="exp-ep-1",
+        dataset_item_id="dataset-ep-1",
+        trace_id="trace-ep-1",
+        execution_policy=policy,
+    )
+
+    assert msg.execution_policy == policy
+
+
+def test_experiment_item_message__execution_policy_optional():
+    """
+    Verify that ExperimentItemMessage works without execution_policy.
+    """
+    msg = messages.ExperimentItemMessage(
+        id="exp-item-ep-2",
+        experiment_id="exp-ep-2",
+        dataset_item_id="dataset-ep-2",
+        trace_id="trace-ep-2",
+    )
+
+    assert msg.execution_policy is None
+
+
 def test_trace_data__has_project_name_field():
     """
     Verify that TraceData has project_name field (inherited from ObservationData).

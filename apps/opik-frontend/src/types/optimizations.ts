@@ -142,6 +142,7 @@ export interface Optimization {
   metadata?: object;
   studio_config?: OptimizationStudioConfig;
   feedback_scores?: AggregatedFeedbackScore[];
+  experiment_scores?: AggregatedFeedbackScore[];
   num_trials: number;
   objective_name: string;
   status: OPTIMIZATION_STATUS;
@@ -149,9 +150,40 @@ export interface Optimization {
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
+  baseline_objective_score?: number;
+  best_objective_score?: number;
+  baseline_duration?: number;
+  best_duration?: number;
+  baseline_cost?: number;
+  best_cost?: number;
+  total_optimization_cost?: number;
 }
 
-export interface OptimizationUpdate {
-  name?: string;
-  status?: OPTIMIZATION_STATUS;
-}
+export type ExperimentOptimizationMetadata = {
+  step_index: number;
+  candidate_id: string;
+  parent_candidate_ids: string[];
+  configuration?: {
+    prompt_messages?: unknown;
+    model?: string;
+    model_parameters?: Record<string, unknown>;
+  };
+};
+
+export type AggregatedCandidate = {
+  id: string;
+  candidateId: string;
+  stepIndex: number;
+  parentCandidateIds: string[];
+  trialNumber: number;
+  score: number | undefined;
+  runtimeCost: number | undefined;
+  latencyP50: number | undefined;
+  totalTraceCount: number;
+  totalDatasetItemCount: number;
+  passedCount: number;
+  totalCount: number;
+  experimentIds: string[];
+  name: string;
+  created_at: string;
+};

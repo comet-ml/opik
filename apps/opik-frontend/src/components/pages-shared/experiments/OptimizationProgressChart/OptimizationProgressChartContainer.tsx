@@ -1,101 +1,79 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 import isNull from "lodash/isNull";
-import isUndefined from "lodash/isUndefined";
 
-import { formatDate } from "@/lib/date";
-import { Experiment } from "@/types/datasets";
+import { AggregatedCandidate } from "@/types/optimizations";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
-import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import NoData from "@/components/shared/NoData/NoData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import useProgressSimulation from "@/hooks/useProgressSimulation";
-import OptimizationProgressChartContent, {
-  ChartData,
-} from "./OptimizationProgressChartContent";
+import OptimizationProgressChartContent from "./OptimizationProgressChartContent";
+import {
+  buildCandidateChartData,
+  type InProgressInfo,
+} from "./optimizationChartUtils";
 
-const OPTIMIZATION_TIPS = [
-  "Running optimization trials...",
-  "Evaluating prompt variations...",
-  "Searching for better prompts...",
-  "Analyzing trial results...",
-  "Testing new configurations...",
-  "Exploring the prompt space...",
-];
+const INITIALIZING_MESSAGE = "Optimization process is initialized...";
+const CALCULATING_BASELINE_MESSAGE = "Calculating baseline...";
 
 type OptimizationProgressChartContainerProps = {
-  experiments: Experiment[];
-  bestEntityId?: string;
+  candidates: AggregatedCandidate[];
+  bestCandidateId?: string;
   objectiveName?: string;
   status?: OPTIMIZATION_STATUS;
+  selectedTrialId?: string;
+  onTrialSelect?: (trialId: string) => void;
+  onTrialClick?: (candidateId: string) => void;
+  isEvaluationSuite?: boolean;
+  inProgressInfo?: InProgressInfo;
+  isRunningMiniBatches?: boolean;
 };
 
 const OptimizationProgressChartContainer: React.FC<
   OptimizationProgressChartContainerProps
-> = ({ experiments, bestEntityId, status, objectiveName = "" }) => {
+> = ({
+  candidates,
+  bestCandidateId,
+  status,
+  objectiveName = "",
+  selectedTrialId,
+  onTrialSelect,
+  onTrialClick,
+  isEvaluationSuite,
+  inProgressInfo,
+  isRunningMiniBatches,
+}) => {
   const isInProgress =
     !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
-  const { message: currentTip } = useProgressSimulation({
-    messages: OPTIMIZATION_TIPS,
-    isPending: isInProgress,
-    loop: true,
-  });
+  const baselineMessage = candidates.some((c) => c.stepIndex === 0)
+    ? CALCULATING_BASELINE_MESSAGE
+    : INITIALIZING_MESSAGE;
 
-  const chartData = useMemo(() => {
-    const retVal: ChartData = {
-      data: [],
-      objectiveName,
-    };
+  const chartData = useMemo(
+    () =>
+      buildCandidateChartData(
+        candidates,
+        isEvaluationSuite,
+        isInProgress,
+        inProgressInfo,
+      ),
+    [candidates, isEvaluationSuite, isInProgress, inProgressInfo],
+  );
 
-    experiments
-      .slice()
-      .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at))
-      .forEach((experiment) => {
-        const value = getFeedbackScoreValue(
-          experiment.feedback_scores ?? [],
-          objectiveName,
-        );
+  const noData = useMemo(
+    () => chartData.every((d) => isNull(d.value)),
+    [chartData],
+  );
 
-        retVal.data.push({
-          entityId: experiment.id,
-          entityName: experiment.name,
-          createdDate: formatDate(experiment.created_at),
-          value: isUndefined(value) ? null : value,
-          allFeedbackScores:
-            experiment.feedback_scores
-              ?.map((score) => ({ name: score.name, value: score.value }))
-              ?.filter((score) => score.name !== objectiveName) || [],
-        });
-      });
-
-    return retVal;
-  }, [experiments, objectiveName]);
-
-  const isPending = !chartData;
-  const noData = useMemo(() => {
-    if (isPending) return false;
-
-    return chartData.data.every((record) => isNull(record.value));
-  }, [chartData?.data, isPending]);
-
-  const renderContent = useCallback(() => {
-    if (isPending) {
-      return (
-        <div className="flex size-full min-h-32 items-center justify-center">
-          <Spinner />
-        </div>
-      );
-    }
-
-    if (noData) {
+  const renderContent = () => {
+    if (!chartData.length || noData) {
       if (isInProgress) {
         return (
           <div className="flex min-h-32 flex-col items-center justify-center gap-2">
             <Spinner size="small" />
             <div className="comet-body-s text-muted-slate transition-opacity duration-300">
-              {currentTip}
+              {baselineMessage}
             </div>
           </div>
         );
@@ -112,17 +90,36 @@ const OptimizationProgressChartContainer: React.FC<
     return (
       <OptimizationProgressChartContent
         chartData={chartData}
-        bestEntityId={bestEntityId}
+        candidates={candidates}
+        bestCandidateId={bestCandidateId}
+        objectiveName={objectiveName}
+        selectedTrialId={selectedTrialId}
+        onTrialSelect={onTrialSelect}
+        onTrialClick={onTrialClick}
+        isEvaluationSuite={isEvaluationSuite}
+        isInProgress={isInProgress}
+        inProgressInfo={inProgressInfo}
       />
     );
-  }, [isPending, noData, chartData, bestEntityId, isInProgress, currentTip]);
+  };
 
   return (
-    <Card className="h-[224px] min-w-[400px] flex-auto">
+    <Card className="h-[280px] min-w-[400px] flex-auto">
       <CardHeader className="space-y-0.5 px-4 pt-3">
         <CardTitle className="comet-body-s-accented flex items-center gap-2">
           Optimization progress
-          {isInProgress && !noData && <Spinner size="xs" />}
+          {isInProgress && !noData && (
+            <>
+              <Spinner size="xs" />
+              <span className="comet-body-xs font-normal text-muted-slate">
+                {inProgressInfo
+                  ? "Evaluating new candidate..."
+                  : isRunningMiniBatches
+                    ? "Looking for failing examples to reflect on..."
+                    : "Generating new candidate..."}
+              </span>
+            </>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-3">{renderContent()}</CardContent>

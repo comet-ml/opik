@@ -185,7 +185,7 @@ public class ExperimentItemService {
 
     private Mono<Map<UUID, Map<UUID, ExecutionPolicy>>> fetchItemPolicies(
             Set<UUID> datasetItemIds, Set<UUID> datasetVersionIds) {
-        if (!featureFlags.isDatasetVersioningEnabled() || datasetVersionIds.isEmpty()) {
+        if (datasetVersionIds.isEmpty()) {
             return Mono.just(Map.of());
         }
         return datasetItemVersionDAO

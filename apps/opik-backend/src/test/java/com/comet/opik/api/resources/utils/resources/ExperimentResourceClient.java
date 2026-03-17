@@ -84,7 +84,8 @@ public class ExperimentResourceClient {
                 .datasetVersionSummary(null)
                 .passRate(null)
                 .passedCount(null)
-                .totalCount(null);
+                .totalCount(null)
+                .datasetItemCount(null);
     }
 
     public List<Experiment> generateExperimentList() {

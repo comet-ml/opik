@@ -94,6 +94,7 @@ class Experiment:
                 dataset_item_id=item.dataset_item_id,
                 trace_id=item.trace_id,
                 project_name=item.project_name,
+                execution_policy=item.execution_policy,
             )
             for item in experiment_items_references
         ]

@@ -41,8 +41,8 @@ import AnnotationQueuePage from "@/components/pages/AnnotationQueuePage/Annotati
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/components/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
-import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
-import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import OptimizationCompareRedirect from "@/components/pages/OptimizationPage/OptimizationCompareRedirect";
+import TrialPage from "@/components/pages/TrialPage/TrialPage";
 import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
 import AlertEditPageGuard from "@/components/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
@@ -267,18 +267,14 @@ const optimizationsNewRoute = createRoute({
   },
 });
 
-const compareOptimizationsRoute = createRoute({
+const optimizationCompareRedirectRoute = createRoute({
   path: "/$datasetId/compare",
   getParentRoute: () => optimizationsRoute,
-  component: CompareOptimizationsPage,
-  staticData: {
-    param: "optimizationsCompare",
-    paramValue: "optimizationsCompare",
-  },
+  component: OptimizationCompareRedirect,
 });
 
 const optimizationBaseRoute = createRoute({
-  path: "/$datasetId/$optimizationId",
+  path: "/$optimizationId",
   getParentRoute: () => optimizationsRoute,
   staticData: {
     param: "optimizationId",
@@ -291,13 +287,13 @@ const optimizationRoute = createRoute({
   component: OptimizationPage,
 });
 
-const compareTrialsRoute = createRoute({
-  path: "/compare",
+const trialRoute = createRoute({
+  path: "/trials",
   getParentRoute: () => optimizationBaseRoute,
-  component: CompareTrialsPage,
+  component: TrialPage,
   staticData: {
-    param: "trialsCompare",
-    paramValue: "trialsCompare",
+    param: "trial",
+    paramValue: "trials",
   },
 });
 
@@ -505,11 +501,8 @@ const routeTree = rootRoute.addChildren([
       optimizationsRoute.addChildren([
         optimizationsListRoute,
         optimizationsNewRoute,
-        compareOptimizationsRoute,
-        optimizationBaseRoute.addChildren([
-          optimizationRoute,
-          compareTrialsRoute,
-        ]),
+        optimizationCompareRedirectRoute,
+        optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,

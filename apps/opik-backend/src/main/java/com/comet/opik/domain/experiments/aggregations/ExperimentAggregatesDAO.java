@@ -2195,6 +2195,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 feedbackScores,
                 CommentResultMapper.parseCommentsFromJson(row.get("comments_array_agg", String.class)),
                 traceCount,
+                null, // datasetItemCount - not in aggregates table
                 createdAt,
                 duration,
                 totalEstimatedCost, // total_estimated_cost_sum

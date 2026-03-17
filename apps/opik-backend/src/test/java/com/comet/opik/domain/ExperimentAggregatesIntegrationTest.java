@@ -86,10 +86,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class ExperimentAggregatesIntegrationTest {
 
-    // Fields to ignore when comparing Experiment objects - we only care about aggregated fields
+    // Fields to ignore in recursive comparison: id is a lookup key,
+    // timestamps differ due to timing, and the remaining fields are not stored
+    // in experiment_aggregates (they are computed/joined in the raw FIND path).
+    // The not-stored fields are explicitly asserted as null below.
     private static final String[] EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE = new String[]{
-            "id", "datasetName", "projectName", "createdAt", "lastUpdatedAt",
-            "promptVersion", "datasetVersionSummary",
+            "id", "createdAt", "lastUpdatedAt",
+            "datasetName", "projectName", "promptVersion",
+            "datasetVersionSummary", "datasetItemCount",
     };
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -476,6 +480,23 @@ class ExperimentAggregatesIntegrationTest {
                 .ignoringFields(EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE)
                 .ignoringCollectionOrderInFields("experimentScores", "feedbackScores")
                 .isEqualTo(rawExperiment);
+
+        // Fields not stored in experiment_aggregates table are expected to be null
+        assertThat(experimentFromAggregates.datasetName())
+                .as("datasetName is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.projectName())
+                .as("projectName is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.promptVersion())
+                .as("promptVersion is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.datasetVersionSummary())
+                .as("datasetVersionSummary is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.datasetItemCount())
+                .as("datasetItemCount is not stored in aggregates")
+                .isNull();
     }
 
     @ParameterizedTest(name = "Group by {0}")

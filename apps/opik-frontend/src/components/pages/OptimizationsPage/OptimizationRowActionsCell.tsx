@@ -10,11 +10,11 @@ import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useOptimizationBatchDeleteMutation from "@/api/optimizations/useOptimizationBatchDeleteMutation";
-import { GroupedOptimization } from "@/hooks/useGroupedOptimizationsList";
+import { Optimization } from "@/types/optimizations";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 const OptimizationRowActionsCell: React.FunctionComponent<
-  CellContext<GroupedOptimization, unknown>
+  CellContext<Optimization, unknown>
 > = (context) => {
   const resetKeyRef = useRef(0);
   const organisation = context.row.original;

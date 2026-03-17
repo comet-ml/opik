@@ -410,6 +410,16 @@ export const getFeedbackScoreValue = (
   scoreName: string,
 ) => getFeedbackScore(scores, scoreName)?.value;
 
+export const getObjectiveScoreValue = (
+  experiment: {
+    feedback_scores?: Array<TraceFeedbackScore | AggregatedFeedbackScore>;
+    experiment_scores?: Array<TraceFeedbackScore | AggregatedFeedbackScore>;
+  },
+  objectiveName: string,
+): number | undefined =>
+  getFeedbackScoreValue(experiment.feedback_scores ?? [], objectiveName) ??
+  getFeedbackScoreValue(experiment.experiment_scores ?? [], objectiveName);
+
 /**
  * Checks if a reason string is valid (not empty and not a placeholder).
  * This is used consistently across the codebase to filter out invalid reasons.

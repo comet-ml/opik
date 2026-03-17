@@ -224,12 +224,11 @@ export const useOptimizationsNewFormHandlers = () => {
       if (result?.id) {
         setLastSessionRunId(result.id);
         navigate({
-          to: "/$workspaceName/optimizations/$datasetId/compare",
+          to: "/$workspaceName/optimizations/$optimizationId",
           params: {
             workspaceName,
-            datasetId: formData.datasetId,
+            optimizationId: result.id,
           },
-          search: { optimizations: [result.id] },
         });
       }
     } finally {

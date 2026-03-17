@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -35,12 +36,28 @@ public record Optimization(
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long numTrials,
         @JsonView({
                 Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> experimentScores,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Optimization.View.Public.class,
                 Optimization.View.Write.class}) @InRange(before = InRangeValidator.MAX_ANALYTICS_DB) Instant lastUpdatedAt,
         @JsonView({
-                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal baselineObjectiveScore,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal bestObjectiveScore,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal baselineDuration,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal bestDuration,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal baselineCost,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal bestCost,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalOptimizationCost){
 
     @Builder(toBuilder = true)
     public record OptimizationPage(

@@ -197,6 +197,15 @@ public interface DatasetDAO {
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
             @Define("project_id") @Bind("project_id") UUID projectId);
 
+    @SqlQuery("SELECT id FROM datasets WHERE workspace_id = :workspace_id AND name LIKE CONCAT('%', :name, '%') ESCAPE '\\\\'")
+    List<UUID> findIdsByPartialName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
+
+    static String escapeLikeMetacharacters(String input) {
+        return input.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+    }
+
     @SqlBatch("UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);

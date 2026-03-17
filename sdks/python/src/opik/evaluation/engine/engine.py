@@ -174,11 +174,16 @@ class EvaluationEngine:
             project_name=self._project_name,
         )
 
+        execution_policy_dict = None
+        if item.execution_policy is not None:
+            execution_policy_dict = item.execution_policy.model_dump(exclude_none=True)
+
         with helpers.evaluate_llm_task_context(
             experiment=experiment_,
             dataset_item_id=item.id,
             trace_data=trace_data,
             client=self._client,
+            execution_policy=execution_policy_dict or None,
         ):
             LOGGER.debug("Task started, input: %s", item_content)
             task_start = time.perf_counter()
