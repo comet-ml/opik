@@ -256,15 +256,17 @@ class TestResponseSchema:
             "$defs": {
                 "AssertionResultItem": {
                     "properties": {
-                        "score": {"type": "boolean"},
-                        "reason": {"type": "string"},
+                        "score": {"title": "Score", "type": "boolean"},
+                        "reason": {"title": "Reason", "type": "string"},
                         "confidence": {
                             "maximum": 1.0,
                             "minimum": 0.0,
+                            "title": "Confidence",
                             "type": "number",
                         },
                     },
                     "required": ["score", "reason", "confidence"],
+                    "title": "AssertionResultItem",
                     "type": "object",
                 }
             },
@@ -275,6 +277,7 @@ class TestResponseSchema:
                 }
             },
             "required": ["assertion_1"],
+            "title": "LLMJudgeResponse",
             "type": "object",
         }
 
@@ -289,7 +292,7 @@ class TestResponseSchema:
 
         json_schema = schema.response_format.model_json_schema()
 
-        assert "title" not in json_schema
+        assert json_schema["title"] == "LLMJudgeResponse"
         assert json_schema["type"] == "object"
         assert json_schema["required"] == [
             "assertion_1",
