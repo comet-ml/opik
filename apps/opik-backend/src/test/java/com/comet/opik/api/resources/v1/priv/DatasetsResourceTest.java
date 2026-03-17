@@ -365,7 +365,7 @@ class DatasetsResourceTest {
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             wireMock.server().resetRequests();
@@ -385,7 +385,7 @@ class DatasetsResourceTest {
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             wireMock.server().resetRequests();
@@ -405,7 +405,7 @@ class DatasetsResourceTest {
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             wireMock.server().resetRequests();

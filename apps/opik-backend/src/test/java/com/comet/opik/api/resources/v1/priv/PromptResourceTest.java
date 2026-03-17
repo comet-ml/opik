@@ -206,7 +206,7 @@ class PromptResourceTest {
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var prompt = factory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt().build();
             var id = createPrompt(prompt, apiKey, workspaceName);
 
             wireMock.server().resetRequests();
@@ -226,7 +226,7 @@ class PromptResourceTest {
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var prompt = factory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt().build();
             var id = createPrompt(prompt, apiKey, workspaceName);
 
             wireMock.server().resetRequests();
