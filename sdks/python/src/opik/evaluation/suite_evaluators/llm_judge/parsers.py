@@ -19,6 +19,9 @@ from opik.evaluation.metrics import score_result
 LOGGER = logging.getLogger(__name__)
 
 
+# Result for a single assertion evaluation.
+# Uses a comment instead of a docstring to avoid leaking into the JSON schema
+# sent to providers.
 class AssertionResultItem(pydantic.BaseModel):
     score: bool
     reason: str
