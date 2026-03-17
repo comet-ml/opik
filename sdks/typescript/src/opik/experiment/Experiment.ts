@@ -16,7 +16,7 @@ import type { Prompt } from "@/prompt/Prompt";
 export interface ExperimentData {
   id?: string;
   name?: string;
-  datasetName: string;
+  datasetName?: string;
   prompts?: Prompt[];
   tags?: string[];
 }
