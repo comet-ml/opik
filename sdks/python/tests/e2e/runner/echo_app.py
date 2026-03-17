@@ -4,11 +4,11 @@ When executed by the runner, it reads inputs from stdin, echoes the message,
 and writes the result to the OPIK_RESULT_FILE.
 """
 
-from opik import track
+import opik
 from opik.runner.activate import activate_runner
 
 
-@track(entrypoint=True)
+@opik.track(entrypoint=True)
 def echo(message: str) -> str:
     """Echo the input message back."""
     return f"echo: {message}"

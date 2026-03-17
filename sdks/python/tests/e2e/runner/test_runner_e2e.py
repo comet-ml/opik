@@ -13,7 +13,7 @@ from typing import Optional
 
 import pytest
 
-from opik import synchronization
+import opik
 import opik.rest_api.client as rest_api_client
 from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 from .conftest import RunnerInfo
@@ -77,7 +77,7 @@ def wait_for_completed_job(
                     return True
         return False
 
-    assert synchronization.until(
+    assert opik.synchronization.until(
         _find,
         max_try_seconds=JOB_COMPLETION_TIMEOUT,
         allow_errors=True,
@@ -105,7 +105,7 @@ def find_trace_by_input(
                     return True
         return False
 
-    assert synchronization.until(
+    assert opik.synchronization.until(
         _find,
         max_try_seconds=TRACE_PROPAGATION_TIMEOUT,
         allow_errors=True,
@@ -129,7 +129,7 @@ def wait_for_agent_registration(
                             return True
         return False
 
-    if not synchronization.until(
+    if not opik.synchronization.until(
         _is_agent_registered,
         max_try_seconds=AGENT_REGISTRATION_TIMEOUT,
         allow_errors=True,

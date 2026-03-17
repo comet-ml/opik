@@ -4,16 +4,16 @@ The greeting defaults to "default-greeting" but can be overridden via
 a mask passed through OPIK_MASK_ID at job creation time.
 """
 
-from opik import track, agent_config
+import opik
 from opik.runner.activate import activate_runner
 
 
-@agent_config()
+@opik.agent_config()
 class EchoConfig:
     greeting: str = "default-greeting"
 
 
-@track(entrypoint=True)
+@opik.track(entrypoint=True)
 def echo_config(message: str) -> str:
     """Echo with a configurable greeting."""
     cfg = EchoConfig()
