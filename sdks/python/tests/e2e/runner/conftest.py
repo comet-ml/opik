@@ -90,38 +90,37 @@ def runner_process(api_client, subprocess_env, project_id, request):
         env=subprocess_env,
     )
 
+    output_lines = []
+    drain_thread = threading.Thread(
+        target=_drain_stdout, args=(proc, output_lines), daemon=True
+    )
+    drain_thread.start()
+
     runner_id = None
     deadline = time.monotonic() + RUNNER_STARTUP_TIMEOUT
-    output_lines = []
 
     while time.monotonic() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
+        for line in list(output_lines):
+            match = re.search(r"Runner connected \(ID: ([^)]+)\)", line)
+            if match:
+                runner_id = match.group(1)
                 break
-            time.sleep(0.1)
-            continue
-
-        output_lines.append(line.rstrip())
-        match = re.search(r"Runner connected \(ID: ([^)]+)\)", line)
-        if match:
-            runner_id = match.group(1)
+        if runner_id is not None:
             break
+        if proc.poll() is not None:
+            break
+        time.sleep(0.05)
 
     if runner_id is None:
         proc.terminate()
         proc.wait(timeout=5)
+        drain_thread.join(timeout=5)
         pytest.fail(
             f"Runner did not start within {RUNNER_STARTUP_TIMEOUT}s.\n"
             f"Output:\n" + "\n".join(output_lines)
         )
 
     info = RunnerInfo(runner_id=runner_id, process=proc, output_lines=output_lines)
-
-    drain_thread = threading.Thread(
-        target=_drain_stdout, args=(proc, output_lines), daemon=True
-    )
-    drain_thread.start()
 
     yield info
 
