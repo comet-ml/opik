@@ -178,6 +178,15 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             LOGGER.debug(
                 "This model does not support the response_format parameter and it will be ignored."
             )
+        if (
+            "reasoning_effort" in params
+            and "reasoning_effort" not in self.supported_params
+        ):
+            filtered_params.pop("reasoning_effort")
+            LOGGER.debug(
+                "Model %s does not support reasoning_effort, dropping.",
+                self.model_name,
+            )
         # NOTE: Filtering based on `supported_params` has been disabled temporarily
         # because LiteLLM does not surface provider-specific connection fields via
         # `get_supported_openai_params`. Dropping those kwargs breaks Azure/Groq

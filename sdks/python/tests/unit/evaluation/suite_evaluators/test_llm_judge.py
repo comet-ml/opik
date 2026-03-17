@@ -76,6 +76,7 @@ class TestLLMJudgeToConfig:
         assert config_dict["model"] == {
             "temperature": 0.0,
             "seed": 123,
+            "customParameters": {"reasoning_effort": "low"},
         }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
         # Schema items: name, type, description (matching backend's LlmAsJudgeOutputSchema)
@@ -145,6 +146,7 @@ class TestLLMJudgeSerializedFormat:
             "model": {
                 "temperature": 0.0,
                 "seed": 42,
+                "customParameters": {"reasoning_effort": "low"},
             },
             "messages": [
                 {
@@ -162,18 +164,18 @@ class TestLLMJudgeSerializedFormat:
                     "role": "USER",
                     "content": (
                         "## Input\n"
-                        "The INPUT section contains all data that the agent received. "
-                        "This may include the actual user query, conversation history, context, metadata, "
-                        "or other structured information. Identify the core user request within this data.\n"
+                        "The INPUT section contains all data that the agent received. This may include the actual user query, conversation history, context, metadata, or other structured information. Identify the core user request within this data.\n"
                         "\n"
+                        "---BEGIN INPUT---\n"
                         "{input}\n"
+                        "---END INPUT---\n"
                         "\n"
                         "## Output\n"
-                        "The OUTPUT section contains all data produced by the agent. "
-                        "This may include the agent's response text, tool calls, intermediate results, metadata, "
-                        "or other structured information. Focus on the substantive response when evaluating assertions.\n"
+                        "The OUTPUT section contains all data produced by the agent. This may include the agent's response text, tool calls, intermediate results, metadata, or other structured information. Focus on the substantive response when evaluating assertions.\n"
                         "\n"
+                        "---BEGIN OUTPUT---\n"
                         "{output}\n"
+                        "---END OUTPUT---\n"
                         "\n"
                         "## Assertions\n"
                         "Evaluate each of the following assertions against the agent's output:\n"
@@ -283,4 +285,5 @@ class TestLLMJudgeFromConfig:
         assert new_config_dict["model"] == {
             "temperature": 0.7,
             "seed": 123,
+            "customParameters": {"reasoning_effort": "low"},
         }

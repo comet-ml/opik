@@ -19,6 +19,7 @@ import pydantic
 
 
 DEFAULT_MODEL_NAME = "gpt-5-nano"
+DEFAULT_REASONING_EFFORT = "low"
 
 
 class LLMJudgeModelConfig(pydantic.BaseModel):
