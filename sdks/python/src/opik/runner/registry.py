@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List
 
 _lock = threading.Lock()
 REGISTRY: Dict[str, Dict[str, Any]] = {}
+_listeners: List[Callable[[str], None]] = []
 
 
 @dataclasses.dataclass
@@ -30,6 +31,15 @@ def register(
             "params": params,
             "docstring": docstring,
         }
+        listeners = list(_listeners)
+
+    for listener in listeners:
+        listener(name)
+
+
+def on_register(listener: Callable[[str], None]) -> None:
+    with _lock:
+        _listeners.append(listener)
 
 
 def get_all() -> Dict[str, Dict[str, Any]]:
