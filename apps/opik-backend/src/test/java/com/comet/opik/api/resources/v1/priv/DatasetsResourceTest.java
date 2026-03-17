@@ -354,6 +354,88 @@ class DatasetsResourceTest {
     }
 
     @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Delete dataset by id passes required permissions to auth endpoint")
+        void deleteDatasetByIdPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callDeleteDataset(id, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Delete dataset by name passes required permissions to auth endpoint")
+        void deleteDatasetByNamePassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.deleteDatasetByName(dataset.name(), apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Delete datasets batch passes required permissions to auth endpoint")
+        void deleteDatasetsBatchPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.deleteDatasetsBatch(Set.of(id), apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Delete dataset items passes required permissions to auth endpoint")
+        void deleteDatasetItemsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callDeleteDatasetItems(List.of(), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_DELETE.getValue()))));
+        }
+    }
+
+    @Nested
     @DisplayName("Api Key Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ApiKey {

@@ -220,6 +220,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDataset", summary = "Delete dataset by id", description = "Delete dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDataset(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -234,6 +235,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetByName", summary = "Delete dataset by name", description = "Delete dataset by name", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDatasetByName(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
@@ -251,6 +253,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetsBatch", summary = "Delete datasets", description = "Delete datasets batch", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDatasetsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batchDelete) {
 
@@ -623,6 +626,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "400", description = "Bad request - invalid parameters or conflicting fields"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
 

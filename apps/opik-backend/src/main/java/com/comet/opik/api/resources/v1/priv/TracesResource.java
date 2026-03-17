@@ -43,6 +43,8 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -273,6 +275,7 @@ public class TracesResource {
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     @UsageLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Trace.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid Trace trace,
             @Context UriInfo uriInfo) {
@@ -300,6 +303,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     @UsageLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -317,6 +321,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response batchUpdate(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatchUpdate.class))) @Valid @NotNull TraceBatchUpdate batchUpdate) {
 
@@ -339,6 +344,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceUpdate.class))) @Valid @NonNull TraceUpdate trace) {
 
@@ -359,6 +365,7 @@ public class TracesResource {
     @Path("{id}")
     @Operation(operationId = "deleteTraceById", summary = "Delete trace by id", description = "Delete trace by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_DELETE)
     public Response deleteById(@PathParam("id") UUID id) {
 
         log.info("Deleting trace with id '{}'", id);
@@ -376,6 +383,7 @@ public class TracesResource {
     @Path("/delete")
     @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_DELETE)
     public Response deleteTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDeleteByProject request) {
         log.info("Deleting traces, project id '{}' and count '{}'", request.projectId(), request.ids().size());
@@ -762,6 +770,7 @@ public class TracesResource {
     @Path("/threads/open")
     @Operation(operationId = "openTraceThread", summary = "Open trace thread", description = "Open trace thread", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response openTraceThread(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
 
@@ -790,6 +799,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response closeTraceThread(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadBatchIdentifier.class))) @NotNull @Valid TraceThreadBatchIdentifier identifier) {
 
@@ -823,6 +833,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response batchUpdateThreads(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadBatchUpdate.class))) @Valid @NotNull TraceThreadBatchUpdate batchUpdate) {
 
@@ -844,6 +855,7 @@ public class TracesResource {
     @Operation(operationId = "updateThread", summary = "Update thread", description = "Update thread", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response updateThread(@PathParam("threadModelId") UUID threadModelId,
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadUpdate.class))) @NotNull @Valid TraceThreadUpdate threadUpdate) {
 

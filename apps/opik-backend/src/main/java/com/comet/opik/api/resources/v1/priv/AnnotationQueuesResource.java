@@ -204,6 +204,7 @@ public class AnnotationQueuesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_DELETE)
     public Response deleteAnnotationQueueBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batch) {
 
@@ -254,6 +255,7 @@ public class AnnotationQueuesResource {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_DELETE)
     public Response removeItemsFromAnnotationQueue(
             @PathParam("id") UUID queueId,
             @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueItemIds.class))) @Valid AnnotationQueueItemIds request) {

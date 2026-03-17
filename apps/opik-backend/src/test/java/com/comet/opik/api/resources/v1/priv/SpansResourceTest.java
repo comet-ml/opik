@@ -12,6 +12,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
@@ -44,6 +45,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentPayloadUtilsTest;
@@ -143,6 +145,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -292,6 +295,107 @@ class SpansResourceTest {
 
         SpanAssertions.assertPage(actualPage, page, expectedSpans.size(), expectedTotal);
         SpanAssertions.assertSpan(actualPage.content(), expectedSpans, unexpectedSpans, USER);
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Create span passes required permissions to auth endpoint")
+        void createSpanPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var span = podamFactory.manufacturePojo(Span.class);
+
+            wireMock.server().resetRequests();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create spans batch passes required permissions to auth endpoint")
+        void createSpansBatchPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var span = podamFactory.manufacturePojo(Span.class);
+
+            wireMock.server().resetRequests();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Batch update spans passes required permissions to auth endpoint")
+        void batchUpdateSpansPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var span = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            var update = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .parentSpanId(span.parentSpanId())
+                    .traceId(span.traceId())
+                    .projectName(span.projectName())
+                    .projectId(null)
+                    .build();
+            var batchUpdate = SpanBatchUpdate.builder()
+                    .ids(Set.of(spanId))
+                    .update(update)
+                    .build();
+
+            wireMock.server().resetRequests();
+            spanResourceClient.batchUpdateSpans(batchUpdate, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update span passes required permissions to auth endpoint")
+        void updateSpanPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var span = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            var update = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .parentSpanId(span.parentSpanId())
+                    .traceId(span.traceId())
+                    .projectName(span.projectName())
+                    .projectId(null)
+                    .build();
+
+            wireMock.server().resetRequests();
+            spanResourceClient.updateSpan(spanId, update, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()))));
+        }
     }
 
     @Nested

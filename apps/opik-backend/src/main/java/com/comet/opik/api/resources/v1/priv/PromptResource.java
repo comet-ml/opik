@@ -20,6 +20,8 @@ import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -177,6 +179,7 @@ public class PromptResource {
     @Operation(operationId = "deletePrompt", summary = "Delete prompt", description = "Delete prompt", responses = {
             @ApiResponse(responseCode = "204", description = "No content")
     })
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_DELETE)
     public Response deletePrompt(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -193,6 +196,7 @@ public class PromptResource {
     @Operation(operationId = "deletePromptsBatch", summary = "Delete prompts", description = "Delete prompts batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_DELETE)
     public Response deletePromptsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
