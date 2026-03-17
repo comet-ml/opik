@@ -19,13 +19,7 @@ from opik.evaluation.metrics import score_result
 LOGGER = logging.getLogger(__name__)
 
 
-def _strip_docstring(schema: Dict[str, Any]) -> None:
-    schema.pop("description", None)
-
-
 class AssertionResultItem(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(json_schema_extra=_strip_docstring)
-
     score: bool
     reason: str
     confidence: float = pydantic.Field(ge=0.0, le=1.0)
