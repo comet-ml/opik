@@ -1,5 +1,26 @@
 import { LLMJudge } from "./LLMJudge";
 
+export function resolveEvaluators(
+  assertions: string[] | undefined,
+  evaluators: LLMJudge[] | undefined,
+  context: string
+): LLMJudge[] | undefined {
+  if (assertions?.length && evaluators?.length) {
+    throw new Error(
+      `Cannot specify both 'assertions' and 'evaluators' for ${context}. ` +
+        `Use 'assertions' for a shorthand or 'evaluators' for full control, but not both.`
+    );
+  }
+  if (assertions?.length) {
+    return [new LLMJudge({ assertions })];
+  }
+  if (evaluators?.length) {
+    validateEvaluators(evaluators, context);
+    return evaluators;
+  }
+  return undefined;
+}
+
 export function validateEvaluators(
   evaluators: unknown[],
   context: string

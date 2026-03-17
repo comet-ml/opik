@@ -106,15 +106,10 @@ export function buildSuiteResult(
   }
 
   const itemsTotal = itemResults.size;
-  let itemsPassed = 0;
-  for (const [, itemResult] of itemResults) {
-    if (itemResult.passed) {
-      itemsPassed++;
-    }
-  }
+  const itemsPassed = [...itemResults.values()].filter((r) => r.passed).length;
 
   const allItemsPassed = itemsTotal === 0 || itemsPassed === itemsTotal;
-  const passRate = itemsTotal === 0 ? 1.0 : itemsPassed / itemsTotal;
+  const passRate = itemsTotal === 0 ? undefined : itemsPassed / itemsTotal;
 
   return {
     allItemsPassed,
