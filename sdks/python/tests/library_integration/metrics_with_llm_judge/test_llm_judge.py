@@ -94,7 +94,6 @@ class TestLLMJudgeScore:
         assert results[0].value is False
         assert_llm_judge_score_result(results[0], expected_name=assertion)
 
-
     @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
     def test_score__many_assertions__returns_all_results(self, llm_model):
         assertions = [

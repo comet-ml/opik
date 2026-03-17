@@ -58,8 +58,7 @@ class ResponseSchema:
 
     def format_assertions(self) -> str:
         return "\n".join(
-            f"- `{key}`: {assertion}"
-            for key, assertion in self._field_mapping.items()
+            f"- `{key}`: {assertion}" for key, assertion in self._field_mapping.items()
         )
 
     def parse(self, content: str) -> List[score_result.ScoreResult]:
