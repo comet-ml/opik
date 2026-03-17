@@ -27,7 +27,7 @@ export interface ExperimentData {
 export class Experiment {
   public readonly id: string;
   private _name?: string;
-  public readonly datasetName: string;
+  public readonly datasetName?: string;
   public readonly prompts?: Prompt[];
   public readonly tags?: string[];
 
