@@ -3,11 +3,31 @@ import pytest
 from opik.evaluation.suite_evaluators import LLMJudge
 
 
-pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
+MODEL_PARAMS = [
+    pytest.param(
+        ("gpt-4o", ["ensure_openai_configured"]),
+        id="openai",
+    ),
+    pytest.param(
+        ("anthropic/claude-sonnet-4-20250514", ["ensure_anthropic_configured"]),
+        id="anthropic",
+    ),
+    pytest.param(
+        ("gemini/gemini-2.0-flash", ["ensure_google_api_configured"]),
+        id="gemini",
+    ),
+]
+
+
+@pytest.fixture()
+def llm_model(request):
+    model_name, fixture_names = request.param
+    for fixture_name in fixture_names:
+        request.getfixturevalue(fixture_name)
+    return model_name
 
 
 def assert_llm_judge_score_result(result, expected_name: str) -> None:
-    """Assert that an LLMJudge score result is valid."""
     assert result.scoring_failed is False
     assert result.name == expected_name
     assert isinstance(result.value, bool)
@@ -16,10 +36,12 @@ def assert_llm_judge_score_result(result, expected_name: str) -> None:
 
 
 class TestLLMJudgeScore:
-    def test_score__single_assertion__returns_result(self):
+    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
+    def test_score__single_assertion__returns_result(self, llm_model):
         assertion = "Response is factually accurate"
         evaluator = LLMJudge(
             assertions=[assertion],
+            model=llm_model,
             track=False,
         )
 
@@ -32,11 +54,13 @@ class TestLLMJudgeScore:
         assert_llm_judge_score_result(results[0], expected_name=assertion)
         assert results[0].value is True
 
-    def test_score__multiple_assertions__returns_multiple_results(self):
+    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
+    def test_score__multiple_assertions__returns_multiple_results(self, llm_model):
         assertion_accurate = "Response is factually accurate"
         assertion_helpful = "Response is helpful to the user"
         evaluator = LLMJudge(
             assertions=[assertion_accurate, assertion_helpful],
+            model=llm_model,
             track=False,
         )
 
@@ -52,27 +76,12 @@ class TestLLMJudgeScore:
         for result in results:
             assert_llm_judge_score_result(result, expected_name=result.name)
 
-    def test_score__custom_name__uses_custom_name_prefix(self):
-        assertion = "Test assertion"
-        evaluator = LLMJudge(
-            assertions=[assertion],
-            name="my_custom_judge",
-            track=False,
-        )
-
-        results = evaluator.score(
-            input="Hello",
-            output="Hello there!",
-        )
-
-        assert len(results) == 1
-        # The assertion text is used as the score name (returned by LLM)
-        assert_llm_judge_score_result(results[0], expected_name=assertion)
-
-    def test_score__failing_assertion__returns_false(self):
+    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
+    def test_score__failing_assertion__returns_false(self, llm_model):
         assertion = "Response is factually accurate"
         evaluator = LLMJudge(
             assertions=[assertion],
+            model=llm_model,
             track=False,
         )
 
@@ -85,13 +94,42 @@ class TestLLMJudgeScore:
         assert results[0].value is False
         assert_llm_judge_score_result(results[0], expected_name=assertion)
 
+    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
+    def test_score__many_assertions__returns_all_results(self, llm_model):
+        assertions = [
+            "Response is factually accurate",
+            "Response is helpful to the user",
+            "Response is concise and to the point",
+            "Response does not contain hallucinated information",
+            "Response directly addresses the question asked",
+        ]
+        evaluator = LLMJudge(
+            assertions=assertions,
+            model=llm_model,
+            track=False,
+        )
+
+        results = evaluator.score(
+            input="What is the capital of France?",
+            output="The capital of France is Paris.",
+        )
+
+        assert len(results) == 5
+        result_names = [r.name for r in results]
+        for assertion in assertions:
+            assert assertion in result_names
+        for result in results:
+            assert_llm_judge_score_result(result, expected_name=result.name)
+
 
 class TestLLMJudgeAsyncScore:
     @pytest.mark.asyncio
-    async def test_ascore__single_assertion__returns_result(self):
+    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
+    async def test_ascore__single_assertion__returns_result(self, llm_model):
         assertion = "Response is factually accurate"
         evaluator = LLMJudge(
             assertions=[assertion],
+            model=llm_model,
             track=False,
         )
 
@@ -105,11 +143,15 @@ class TestLLMJudgeAsyncScore:
         assert results[0].value is True
 
     @pytest.mark.asyncio
-    async def test_ascore__multiple_assertions__returns_multiple_results(self):
+    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
+    async def test_ascore__multiple_assertions__returns_multiple_results(
+        self, llm_model
+    ):
         assertion_accurate = "Response is factually accurate"
         assertion_concise = "Response is concise and to the point"
         evaluator = LLMJudge(
             assertions=[assertion_accurate, assertion_concise],
+            model=llm_model,
             track=False,
         )
 

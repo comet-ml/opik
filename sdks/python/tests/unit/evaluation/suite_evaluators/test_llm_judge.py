@@ -178,7 +178,8 @@ class TestLLMJudgeSerializedFormat:
                         "---END OUTPUT---\n"
                         "\n"
                         "## Assertions\n"
-                        "Evaluate each of the following assertions against the agent's output:\n"
+                        "Evaluate each of the following assertions against the agent's output.\n"
+                        "Use the provided field key as the JSON property name for each assertion result.\n"
                         "\n"
                         "{assertions}\n"
                     ),
