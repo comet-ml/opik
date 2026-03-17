@@ -11,7 +11,6 @@ import sys
 import time
 from typing import Optional
 
-import pytest
 
 import opik
 import opik.rest_api.client as rest_api_client
@@ -20,7 +19,6 @@ from .conftest import RunnerInfo
 
 
 ECHO_APP = os.path.join(os.path.dirname(__file__), "echo_app.py")
-ECHO_CONFIG_APP = os.path.join(os.path.dirname(__file__), "echo_config_app.py")
 
 JOB_COMPLETION_TIMEOUT = 30
 TRACE_PROPAGATION_TIMEOUT = 30
@@ -161,12 +159,11 @@ def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
     assert f"echo: {message}" in str(trace.output)
 
 
-@pytest.mark.parametrize("runner_process", [ECHO_CONFIG_APP], indirect=True)
 def test_runner_with_mask(
     opik_client, api_client, runner_process: RunnerInfo, project_id
 ):
     """Mask: register echo_config agent, create mask, verify mask value in job result and trace."""
-    register_agent(ECHO_CONFIG_APP)
+    register_agent(ECHO_APP)
     message = f"mask-e2e-{int(time.time())}"
     custom_greeting = f"custom-greeting-{int(time.time())}"
 

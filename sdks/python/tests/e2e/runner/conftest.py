@@ -80,11 +80,10 @@ def _drain_stdout(proc, output_lines):
 
 @pytest.fixture()
 def runner_process(api_client, subprocess_env, project_id, request):
-    app_path = getattr(request, "param", ECHO_APP)
     pair = api_client.runners.generate_pairing_code(project_id=project_id)
 
     proc = subprocess.Popen(
-        [OPIK_CLI, "connect", "--pair", pair.pairing_code, sys.executable, app_path],
+        [OPIK_CLI, "connect", "--pair", pair.pairing_code, sys.executable, ECHO_APP],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

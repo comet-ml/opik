@@ -1,7 +1,8 @@
-"""Minimal agent app used by the runner e2e test.
+"""Agent app used by the runner e2e tests.
 
-When executed by the runner, it reads inputs from stdin, echoes the message,
-and writes the result to the OPIK_RESULT_FILE.
+Contains two entrypoints:
+- echo: basic echo function
+- echo_config: echo with a configurable greeting (used in mask tests)
 """
 
 import opik
@@ -10,8 +11,18 @@ from opik.runner.activate import activate_runner
 
 @opik.track(entrypoint=True)
 def echo(message: str) -> str:
-    """Echo the input message back."""
     return f"echo: {message}"
+
+
+@opik.agent_config()
+class EchoConfig:
+    greeting: str = "default-greeting"
+
+
+@opik.track(entrypoint=True)
+def echo_config(message: str) -> str:
+    cfg = EchoConfig()
+    return f"{cfg.greeting}: {message}"
 
 
 activate_runner()
