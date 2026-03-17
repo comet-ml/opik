@@ -19,13 +19,15 @@ from opik.evaluation.metrics import score_result
 LOGGER = logging.getLogger(__name__)
 
 
-class AssertionResultItem(pydantic.BaseModel):
-    """Result for a single assertion evaluation.
+def _strip_noise(schema: Dict[str, Any]) -> None:
+    schema.pop("title", None)
+    schema.pop("description", None)
+    for prop in schema.get("properties", {}).values():
+        prop.pop("title", None)
 
-    Extends the backend's expected format {"score": <value>, "reason": "..."}
-    with an additional ``confidence`` field used by the SDK.
-    The backend ignores extra fields, so this is forward-compatible.
-    """
+
+class AssertionResultItem(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(json_schema_extra=_strip_noise)
 
     score: bool
     reason: str
@@ -52,9 +54,13 @@ class ResponseSchema:
             )
             for key, assertion in self._field_mapping.items()
         }
+        def _strip_title(schema: Dict[str, Any]) -> None:
+            schema.pop("title", None)
+
         self._response_model: Type[pydantic.BaseModel] = pydantic.create_model(
             "LLMJudgeResponse", **fields
         )
+        self._response_model.model_config["json_schema_extra"] = _strip_title
 
     @property
     def response_format(self) -> Type[pydantic.BaseModel]:

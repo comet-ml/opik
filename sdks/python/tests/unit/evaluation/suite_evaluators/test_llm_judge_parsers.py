@@ -255,25 +255,16 @@ class TestResponseSchema:
         assert schema.response_format.model_json_schema() == {
             "$defs": {
                 "AssertionResultItem": {
-                    "description": (
-                        "Result for a single assertion evaluation.\n"
-                        "\n"
-                        'Extends the backend\'s expected format {"score": <value>, "reason": "..."}\n'
-                        "with an additional ``confidence`` field used by the SDK.\n"
-                        "The backend ignores extra fields, so this is forward-compatible."
-                    ),
                     "properties": {
-                        "score": {"title": "Score", "type": "boolean"},
-                        "reason": {"title": "Reason", "type": "string"},
+                        "score": {"type": "boolean"},
+                        "reason": {"type": "string"},
                         "confidence": {
                             "maximum": 1.0,
                             "minimum": 0.0,
-                            "title": "Confidence",
                             "type": "number",
                         },
                     },
                     "required": ["score", "reason", "confidence"],
-                    "title": "AssertionResultItem",
                     "type": "object",
                 }
             },
@@ -284,7 +275,6 @@ class TestResponseSchema:
                 }
             },
             "required": ["assertion_1"],
-            "title": "LLMJudgeResponse",
             "type": "object",
         }
 
@@ -299,7 +289,7 @@ class TestResponseSchema:
 
         json_schema = schema.response_format.model_json_schema()
 
-        assert json_schema["title"] == "LLMJudgeResponse"
+        assert "title" not in json_schema
         assert json_schema["type"] == "object"
         assert json_schema["required"] == [
             "assertion_1",
