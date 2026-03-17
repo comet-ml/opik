@@ -5,10 +5,20 @@ Contains two entrypoints:
 - echo_config: echo with a configurable greeting (used in mask tests)
 """
 
+import uvicorn
+from fastapi import FastAPI
+
 import opik
-from opik.runner.activate import activate_runner
+
+app = FastAPI()
 
 
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
+@app.get("/echo")
 @opik.track(entrypoint=True)
 def echo(message: str) -> str:
     return f"echo: {message}"
@@ -19,14 +29,12 @@ class EchoConfig:
     greeting: str = "default-greeting"
 
 
+@app.get("/echo-config")
 @opik.track(entrypoint=True)
 def echo_config(message: str) -> str:
     cfg = EchoConfig()
     return f"{cfg.greeting}: {message}"
 
 
-activate_runner()
-
 if __name__ == "__main__":
-    result = echo("hello")
-    print(f"Result: {result}")
+    uvicorn.run(app, host="127.0.0.1", port=0)

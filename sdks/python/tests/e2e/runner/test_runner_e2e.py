@@ -5,9 +5,6 @@ Test 2 (mask):  register echo_config agent, create mask, create job with
                 mask_id, verify the mask value appears in the trace output.
 """
 
-import os
-import subprocess
-import sys
 import time
 from typing import Optional
 
@@ -18,8 +15,6 @@ from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 from .conftest import RunnerInfo
 
 
-ECHO_APP = os.path.join(os.path.dirname(__file__), "echo_app.py")
-
 JOB_COMPLETION_TIMEOUT = 30
 TRACE_PROPAGATION_TIMEOUT = 30
 AGENT_REGISTRATION_TIMEOUT = 10
@@ -28,19 +23,6 @@ AGENT_REGISTRATION_TIMEOUT = 10
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def register_agent(app_path: str) -> None:
-    """Run an agent app once so it self-registers to ~/.opik/agents.json."""
-    proc = subprocess.run(
-        [sys.executable, app_path],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert proc.returncode == 0, (
-        f"Agent registration failed ({app_path}):\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
-    )
 
 
 def submit_job(
@@ -144,7 +126,6 @@ def wait_for_agent_registration(
 
 def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
     """Basic: register echo agent, run job, verify job result and trace output."""
-    register_agent(ECHO_APP)
     message = f"hello-e2e-{int(time.time())}"
 
     wait_for_agent_registration(api_client, "echo", project_id)
@@ -163,7 +144,6 @@ def test_runner_with_mask(
     opik_client, api_client, runner_process: RunnerInfo, project_id
 ):
     """Mask: register echo_config agent, create mask, verify mask value in job result and trace."""
-    register_agent(ECHO_APP)
     message = f"mask-e2e-{int(time.time())}"
     custom_greeting = f"custom-greeting-{int(time.time())}"
 

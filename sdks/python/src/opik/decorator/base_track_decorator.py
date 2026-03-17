@@ -16,6 +16,7 @@ from typing import (
 
 from .. import context_storage, logging_messages, tracing_runtime_config
 from ..api_objects import opik_client, span, trace
+from ..runner.registry import extract_params, register
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType
 from . import (
     arguments_helpers,
@@ -618,8 +619,6 @@ def _apply_entrypoint(
     wrapped_func: Callable,
     track_options: "arguments_helpers.TrackOptions",
 ) -> None:
-    from ..runner.registry import extract_params, register
-
     agent_name = track_options.name or original_func.__name__
     agent_project = track_options.project_name or "default"
     params = extract_params(original_func)
@@ -632,6 +631,10 @@ def _apply_entrypoint(
         params=params,
         docstring=docstring,
     )
+
+    from ..runner.activate import activate_runner
+
+    activate_runner()
 
 
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
