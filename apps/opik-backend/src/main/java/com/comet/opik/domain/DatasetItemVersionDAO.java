@@ -711,7 +711,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     // Query to extract columns from trace output for experiment items view
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
             WITH experiments_resolved AS (
-                SELECT
+                SELECT DISTINCT
                     id
                 FROM experiments
                 WHERE workspace_id = :workspace_id
@@ -719,12 +719,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(experiment_ids)>AND id IN :experiment_ids<endif>
             ),
             experiment_items_scope AS (
-                SELECT
-                    ei.trace_id,
-                    ei.dataset_item_id
+                SELECT DISTINCT
+                    ei.trace_id
                 FROM experiment_items ei
-                INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
+                <if(experiment_ids)>AND ei.experiment_id IN (SELECT id FROM experiments_resolved)<endif>
             )
             SELECT
                 mapFromArrays(
