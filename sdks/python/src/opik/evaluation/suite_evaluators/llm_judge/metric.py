@@ -58,21 +58,17 @@ def _format_value(value: Any) -> str:
 def _generate_prompt(
     input: Any,
     output: Any,
-    field_mapping: Dict[str, str],
+    assertions_text: str,
 ) -> str:
     """Generate the LLM query for evaluating assertions.
 
     Combines the system prompt and user template into a single string
     because the model's generate_string API accepts only one input string.
     """
-    assertions_str = "\n".join(
-        f"- `{key}`: {assertion}" for key, assertion in field_mapping.items()
-    )
-
     user_content = LLM_JUDGE_USER_TEMPLATE.format(
         input=_format_value(input),
         output=_format_value(output),
-        assertions=assertions_str,
+        assertions=assertions_text,
     )
     return LLM_JUDGE_SYSTEM_PROMPT + "\n" + user_content
 
@@ -230,23 +226,17 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
         """
-        response_format, field_mapping = parsers.build_response_format_model(
-            self._assertions
-        )
+        schema = parsers.ResponseSchema(self._assertions)
         llm_query = _generate_prompt(
             input=input,
             output=output,
-            field_mapping=field_mapping,
+            assertions_text=schema.format_assertions(),
         )
         model_output = self._model.generate_string(
-            input=llm_query, response_format=response_format
+            input=llm_query, response_format=schema.response_format
         )
 
-        return parsers.parse_model_output(
-            content=model_output,
-            assertions=self._assertions,
-            field_mapping=field_mapping,
-        )
+        return schema.parse(model_output)
 
     async def ascore(
         self,
@@ -267,23 +257,17 @@ class LLMJudge(base.BaseSuiteEvaluator):
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
         """
-        response_format, field_mapping = parsers.build_response_format_model(
-            self._assertions
-        )
+        schema = parsers.ResponseSchema(self._assertions)
         llm_query = _generate_prompt(
             input=input,
             output=output,
-            field_mapping=field_mapping,
+            assertions_text=schema.format_assertions(),
         )
         model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=response_format
+            input=llm_query, response_format=schema.response_format
         )
 
-        return parsers.parse_model_output(
-            content=model_output,
-            assertions=self._assertions,
-            field_mapping=field_mapping,
-        )
+        return schema.parse(model_output)
 
     def to_config(self) -> llm_judge_config.LLMJudgeConfig:
         """
