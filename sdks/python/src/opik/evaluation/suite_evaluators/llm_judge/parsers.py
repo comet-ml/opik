@@ -10,7 +10,6 @@ each assertion produces {"score": <bool/int/float>, "reason": "..."}.
 
 import json
 import logging
-import re
 from typing import Any, Dict, List, Type
 
 import pydantic
@@ -33,49 +32,25 @@ class AssertionResultItem(pydantic.BaseModel):
     confidence: float = pydantic.Field(ge=0.0, le=1.0)
 
 
-def _sanitize_field_name(name: str) -> str:
-    """Convert an arbitrary string into a valid Python / JSON-schema identifier.
-
-    Replaces non-alphanumeric characters with underscores, collapses runs of
-    underscores, and strips leading/trailing underscores.  Prepends ``a_`` if
-    the result starts with a digit.
-    """
-    sanitized = re.sub(r"[^a-zA-Z0-9]", "_", name)
-    sanitized = re.sub(r"_+", "_", sanitized).strip("_")
-    if not sanitized or sanitized[0].isdigit():
-        sanitized = f"a_{sanitized}"
-    return sanitized
-
-
-def _build_field_mapping(assertions: List[str]) -> Dict[str, str]:
-    """Return a mapping from sanitized field name -> original assertion text.
-
-    Appends a numeric suffix when two assertions sanitize to the same key.
-    """
-    mapping: Dict[str, str] = {}
-    for assertion in assertions:
-        base = _sanitize_field_name(assertion)
-        key = base
-        counter = 2
-        while key in mapping:
-            key = f"{base}_{counter}"
-            counter += 1
-        mapping[key] = assertion
-    return mapping
-
-
 class ResponseSchema:
     """Encapsulates the JSON schema for LLMJudge structured output.
 
-    Owns the mapping between sanitized field names and original assertion
-    text, the Pydantic response model, and the logic for formatting
-    assertions in the prompt and parsing LLM output back into ScoreResults.
+    Uses short indexed keys (``assertion_1``, ``assertion_2``, ...) that are
+    compatible with all LLM providers while embedding the original assertion
+    text as the field ``description`` in the JSON schema.
     """
 
     def __init__(self, assertions: List[str]) -> None:
-        self._field_mapping = _build_field_mapping(assertions)
+        self._assertions = list(assertions)
+        self._field_mapping: Dict[str, str] = {
+            f"assertion_{i}": assertion for i, assertion in enumerate(assertions, 1)
+        }
         fields: dict[str, Any] = {
-            key: (AssertionResultItem, ...) for key in self._field_mapping
+            key: (
+                AssertionResultItem,
+                pydantic.Field(description=assertion),
+            )
+            for key, assertion in self._field_mapping.items()
         }
         self._response_model: Type[pydantic.BaseModel] = pydantic.create_model(
             "LLMJudgeResponse", **fields
@@ -87,7 +62,8 @@ class ResponseSchema:
 
     def format_assertions(self) -> str:
         return "\n".join(
-            f"- `{key}`: {assertion}" for key, assertion in self._field_mapping.items()
+            f"- `{key}`: {assertion}"
+            for key, assertion in self._field_mapping.items()
         )
 
     def parse(self, content: str) -> List[score_result.ScoreResult]:

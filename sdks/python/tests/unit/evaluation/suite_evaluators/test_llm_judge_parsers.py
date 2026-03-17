@@ -5,76 +5,39 @@ import pytest
 from opik.evaluation.suite_evaluators.llm_judge import parsers as llm_judge_parsers
 
 
-class TestSanitizeFieldName:
-    def test_simple_text__replaces_spaces_with_underscores(self):
-        assert (
-            llm_judge_parsers._sanitize_field_name("Response is accurate")
-            == "Response_is_accurate"
-        )
-
-    def test_special_characters__replaced_and_collapsed(self):
-        result = llm_judge_parsers._sanitize_field_name(
-            'Response doesn\'t contain "quotes" or special chars: {}/\\'
-        )
-        assert result == "Response_doesn_t_contain_quotes_or_special_chars"
-
-    def test_leading_digit__prepends_prefix(self):
-        assert llm_judge_parsers._sanitize_field_name("123abc") == "a_123abc"
-
-    def test_empty_string__returns_prefix(self):
-        assert llm_judge_parsers._sanitize_field_name("!!!") == "a_"
-
-
-class TestBuildFieldMapping:
-    def test_unique_assertions__no_collisions(self):
-        mapping = llm_judge_parsers._build_field_mapping(
-            ["Response is accurate", "No hallucinations"]
-        )
-        assert list(mapping.values()) == ["Response is accurate", "No hallucinations"]
-        assert list(mapping.keys()) == ["Response_is_accurate", "No_hallucinations"]
-
-    def test_colliding_assertions__appends_suffix(self):
-        mapping = llm_judge_parsers._build_field_mapping(["a!b", "a@b"])
-        keys = list(mapping.keys())
-        assert keys[0] == "a_b"
-        assert keys[1] == "a_b_2"
-        assert list(mapping.values()) == ["a!b", "a@b"]
-
-    def test_underscore_vs_space__no_silent_collision(self):
-        mapping = llm_judge_parsers._build_field_mapping(
-            ["Response is accurate", "Response_is_accurate"]
-        )
-        keys = list(mapping.keys())
-        assert keys[0] == "Response_is_accurate"
-        assert keys[1] == "Response_is_accurate_2"
-        assert list(mapping.values()) == [
-            "Response is accurate",
-            "Response_is_accurate",
-        ]
-
-
 class TestResponseSchema:
     def test_response_format__single_assertion__creates_model_with_one_field(self):
         schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
 
-        assert "Response_is_accurate" in schema.response_format.model_fields
+        assert "assertion_1" in schema.response_format.model_fields
 
     def test_response_format__multiple_assertions__creates_model_with_all_fields(self):
         schema = llm_judge_parsers.ResponseSchema(
             ["Response is accurate", "Response is helpful", "No hallucinations"]
         )
 
-        assert "Response_is_accurate" in schema.response_format.model_fields
-        assert "Response_is_helpful" in schema.response_format.model_fields
-        assert "No_hallucinations" in schema.response_format.model_fields
+        assert "assertion_1" in schema.response_format.model_fields
+        assert "assertion_2" in schema.response_format.model_fields
+        assert "assertion_3" in schema.response_format.model_fields
         assert len(schema.response_format.model_fields) == 3
+
+    def test_response_format__descriptions_contain_assertion_text(self):
+        schema = llm_judge_parsers.ResponseSchema(
+            ["Response is accurate", "No hallucinations"]
+        )
+        json_schema = schema.response_format.model_json_schema()
+
+        a1 = json_schema["properties"]["assertion_1"]
+        a2 = json_schema["properties"]["assertion_2"]
+        assert a1["description"] == "Response is accurate"
+        assert a2["description"] == "No hallucinations"
 
     def test_response_format__validates_valid_input(self):
         schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
 
         instance = schema.response_format(
             **{
-                "Response_is_accurate": {
+                "assertion_1": {
                     "score": True,
                     "reason": "The response is correct",
                     "confidence": 0.95,
@@ -82,7 +45,7 @@ class TestResponseSchema:
             }
         )
 
-        result = getattr(instance, "Response_is_accurate")
+        result = getattr(instance, "assertion_1")
         assert result.score is True
         assert result.reason == "The response is correct"
         assert result.confidence == 0.95
@@ -95,7 +58,7 @@ class TestResponseSchema:
         with pytest.raises(Exception):
             schema.response_format(
                 **{
-                    "Response_is_accurate": {
+                    "assertion_1": {
                         "score": True,
                         "reason": "Correct",
                         "confidence": 0.9,
@@ -103,16 +66,19 @@ class TestResponseSchema:
                 }
             )
 
-    def test_response_format__schema_has_valid_identifiers(self):
+    def test_response_format__keys_are_short_identifiers(self):
         schema = llm_judge_parsers.ResponseSchema(
-            ["Response is accurate", "No hallucinated info!"]
+            [
+                "Response is accurate",
+                "A very long assertion that would previously create a huge key name",
+                'Special chars: {}/\\"quotes"',
+            ]
         )
         json_schema = schema.response_format.model_json_schema()
 
         for prop_name in json_schema["properties"]:
-            assert prop_name.isidentifier(), (
-                f"Property name '{prop_name}' is not a valid identifier"
-            )
+            assert prop_name.isidentifier()
+            assert len(prop_name) < 64
 
     def test_format_assertions__includes_keys_and_text(self):
         schema = llm_judge_parsers.ResponseSchema(
@@ -121,14 +87,14 @@ class TestResponseSchema:
 
         formatted = schema.format_assertions()
 
-        assert "- `Response_is_accurate`: Response is accurate" in formatted
-        assert "- `No_hallucinations`: No hallucinations" in formatted
+        assert "- `assertion_1`: Response is accurate" in formatted
+        assert "- `assertion_2`: No hallucinations" in formatted
 
     def test_parse__valid_json__returns_score_results(self):
         schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
         content = json.dumps(
             {
-                "Response_is_accurate": {
+                "assertion_1": {
                     "score": True,
                     "reason": "The response correctly states Paris",
                     "confidence": 0.95,
@@ -152,17 +118,17 @@ class TestResponseSchema:
         )
         content = json.dumps(
             {
-                "First_assertion": {
+                "assertion_1": {
                     "score": True,
                     "reason": "First reason",
                     "confidence": 0.9,
                 },
-                "Second_assertion": {
+                "assertion_2": {
                     "score": False,
                     "reason": "Second reason",
                     "confidence": 0.85,
                 },
-                "Third_assertion": {
+                "assertion_3": {
                     "score": True,
                     "reason": "Third reason",
                     "confidence": 0.7,
@@ -203,7 +169,7 @@ class TestResponseSchema:
         )
         content = json.dumps(
             {
-                "Response_is_accurate": {
+                "assertion_1": {
                     "score": True,
                     "reason": "Correct",
                     "confidence": 0.9,
@@ -222,7 +188,7 @@ class TestResponseSchema:
         schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
         content = json.dumps(
             {
-                "Response_is_accurate": {
+                "assertion_1": {
                     "score": True,
                 }
             }
@@ -242,13 +208,53 @@ class TestResponseSchema:
 
         assert len(results) == 0
 
+    def test_response_format__many_assertions__creates_all_fields(self):
+        assertions = [f"Assertion number {i}" for i in range(1, 11)]
+        schema = llm_judge_parsers.ResponseSchema(assertions)
+
+        assert len(schema.response_format.model_fields) == 10
+        for i in range(1, 11):
+            assert f"assertion_{i}" in schema.response_format.model_fields
+
+    def test_parse__many_assertions__returns_all_results_in_order(self):
+        assertions = [f"Assertion number {i}" for i in range(1, 11)]
+        schema = llm_judge_parsers.ResponseSchema(assertions)
+        content = json.dumps(
+            {
+                f"assertion_{i}": {
+                    "score": i % 2 == 0,
+                    "reason": f"Reason for assertion {i}",
+                    "confidence": round(0.5 + i * 0.05, 2),
+                }
+                for i in range(1, 11)
+            }
+        )
+
+        results = schema.parse(content)
+
+        assert len(results) == 10
+        for i, result in enumerate(results, 1):
+            assert result.name == f"Assertion number {i}"
+            assert result.value is (i % 2 == 0)
+            assert result.reason == f"Reason for assertion {i}"
+            assert result.scoring_failed is False
+            assert result.category_name == "suite_assertion"
+
+    def test_format_assertions__many_assertions__lists_all(self):
+        assertions = [f"Check item {i}" for i in range(1, 8)]
+        schema = llm_judge_parsers.ResponseSchema(assertions)
+
+        formatted = schema.format_assertions()
+
+        for i in range(1, 8):
+            assert f"- `assertion_{i}`: Check item {i}" in formatted
+
     def test_parse__assertion_with_special_characters__handles_correctly(self):
         assertion = 'Response doesn\'t contain "quotes" or special chars: {}/\\'
         schema = llm_judge_parsers.ResponseSchema([assertion])
-        sanitized_key = list(schema.response_format.model_fields.keys())[0]
         content = json.dumps(
             {
-                sanitized_key: {
+                "assertion_1": {
                     "score": True,
                     "reason": "No special chars found",
                     "confidence": 0.88,

@@ -95,6 +95,34 @@ class TestLLMJudgeScore:
         assert_llm_judge_score_result(results[0], expected_name=assertion)
 
 
+    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
+    def test_score__many_assertions__returns_all_results(self, llm_model):
+        assertions = [
+            "Response is factually accurate",
+            "Response is helpful to the user",
+            "Response is concise and to the point",
+            "Response does not contain hallucinated information",
+            "Response directly addresses the question asked",
+        ]
+        evaluator = LLMJudge(
+            assertions=assertions,
+            model=llm_model,
+            track=False,
+        )
+
+        results = evaluator.score(
+            input="What is the capital of France?",
+            output="The capital of France is Paris.",
+        )
+
+        assert len(results) == 5
+        result_names = [r.name for r in results]
+        for assertion in assertions:
+            assert assertion in result_names
+        for result in results:
+            assert_llm_judge_score_result(result, expected_name=result.name)
+
+
 class TestLLMJudgeAsyncScore:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
