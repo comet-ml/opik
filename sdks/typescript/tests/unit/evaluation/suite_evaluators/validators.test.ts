@@ -3,7 +3,6 @@ import {
   resolveEvaluators,
   validateEvaluators,
   validateExecutionPolicy,
-  validateSuiteItems,
 } from "@/evaluation/suite_evaluators/validators";
 import { ExactMatch } from "@/evaluation/metrics/heuristics/ExactMatch";
 import { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
@@ -264,76 +263,6 @@ describe("validateExecutionPolicy", () => {
     expect(() =>
       validateExecutionPolicy({ runsPerItem: 0 }, "my custom context")
     ).toThrow("for my custom context");
-  });
-});
-
-describe("validateSuiteItems", () => {
-  it("should pass for valid items with data only", () => {
-    expect(() =>
-      validateSuiteItems([{ data: { input: "hello" } }])
-    ).not.toThrow();
-  });
-
-  it("should pass for items with assertions and executionPolicy", () => {
-    expect(() =>
-      validateSuiteItems([
-        {
-          data: { input: "test" },
-          assertions: ["is correct"],
-          executionPolicy: { runsPerItem: 2, passThreshold: 1 },
-        },
-      ])
-    ).not.toThrow();
-  });
-
-  it("should throw when item is missing required key 'data'", () => {
-    expect(() =>
-      validateSuiteItems([{ assertions: ["test"] }])
-    ).toThrow("missing required key 'data'");
-  });
-
-  it("should throw when 'data' is not an object", () => {
-    expect(() =>
-      validateSuiteItems([{ data: "string" }])
-    ).toThrow("'data' must be an object");
-  });
-
-  it("should throw when item has an unknown key", () => {
-    expect(() =>
-      validateSuiteItems([{ data: { input: "test" }, unknown: true }])
-    ).toThrow("has unknown key: 'unknown'");
-  });
-
-  it("should throw when item is not an object", () => {
-    expect(() =>
-      validateSuiteItems(["not an object"])
-    ).toThrow("must be an object");
-  });
-
-  it("should throw when executionPolicy is invalid (runsPerItem: 0)", () => {
-    expect(() =>
-      validateSuiteItems([
-        { data: { input: "test" }, executionPolicy: { runsPerItem: 0 } },
-      ])
-    ).toThrow(RangeError);
-  });
-
-  it("should throw when assertions is not an array", () => {
-    expect(() =>
-      validateSuiteItems([{ data: { input: "test" }, assertions: "not-array" }])
-    ).toThrow("'assertions' must be an array");
-  });
-
-  it("should throw when assertions contains a non-string element", () => {
-    expect(() =>
-      validateSuiteItems([{ data: { input: "test" }, assertions: ["valid", 42] }])
-    ).toThrow("'assertions[1]' must be a string");
-  });
-
-  it("should pass for items with description", () => {
-    expect(() =>
-      validateSuiteItems([{ data: { input: "test" }, description: "A test item" }])
-    ).not.toThrow();
   });
 });
 

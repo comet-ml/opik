@@ -5,7 +5,6 @@ export {
   resolveEvaluators,
   validateEvaluators,
   validateExecutionPolicy,
-  validateSuiteItems,
 } from "./validators";
 export type { LLMJudgeConfig } from "./llmJudgeConfig";
 export { buildResponseSchema, parseResponse } from "./llmJudgeParsers";

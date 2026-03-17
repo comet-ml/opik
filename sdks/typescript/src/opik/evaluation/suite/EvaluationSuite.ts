@@ -4,7 +4,6 @@ import { OpikClient } from "@/client/Client";
 import {
   resolveEvaluators,
   validateExecutionPolicy,
-  validateSuiteItems,
 } from "../suite_evaluators/validators";
 import type {
   EvaluationSuiteResult,
@@ -233,9 +232,14 @@ export class EvaluationSuite {
   }
 
   async addItems(items: EvaluationSuiteItem[]): Promise<void> {
-    validateSuiteItems(items);
-
     const datasetItems: DatasetItemData[] = items.map((item) => {
+      if (item.executionPolicy) {
+        validateExecutionPolicy(
+          item.executionPolicy,
+          "item-level execution policy"
+        );
+      }
+
       const evaluators = resolveEvaluators(
         item.assertions,
         undefined,

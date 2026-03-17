@@ -1,5 +1,4 @@
 import { LLMJudge } from "./LLMJudge";
-import type { ExecutionPolicy } from "../suite/types";
 
 export function resolveEvaluators(
   assertions: string[] | undefined,
@@ -63,55 +62,5 @@ export function validateExecutionPolicy(
     throw new RangeError(
       `passThreshold (${policy.passThreshold}) cannot exceed runsPerItem (${policy.runsPerItem}) for ${context}`
     );
-  }
-}
-
-export function validateSuiteItems(items: unknown[]): void {
-  const validKeys = new Set([
-    "data",
-    "assertions",
-    "description",
-    "executionPolicy",
-  ]);
-
-  for (let i = 0; i < items.length; i++) {
-    if (typeof items[i] !== "object" || items[i] === null) {
-      throw new TypeError(`Item at index ${i} must be an object`);
-    }
-    const item = items[i] as Record<string, unknown>;
-    if (!("data" in item)) {
-      throw new Error(`Item at index ${i} is missing required key 'data'`);
-    }
-    if (typeof item.data !== "object" || item.data === null) {
-      throw new TypeError(`Item at index ${i} 'data' must be an object`);
-    }
-    for (const key of Object.keys(item)) {
-      if (!validKeys.has(key)) {
-        throw new Error(
-          `Item at index ${i} has unknown key: '${key}'. ` +
-            `Valid keys are: data, assertions, description, executionPolicy`
-        );
-      }
-    }
-    if ("assertions" in item) {
-      if (!Array.isArray(item.assertions)) {
-        throw new TypeError(
-          `Item at index ${i} 'assertions' must be an array`
-        );
-      }
-      for (let j = 0; j < (item.assertions as unknown[]).length; j++) {
-        if (typeof (item.assertions as unknown[])[j] !== "string") {
-          throw new TypeError(
-            `Item at index ${i} 'assertions[${j}]' must be a string`
-          );
-        }
-      }
-    }
-    if (item.executionPolicy) {
-      validateExecutionPolicy(
-        item.executionPolicy as ExecutionPolicy,
-        `Item at index ${i} executionPolicy`
-      );
-    }
   }
 }
