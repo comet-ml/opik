@@ -16,7 +16,7 @@ from typing import (
 
 from .. import context_storage, logging_messages, tracing_runtime_config
 from ..api_objects import opik_client, span, trace
-from ..runner.registry import extract_params, register
+from ..runner import registry
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType
 from . import (
     arguments_helpers,
@@ -621,10 +621,10 @@ def _apply_entrypoint(
 ) -> None:
     agent_name = track_options.name or original_func.__name__
     agent_project = track_options.project_name or "default"
-    params = extract_params(original_func)
+    params = registry.extract_params(original_func)
     docstring = inspect.getdoc(original_func) or ""
 
-    register(
+    registry.register(
         name=agent_name,
         func=wrapped_func,
         project=agent_project,
