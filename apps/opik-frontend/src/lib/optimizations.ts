@@ -304,7 +304,7 @@ export const mergeExperimentScores = (
   experimentScores: AggregatedFeedbackScore[] | undefined,
 ): AggregatedFeedbackScore[] => {
   if (!experimentScores?.length) return [];
-  const existingNames = new Set(feedbackScores?.map((s) => s.name));
+  const existingNames = new Set(feedbackScores?.map((s) => s.name) ?? []);
   return experimentScores.filter((s) => !existingNames.has(s.name));
 };
 
