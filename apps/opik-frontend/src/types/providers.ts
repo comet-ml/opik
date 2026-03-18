@@ -79,6 +79,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_5_4_MINI = "gpt-5.4-mini",
+  GPT_5_4_NANO = "gpt-5.4-nano",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -293,6 +295,7 @@ export enum PROVIDER_MODEL_TYPE {
   MISTRALAI_MISTRAL_SMALL = "mistralai/mistral-small",
   MISTRALAI_MISTRAL_SMALL_24B_INSTRUCT_2501 = "mistralai/mistral-small-24b-instruct-2501",
   MISTRALAI_MISTRAL_SMALL_24B_INSTRUCT_2501_FREE = "mistralai/mistral-small-24b-instruct-2501:free",
+  MISTRALAI_MISTRAL_SMALL_2603 = "mistralai/mistral-small-2603",
   MISTRALAI_MISTRAL_SMALL_3_1_24B_INSTRUCT = "mistralai/mistral-small-3.1-24b-instruct",
   MISTRALAI_MISTRAL_SMALL_3_1_24B_INSTRUCT_FREE = "mistralai/mistral-small-3.1-24b-instruct:free",
   MISTRALAI_MISTRAL_SMALL_3_2_24B_INSTRUCT = "mistralai/mistral-small-3.2-24b-instruct",
@@ -379,6 +382,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_3_CHAT = "openai/gpt-5.3-chat",
   OPENAI_GPT_5_3_CODEX = "openai/gpt-5.3-codex",
   OPENAI_GPT_5_4 = "openai/gpt-5.4",
+  OPENAI_GPT_5_4_MINI = "openai/gpt-5.4-mini",
+  OPENAI_GPT_5_4_NANO = "openai/gpt-5.4-nano",
   OPENAI_GPT_5_4_PRO = "openai/gpt-5.4-pro",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
