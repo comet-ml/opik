@@ -104,7 +104,7 @@ class LocalRunnerTask:
                 LOGGER.warning(
                     "Transient network error polling job %s: %s", job_id, exc
                 )
-                if time.monotonic() + self._poll_interval_seconds >= deadline:
+                if time.monotonic() >= deadline:
                     raise TimeoutError(
                         f"Job {job_id} did not complete within {self._timeout_seconds}s"
                     ) from exc
@@ -118,7 +118,7 @@ class LocalRunnerTask:
             if job.status == "cancelled":
                 raise RuntimeError(f"Job {job_id} was cancelled")
 
-            if time.monotonic() + self._poll_interval_seconds >= deadline:
+            if time.monotonic() >= deadline:
                 raise TimeoutError(
                     f"Job {job_id} did not complete within {self._timeout_seconds}s"
                 )

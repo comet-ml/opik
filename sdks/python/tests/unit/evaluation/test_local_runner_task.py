@@ -130,10 +130,10 @@ class TestLocalRunnerTask:
             poll_interval_seconds=2,
         )
 
-        # Simulate elapsed time: each monotonic() call advances past deadline
+        # monotonic: deadline=0+4=4, poll at 1.0 (<4 ok), poll at 5.0 (>=4 timeout)
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=[0.0, 1.0, 3.0, 5.0],
+            side_effect=[0.0, 1.0, 5.0],
         ):
             with pytest.raises(TimeoutError, match="did not complete within 4s"):
                 task({"input": "test"})
@@ -337,7 +337,7 @@ class TestLocalRunnerTask:
         with pytest.raises(RuntimeError, match="was cancelled"):
             task({"input": "test"})
 
-    def test_call__timeout_less_than_poll_interval__polls_at_least_once(
+    def test_call__timeout_less_than_poll_interval__uses_full_timeout(
         self,
         mock_rest_client,
         patch_get_client,
@@ -356,15 +356,13 @@ class TestLocalRunnerTask:
             poll_interval_seconds=5,
         )
 
-        # monotonic: deadline=0+1=1, first poll at 0.1, then 0.1+5>=1 → timeout
+        # monotonic: deadline=0+1=1, first poll at 0.5 (<1 sleep), second poll at 1.5 (>=1 timeout)
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=[0.0, 0.1],
+            side_effect=[0.0, 0.5, 1.5],
         ):
             with pytest.raises(TimeoutError, match="did not complete within 1s"):
                 task({"input": "test"})
-
-        assert mock_rest_client.runners.get_job.call_count == 1
 
     def test_call__transient_network_error__retries_and_succeeds(
         self,
