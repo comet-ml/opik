@@ -165,8 +165,7 @@ const AssistantSidebarContent: React.FC<AssistantSidebarProps> = ({
   if (!scriptReady) return null;
 
   return (
-    {/* eslint-disable-next-line tailwindcss/no-custom-classname */}
-    <div className="assistant-sidebar-root absolute bottom-0 right-0 top-[var(--banner-height)] z-10">
+    <div className="comet-assistant-sidebar-root absolute bottom-0 right-0 top-[var(--banner-height)] z-10">
       <div ref={containerRef} className="h-full" />
     </div>
   );
