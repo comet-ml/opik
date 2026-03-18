@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiaghora:000068_add_project_id_to_experiments
+--changeset thiaghora:000070_add_project_id_to_experiments
 --comment: Add project_id column to experiments table for project-scoped operations (OPIK-4932)
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}'
