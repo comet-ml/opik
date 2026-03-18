@@ -2960,18 +2960,15 @@ class DatasetsResourceTest {
 
                         createAndAssert(dataset, apiKey, workspaceName);
 
-                        Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        Experiment experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .type(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .promptVersion(
                                         Experiment.PromptVersionLink.builder()
                                                 .promptId(promptVersion.promptId())
                                                 .id(promptVersion.id())
                                                 .commit(promptVersion.commit())
                                                 .build())
-                                .promptVersions(null)
                                 .build();
 
                         createAndAssert(
@@ -2982,13 +2979,9 @@ class DatasetsResourceTest {
                         experiment = getExperiment(apiKey, workspaceName, experiment);
 
                         // Create trial experiment for the same dataset, should not be included in experiment count
-                        Experiment trial = factory.manufacturePojo(Experiment.class).toBuilder()
+                        Experiment trial = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .type(ExperimentType.TRIAL)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
-                                .promptVersions(null)
                                 .build();
 
                         createAndAssert(
@@ -3041,12 +3034,9 @@ class DatasetsResourceTest {
 
                         createAndAssert(dataset, apiKey, workspaceName);
 
-                        Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        Experiment experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .type(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
                                 .promptVersions(List.of(
                                         Experiment.PromptVersionLink.builder()
                                                 .promptId(promptVersion.promptId())
@@ -6154,12 +6144,8 @@ class DatasetsResourceTest {
             // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
-                                .promptVersions(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -6370,12 +6356,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
-                    .promptVersion(null)
-                    .promptVersions(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -6572,12 +6554,8 @@ class DatasetsResourceTest {
             // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
-                                .promptVersions(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -7366,12 +7344,8 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
             // Create experiment
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
-                    .promptVersion(null)
-                    .promptVersions(null)
                     .build();
 
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
@@ -7968,12 +7942,8 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
             // Create experiment
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8133,12 +8103,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8216,12 +8182,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8288,12 +8250,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8390,12 +8348,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8541,12 +8495,8 @@ class DatasetsResourceTest {
             // Create 5 experiments linked to the dataset
             List<UUID> experimentIds = IntStream.range(0, 5)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -8600,12 +8550,8 @@ class DatasetsResourceTest {
             // Create 2 experiments linked to the dataset
             List<UUID> experimentIds = IntStream.range(0, 2)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -8634,12 +8580,8 @@ class DatasetsResourceTest {
             // Create 3 more experiments linked to the dataset
             List<UUID> otherExperimentIds = IntStream.range(0, 3)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -8685,12 +8627,8 @@ class DatasetsResourceTest {
             // Create experiments but no experiment items (no traces linked)
             List<UUID> experimentIds = IntStream.range(0, 2)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
