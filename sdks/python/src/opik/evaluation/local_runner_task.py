@@ -10,9 +10,7 @@ from ..rest_api import client as rest_api_client
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT_SECONDS = int(
-    os.getenv("OPIK_LOCAL_RUNNER_TIMEOUT_SECONDS", "120")
-)
+DEFAULT_TIMEOUT_SECONDS = int(os.getenv("OPIK_LOCAL_RUNNER_TIMEOUT_SECONDS", "120"))
 DEFAULT_POLL_INTERVAL_SECONDS = int(
     os.getenv("OPIK_LOCAL_RUNNER_POLL_INTERVAL_SECONDS", "2")
 )
@@ -113,6 +111,7 @@ class LocalRunnerTask:
         )
 
     def __call__(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        # Filter out "id" — it's a dataset-item identifier, not an agent input
         inputs = {k: v for k, v in item.items() if k != "id"}
         result = self._wait_for_job(self._submit_job(inputs))
         output = result.get("result", result)
