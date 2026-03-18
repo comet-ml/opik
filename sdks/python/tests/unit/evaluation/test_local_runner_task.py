@@ -129,10 +129,14 @@ class TestLocalRunnerTask:
             timeout_seconds=4,
             poll_interval_seconds=2,
         )
-        with pytest.raises(TimeoutError, match="did not complete within 4s"):
-            task({"input": "test"})
 
-        assert mock_rest_client.runners.get_job.call_count == 2
+        # Simulate elapsed time: each monotonic() call advances past deadline
+        with mock.patch(
+            "opik.evaluation.local_runner_task.time.monotonic",
+            side_effect=[0.0, 1.0, 3.0, 5.0],
+        ):
+            with pytest.raises(TimeoutError, match="did not complete within 4s"):
+                task({"input": "test"})
 
     def test_call__no_job_id_in_location_header__raises_runtime_error(
         self,
@@ -299,7 +303,13 @@ class TestLocalRunnerTask:
             timeout_seconds=10,
             poll_interval_seconds=2,
         )
-        output = task({"input": "test"})
+
+        # monotonic: deadline=0+10=10, then check 1+2<10, 3+2<10, completes
+        with mock.patch(
+            "opik.evaluation.local_runner_task.time.monotonic",
+            side_effect=[0.0, 1.0, 3.0],
+        ):
+            output = task({"input": "test"})
 
         assert output == {
             "input": {"input": "test"},
@@ -345,8 +355,14 @@ class TestLocalRunnerTask:
             timeout_seconds=1,
             poll_interval_seconds=5,
         )
-        with pytest.raises(TimeoutError, match="did not complete within 1s"):
-            task({"input": "test"})
+
+        # monotonic: deadline=0+1=1, first poll at 0.1, then 0.1+5>=1 → timeout
+        with mock.patch(
+            "opik.evaluation.local_runner_task.time.monotonic",
+            side_effect=[0.0, 0.1],
+        ):
+            with pytest.raises(TimeoutError, match="did not complete within 1s"):
+                task({"input": "test"})
 
         assert mock_rest_client.runners.get_job.call_count == 1
 
@@ -371,7 +387,13 @@ class TestLocalRunnerTask:
             timeout_seconds=10,
             poll_interval_seconds=2,
         )
-        output = task({"input": "test"})
+
+        # monotonic: deadline=0+10=10, error at 1.0 → 1+2<10 retry, completes
+        with mock.patch(
+            "opik.evaluation.local_runner_task.time.monotonic",
+            side_effect=[0.0, 1.0],
+        ):
+            output = task({"input": "test"})
 
         assert output == {
             "input": {"input": "test"},
@@ -403,3 +425,37 @@ class TestLocalRunnerTask:
             "input": {"input": "test"},
             "output": {"answer": "42", "confidence": "high"},
         }
+
+    def test_init__poll_interval_zero__raises_value_error(self):
+        with pytest.raises(ValueError, match="poll_interval_seconds must be positive"):
+            LocalRunnerTask(
+                project_name="My Project",
+                agent_name="my_agent",
+                poll_interval_seconds=0,
+            )
+
+    def test_init__poll_interval_negative__raises_value_error(self):
+        with pytest.raises(ValueError, match="poll_interval_seconds must be positive"):
+            LocalRunnerTask(
+                project_name="My Project",
+                agent_name="my_agent",
+                poll_interval_seconds=-1,
+            )
+
+    def test_call__submit_network_error__raises_runtime_error(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.side_effect = (
+            httpx.ConnectError("connection refused")
+        )
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+        )
+        with pytest.raises(RuntimeError, match="network error"):
+            task({"input": "test"})

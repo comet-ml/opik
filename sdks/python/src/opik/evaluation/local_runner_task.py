@@ -49,6 +49,9 @@ class LocalRunnerTask:
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None:
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be positive")
+
         self._project_name = project_name
         self._agent_name = agent_name
         self._mask_id = mask_id
@@ -78,7 +81,13 @@ class LocalRunnerTask:
         if self._mask_id is not None:
             kwargs["mask_id"] = self._mask_id
 
-        resp = rest_client.runners.with_raw_response.create_job(**kwargs)
+        try:
+            resp = rest_client.runners.with_raw_response.create_job(**kwargs)
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise RuntimeError(
+                f"Failed to submit job due to network error: {exc}"
+            ) from exc
+
         job_id = resp.headers.get("location", "").rsplit("/", 1)[-1]
         if not job_id:
             raise RuntimeError("Could not extract job ID from Location header")
@@ -86,15 +95,19 @@ class LocalRunnerTask:
 
     def _wait_for_job(self, job_id: str) -> Dict[str, Any]:
         rest_client = self._get_rest_client()
-        iterations = max(1, self._timeout_seconds // self._poll_interval_seconds)
+        deadline = time.monotonic() + self._timeout_seconds
 
-        for _ in range(iterations):
+        while True:
             try:
                 job = rest_client.runners.get_job(job_id)
             except (httpx.ConnectError, httpx.TimeoutException) as exc:
                 LOGGER.warning(
                     "Transient network error polling job %s: %s", job_id, exc
                 )
+                if time.monotonic() + self._poll_interval_seconds >= deadline:
+                    raise TimeoutError(
+                        f"Job {job_id} did not complete within {self._timeout_seconds}s"
+                    ) from exc
                 time.sleep(self._poll_interval_seconds)
                 continue
 
@@ -104,11 +117,12 @@ class LocalRunnerTask:
                 raise RuntimeError(f"Job {job_id} failed: {job.error}")
             if job.status == "cancelled":
                 raise RuntimeError(f"Job {job_id} was cancelled")
-            time.sleep(self._poll_interval_seconds)
 
-        raise TimeoutError(
-            f"Job {job_id} did not complete within {self._timeout_seconds}s"
-        )
+            if time.monotonic() + self._poll_interval_seconds >= deadline:
+                raise TimeoutError(
+                    f"Job {job_id} did not complete within {self._timeout_seconds}s"
+                )
+            time.sleep(self._poll_interval_seconds)
 
     def __call__(self, item: Dict[str, Any]) -> Dict[str, Any]:
         # Filter out "id" — it's a dataset-item identifier, not an agent input
