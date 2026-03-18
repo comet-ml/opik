@@ -68,7 +68,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
         // Skip execution if still in backoff period
         long backoffUntil = backoffUntilMillis.get();
         if (backoffUntil > 0 && System.currentTimeMillis() < backoffUntil) {
-            log.info("Trace threads closing job in backoff period (consecutive failures: {}), skipping execution",
+            log.info("Trace threads closing job in backoff period (consecutive failures: '{}'), skipping execution",
                     consecutiveFailures.get());
             return;
         }
@@ -96,7 +96,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                                 log.warn("Closing of trace threads was interrupted", error);
                             } else {
                                 applyBackoff();
-                                log.error("Error processing closing of trace threads (consecutive failures: {})",
+                                log.error("Error processing closing of trace threads (consecutive failures: '{}')",
                                         consecutiveFailures.get(), error);
                             }
                         });
@@ -174,7 +174,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
         long intervalMs = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration().toMillis();
         long backoffMs = intervalMs * (1L << exponent);
         backoffUntilMillis.set(System.currentTimeMillis() + backoffMs);
-        log.warn("Applying exponential backoff: next execution in {}ms (failure #{})", backoffMs, failures);
+        log.warn("Applying exponential backoff: next execution in '{}' ms (failure #'{}')", backoffMs, failures);
     }
 
     private void errorLog(Throwable throwable) {
