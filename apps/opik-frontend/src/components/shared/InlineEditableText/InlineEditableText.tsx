@@ -177,7 +177,7 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
             className={cn(
               "block truncate text-sm leading-5",
               isTitle ? "font-medium text-foreground" : "text-foreground",
-              !value && "text-muted-slate",
+              !value && "text-light-slate",
             )}
           >
             {displayValue}

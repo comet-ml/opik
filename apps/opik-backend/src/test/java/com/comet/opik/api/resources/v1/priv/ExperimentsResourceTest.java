@@ -1928,6 +1928,137 @@ class ExperimentsResourceTest {
         }
 
         @Test
+        @DisplayName("when creating experiment with project_id, then project_id is stored directly")
+        void createExperimentWithProjectId() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .projectId(projectId)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var actual = getAndAssert(experimentId, experiment, workspaceName, apiKey);
+            assertThat(actual.projectId()).isEqualTo(projectId);
+            assertThat(actual.projectName()).isEqualTo(project.name());
+        }
+
+        @Test
+        @DisplayName("when creating experiment with project_name, then project_id is resolved from project_name")
+        void createExperimentWithProjectName() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .projectName(project.name())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var expectedExperiment = experiment.toBuilder()
+                    .projectId(projectId)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when creating experiment with project_name for new project, then project is created and linked")
+        void createExperimentWithNewProjectName() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var newProjectName = "new-project-" + UUID.randomUUID().toString().substring(0, 8);
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .projectName(newProjectName)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var createdProject = projectResourceClient.getByName(newProjectName, apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .projectId(createdProject.id())
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when filtering by project_id with direct project_id on experiment, then return matching experiments")
+        void findByDirectProjectId() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project1 = podamFactory.manufacturePojo(Project.class);
+            var project1Id = projectResourceClient.createProject(project1, apiKey, workspaceName);
+
+            var project2 = podamFactory.manufacturePojo(Project.class);
+            var project2Id = projectResourceClient.createProject(project2, apiKey, workspaceName);
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .projectId(project1Id)
+                    .build();
+            experimentResourceClient.create(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .projectId(project2Id)
+                    .build();
+            experimentResourceClient.create(experiment2, apiKey, workspaceName);
+
+            // Filter by project1 - should only return experiment1
+            var response1 = experimentResourceClient.findExperiments(
+                    1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
+                    false, null, null, false, null, project1Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertExperiments(null, List.of(experiment1), List.of(experiment2), null, response1.content());
+
+            // Filter by project2 - should only return experiment2
+            var response2 = experimentResourceClient.findExperiments(
+                    1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
+                    false, null, null, false, null, project2Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertExperiments(null, List.of(experiment2), List.of(experiment1), null, response2.content());
+
+            // No project filter - should return both experiments
+            var responseAll = experimentResourceClient.findExperiments(
+                    1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
+                    false, null, null, false, null, null, false, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertExperiments(null, List.of(experiment2, experiment1), List.of(), null, responseAll.content());
+        }
+
+        @Test
         void findAllAndCalculateFeedbackAvg() {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -4707,7 +4838,7 @@ class ExperimentsResourceTest {
 
         @Test
         void createWithInvalidPromptVersionId() {
-            var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate(), null))
                     .datasetVersionId(null)
                     .datasetVersionSummary(null)
@@ -4730,7 +4861,7 @@ class ExperimentsResourceTest {
 
         @Test
         void createInvalidId() {
-            var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .id(UUID.randomUUID())
                     .build();
             var expectedError = new com.comet.opik.api.error.ErrorMessage(

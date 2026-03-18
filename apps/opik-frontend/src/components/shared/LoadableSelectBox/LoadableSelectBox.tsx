@@ -22,6 +22,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface BaseLoadableSelectBoxProps {
+  id?: string;
   placeholder?: ReactElement | string;
   searchPlaceholder?: string;
   open?: boolean;
@@ -62,6 +63,7 @@ interface MultiSelectProps extends BaseLoadableSelectBoxProps {
 export type LoadableSelectBoxProps = SingleSelectProps | MultiSelectProps;
 
 export const LoadableSelectBox = ({
+  id,
   value = "",
   placeholder = "Select value",
   searchPlaceholder = "Search",
@@ -241,6 +243,7 @@ export const LoadableSelectBox = ({
 
   const buttonElement = (
     <Button
+      id={id}
       className={cn("group justify-between px-3", buttonClassName, {
         "disabled:cursor-not-allowed disabled:border-input disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray hover:disabled:shadow-none":
           disabled,

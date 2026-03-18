@@ -14,21 +14,27 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
+import TagCell from "@/components/shared/DataTableCells/TagCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { Dashboard } from "@/types/dashboard";
+import {
+  Dashboard,
+  DASHBOARD_SCOPE,
+  DASHBOARD_TYPE_LABELS,
+} from "@/types/dashboard";
+import { generateDashboardScopeFilter } from "@/lib/filters";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 import { DashboardRowActionsCell } from "@/components/pages/DashboardsPage/DashboardRowActionsCell";
 import DashboardsActionsPanel from "@/components/pages/DashboardsPage/DashboardsActionsPanel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tag } from "@/components/ui/tag";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import {
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
@@ -43,6 +49,23 @@ import {
   generateSelectColumDef,
   getRowId,
 } from "@/components/shared/DataTable/utils";
+import { Filter } from "@/types/filters";
+import {
+  DASHBOARD_TYPE_OPTIONS,
+  DASHBOARD_TYPE_TAG_VARIANT,
+  renderDashboardTypeOption,
+} from "@/lib/dashboardTypeSelect";
+
+const FILTERS_CONFIG = {
+  rowsMap: {
+    type: {
+      keyComponentProps: {
+        options: DASHBOARD_TYPE_OPTIONS,
+        renderOption: renderDashboardTypeOption,
+      },
+    },
+  },
+};
 
 const SELECTED_COLUMNS_KEY = "dashboards-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
@@ -58,8 +81,51 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
+  "type",
   "description",
   "last_updated_at",
+];
+
+export const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_NAME_ID,
+  "description",
+  "created_by",
+  "last_updated_at",
+  "created_at",
+  "type",
+];
+
+export const FILTERS_COLUMNS: ColumnData<Dashboard>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "type",
+    label: "Type",
+    type: COLUMN_TYPE.category,
+  },
+  {
+    id: "description",
+    label: "Description",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
 ];
 
 const DashboardsPage: React.FunctionComponent = () => {
@@ -80,6 +146,18 @@ const DashboardsPage: React.FunctionComponent = () => {
         label: "ID",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
+      },
+      {
+        id: "type",
+        label: "Type",
+        type: COLUMN_TYPE.category,
+        cell: TagCell as never,
+        accessorFn: (row: Dashboard) =>
+          DASHBOARD_TYPE_LABELS[row.type] ?? row.type,
+        customMeta: {
+          variantMap: DASHBOARD_TYPE_TAG_VARIANT,
+        },
+        sortable: true,
       },
       {
         id: "description",
@@ -111,6 +189,13 @@ const DashboardsPage: React.FunctionComponent = () => {
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
+  const [filters = [], setFilters] = useQueryParam<Filter[]>(
+    "filters",
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
@@ -142,11 +227,20 @@ const DashboardsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
+  const processedFilters = useMemo(
+    () => [
+      ...filters!,
+      ...generateDashboardScopeFilter(DASHBOARD_SCOPE.WORKSPACE),
+    ],
+    [filters],
+  );
+
   const { data, isPending, isPlaceholderData, isFetching } = useDashboardsList(
     {
       workspaceName,
       sorting: sortedColumns,
       search: search!,
+      filters: processedFilters,
       page: page!,
       size: size!,
     },
@@ -161,7 +255,7 @@ const DashboardsPage: React.FunctionComponent = () => {
     [data?.sortable_by],
   );
   const total = data?.total ?? 0;
-  const noData = !search;
+  const noData = !search && (!filters || filters.length === 0);
   const noDataText = noData
     ? "There are no dashboards yet"
     : "No search results";
@@ -174,7 +268,7 @@ const DashboardsPage: React.FunctionComponent = () => {
     SELECTED_COLUMNS_KEY_V2,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
+        SELECTED_COLUMNS_KEY_V2,
         DEFAULT_SELECTED_COLUMNS,
         [COLUMN_NAME_ID],
       ),
@@ -184,7 +278,7 @@ const DashboardsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
@@ -251,9 +345,8 @@ const DashboardsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center">
           <h1 className="comet-title-l truncate break-words">Dashboards</h1>
-          <Tag variant="green">Beta</Tag>
         </div>
       </div>
       <ExplainerDescription
@@ -261,13 +354,21 @@ const DashboardsPage: React.FunctionComponent = () => {
         {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_dashboards]}
       />
       <div className="mb-4 flex items-center justify-between gap-8">
-        <SearchInput
-          searchText={search!}
-          setSearchText={setSearch}
-          placeholder="Search by name"
-          className="w-[320px]"
-          dimension="sm"
-        ></SearchInput>
+        <div className="flex items-center gap-2">
+          <SearchInput
+            searchText={search!}
+            setSearchText={setSearch}
+            placeholder="Search by name"
+            className="w-[320px]"
+            dimension="sm"
+          ></SearchInput>
+          <FiltersButton
+            columns={FILTERS_COLUMNS}
+            config={FILTERS_CONFIG as never}
+            filters={filters!}
+            onChange={setFilters}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <DashboardsActionsPanel dashboards={selectedDashboards} />
           <Separator orientation="vertical" className="mx-2 h-4" />

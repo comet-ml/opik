@@ -1,14 +1,5 @@
 [
   {
-    "type": "dependency",
-    "from": "src/api/projects/useProjectMetric.ts",
-    "to": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-api-importing-components"
-    }
-  },
-  {
     "type": "cycle",
     "from": "src/api/provider-keys/useProviderKeys.ts",
     "to": "src/lib/provider.ts",
@@ -449,218 +440,11 @@
   },
   {
     "type": "dependency",
-    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/SetInactiveConfirmDialog.tsx",
-    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-pages-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/SetInactiveConfirmDialog.tsx",
-    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/types.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-pages-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel.tsx",
-    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-pages-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel.tsx",
-    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/types.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-pages-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/PromptsTab.tsx",
     "to": "src/components/pages/PromptPage/TryInPlaygroundButton.tsx",
     "rule": {
       "severity": "error",
       "name": "no-pages-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidgetEditor.tsx",
-    "to": "src/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidgetEditor.tsx",
-    "to": "src/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor.tsx",
-    "to": "src/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor.tsx",
-    "to": "src/components/pages-shared/experiments/useExperimentsFeedbackScores.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsBreakdownSection.tsx",
-    "to": "src/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx",
-    "to": "src/components/pages-shared/automations/ProjectsSelectBox.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx",
-    "to": "src/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx",
-    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/constants.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
-    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/constants.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
-    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/utils.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
-    "to": "src/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
-    "to": "src/components/pages/TracesPage/MetricsTab/utils.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectStatsCardWidget/ProjectStatsCardEditor.tsx",
-    "to": "src/components/pages-shared/automations/ProjectsSelectBox.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectStatsCardWidget/ProjectStatsCardWidget.tsx",
-    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/constants.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ProjectStatsCardWidget/ProjectStatsCardWidget.tsx",
-    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/utils.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection.tsx",
-    "to": "src/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection.tsx",
-    "to": "src/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection.tsx",
-    "to": "src/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection.tsx",
-    "to": "src/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
     }
   },
   {
@@ -737,15 +521,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/components/shared/DataTableCells/MediaCell.tsx",
-    "to": "src/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/components/shared/DataTableCells/SpanTypeCell.tsx",
     "to": "src/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon.tsx",
     "rule": {
@@ -814,15 +589,6 @@
     "rule": {
       "severity": "error",
       "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/types/dashboard.ts",
-    "to": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-types-with-side-effects"
     }
   },
   {
