@@ -38,8 +38,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
   [FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED]: false,
-  [FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED]:
-    import.meta.env.DEV && import.meta.env.VITE_ASSISTANT_SIDEBAR_ENABLED === 'true',
+  [FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
@@ -60,13 +59,7 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
 
   useEffect(() => {
     if (data) {
-      setFeatures({
-        ...data,
-        // Preserve dev-only overrides that the API won't know about
-        [FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED]:
-          data[FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED] ||
-          DEFAULT_STATE[FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED],
-      });
+      setFeatures(data);
     }
   }, [data]);
 
