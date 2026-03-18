@@ -11,6 +11,7 @@ export const AgentBlueprintHistory: core.serialization.ObjectSchema<
     OpikApi.AgentBlueprintHistory
 > = core.serialization.object({
     id: core.serialization.string().optional(),
+    name: core.serialization.string().optional(),
     type: AgentBlueprintHistoryType,
     description: core.serialization.string().optional(),
     envs: core.serialization.list(core.serialization.string()).optional(),
@@ -24,6 +25,7 @@ export const AgentBlueprintHistory: core.serialization.ObjectSchema<
 export declare namespace AgentBlueprintHistory {
     export interface Raw {
         id?: string | null;
+        name?: string | null;
         type: AgentBlueprintHistoryType.Raw;
         description?: string | null;
         envs?: string[] | null;

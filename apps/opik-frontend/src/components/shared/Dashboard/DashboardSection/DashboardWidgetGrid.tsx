@@ -21,9 +21,10 @@ import {
   useDashboardStore,
   selectUpdateLayout,
   selectWidgetResolver,
+  selectReadOnly,
 } from "@/store/DashboardStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { applyWidgetPermissions } from "@/components/shared/Dashboard/widgets/widgetRegistry";
+import { applyWidgetPermissions } from "@/lib/dashboard/permissions";
 import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
 import DashboardWidgetDisabled from "../DashboardWidget/DashboardWidgetDisabled";
 
@@ -43,6 +44,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const updateLayout = useDashboardStore(selectUpdateLayout);
+  const readOnly = useDashboardStore(selectReadOnly);
   const { permissions } = usePermissions();
 
   const handleAddWidget = () => {
@@ -59,7 +61,12 @@ const DashboardWidgetGrid: React.FunctionComponent<
   );
 
   if (isEmpty(widgets)) {
-    return <DashboardWidgetGridEmpty onAddWidget={handleAddWidget} />;
+    return (
+      <DashboardWidgetGridEmpty
+        onAddWidget={handleAddWidget}
+        readOnly={readOnly}
+      />
+    );
   }
 
   return (
@@ -71,6 +78,8 @@ const DashboardWidgetGrid: React.FunctionComponent<
       margin={GRID_MARGIN}
       containerPadding={CONTAINER_PADDING}
       onLayoutChange={handleLayoutChange}
+      isDraggable={!readOnly}
+      isResizable={!readOnly}
       draggableHandle=".comet-drag-handle"
       useCSSTransforms
       preventCollision={false}

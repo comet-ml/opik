@@ -7,8 +7,8 @@ import type * as serializers from "../index.js";
 export const ExperimentPublicType: core.serialization.Schema<
     serializers.ExperimentPublicType.Raw,
     OpikApi.ExperimentPublicType
-> = core.serialization.enum_(["regular", "trial", "mini-batch"]);
+> = core.serialization.enum_(["regular", "trial", "mini-batch", "mutation"]);
 
 export declare namespace ExperimentPublicType {
-    export type Raw = "regular" | "trial" | "mini-batch";
+    export type Raw = "regular" | "trial" | "mini-batch" | "mutation";
 }

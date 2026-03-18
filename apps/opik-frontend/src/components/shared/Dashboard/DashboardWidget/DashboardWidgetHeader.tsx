@@ -11,7 +11,7 @@ type DashboardWidgetHeaderProps = {
   actions?: React.ReactElement<{ onOpenChange?: (open: boolean) => void }>;
   dragHandle?: React.ReactNode;
   className?: string;
-  preview?: boolean;
+  readOnly?: boolean;
 };
 
 const DashboardWidgetHeader: React.FunctionComponent<
@@ -24,16 +24,16 @@ const DashboardWidgetHeader: React.FunctionComponent<
   actions,
   dragHandle,
   className,
-  preview = false,
+  readOnly,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const actionsWithHandler =
-    actions && !preview
+    actions && !readOnly
       ? React.cloneElement(actions, { onOpenChange: setMenuOpen })
       : null;
 
-  const showDragHandle = dragHandle && !preview;
+  const showDragHandle = dragHandle && !readOnly;
 
   return (
     <div

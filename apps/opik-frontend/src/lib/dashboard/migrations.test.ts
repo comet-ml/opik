@@ -1,11 +1,39 @@
 import { describe, it, expect, vi } from "vitest";
 import { migrateDashboardConfig } from "./migrations";
-import {
-  DashboardState,
-  WIDGET_TYPE,
-  EXPERIMENT_DATA_SOURCE,
-} from "@/types/dashboard";
+import { DashboardState, WIDGET_TYPE } from "@/types/dashboard";
 import { DASHBOARD_VERSION, DEFAULT_MAX_EXPERIMENTS } from "./utils";
+
+enum LEGACY_EXPERIMENT_DATA_SOURCE {
+  FILTER_AND_GROUP = "filter_and_group",
+  SELECT_EXPERIMENTS = "select_experiments",
+}
+
+const createLegacyDashboard = (
+  version: number,
+  overrides: Record<string, unknown> = {},
+) => {
+  return {
+    version,
+    sections: [
+      {
+        id: "section-1",
+        title: "Section",
+        widgets: [],
+        layout: [],
+      },
+    ],
+    lastModified: Date.now(),
+    config: {
+      dateRange: "7d",
+      projectIds: [],
+      experimentIds: [],
+      experimentDataSource: LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+    },
+    ...overrides,
+  } as unknown as DashboardState;
+};
 
 describe("migrateDashboardConfig", () => {
   describe("invalid inputs", () => {
@@ -68,14 +96,6 @@ describe("migrateDashboardConfig", () => {
         },
       ],
       lastModified: Date.now(),
-      config: {
-        dateRange: "7d",
-        projectIds: ["project-1"],
-        experimentIds: [],
-        experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-        experimentFilters: [],
-        maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-      },
     };
 
     it("should return dashboard unchanged when already at current version", () => {
@@ -88,82 +108,48 @@ describe("migrateDashboardConfig", () => {
       expect(result.version).toBe(currentDashboard.version);
       expect(result.sections).toEqual(currentDashboard.sections);
       expect(result.lastModified).toBe(currentDashboard.lastModified);
-      expect(result.config).toEqual(currentDashboard.config);
+    });
+
+    it("should not have config property", () => {
+      const result = migrateDashboardConfig(currentDashboard);
+      expect(result).not.toHaveProperty("config");
     });
   });
 
   describe("legacy dashboard without version", () => {
-    const legacyDashboard = {
-      version: 0,
-      sections: [
-        {
-          id: "section-1",
-          title: "Legacy Section",
-          widgets: [],
-          layout: [],
-        },
-      ],
-      lastModified: Date.now(),
+    const legacyDashboard = createLegacyDashboard(0, {
       config: {
         dateRange: "30d",
         projectIds: ["legacy-project"],
         experimentIds: [],
-        experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+        experimentDataSource: LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
         experimentFilters: [],
         maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
       },
-    } as DashboardState;
-
-    it("should treat dashboard without version as version 0", () => {
-      const result = migrateDashboardConfig(legacyDashboard);
-      expect(result.sections).toEqual(legacyDashboard.sections);
     });
 
-    it("should preserve legacy dashboard data", () => {
+    it("should migrate to current version", () => {
       const result = migrateDashboardConfig(legacyDashboard);
-      expect(result.sections[0].title).toBe("Legacy Section");
-      expect(result.config.dateRange).toBe(legacyDashboard.config.dateRange);
-      expect(result.config.projectIds).toEqual(
-        legacyDashboard.config.projectIds,
-      );
-      expect(result.config.experimentIds).toEqual(
-        legacyDashboard.config.experimentIds,
-      );
-      // Migration adds new fields
-      expect(result.config.experimentDataSource).toBe(
-        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-      );
-      expect(result.config.experimentFilters).toEqual([]);
-      expect(result.config.maxExperimentsCount).toBe(10);
+      expect(result.version).toBe(DASHBOARD_VERSION);
+    });
+
+    it("should preserve legacy dashboard sections", () => {
+      const result = migrateDashboardConfig(legacyDashboard);
+      expect(result.sections[0].title).toBe("Section");
+    });
+
+    it("should not have config property after migration", () => {
+      const result = migrateDashboardConfig(legacyDashboard);
+      expect(result).not.toHaveProperty("config");
     });
   });
 
   describe("old version dashboard", () => {
     it("should handle dashboard with version 0", () => {
-      const oldDashboard: DashboardState = {
-        version: 0,
-        sections: [
-          {
-            id: "section-1",
-            title: "Old Section",
-            widgets: [],
-            layout: [],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
+      const oldDashboard = createLegacyDashboard(0);
       const result = migrateDashboardConfig(oldDashboard);
       expect(result.sections).toBeDefined();
-      expect(result.version).toBeDefined();
+      expect(result.version).toBe(DASHBOARD_VERSION);
     });
   });
 
@@ -180,14 +166,6 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
       };
 
       const result = migrateDashboardConfig(futureDashboard);
@@ -202,44 +180,10 @@ describe("migrateDashboardConfig", () => {
         version: DASHBOARD_VERSION,
         sections: [],
         lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
       };
 
       const result = migrateDashboardConfig(dashboard);
       expect(result.sections).toEqual([]);
-    });
-
-    it("should handle dashboard with default config", () => {
-      const dashboard: DashboardState = {
-        version: DASHBOARD_VERSION,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [],
-            layout: [],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(dashboard);
-      expect(result.config).toEqual(dashboard.config);
     });
 
     it("should handle dashboard with complex widget configs", () => {
@@ -273,14 +217,6 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: ["project-1"],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
       };
 
       const result = migrateDashboardConfig(dashboard);
@@ -290,26 +226,36 @@ describe("migrateDashboardConfig", () => {
     });
 
     it("should not mutate original dashboard", () => {
-      const dashboard: DashboardState = {
-        version: DASHBOARD_VERSION,
+      const dashboard = createLegacyDashboard(3, {
         sections: [
           {
             id: "section-1",
             title: "Section",
-            widgets: [],
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: {
+                  projectId: "project-1",
+                  metricType: "trace_count",
+                  overrideDefaults: true,
+                },
+              },
+            ],
             layout: [],
           },
         ],
-        lastModified: Date.now(),
         config: {
           dateRange: "7d",
           projectIds: ["test"],
           experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentDataSource:
+            LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
           experimentFilters: [],
           maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
         },
-      };
+      });
 
       const originalCopy = JSON.parse(JSON.stringify(dashboard));
       migrateDashboardConfig(dashboard);
@@ -341,14 +287,6 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
       };
 
       const result = migrateDashboardConfig(dashboard);
@@ -357,10 +295,9 @@ describe("migrateDashboardConfig", () => {
     });
   });
 
-  describe("migration from v1 to v2", () => {
-    it("should set overrideDefaults to true for PROJECT_METRICS widgets with custom projectId", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
+  describe("migration from v1 to v2 (through full pipeline)", () => {
+    it("should migrate PROJECT_METRICS with custom projectId — preserves projectId", () => {
+      const v1Dashboard = createLegacyDashboard(1, {
         sections: [
           {
             id: "section-1",
@@ -380,229 +317,18 @@ describe("migrateDashboardConfig", () => {
             layout: [{ i: "widget-1", x: 0, y: 0, w: 3, h: 5 }],
           },
         ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
-    });
-
-    it("should set overrideDefaults to false for PROJECT_METRICS widgets without custom projectId", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.PROJECT_METRICS,
-                title: "Metrics",
-                config: {
-                  metricType: "trace_count",
-                  chartType: "line",
-                },
-              },
-            ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 3, h: 5 }],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
-    });
-
-    it("should set overrideDefaults to true for PROJECT_STATS_CARD widgets with custom projectId", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.PROJECT_STATS_CARD,
-                title: "Stats",
-                config: {
-                  projectId: "project-1",
-                  source: "traces",
-                  metric: "count",
-                },
-              },
-            ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 2, h: 3 }],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
-    });
-
-    it("should set overrideDefaults to false for PROJECT_STATS_CARD widgets without custom projectId", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.PROJECT_STATS_CARD,
-                title: "Stats",
-                config: {
-                  source: "traces",
-                  metric: "count",
-                },
-              },
-            ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 2, h: 3 }],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
-    });
-
-    it("should set overrideDefaults to true when experimentIds exist", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
-                title: "Experiments",
-                config: {
-                  experimentIds: ["exp-1"],
-                  chartType: "line",
-                },
-              },
-            ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
-    });
-
-    it("should set overrideDefaults to true when dataSource is not SELECT_EXPERIMENTS", () => {
-      const testCases = [
-        {
-          name: "undefined dataSource",
-          config: { chartType: "line" },
-        },
-        {
-          name: "FILTER_AND_GROUP dataSource",
-          config: {
-            dataSource: "filter-and-group",
-            chartType: "line",
-            filters: [],
-            groups: [],
-          },
-        },
-      ];
-
-      testCases.forEach(({ name, config }) => {
-        const v1Dashboard: DashboardState = {
-          version: 1,
-          sections: [
-            {
-              id: "section-1",
-              title: "Section",
-              widgets: [
-                {
-                  id: "widget-1",
-                  type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
-                  title: "Experiments",
-                  config,
-                },
-              ],
-              layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
-            },
-          ],
-          lastModified: Date.now(),
-          config: {
-            dateRange: "7d",
-            projectIds: [],
-            experimentIds: [],
-            experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-            experimentFilters: [],
-            maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-          },
-        };
-
-        const result = migrateDashboardConfig(v1Dashboard);
-        expect(result.version).toBe(DASHBOARD_VERSION);
-        expect(
-          result.sections[0].widgets[0].config.overrideDefaults,
-          `Failed for ${name}`,
-        ).toBe(true);
       });
+
+      const result = migrateDashboardConfig(v1Dashboard);
+      expect(result.version).toBe(DASHBOARD_VERSION);
+      expect(result.sections[0].widgets[0].config.projectId).toBe("project-1");
+      expect(
+        result.sections[0].widgets[0].config.overrideDefaults,
+      ).toBeUndefined();
     });
 
-    it("should set overrideDefaults to false when dataSource is SELECT_EXPERIMENTS and no experimentIds", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
+    it("should migrate PROJECT_METRICS without projectId — gets global projectId", () => {
+      const v1Dashboard = createLegacyDashboard(1, {
         sections: [
           {
             id: "section-1",
@@ -610,36 +336,40 @@ describe("migrateDashboardConfig", () => {
             widgets: [
               {
                 id: "widget-1",
-                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
-                title: "Experiments",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
                 config: {
-                  dataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+                  metricType: "trace_count",
                   chartType: "line",
                 },
               },
             ],
-            layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
+            layout: [{ i: "widget-1", x: 0, y: 0, w: 3, h: 5 }],
           },
         ],
-        lastModified: Date.now(),
         config: {
           dateRange: "7d",
-          projectIds: [],
+          projectIds: ["global-project"],
           experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentDataSource:
+            LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
           experimentFilters: [],
           maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
         },
-      };
+      });
 
       const result = migrateDashboardConfig(v1Dashboard);
       expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(false);
+      expect(result.sections[0].widgets[0].config.projectId).toBe(
+        "global-project",
+      );
+      expect(
+        result.sections[0].widgets[0].config.overrideDefaults,
+      ).toBeUndefined();
     });
 
     it("should not modify TEXT_MARKDOWN widgets", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
+      const v1Dashboard = createLegacyDashboard(1, {
         sections: [
           {
             id: "section-1",
@@ -649,22 +379,13 @@ describe("migrateDashboardConfig", () => {
                 id: "widget-1",
                 type: WIDGET_TYPE.TEXT_MARKDOWN,
                 title: "Text",
-                config: { content: "test" } as never,
+                config: { content: "test" },
               },
             ],
             layout: [{ i: "widget-1", x: 0, y: 0, w: 2, h: 2 }],
           },
         ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
+      });
 
       const result = migrateDashboardConfig(v1Dashboard);
       expect(result.version).toBe(DASHBOARD_VERSION);
@@ -674,8 +395,7 @@ describe("migrateDashboardConfig", () => {
     });
 
     it("should handle multiple widgets of different types", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
+      const v1Dashboard = createLegacyDashboard(1, {
         sections: [
           {
             id: "section-1",
@@ -691,7 +411,7 @@ describe("migrateDashboardConfig", () => {
                 id: "widget-2",
                 type: WIDGET_TYPE.TEXT_MARKDOWN,
                 title: "Text",
-                config: { content: "test" } as never,
+                config: { content: "test" },
               },
               {
                 id: "widget-3",
@@ -703,151 +423,19 @@ describe("migrateDashboardConfig", () => {
             layout: [],
           },
         ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
+      });
 
       const result = migrateDashboardConfig(v1Dashboard);
       expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.sections[0].widgets[0].config.overrideDefaults).toBe(true);
-      expect(
-        result.sections[0].widgets[1].config.overrideDefaults,
-      ).toBeUndefined();
-      expect(result.sections[0].widgets[2].config.overrideDefaults).toBe(false);
-    });
-
-    it("should preserve existing widget config properties", () => {
-      const v1Dashboard: DashboardState = {
-        version: 1,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [
-              {
-                id: "widget-1",
-                type: WIDGET_TYPE.PROJECT_METRICS,
-                title: "Metrics",
-                config: {
-                  projectId: "project-1",
-                  metricType: "trace_count",
-                  chartType: "line",
-                  traceFilters: [
-                    {
-                      field: "status",
-                      operator: "=",
-                      value: "success",
-                      type: "string",
-                    },
-                  ],
-                  feedbackScores: ["score-1"],
-                },
-              },
-            ],
-            layout: [],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(v1Dashboard);
-      expect(result.sections[0].widgets[0].config).toEqual({
-        projectId: "project-1",
-        metricType: "trace_count",
-        chartType: "line",
-        traceFilters: [
-          {
-            field: "status",
-            operator: "=",
-            value: "success",
-            type: "string",
-          },
-        ],
-        feedbackScores: ["score-1"],
-        overrideDefaults: true,
-      });
+      for (const widget of result.sections[0].widgets) {
+        expect(widget.config.overrideDefaults).toBeUndefined();
+      }
     });
   });
 
-  describe("migration from v2 to v3", () => {
-    it("should migrate dashboard from version 2 to 3 and add default config fields", () => {
-      const v2Dashboard: DashboardState = {
-        version: 2,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [],
-            layout: [],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
-        },
-      };
-
-      const result = migrateDashboardConfig(v2Dashboard);
-      expect(result.version).toBe(DASHBOARD_VERSION);
-      expect(result.config.experimentDataSource).toBe(
-        EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-      );
-      expect(result.config.experimentFilters).toEqual([]);
-      expect(result.config.maxExperimentsCount).toBe(10);
-    });
-
-    it("should preserve existing config values", () => {
-      const v2Dashboard: DashboardState = {
-        version: 2,
-        sections: [
-          {
-            id: "section-1",
-            title: "Section",
-            widgets: [],
-            layout: [],
-          },
-        ],
-        lastModified: Date.now(),
-        config: {
-          dateRange: "7d",
-          projectIds: [],
-          experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
-          experimentFilters: [],
-          maxExperimentsCount: 25,
-        },
-      };
-
-      const result = migrateDashboardConfig(v2Dashboard);
-      expect(result.config.experimentDataSource).toBe(
-        EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
-      );
-      expect(result.config.maxExperimentsCount).toBe(25);
-    });
-
+  describe("migration from v2 to v3 (through full pipeline)", () => {
     it("should add maxExperimentsCount to EXPERIMENTS_FEEDBACK_SCORES widgets", () => {
-      const v2Dashboard: DashboardState = {
-        version: 2,
+      const v2Dashboard = createLegacyDashboard(2, {
         sections: [
           {
             id: "section-1",
@@ -865,19 +453,372 @@ describe("migrateDashboardConfig", () => {
             layout: [{ i: "widget-1", x: 0, y: 0, w: 4, h: 5 }],
           },
         ],
-        lastModified: Date.now(),
+      });
+
+      const result = migrateDashboardConfig(v2Dashboard);
+      expect(result.version).toBe(DASHBOARD_VERSION);
+      expect(result.sections[0].widgets[0].config.maxExperimentsCount).toBe(10);
+    });
+  });
+
+  describe("migration from v3 to v4", () => {
+    it("should copy global projectId into project widgets with overrideDefaults=false", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: {
+                  metricType: "trace_count",
+                  overrideDefaults: false,
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
+        config: {
+          dateRange: "7d",
+          projectIds: ["global-project"],
+          experimentIds: [],
+          experimentDataSource:
+            LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
+      });
+
+      const result = migrateDashboardConfig(v3Dashboard);
+      expect(result.version).toBe(DASHBOARD_VERSION);
+      expect(result.sections[0].widgets[0].config.projectId).toBe(
+        "global-project",
+      );
+      expect(
+        result.sections[0].widgets[0].config.overrideDefaults,
+      ).toBeUndefined();
+      expect(result).not.toHaveProperty("config");
+    });
+
+    it("should keep widget projectId when overrideDefaults=true", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: {
+                  projectId: "widget-project",
+                  metricType: "trace_count",
+                  overrideDefaults: true,
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
+        config: {
+          dateRange: "7d",
+          projectIds: ["global-project"],
+          experimentIds: [],
+          experimentDataSource:
+            LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+        },
+      });
+
+      const result = migrateDashboardConfig(v3Dashboard);
+      expect(result.sections[0].widgets[0].config.projectId).toBe(
+        "widget-project",
+      );
+      expect(
+        result.sections[0].widgets[0].config.overrideDefaults,
+      ).toBeUndefined();
+    });
+
+    it("should convert SELECT_EXPERIMENTS experimentIds to filter when overrideDefaults=false", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  chartType: "line",
+                  maxExperimentsCount: 10,
+                  overrideDefaults: false,
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: ["exp-1", "exp-2"],
+          experimentDataSource:
+            LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [{ field: "name", operator: "=", value: "test" }],
+          maxExperimentsCount: 25,
+        },
+      });
+
+      const result = migrateDashboardConfig(v3Dashboard);
+      expect(result.version).toBe(DASHBOARD_VERSION);
+      const widgetConfig = result.sections[0].widgets[0].config;
+      expect(widgetConfig.dataSource).toBeUndefined();
+      expect(widgetConfig.experimentIds).toBeUndefined();
+      expect(widgetConfig.filters).toEqual([
+        {
+          id: "experiment-ids-filter",
+          field: "experiment_ids",
+          type: "string",
+          operator: "=",
+          key: "",
+          value: "exp-1,exp-2",
+        },
+      ]);
+      expect(widgetConfig.groups).toEqual([]);
+      expect(widgetConfig.overrideDefaults).toBeUndefined();
+    });
+
+    it("should keep filters when FILTER_AND_GROUP mode with overrideDefaults=false", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  chartType: "line",
+                  maxExperimentsCount: 10,
+                  overrideDefaults: false,
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
         config: {
           dateRange: "7d",
           projectIds: [],
           experimentIds: [],
-          experimentDataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-          experimentFilters: [],
-          maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
+          experimentDataSource: LEGACY_EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+          experimentFilters: [{ field: "name", operator: "=", value: "test" }],
+          maxExperimentsCount: 25,
         },
-      };
+      });
 
-      const result = migrateDashboardConfig(v2Dashboard);
-      expect(result.sections[0].widgets[0].config.maxExperimentsCount).toBe(10);
+      const result = migrateDashboardConfig(v3Dashboard);
+      const widgetConfig = result.sections[0].widgets[0].config;
+      expect(widgetConfig.dataSource).toBeUndefined();
+      expect(widgetConfig.experimentIds).toBeUndefined();
+      expect(widgetConfig.filters).toEqual([
+        { field: "name", operator: "=", value: "test" },
+      ]);
+      expect(widgetConfig.maxExperimentsCount).toBe(25);
+    });
+
+    it("should convert experiment widget own values when overrideDefaults=true", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  chartType: "line",
+                  maxExperimentsCount: 15,
+                  dataSource: LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+                  filters: [{ field: "own", operator: "=", value: "filter" }],
+                  experimentIds: ["own-exp"],
+                  overrideDefaults: true,
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: ["global-exp"],
+          experimentDataSource: LEGACY_EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+          experimentFilters: [
+            { field: "global", operator: "=", value: "filter" },
+          ],
+          maxExperimentsCount: 50,
+        },
+      });
+
+      const result = migrateDashboardConfig(v3Dashboard);
+      const widgetConfig = result.sections[0].widgets[0].config;
+      expect(widgetConfig.dataSource).toBeUndefined();
+      expect(widgetConfig.experimentIds).toBeUndefined();
+      expect(widgetConfig.filters).toEqual([
+        {
+          id: "experiment-ids-filter",
+          field: "experiment_ids",
+          type: "string",
+          operator: "=",
+          key: "",
+          value: "own-exp",
+        },
+      ]);
+      expect(widgetConfig.groups).toEqual([]);
+      expect(widgetConfig.maxExperimentsCount).toBe(15);
+      expect(widgetConfig.overrideDefaults).toBeUndefined();
+    });
+
+    it("should convert leaderboard widget from global config when overrideDefaults=false", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENT_LEADERBOARD,
+                title: "Leaderboard",
+                config: {
+                  enableRanking: true,
+                  overrideDefaults: false,
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
+        config: {
+          dateRange: "7d",
+          projectIds: [],
+          experimentIds: ["exp-1"],
+          experimentDataSource:
+            LEGACY_EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+          experimentFilters: [],
+          maxExperimentsCount: 50,
+        },
+      });
+
+      const result = migrateDashboardConfig(v3Dashboard);
+      const widgetConfig = result.sections[0].widgets[0].config;
+      expect(widgetConfig.dataSource).toBeUndefined();
+      expect(widgetConfig.experimentIds).toBeUndefined();
+      expect(widgetConfig.filters).toEqual([
+        {
+          id: "experiment-ids-filter",
+          field: "experiment_ids",
+          type: "string",
+          operator: "=",
+          key: "",
+          value: "exp-1",
+        },
+      ]);
+      expect(widgetConfig.groups).toEqual([]);
+      expect(widgetConfig.maxRows).toBe(50);
+      expect(widgetConfig.overrideDefaults).toBeUndefined();
+    });
+
+    it("should strip overrideDefaults from all widgets", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.PROJECT_METRICS,
+                title: "Metrics",
+                config: { metricType: "trace_count", overrideDefaults: true },
+              },
+              {
+                id: "widget-2",
+                type: WIDGET_TYPE.PROJECT_STATS_CARD,
+                title: "Stats",
+                config: {
+                  source: "traces",
+                  metric: "count",
+                  overrideDefaults: false,
+                },
+              },
+              {
+                id: "widget-3",
+                type: WIDGET_TYPE.TEXT_MARKDOWN,
+                title: "Text",
+                config: { content: "test" },
+              },
+            ],
+            layout: [],
+          },
+        ],
+      });
+
+      const result = migrateDashboardConfig(v3Dashboard);
+      for (const widget of result.sections[0].widgets) {
+        expect(widget.config.overrideDefaults).toBeUndefined();
+      }
+    });
+
+    it("should remove config property from dashboard", () => {
+      const v3Dashboard = createLegacyDashboard(3);
+      const result = migrateDashboardConfig(v3Dashboard);
+      expect(result).not.toHaveProperty("config");
+    });
+
+    it("should keep FILTER_AND_GROUP with empty experimentIds as-is (no experiment_ids filter)", () => {
+      const v3Dashboard = createLegacyDashboard(3, {
+        sections: [
+          {
+            id: "section-1",
+            title: "Section",
+            widgets: [
+              {
+                id: "widget-1",
+                type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+                title: "Experiments",
+                config: {
+                  chartType: "line",
+                  dataSource: LEGACY_EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+                  filters: [],
+                  experimentIds: [],
+                  overrideDefaults: true,
+                },
+              },
+            ],
+            layout: [],
+          },
+        ],
+      });
+
+      const result = migrateDashboardConfig(v3Dashboard);
+      const widgetConfig = result.sections[0].widgets[0].config;
+      expect(widgetConfig.dataSource).toBeUndefined();
+      expect(widgetConfig.experimentIds).toBeUndefined();
+      expect(widgetConfig.filters).toEqual([]);
     });
   });
 });

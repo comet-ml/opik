@@ -9,6 +9,7 @@ from .dataset_item_public_source import DatasetItemPublicSource
 from .evaluator_item_public import EvaluatorItemPublic
 from .execution_policy_public import ExecutionPolicyPublic
 from .experiment_item_public import ExperimentItemPublic
+from .experiment_run_summary_public import ExperimentRunSummaryPublic
 from .json_node import JsonNode
 
 
@@ -24,6 +25,7 @@ class DatasetItemPublic(UniversalBaseModel):
     evaluators: typing.Optional[typing.List[EvaluatorItemPublic]] = None
     execution_policy: typing.Optional[ExecutionPolicyPublic] = None
     experiment_items: typing.Optional[typing.List[ExperimentItemPublic]] = None
+    run_summaries_by_experiment: typing.Optional[typing.Dict[str, ExperimentRunSummaryPublic]] = None
     dataset_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

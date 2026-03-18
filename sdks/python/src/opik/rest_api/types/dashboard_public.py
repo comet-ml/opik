@@ -13,6 +13,11 @@ from .json_node_public import JsonNodePublic
 class DashboardPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     workspace_id: typing.Optional[str] = None
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project ID. Takes precedence over project_name when both are provided.
+    """
+
     name: str
     slug: typing.Optional[str] = None
     type: typing.Optional[DashboardPublicType] = None

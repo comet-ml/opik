@@ -10,6 +10,7 @@ export const PromptDetail: core.serialization.ObjectSchema<serializers.PromptDet
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         description: core.serialization.string().optional(),
         templateStructure: core.serialization.property("template_structure", PromptDetailTemplateStructure.optional()),
         tags: core.serialization.list(core.serialization.string()).optional(),
@@ -26,6 +27,7 @@ export declare namespace PromptDetail {
     export interface Raw {
         id?: string | null;
         name: string;
+        project_id?: string | null;
         description?: string | null;
         template_structure?: PromptDetailTemplateStructure.Raw | null;
         tags?: string[] | null;

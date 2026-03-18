@@ -1,17 +1,19 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
-import { Tag } from "@/components/ui/tag";
+import { Tag, TagProps } from "@/components/ui/tag";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 type CustomMeta = {
-  colored: boolean;
+  colored?: boolean;
+  variantMap?: Record<string, TagProps["variant"]>;
 };
 
 const TagCell = (context: CellContext<unknown, string>) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { colored = true } = (custom ?? {}) as CustomMeta;
+  const { colored = true, variantMap } = (custom ?? {}) as CustomMeta;
   const value = context.getValue();
+  const fixedVariant = variantMap?.[value];
 
   return (
     <CellWrapper
@@ -19,7 +21,7 @@ const TagCell = (context: CellContext<unknown, string>) => {
       tableMetadata={context.table.options.meta}
     >
       {colored ? (
-        <ColoredTag label={value}></ColoredTag>
+        <ColoredTag label={value} variant={fixedVariant} />
       ) : (
         <Tag size="md">{value}</Tag>
       )}

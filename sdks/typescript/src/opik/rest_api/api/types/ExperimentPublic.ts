@@ -4,7 +4,7 @@ import type * as OpikApi from "../index.js";
 
 export interface ExperimentPublic {
     id?: string;
-    datasetName: string;
+    datasetName: string | null;
     datasetId?: string;
     projectId?: string;
     projectName?: string;
@@ -17,6 +17,7 @@ export interface ExperimentPublic {
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
     comments?: OpikApi.CommentPublic[];
     traceCount?: number;
+    datasetItemCount?: number;
     createdAt?: Date;
     duration?: OpikApi.PercentageValuesPublic;
     totalEstimatedCost?: number;

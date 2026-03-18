@@ -4,24 +4,19 @@ import useProjectById from "@/api/projects/useProjectById";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
-import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
+import InsightsTab from "@/components/pages/TracesPage/InsightsTab/InsightsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
 import ConfigurationTab from "@/components/pages/TracesPage/ConfigurationTab/ConfigurationTab";
-import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Construction } from "lucide-react";
 import { useState } from "react";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import { VIEW_TYPE } from "@/types/dashboard";
 import useProjectTabs from "@/components/pages/TracesPage/useProjectTabs";
 import { PROJECT_TAB } from "@/constants/traces";
-import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -55,77 +50,67 @@ const TracesPage = () => {
     projectId,
   });
 
-  const { view, setView } = useViewQueryParam();
-
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
   const renderContent = () => {
-    if (view === VIEW_TYPE.DETAILS) {
-      return (
-        <Tabs
-          defaultValue={PROJECT_TAB.logs}
-          value={activeTab}
-          onValueChange={handleTabChange}
-          className="min-w-min"
-        >
-          <PageBodyStickyContainer direction="horizontal" limitWidth>
-            <TabsList variant="underline">
-              <TabsTrigger variant="underline" value={PROJECT_TAB.logs}>
-                Logs
-              </TabsTrigger>
-              <TabsTrigger variant="underline" value={PROJECT_TAB.metrics}>
-                Metrics
-              </TabsTrigger>
-              {isAgentConfigurationEnabled && (
-                <TabsTrigger
-                  variant="underline"
-                  value={PROJECT_TAB.configuration}
-                >
-                  Configuration
-                </TabsTrigger>
-              )}
-              <TabsTrigger variant="underline" value={PROJECT_TAB.evaluators}>
-                Online evaluation
-              </TabsTrigger>
+    return (
+      <Tabs
+        defaultValue={PROJECT_TAB.logs}
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="min-w-min"
+      >
+        <PageBodyStickyContainer direction="horizontal" limitWidth>
+          <TabsList variant="underline">
+            <TabsTrigger variant="underline" value={PROJECT_TAB.logs}>
+              Logs
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value={PROJECT_TAB.insights}>
+              Insights
+            </TabsTrigger>
+            {isAgentConfigurationEnabled && (
               <TabsTrigger
                 variant="underline"
-                value={PROJECT_TAB.annotationQueues}
+                value={PROJECT_TAB.configuration}
               >
-                Annotation queues
+                Configuration
               </TabsTrigger>
-            </TabsList>
-          </PageBodyStickyContainer>
-          <TabsContent value={PROJECT_TAB.logs}>
-            <LogsTab
-              projectId={projectId}
-              projectName={projectName}
-              logsType={logsType}
-              onLogsTypeChange={setLogsType}
-            />
+            )}
+            <TabsTrigger variant="underline" value={PROJECT_TAB.evaluators}>
+              Online evaluation
+            </TabsTrigger>
+            <TabsTrigger
+              variant="underline"
+              value={PROJECT_TAB.annotationQueues}
+            >
+              Annotation queues
+            </TabsTrigger>
+          </TabsList>
+        </PageBodyStickyContainer>
+        <TabsContent value={PROJECT_TAB.logs}>
+          <LogsTab
+            projectId={projectId}
+            projectName={projectName}
+            logsType={logsType}
+            onLogsTypeChange={setLogsType}
+          />
+        </TabsContent>
+        <TabsContent value={PROJECT_TAB.insights}>
+          <InsightsTab projectId={projectId} />
+        </TabsContent>
+        {isAgentConfigurationEnabled && (
+          <TabsContent value={PROJECT_TAB.configuration}>
+            <ConfigurationTab projectId={projectId} />
           </TabsContent>
-          <TabsContent value={PROJECT_TAB.metrics}>
-            <MetricsTab projectId={projectId} />
-          </TabsContent>
-          {isAgentConfigurationEnabled && (
-            <TabsContent value={PROJECT_TAB.configuration}>
-              <ConfigurationTab projectId={projectId} />
-            </TabsContent>
-          )}
-          <TabsContent value={PROJECT_TAB.evaluators}>
-            <RulesTab projectId={projectId} />
-          </TabsContent>
-          <TabsContent value={PROJECT_TAB.annotationQueues}>
-            <AnnotationQueuesTab projectId={projectId} />
-          </TabsContent>
-        </Tabs>
-      );
-    }
-
-    if (view === VIEW_TYPE.DASHBOARDS) {
-      return <DashboardsTab projectId={projectId} />;
-    }
-
-    return null;
+        )}
+        <TabsContent value={PROJECT_TAB.evaluators}>
+          <RulesTab projectId={projectId} />
+        </TabsContent>
+        <TabsContent value={PROJECT_TAB.annotationQueues}>
+          <AnnotationQueuesTab projectId={projectId} />
+        </TabsContent>
+      </Tabs>
+    );
   };
 
   return (
@@ -141,22 +126,18 @@ const TracesPage = () => {
           >
             {projectName}
           </h1>
-          <div className="flex shrink-0 items-center gap-2">
-            {isGuardrailsEnabled && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={openGuardrailsDialog}
-                >
-                  <Construction className="mr-1.5 size-3.5" />
-                  Set a guardrail
-                </Button>
-                <Separator orientation="vertical" className="h-4" />
-              </>
-            )}
-            <ViewSelector value={view as VIEW_TYPE} onChange={setView} />
-          </div>
+          {isGuardrailsEnabled && (
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openGuardrailsDialog}
+              >
+                <Construction className="mr-1.5 size-3.5" />
+                Set a guardrail
+              </Button>
+            </div>
+          )}
         </PageBodyStickyContainer>
         {project?.description && (
           <PageBodyStickyContainer

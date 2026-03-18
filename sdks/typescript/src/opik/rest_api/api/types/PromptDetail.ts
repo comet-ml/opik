@@ -5,6 +5,8 @@ import type * as OpikApi from "../index.js";
 export interface PromptDetail {
     id?: string;
     name: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
+    projectId?: string;
     description?: string;
     /** Template structure type: 'text' or 'chat'. Immutable after creation. */
     templateStructure?: OpikApi.PromptDetailTemplateStructure;

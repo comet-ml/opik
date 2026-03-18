@@ -99,7 +99,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -145,7 +144,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -205,7 +203,7 @@ class ExperimentsResourceTest {
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments", "projectId", "projectName", "datasetItemCount"};
+            "lastUpdatedBy", "comments", "projectName", "datasetItemCount"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -976,11 +974,12 @@ class ExperimentsResourceTest {
                             .datasetName(datasetName)
                             .build())
                     .toList();
-            experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+            experiments.forEach(experiment -> experimentResourceClient.create(experiment, apiKey, workspaceName));
 
             var unexpectedExperiments = List.of(generateExperiment());
 
-            unexpectedExperiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+            unexpectedExperiments
+                    .forEach(experiment -> experimentResourceClient.create(experiment, apiKey, workspaceName));
 
             var pageSize = experiments.size() - 2;
             var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
@@ -1024,13 +1023,14 @@ class ExperimentsResourceTest {
                             .name(name)
                             .build())
                     .toList();
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+            experiments.forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment,
                     apiKey, workspaceName));
 
             var unexpectedExperiments = List.of(generateExperiment());
 
             unexpectedExperiments
-                    .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+                    .forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment, apiKey,
+                            workspaceName));
 
             var pageSize = experiments.size() - 2;
             UUID datasetId = null;
@@ -1063,13 +1063,14 @@ class ExperimentsResourceTest {
                             .metadata(null)
                             .build())
                     .toList();
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+            experiments.forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment,
                     apiKey, workspaceName));
 
             var unexpectedExperiments = List.of(generateExperiment());
 
             unexpectedExperiments
-                    .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+                    .forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment, apiKey,
+                            workspaceName));
 
             var pageSize = experiments.size() - 2;
             var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
@@ -1106,13 +1107,14 @@ class ExperimentsResourceTest {
                                             "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
                             .build())
                     .toList();
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+            experiments.forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment,
                     apiKey, workspaceName));
 
             var unexpectedExperiments = List.of(generateExperiment());
 
             unexpectedExperiments
-                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
+                    .forEach(unexpectedExperiment -> experimentResourceClient.create(unexpectedExperiment, apiKey,
+                            workspaceName));
 
             var pageSize = experiments.size() - 2;
             var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
@@ -1226,13 +1228,14 @@ class ExperimentsResourceTest {
                             .tags(Set.of("tag1", "tag2", "tag3"))
                             .build())
                     .toList();
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+            experiments.forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment,
                     apiKey, workspaceName));
 
             var unexpectedExperiments = List.of(generateExperiment().toBuilder().tags(Set.of("other")).build());
 
             unexpectedExperiments
-                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
+                    .forEach(unexpectedExperiment -> experimentResourceClient.create(unexpectedExperiment, apiKey,
+                            workspaceName));
 
             var pageSize = experiments.size() - 2;
             var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
@@ -1279,8 +1282,8 @@ class ExperimentsResourceTest {
                     .tags(null)
                     .build();
 
-            createAndAssert(experimentWithTags, apiKey, workspaceName);
-            createAndAssert(experimentWithoutTags, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithTags, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithoutTags, apiKey, workspaceName);
 
             // Filter by tags with IS_EMPTY or IS_NOT_EMPTY
             var filters = List.of(ExperimentFilter.builder()
@@ -1334,13 +1337,14 @@ class ExperimentsResourceTest {
                             .promptVersions(List.of(versionLink))
                             .build())
                     .toList();
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+            experiments.forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment,
                     apiKey, workspaceName));
 
             var unexpectedExperiments = List.of(generateExperiment());
 
             unexpectedExperiments
-                    .forEach(unexpectedExperiment -> createAndAssert(unexpectedExperiment, apiKey, workspaceName));
+                    .forEach(unexpectedExperiment -> experimentResourceClient.create(unexpectedExperiment, apiKey,
+                            workspaceName));
 
             var pageSize = experiments.size() - 2;
             var experiment = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey);
@@ -1389,13 +1393,14 @@ class ExperimentsResourceTest {
                             .type(type)
                             .build())
                     .toList();
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+            experiments.forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment,
                     apiKey, workspaceName));
 
             var unexpectedExperiments = List.of(generateExperiment());
 
             unexpectedExperiments
-                    .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+                    .forEach(expectedExperiment -> experimentResourceClient.create(expectedExperiment, apiKey,
+                            workspaceName));
 
             var pageSize = experiments.size() - 2;
             var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
@@ -1425,7 +1430,7 @@ class ExperimentsResourceTest {
             var allExperiments = IntStream.range(0, 5)
                     .mapToObj(i -> generateExperiment())
                     .toList();
-            allExperiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+            allExperiments.forEach(experiment -> experimentResourceClient.create(experiment, apiKey, workspaceName));
 
             // Select 2 experiments to filter by
             var experimentIdsToFilter = Set.of(allExperiments.get(1).id(), allExperiments.get(3).id());
@@ -1494,7 +1499,7 @@ class ExperimentsResourceTest {
                 experiments.add(experiment);
                 traces.add(trace);
 
-                createAndAssert(experiment, apiKey, workspaceName);
+                experimentResourceClient.create(experiment, apiKey, workspaceName);
 
                 experimentItems.add(podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                         .experimentId(experiment.id())
@@ -1564,8 +1569,8 @@ class ExperimentsResourceTest {
             var experimentWithScores = generateExperiment();
             var experimentWithoutScores = generateExperiment();
 
-            createAndAssert(experimentWithScores, apiKey, workspaceName);
-            createAndAssert(experimentWithoutScores, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithScores, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithoutScores, apiKey, workspaceName);
 
             // Create traces
             var traceWithScores = podamFactory.manufacturePojo(Trace.class);
@@ -1659,7 +1664,7 @@ class ExperimentsResourceTest {
                         .build();
 
                 experiments.add(experiment);
-                createAndAssert(experiment, apiKey, workspaceName);
+                experimentResourceClient.create(experiment, apiKey, workspaceName);
             }
 
             // Test different filter operators
@@ -1715,14 +1720,14 @@ class ExperimentsResourceTest {
                     .experimentScores(List.of(experimentScoreWithScore))
                     .build();
 
-            createAndAssert(experimentWithScores, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithScores, apiKey, workspaceName);
 
             // Create experiment without experiment_scores
             var experimentWithoutScores = generateExperiment().toBuilder()
                     .experimentScores(null)
                     .build();
 
-            createAndAssert(experimentWithoutScores, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithoutScores, apiKey, workspaceName);
 
             // Filter by experiment_scores with IS_EMPTY or IS_NOT_EMPTY
             var filters = List.of(ExperimentFilter.builder()
@@ -1764,7 +1769,8 @@ class ExperimentsResourceTest {
 
             var experiments = experimentResourceClient.generateExperimentList();
 
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+            experiments.forEach(
+                    expectedExperiment -> experimentResourceClient.create(expectedExperiment, apiKey, workspaceName));
 
             var page = 1;
             var pageSize = experiments.size();
@@ -1886,7 +1892,7 @@ class ExperimentsResourceTest {
 
             // Create an experiment
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .datasetId(dataset.id())
+                    .datasetName(dataset.name())
                     .build();
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
@@ -1903,27 +1909,22 @@ class ExperimentsResourceTest {
                     .build();
             createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
 
-            // Wait for ClickHouse to process the trace-experiment relationship
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var retrievedExperiment = getExperiment(experimentId, workspaceName, apiKey);
-                assertThat(retrievedExperiment).isNotNull();
-                assertThat(retrievedExperiment.projectId())
-                        .as("projectId should be set from trace")
-                        .isEqualTo(projectId);
-                assertThat(retrievedExperiment.projectName())
-                        .as("projectName should be enriched from projectId")
-                        .isEqualTo(project.name());
-            });
+            List<BigDecimal> quantities = getQuantities(Stream.of(trace));
+            var expectedExperiment = experiment.toBuilder()
+                    .id(experimentId)
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
 
             // Also verify when finding experiments
             var response = experimentResourceClient.findExperiments(
                     1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
                     false, null, null, false, null, null, false, apiKey, workspaceName, HttpStatus.SC_OK);
 
-            assertThat(response.content()).hasSize(1);
-            var foundExperiment = response.content().get(0);
-            assertThat(foundExperiment.projectId()).isEqualTo(projectId);
-            assertThat(foundExperiment.projectName()).isEqualTo(project.name());
+            assertExperiments(dataset.id(), List.of(expectedExperiment), List.of(), Map.of(),
+                    response.content());
         }
 
         @Test
@@ -1940,15 +1941,16 @@ class ExperimentsResourceTest {
                             .build())
                     .toList();
 
-            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+            experiments.forEach(
+                    expectedExperiment -> experimentResourceClient.create(expectedExperiment, apiKey, workspaceName));
 
             var noScoreExperiment = generateExperiment();
 
-            createAndAssert(noScoreExperiment, apiKey, workspaceName);
+            experimentResourceClient.create(noScoreExperiment, apiKey, workspaceName);
 
             var noItemExperiment = generateExperiment();
 
-            createAndAssert(noItemExperiment, apiKey, workspaceName);
+            experimentResourceClient.create(noItemExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
             var trace1 = podamFactory.manufacturePojo(Trace.class);
@@ -2085,7 +2087,7 @@ class ExperimentsResourceTest {
                     .feedbackScores(null)
                     .build();
 
-            createAndAssert(expectedExperiment, apiKey, workspaceName);
+            experimentResourceClient.create(expectedExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
             var trace1 = podamFactory.manufacturePojo(Trace.class);
@@ -2176,36 +2178,34 @@ class ExperimentsResourceTest {
             var page = 1;
             var pageSize = 1;
 
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                try (var actualResponse = client.target(getExperimentsPath())
-                        .queryParam("page", page)
-                        .queryParam("size", pageSize)
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, apiKey)
-                        .header(WORKSPACE_HEADER, workspaceName)
-                        .get()) {
+            try (var actualResponse = client.target(getExperimentsPath())
+                    .queryParam("page", page)
+                    .queryParam("size", pageSize)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
 
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                    var actualPage = actualResponse.readEntity(ExperimentPage.class);
-                    var actualExperiments = actualPage.content();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+                var actualExperiments = actualPage.content();
 
-                    assertThat(actualPage.page()).isEqualTo(page);
-                    assertThat(actualPage.size()).isEqualTo(pageSize);
-                    assertThat(actualPage.total()).isEqualTo(pageSize);
-                    assertThat(actualExperiments).hasSize(pageSize);
+                assertThat(actualPage.page()).isEqualTo(page);
+                assertThat(actualPage.size()).isEqualTo(pageSize);
+                assertThat(actualPage.total()).isEqualTo(pageSize);
+                assertThat(actualExperiments).hasSize(pageSize);
 
-                    for (Experiment experiment : actualExperiments) {
-                        var expectedScores = expectedScoresPerExperiment.get(experiment.id());
-                        var actualScores = getScoresMap(experiment);
+                for (Experiment experiment : actualExperiments) {
+                    var expectedScores = expectedScoresPerExperiment.get(experiment.id());
+                    var actualScores = getScoresMap(experiment);
 
-                        assertThat(actualScores)
-                                .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                                        .build())
-                                .isEqualTo(expectedScores);
-                    }
+                    assertThat(actualScores)
+                            .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                    .build())
+                            .isEqualTo(expectedScores);
                 }
-            });
+            }
         }
 
         @Test
@@ -2220,7 +2220,7 @@ class ExperimentsResourceTest {
             datasets.forEach(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
-                createAndAssert(experimentResourceClient.createPartialExperiment()
+                experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
                         .datasetName(dataset.name())
                         .build(), apiKey, workspaceName);
             });
@@ -2243,7 +2243,7 @@ class ExperimentsResourceTest {
                         var dataset = buildDataset();
                         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                         datasets.add(dataset);
-                        var experimentId = createAndAssert(
+                        var experimentId = experimentResourceClient.create(
                                 experimentResourceClient.createPartialExperiment().datasetName(dataset.name()).build(),
                                 apiKey,
                                 workspaceName);
@@ -2278,6 +2278,9 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var experimentCount = 11;
             var expectedMatchCount = 5;
             var unexpectedDatasetCount = experimentCount - expectedMatchCount;
@@ -2301,7 +2304,7 @@ class ExperimentsResourceTest {
                         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                         datasets.add(dataset);
                         var expectedExperiment = createExperimentWithFeedbackScores(
-                                apiKey, workspaceName, dataset.name());
+                                apiKey, workspaceName, dataset.name(), project.name(), projectId);
                         experiments.add(expectedExperiment);
                     });
 
@@ -2334,6 +2337,9 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var dataset = buildDataset();
             datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
@@ -2348,7 +2354,9 @@ class ExperimentsResourceTest {
             List<Trace> traces = new ArrayList<>();
 
             IntStream.range(0, 5).forEach(i -> {
-                var trace = podamFactory.manufacturePojo(Trace.class);
+                var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(project.name())
+                        .build();
                 traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
                 var span = podamFactory.manufacturePojo(Span.class).toBuilder()
@@ -2376,6 +2384,7 @@ class ExperimentsResourceTest {
             List<BigDecimal> quantiles = getQuantities(traces.stream());
 
             var expectedExperiment = experiment.toBuilder()
+                    .projectId(projectId)
                     .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
                     .totalEstimatedCost(getTotalEstimatedCost(spans))
                     .totalEstimatedCostAvg(getTotalEstimatedCostAvg(spans))
@@ -2424,7 +2433,7 @@ class ExperimentsResourceTest {
             var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
                     .build();
-            var expectedExperimentId = createAndAssert(experiment, apiKey, workspaceName);
+            var expectedExperimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
             var expectedExperiment = experiment.toBuilder()
                     .datasetName(null)
                     .datasetId(null)
@@ -2437,18 +2446,28 @@ class ExperimentsResourceTest {
                     1, List.of(), apiKey, datasetDeleted, Map.of(), null);
         }
 
-        private Experiment createExperimentWithFeedbackScores(String apiKey, String workspaceName, String datasetName) {
+        private Experiment createExperimentWithFeedbackScores(String apiKey, String workspaceName,
+                String datasetName) {
+            return createExperimentWithFeedbackScores(apiKey, workspaceName, datasetName, null, null);
+        }
+
+        private Experiment createExperimentWithFeedbackScores(String apiKey, String workspaceName,
+                String datasetName, String projectName, UUID projectId) {
             var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(datasetName)
                     .build();
 
-            createAndAssert(experiment, apiKey, workspaceName);
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
 
             var expectedExperiment = getExperiment(experiment.id(), workspaceName, apiKey).toBuilder()
                     .datasetName(null)
                     .build();
 
-            var trace = podamFactory.manufacturePojo(Trace.class);
+            var traceBuilder = podamFactory.manufacturePojo(Trace.class).toBuilder();
+            if (projectName != null) {
+                traceBuilder.projectName(projectName);
+            }
+            var trace = traceBuilder.build();
 
             var traces = List.of(trace);
 
@@ -2494,15 +2513,18 @@ class ExperimentsResourceTest {
 
             List<BigDecimal> quantiles = getQuantities(traces.stream());
 
-            return expectedExperiment.toBuilder()
+            var resultBuilder = expectedExperiment.toBuilder()
                     .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
                     .feedbackScores(expectedScoresPerExperiment.get(expectedExperiment.id()).entrySet().stream()
                             .map(e -> FeedbackScoreAverage.builder()
                                     .name(e.getKey())
                                     .value(avgFromList(List.of(e.getValue())))
                                     .build())
-                            .toList())
-                    .build();
+                            .toList());
+            if (projectId != null) {
+                resultBuilder.projectId(projectId);
+            }
+            return resultBuilder.build();
         }
 
         @ParameterizedTest
@@ -2534,7 +2556,7 @@ class ExperimentsResourceTest {
                                 .feedbackScores(null)
                                 .build();
 
-                        createAndAssert(experiment, apiKey, workspaceName);
+                        experimentResourceClient.create(experiment, apiKey, workspaceName);
 
                         return getExperiment(experiment.id(), workspaceName, apiKey);
                     })
@@ -2579,7 +2601,7 @@ class ExperimentsResourceTest {
                                 .feedbackScores(null)
                                 .build();
 
-                        createAndAssert(experiment, apiKey, workspaceName);
+                        experimentResourceClient.create(experiment, apiKey, workspaceName);
 
                         return getExperiment(experiment.id(), workspaceName, apiKey);
                     })
@@ -2685,6 +2707,9 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
                     FeedbackScoreBatchItem.class);
             var experiments = IntStream.range(0, 5)
@@ -2692,7 +2717,8 @@ class ExperimentsResourceTest {
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
                             .build())
-                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace))
+                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace,
+                            project.name(), projectId))
                     .toList();
 
             var expectedExperiments = experiments
@@ -2719,6 +2745,9 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
                     FeedbackScoreBatchItem.class);
             var experiments = IntStream.range(0, 5)
@@ -2726,7 +2755,8 @@ class ExperimentsResourceTest {
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
                             .build())
-                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace))
+                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace,
+                            project.name(), projectId))
                     .toList();
 
             var sortingField = new SortingField(
@@ -2991,11 +3021,14 @@ class ExperimentsResourceTest {
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
                 PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
-                // Assign a random project to each experiment for PROJECT_ID grouping
+                // Map to hold the assigned projectId per experiment (set after creation)
+                Map<UUID, UUID> experimentProjectIds = new HashMap<>();
+
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
                         .map(experiment -> {
                             var project = projects.get(random.nextInt(projects.size()));
+                            experimentProjectIds.put(experiment.id(), project.id());
                             return experiment.toBuilder()
                                     .datasetId(dataset.id())
                                     .datasetName(dataset.name())
@@ -3004,19 +3037,19 @@ class ExperimentsResourceTest {
                                     .metadata(JsonUtils
                                             .getJsonNodeFromString(metadatas.get(random.nextInt(metadatas.size()))))
                                     .tags(tagsList.get(random.nextInt(tagsList.size())))
-                                    .projectId(project.id())
                                     .build();
                         })
                         .toList();
-                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+                experiments.forEach(experiment -> experimentResourceClient.create(experiment, apiKey, workspaceName));
 
                 // Create traces with different durations and setup spans with cost
                 // Link traces to the same project as their experiment
                 var traces = IntStream.range(0, 10)
                         .mapToObj(i -> {
                             var experiment = experiments.get(i % experiments.size());
+                            var assignedProjectId = experimentProjectIds.get(experiment.id());
                             var project = projects.stream()
-                                    .filter(p -> p.id().equals(experiment.projectId()))
+                                    .filter(p -> p.id().equals(assignedProjectId))
                                     .findFirst()
                                     .orElseThrow();
                             return createTraceWithDuration(random.nextInt(300)).toBuilder()
@@ -3069,7 +3102,11 @@ class ExperimentsResourceTest {
 
                 createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-                return experiments.stream();
+                // Return experiments with projectId set for expected grouping
+                return experiments.stream()
+                        .map(exp -> exp.toBuilder()
+                                .projectId(experimentProjectIds.get(exp.id()))
+                                .build());
             }).toList();
 
             // Call the aggregations endpoint
@@ -3249,10 +3286,10 @@ class ExperimentsResourceTest {
                     .tags(null)
                     .build();
 
-            createAndAssert(experimentWithTags1, apiKey, workspaceName);
-            createAndAssert(experimentWithTags2, apiKey, workspaceName);
-            createAndAssert(experimentWithoutTags1, apiKey, workspaceName);
-            createAndAssert(experimentWithoutTags2, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithTags1, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithTags2, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithoutTags1, apiKey, workspaceName);
+            experimentResourceClient.create(experimentWithoutTags2, apiKey, workspaceName);
 
             // Group by tags
             var groups = List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build());
@@ -3540,45 +3577,60 @@ class ExperimentsResourceTest {
             var allExperiments = datasets.stream().flatMap(dataset -> {
                 datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+                // Map to hold the assigned projectId per experiment (set after creation)
+                Map<UUID, UUID> experimentProjectIds = new HashMap<>();
+
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
-                        .map(experiment -> experiment.toBuilder()
-                                .datasetId(dataset.id())
-                                .datasetName(dataset.name())
-                                .metadata(JsonUtils
-                                        .getJsonNodeFromString(
-                                                "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
-                                                        .formatted(random.nextBoolean() ? "2024" : "2025") +
-                                                        "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
-                                .tags(tagsList.get(random.nextInt(tagsList.size())))
-                                // Assign a random project to each experiment for PROJECT_ID grouping
-                                .projectId(projects.get(random.nextInt(projects.size())).id())
-                                .build())
+                        .map(experiment -> {
+                            var assignedProjectId = projects.get(random.nextInt(projects.size())).id();
+                            var built = experiment.toBuilder()
+                                    .datasetId(dataset.id())
+                                    .datasetName(dataset.name())
+                                    .metadata(JsonUtils
+                                            .getJsonNodeFromString(
+                                                    "{\"provider\":\"openai\",\"model\":[{\"year\":%s,\"version\":\"OpenAI, "
+                                                            .formatted(random.nextBoolean() ? "2024" : "2025") +
+                                                            "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                                    .tags(tagsList.get(random.nextInt(tagsList.size())))
+                                    .build();
+                            experimentProjectIds.put(built.id(), assignedProjectId);
+                            return built;
+                        })
                         .toList();
 
-                // Create experiments and link them to projects via traces and experiment items
-                experiments.forEach(experiment -> {
-                    createAndAssert(experiment, apiKey, workspaceName);
+                // Create experiments and collect traces/items for batch creation
+                experiments.forEach(experiment -> experimentResourceClient.create(experiment, apiKey, workspaceName));
 
-                    // Create a trace linked to the experiment's project
+                List<Trace> allTraces = new ArrayList<>();
+                List<ExperimentItem> allItems = new ArrayList<>();
+
+                experiments.forEach(experiment -> {
+                    var assignedProjectId = experimentProjectIds.get(experiment.id());
                     var project = projects.stream()
-                            .filter(p -> p.id().equals(experiment.projectId()))
+                            .filter(p -> p.id().equals(assignedProjectId))
                             .findFirst()
                             .orElseThrow();
                     var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(project.name())
                             .build();
-                    traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+                    allTraces.add(trace);
 
-                    // Create experiment item linking experiment to trace
                     var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experiment.id())
                             .traceId(trace.id())
                             .build();
-                    createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+                    allItems.add(experimentItem);
                 });
 
-                return experiments.stream();
+                traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+                createAndAssert(new ExperimentItemsBatch(new HashSet<>(allItems)), apiKey, workspaceName);
+
+                // Return experiments with projectId set for expected grouping
+                return experiments.stream()
+                        .map(exp -> exp.toBuilder()
+                                .projectId(experimentProjectIds.get(exp.id()))
+                                .build());
             }).toList();
 
             var response = experimentResourceClient.findGroups(
@@ -3636,7 +3688,7 @@ class ExperimentsResourceTest {
                                 .tags(tagsList.get(random.nextInt(tagsList.size())))
                                 .build())
                         .toList();
-                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+                experiments.forEach(experiment -> experimentResourceClient.create(experiment, apiKey, workspaceName));
 
                 return experiments.stream();
             }).toList();
@@ -3684,7 +3736,7 @@ class ExperimentsResourceTest {
                                                         "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
                                 .build())
                         .toList();
-                experiments.forEach(experiment -> createAndAssert(experiment, apiKey, workspaceName));
+                experiments.forEach(experiment -> experimentResourceClient.create(experiment, apiKey, workspaceName));
 
                 return experiments.stream();
             }).toList();
@@ -3851,16 +3903,31 @@ class ExperimentsResourceTest {
             String workspaceName,
             Experiment expectedExperiment,
             List<FeedbackScoreBatchItem> scoreForTrace) {
+        return generateFullExperiment(apiKey, workspaceName, expectedExperiment, scoreForTrace, null, null);
+    }
+
+    private Experiment generateFullExperiment(
+            String apiKey,
+            String workspaceName,
+            Experiment expectedExperiment,
+            List<FeedbackScoreBatchItem> scoreForTrace,
+            String projectName,
+            UUID projectId) {
 
         createAndAssert(expectedExperiment, apiKey, workspaceName);
 
         int tracesNumber = PodamUtils.getIntegerInRange(1, 10);
 
         List<Trace> traces = IntStream.range(0, tracesNumber)
-                .mapToObj(i -> podamFactory.manufacturePojo(Trace.class).toBuilder()
-                        .startTime(Instant.now())
-                        .endTime(Instant.now().plus(PodamUtils.getIntegerInRange(100, 2000), ChronoUnit.MILLIS))
-                        .build())
+                .mapToObj(i -> {
+                    var builder = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                            .startTime(Instant.now())
+                            .endTime(Instant.now().plus(PodamUtils.getIntegerInRange(100, 2000), ChronoUnit.MILLIS));
+                    if (projectName != null) {
+                        builder.projectName(projectName);
+                    }
+                    return builder.build();
+                })
                 .toList();
 
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -3910,7 +3977,7 @@ class ExperimentsResourceTest {
 
         List<BigDecimal> quantities = getQuantities(traces.stream());
 
-        return expectedExperiment.toBuilder()
+        var resultBuilder = expectedExperiment.toBuilder()
                 .traceCount((long) traces.size())
                 .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
                 .totalEstimatedCost(null)
@@ -3923,8 +3990,11 @@ class ExperimentsResourceTest {
                                         .name(e.getKey())
                                         .value(avgFromList(List.of(e.getValue())))
                                         .build())
-                                .toList())
-                .build();
+                                .toList());
+        if (projectId != null) {
+            resultBuilder.projectId(projectId);
+        }
+        return resultBuilder.build();
     }
 
     private static PromptVersionLink buildVersionLink(PromptVersion promptVersion, String promptName) {
@@ -4232,6 +4302,11 @@ class ExperimentsResourceTest {
         void streamFullExperimentWithScoresPromptVersionsAndComments() {
             var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var name = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+            // Create a shared project for all traces
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
             // Only 2 experiments is enough for this test
             var experiments = IntStream.range(0, 2)
                     .mapToObj(i -> {
@@ -4254,12 +4329,17 @@ class ExperimentsResourceTest {
                         var scores = IntStream.range(0, 2)
                                 .mapToObj(j -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class))
                                 .toList();
-                        return generateFullExperiment(API_KEY, TEST_WORKSPACE, experiment, scores);
+                        return generateFullExperiment(API_KEY, TEST_WORKSPACE, experiment, scores,
+                                project.name(), projectId);
                     })
                     .toList();
 
             // Only 1 trace per experiment is enough for this test
-            var traces = IntStream.range(0, 2).mapToObj(i -> podamFactory.manufacturePojo(Trace.class)).toList();
+            var traces = IntStream.range(0, 2)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(project.name())
+                            .build())
+                    .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             // Attaching 2 comments to each trace.
@@ -4304,6 +4384,7 @@ class ExperimentsResourceTest {
                                 .sequential());
 
                         return experiment.toBuilder()
+                                .projectId(projectId)
                                 .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
                                 .build();
                     })
@@ -4383,12 +4464,19 @@ class ExperimentsResourceTest {
 
             createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
+            // Create a shared project for all traces
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
             // Creating three traces with input, output and scores
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
             var traces = List.of(trace1, trace2, trace3);
 
@@ -4431,6 +4519,7 @@ class ExperimentsResourceTest {
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3));
 
             expectedExperiment = expectedExperiment.toBuilder()
+                    .projectId(projectId)
                     .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
                     .build();
 
@@ -4457,12 +4546,19 @@ class ExperimentsResourceTest {
 
             createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
+            // Create a shared project for all traces
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
             // Creating three traces with input, output, and scores
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
             var traces = List.of(trace1, trace2, trace3);
 
@@ -4503,6 +4599,7 @@ class ExperimentsResourceTest {
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3));
 
             expectedExperiment = expectedExperiment.toBuilder()
+                    .projectId(projectId)
                     .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
                     .build();
 
@@ -4681,24 +4778,33 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var experiment = experimentResourceClient.createPartialExperiment()
                     .feedbackScores(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
 
-            // Creating three traces with input, output and scores
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            // Creating traces with input, output and scores
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace4 = podamFactory.manufacturePojo(Trace.class);
+            var trace4 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace5 = podamFactory.manufacturePojo(Trace.class);
+            var trace5 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
-            var trace6 = podamFactory.manufacturePojo(Trace.class);
+            var trace6 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
 
             var traces = List.of(trace1, trace2, trace3, trace4, trace5, trace6);
 
@@ -4768,6 +4874,7 @@ class ExperimentsResourceTest {
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
 
             var expectedExperiment = experiment.toBuilder()
+                    .projectId(projectId)
                     .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
                     .build();
 
@@ -4777,19 +4884,17 @@ class ExperimentsResourceTest {
                             .filter(e -> !e.getKey().equals(trace6.id()))
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
 
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                Experiment actualExperiment = getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+            Experiment actualExperiment = getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
 
-                assertThat(actualExperiment.traceCount()).isEqualTo(traces.size()); // decide if we should count deleted traces
+            assertThat(actualExperiment.traceCount()).isEqualTo(traces.size()); // decide if we should count deleted traces
 
-                Map<String, BigDecimal> actual = getScoresMap(actualExperiment);
+            Map<String, BigDecimal> actual = getScoresMap(actualExperiment);
 
-                assertThat(actual)
-                        .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                                .build())
-                        .isEqualTo(expectedScores);
-            });
+            assertThat(actual)
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .build())
+                    .isEqualTo(expectedScores);
         }
 
         @Test
@@ -4805,7 +4910,7 @@ class ExperimentsResourceTest {
             var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
                     .build();
-            var expectedExperimentId = createAndAssert(experiment, apiKey, workspaceName);
+            var expectedExperimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
             var expectedExperiment = experiment.toBuilder()
                     .datasetName(null)
                     .datasetId(null)
@@ -7495,15 +7600,21 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var experiment = experimentResourceClient.createPartialExperiment()
                     .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
-            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
 
             var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -7531,6 +7642,7 @@ class ExperimentsResourceTest {
             var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
             var expectedExperiment = experiment.toBuilder()
                     .duration(actual.duration())
+                    .projectId(projectId)
                     .passedCount(2L)
                     .totalCount(3L)
                     .passRate(BigDecimal.valueOf(2).divide(BigDecimal.valueOf(3), 9, RoundingMode.HALF_UP))
@@ -7547,12 +7659,16 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var experiment = experimentResourceClient.createPartialExperiment()
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
-            var trace = podamFactory.manufacturePojo(Trace.class);
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
             traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
 
             var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -7568,6 +7684,7 @@ class ExperimentsResourceTest {
             var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
             var expectedExperiment = experiment.toBuilder()
                     .duration(actual.duration())
+                    .projectId(projectId)
                     .build();
             getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
         }
@@ -7581,14 +7698,19 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var experiment = experimentResourceClient.createPartialExperiment()
                     .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
 
             var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -7615,6 +7737,7 @@ class ExperimentsResourceTest {
             var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
             var expectedExperiment = experiment.toBuilder()
                     .duration(actual.duration())
+                    .projectId(projectId)
                     .passedCount(1L)
                     .totalCount(2L)
                     .passRate(BigDecimal.valueOf(0.5))
@@ -7649,14 +7772,19 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
             var experiment = experimentResourceClient.createPartialExperiment()
                     .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
 
             var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -7672,6 +7800,7 @@ class ExperimentsResourceTest {
             var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
             var expectedExperiment = experiment.toBuilder()
                     .duration(actual.duration())
+                    .projectId(projectId)
                     .passedCount(2L)
                     .totalCount(2L)
                     .passRate(BigDecimal.ONE)
@@ -7687,6 +7816,9 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             // Create dataset with one item
             var dataset = buildDataset().toBuilder()
@@ -7725,9 +7857,12 @@ class ExperimentsResourceTest {
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
             // Create 3 traces (3 runs for the same dataset item)
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
-            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
 
             // Create 3 experiment items all pointing to the same dataset_item_id
@@ -7761,6 +7896,7 @@ class ExperimentsResourceTest {
                     .duration(actual.duration())
                     .datasetVersionId(actual.datasetVersionId())
                     .datasetVersionSummary(actual.datasetVersionSummary())
+                    .projectId(projectId)
                     .passedCount(1L)
                     .totalCount(1L)
                     .passRate(BigDecimal.ONE)
@@ -7776,6 +7912,9 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             // Create dataset with one item
             var dataset = buildDataset().toBuilder()
@@ -7814,9 +7953,12 @@ class ExperimentsResourceTest {
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
             // Create 3 traces (3 runs for the same dataset item)
-            var trace1 = podamFactory.manufacturePojo(Trace.class);
-            var trace2 = podamFactory.manufacturePojo(Trace.class);
-            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
 
             // Create 3 experiment items all pointing to the same dataset_item_id
@@ -7850,6 +7992,7 @@ class ExperimentsResourceTest {
                     .duration(actual.duration())
                     .datasetVersionId(actual.datasetVersionId())
                     .datasetVersionSummary(actual.datasetVersionSummary())
+                    .projectId(projectId)
                     .passedCount(0L)
                     .totalCount(1L)
                     .passRate(BigDecimal.ZERO)
@@ -7865,6 +8008,9 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             // Create dataset with two items
             var dataset = buildDataset().toBuilder()
@@ -7909,12 +8055,18 @@ class ExperimentsResourceTest {
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
             // 3 runs per item (6 traces total)
-            var traceA1 = podamFactory.manufacturePojo(Trace.class);
-            var traceA2 = podamFactory.manufacturePojo(Trace.class);
-            var traceA3 = podamFactory.manufacturePojo(Trace.class);
-            var traceB1 = podamFactory.manufacturePojo(Trace.class);
-            var traceB2 = podamFactory.manufacturePojo(Trace.class);
-            var traceB3 = podamFactory.manufacturePojo(Trace.class);
+            var traceA1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var traceA2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var traceA3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var traceB1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var traceB2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var traceB3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
             traceResourceClient.batchCreateTraces(
                     List.of(traceA1, traceA2, traceA3, traceB1, traceB2, traceB3), apiKey, workspaceName);
 
@@ -7950,6 +8102,7 @@ class ExperimentsResourceTest {
             // ItemA fails (2 < 3), ItemB passes (2 >= 1) → passedCount=1, totalCount=2, passRate=0.5
             var actual = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
             var expectedExperiment = experiment.toBuilder()
+                    .projectId(projectId)
                     .duration(actual.duration())
                     .datasetVersionId(actual.datasetVersionId())
                     .datasetVersionSummary(actual.datasetVersionSummary())

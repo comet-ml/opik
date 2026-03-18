@@ -39,6 +39,7 @@ class RawPromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -53,6 +54,8 @@ class RawPromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -73,6 +76,7 @@ class RawPromptsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "project_id": project_id,
                 "sorting": sorting,
                 "filters": filters,
             },
@@ -98,6 +102,8 @@ class RawPromptsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
         template: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
@@ -115,6 +121,12 @@ class RawPromptsClient:
         name : str
 
         id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the prompt is created at workspace level.
 
         description : typing.Optional[str]
 
@@ -144,6 +156,8 @@ class RawPromptsClient:
             json={
                 "id": id,
                 "name": name,
+                "project_id": project_id,
+                "project_name": project_name,
                 "description": description,
                 "template": template,
                 "metadata": metadata,
@@ -962,6 +976,7 @@ class AsyncRawPromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -976,6 +991,8 @@ class AsyncRawPromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -996,6 +1013,7 @@ class AsyncRawPromptsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "project_id": project_id,
                 "sorting": sorting,
                 "filters": filters,
             },
@@ -1021,6 +1039,8 @@ class AsyncRawPromptsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
         template: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
@@ -1038,6 +1058,12 @@ class AsyncRawPromptsClient:
         name : str
 
         id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the prompt is created at workspace level.
 
         description : typing.Optional[str]
 
@@ -1067,6 +1093,8 @@ class AsyncRawPromptsClient:
             json={
                 "id": id,
                 "name": name,
+                "project_id": project_id,
+                "project_name": project_name,
                 "description": description,
                 "template": template,
                 "metadata": metadata,

@@ -7,6 +7,7 @@ import { DatasetItemSource } from "./DatasetItemSource.js";
 import { EvaluatorItem } from "./EvaluatorItem.js";
 import { ExecutionPolicy } from "./ExecutionPolicy.js";
 import { ExperimentItem } from "./ExperimentItem.js";
+import { ExperimentRunSummary } from "./ExperimentRunSummary.js";
 import { JsonNode } from "./JsonNode.js";
 
 export const DatasetItem: core.serialization.ObjectSchema<serializers.DatasetItem.Raw, OpikApi.DatasetItem> =
@@ -24,6 +25,10 @@ export const DatasetItem: core.serialization.ObjectSchema<serializers.DatasetIte
         experimentItems: core.serialization.property(
             "experiment_items",
             core.serialization.list(ExperimentItem).optional(),
+        ),
+        runSummariesByExperiment: core.serialization.property(
+            "run_summaries_by_experiment",
+            core.serialization.record(core.serialization.string(), ExperimentRunSummary).optional(),
         ),
         datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -45,6 +50,7 @@ export declare namespace DatasetItem {
         evaluators?: EvaluatorItem.Raw[] | null;
         execution_policy?: ExecutionPolicy.Raw | null;
         experiment_items?: ExperimentItem.Raw[] | null;
+        run_summaries_by_experiment?: Record<string, ExperimentRunSummary.Raw> | null;
         dataset_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;

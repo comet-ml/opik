@@ -4,5 +4,6 @@ export const ExperimentWriteType = {
     Regular: "regular",
     Trial: "trial",
     MiniBatch: "mini-batch",
+    Mutation: "mutation",
 } as const;
 export type ExperimentWriteType = (typeof ExperimentWriteType)[keyof typeof ExperimentWriteType];

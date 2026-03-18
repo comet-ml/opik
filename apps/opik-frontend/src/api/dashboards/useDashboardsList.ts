@@ -7,11 +7,14 @@ import api, {
 import { Dashboard } from "@/types/dashboard";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
+import { Filter } from "@/types/filters";
+import { processFilters } from "@/lib/filters";
 
 type UseDashboardsListParams = {
   workspaceName: string;
   sorting?: Sorting;
   search?: string;
+  filters?: Filter[];
   page: number;
   size: number;
 };
@@ -24,7 +27,14 @@ type UseDashboardsListResponse = {
 
 const getDashboardsList = async (
   { signal }: QueryFunctionContext,
-  { workspaceName, sorting, search, size, page }: UseDashboardsListParams,
+  {
+    workspaceName,
+    sorting,
+    search,
+    filters,
+    size,
+    page,
+  }: UseDashboardsListParams,
 ) => {
   const { data } = await api.get(DASHBOARDS_REST_ENDPOINT, {
     signal,
@@ -32,6 +42,7 @@ const getDashboardsList = async (
       workspace_name: workspaceName,
       ...processSorting(sorting),
       ...(search && { name: search }),
+      ...processFilters(filters),
       size,
       page,
     },
