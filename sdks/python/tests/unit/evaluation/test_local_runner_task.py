@@ -249,3 +249,60 @@ class TestLocalRunnerTask:
             "input": {"input": "test"},
             "output": "{}",
         }
+
+    def test_call__id_key_filtered_from_inputs(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-id-filter")
+        )
+        mock_rest_client.runners.get_job.return_value = _make_job(
+            "completed", result={"result": "ok"}
+        )
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+        )
+        task({"id": "dataset-item-id", "topic": "AI"})
+
+        call_kwargs = (
+            mock_rest_client.runners.with_raw_response.create_job.call_args.kwargs
+        )
+        assert call_kwargs["inputs"] == {"topic": "AI"}
+        assert "id" not in call_kwargs["inputs"]
+
+    def test_call__job_transitions_from_pending_to_completed(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-transition")
+        )
+        mock_rest_client.runners.get_job.side_effect = [
+            _make_job("pending"),
+            _make_job("running"),
+            _make_job("completed", result={"result": "done"}),
+        ]
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+            timeout_seconds=10,
+            poll_interval_seconds=2,
+        )
+        output = task({"input": "test"})
+
+        assert output == {
+            "input": {"input": "test"},
+            "output": "done",
+        }
+        assert mock_rest_client.runners.get_job.call_count == 3
+        assert patch_sleep.call_count == 2
