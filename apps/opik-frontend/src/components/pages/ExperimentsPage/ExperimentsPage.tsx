@@ -88,6 +88,7 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -134,6 +135,10 @@ const ExperimentsPage: React.FC = () => {
   const isDatasetVersioningEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
   );
+
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
 
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
@@ -721,14 +726,16 @@ const ExperimentsPage: React.FC = () => {
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new experiment
-          </Button>
+          {canCreateExperiments && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewExperimentClick}
+            >
+              <Info className="mr-1.5 size-3.5" />
+              Create new experiment
+            </Button>
+          )}
         </div>
       </PageBodyStickyContainer>
       <DataTable
@@ -751,7 +758,7 @@ const ExperimentsPage: React.FC = () => {
         columnPinning={columnPinningConfig}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateExperiments && (
               <Button variant="link" onClick={handleNewExperimentClick}>
                 Create new experiment
               </Button>
