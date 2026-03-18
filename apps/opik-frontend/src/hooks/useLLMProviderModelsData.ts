@@ -785,6 +785,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "microsoft/wizardlm-2-8x22b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_7,
+      label: "minimax/minimax-m2.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_7_HIGHSPEED,
+      label: "minimax/minimax-m2.7-highspeed",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_01,
       label: "minimax/minimax-01",
     },

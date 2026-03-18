@@ -180,6 +180,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MICROSOFT_PHI_4_MULTIMODAL_INSTRUCT("microsoft/phi-4-multimodal-instruct"),
     MICROSOFT_PHI_4_REASONING_PLUS("microsoft/phi-4-reasoning-plus"),
     MICROSOFT_WIZARDLM_2_8X22B("microsoft/wizardlm-2-8x22b"),
+    MINIMAX_MINIMAX_M2_7("minimax/minimax-m2.7"),
+    MINIMAX_MINIMAX_M2_7_HIGHSPEED("minimax/minimax-m2.7-highspeed"),
     MINIMAX_MINIMAX_01("minimax/minimax-01"),
     MINIMAX_MINIMAX_M1("minimax/minimax-m1"),
     MINIMAX_MINIMAX_M2("minimax/minimax-m2"),

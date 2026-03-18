@@ -9,7 +9,7 @@ og:title: Integrate MiniMax with Opik - Opik
 title: Observability for MiniMax with Opik
 ---
 
-[MiniMax](https://www.minimax.io/) is a leading AI company providing powerful large language models through an OpenAI-compatible API. Their flagship models, MiniMax-M2.5 and MiniMax-M2.5-highspeed, offer a 204K context window and strong performance across a wide range of tasks.
+[MiniMax](https://www.minimax.io/) is a leading AI company providing powerful large language models through an OpenAI-compatible API. Their latest flagship model, MiniMax-M2.7, offers enhanced reasoning and coding capabilities with a 1M token context window.
 
 This guide explains how to integrate Opik with MiniMax using their OpenAI-compatible API endpoints. By using the Opik OpenAI integration, you can easily track and evaluate your MiniMax API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
@@ -77,7 +77,7 @@ client = track_openai(client, project_name="minimax-demo")
 
 # Call the API
 response = client.chat.completions.create(
-    model="MiniMax-M2.5",
+    model="MiniMax-M2.7",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Hello, what can you help me with?"},
@@ -106,7 +106,7 @@ opik_logger = OpikLogger()
 litellm.callbacks = [opik_logger]
 
 response = litellm.completion(
-    model="minimax/MiniMax-M2.5",
+    model="minimax/MiniMax-M2.7",
     messages=[{"role": "user", "content": "Write a short story about AI."}],
 )
 
@@ -134,7 +134,7 @@ client = track_openai(client)
 @track
 def analyze_text(text: str):
     response = client.chat.completions.create(
-        model="MiniMax-M2.5",
+        model="MiniMax-M2.7",
         messages=[
             {"role": "user", "content": f"Analyze this text: {text}"}
         ],
@@ -144,7 +144,7 @@ def analyze_text(text: str):
 @track
 def summarize_analysis(analysis: str):
     response = client.chat.completions.create(
-        model="MiniMax-M2.5-highspeed",
+        model="MiniMax-M2.7-highspeed",
         messages=[
             {"role": "user", "content": f"Summarize this analysis: {analysis}"}
         ],
@@ -166,7 +166,7 @@ MiniMax supports streaming responses, which are also tracked by Opik:
 
 ```python
 response = client.chat.completions.create(
-    model="MiniMax-M2.5",
+    model="MiniMax-M2.7",
     messages=[
         {"role": "user", "content": "Explain quantum computing in simple terms."}
     ],
@@ -187,7 +187,7 @@ from opik.evaluation.metrics import Hallucination, AnswerRelevance
 from opik.evaluation.models import LiteLLMChatModel
 
 # Create a MiniMax model for evaluation
-minimax_model = LiteLLMChatModel(model_name="minimax/MiniMax-M2.5")
+minimax_model = LiteLLMChatModel(model_name="minimax/MiniMax-M2.7")
 
 # Use it as the judge in evaluation metrics
 hallucination_metric = Hallucination(model=minimax_model)
@@ -200,8 +200,10 @@ MiniMax provides the following models:
 
 | Model | Context Window | Description |
 |-------|---------------|-------------|
-| `MiniMax-M2.5` | 204K tokens | Flagship model with strong reasoning and generation capabilities |
-| `MiniMax-M2.5-highspeed` | 204K tokens | Optimized for faster inference with comparable quality |
+| `MiniMax-M2.7` | 1M tokens | Latest flagship model with enhanced reasoning and coding |
+| `MiniMax-M2.7-highspeed` | 1M tokens | High-speed version of M2.7 for low-latency scenarios |
+| `MiniMax-M2.5` | 1M tokens | Previous flagship model with strong reasoning and generation capabilities |
+| `MiniMax-M2.5-highspeed` | 1M tokens | Optimized for faster inference with comparable quality |
 
 For the latest model information, visit the [MiniMax platform](https://platform.minimaxi.com/).
 

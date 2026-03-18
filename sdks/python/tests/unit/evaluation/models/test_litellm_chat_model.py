@@ -166,7 +166,7 @@ def test_litellm_chat_model_clamps_temperature_for_minimax(monkeypatch):
     stub = _install_litellm_stub(monkeypatch)
 
     model = litellm_chat_model.LiteLLMChatModel(
-        model_name="minimax/MiniMax-M2.5",
+        model_name="minimax/MiniMax-M2.7",
         temperature=0,
     )
 
@@ -184,7 +184,7 @@ def test_litellm_chat_model_preserves_valid_temperature_for_minimax(monkeypatch)
     stub = _install_litellm_stub(monkeypatch)
 
     model = litellm_chat_model.LiteLLMChatModel(
-        model_name="minimax/MiniMax-M2.5",
+        model_name="minimax/MiniMax-M2.7",
         temperature=0.7,
     )
 
