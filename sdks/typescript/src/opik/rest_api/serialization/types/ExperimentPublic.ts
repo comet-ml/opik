@@ -35,6 +35,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     ),
     comments: core.serialization.list(CommentPublic).optional(),
     traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
+    datasetItemCount: core.serialization.property("dataset_item_count", core.serialization.number().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     duration: PercentageValuesPublic.optional(),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
@@ -82,6 +83,7 @@ export declare namespace ExperimentPublic {
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;
         trace_count?: number | null;
+        dataset_item_count?: number | null;
         created_at?: string | null;
         duration?: PercentageValuesPublic.Raw | null;
         total_estimated_cost?: number | null;

@@ -32,6 +32,7 @@ class Experiment(UniversalBaseModel):
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     trace_count: typing.Optional[int] = None
+    dataset_item_count: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
     duration: typing.Optional[PercentageValues] = None
     total_estimated_cost: typing.Optional[float] = None
