@@ -5,6 +5,8 @@ import type * as OpikApi from "../index.js";
 export interface DatasetPublic {
     id?: string;
     name: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
+    projectId?: string;
     type?: OpikApi.DatasetPublicType;
     visibility?: OpikApi.DatasetPublicVisibility;
     tags?: string[];

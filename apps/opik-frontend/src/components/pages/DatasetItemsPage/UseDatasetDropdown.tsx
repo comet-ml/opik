@@ -30,7 +30,7 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const {
-    permissions: { canViewExperiments },
+    permissions: { canCreateExperiments },
   } = usePermissions();
 
   const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
@@ -58,13 +58,11 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
 
   return (
     <>
-      {canViewExperiments && (
-        <AddExperimentDialog
-          open={openExperimentDialog}
-          setOpen={setOpenExperimentDialog}
-          datasetName={datasetName}
-        />
-      )}
+      <AddExperimentDialog
+        open={openExperimentDialog}
+        setOpen={setOpenExperimentDialog}
+        datasetName={datasetName}
+      />
       <ConfirmDialog
         key={resetKeyRef.current}
         open={openConfirmDialog}
@@ -94,7 +92,7 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
               </span>
             </div>
           </DropdownMenuItem>
-          {canViewExperiments && (
+          {canCreateExperiments && (
             <DropdownMenuItem
               onClick={handleRunExperimentClick}
               disabled={disabled}

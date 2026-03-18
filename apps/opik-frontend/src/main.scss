@@ -78,12 +78,19 @@
     /* Chart colors */
     --chart-tick-stroke: #94a3b8;
     --chart-grid-stroke: #f1f5f8;
+    --chart-blue: #5899da;
+    --chart-yellow: #f4b400;
+    --chart-green: #19a979;
+    --chart-red: #ef6868;
+    --chart-burgundy: #bf399e;
+    --chart-purple: #945fcf;
+    --chart-pink: #ed4a7b;
+    --chart-orange: #fb9341;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;
     --template-icon-scratch: #945fcf;
-    --template-icon-experiments: #10b981;
 
     /* Trace thread colors */
     --thread-active: #ebf2f5;
@@ -323,12 +330,19 @@
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
     --chart-grid-stroke: #303030;
+    --chart-blue: #5899da;
+    --chart-yellow: #f4b400;
+    --chart-green: #19a979;
+    --chart-red: #ef6868;
+    --chart-burgundy: #bf399e;
+    --chart-purple: #945fcf;
+    --chart-pink: #ed4a7b;
+    --chart-orange: #fb9341;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;
     --template-icon-scratch: #945fcf;
-    --template-icon-experiments: #10b981;
 
     /* Diff colors - Dark Mode */
     --diff-removed-bg: #7f1d1d;

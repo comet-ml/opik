@@ -809,7 +809,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 request.datasetVersion(), workspaceId);
 
         return Mono
-                .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
+                .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), request.projectId(),
+                        visibility))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(dataset -> Mono.deferContextual(ctx -> {
                     // Ensure dataset is migrated if lazy migration is enabled

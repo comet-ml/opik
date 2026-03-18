@@ -42,7 +42,10 @@ type DashboardWidgetComponents = typeof DashboardWidgetRoot & {
   Content: typeof DashboardWidgetContent;
   PreviewContent: typeof DashboardWidgetPreviewContent;
   PreviewHeader: typeof DashboardWidgetPreviewHeader;
-  EmptyState: typeof DashboardWidgetEmptyState;
+  EmptyState: typeof DashboardWidgetEmptyState & {
+    EditAction: (typeof DashboardWidgetEmptyState)["EditAction"];
+    DocsLink: (typeof DashboardWidgetEmptyState)["DocsLink"];
+  };
   ErrorState: typeof DashboardWidgetErrorState;
   DragHandle: typeof DashboardWidgetDragHandle;
   DisabledState: typeof DashboardWidgetDisabledState;

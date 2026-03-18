@@ -116,11 +116,20 @@ module.exports = {
         "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
         "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
 
+        /* Chart colors (Figma Design System) */
+        "chart-blue": "var(--chart-blue)",
+        "chart-yellow": "var(--chart-yellow)",
+        "chart-green": "var(--chart-green)",
+        "chart-red": "var(--chart-red)",
+        "chart-burgundy": "var(--chart-burgundy)",
+        "chart-purple": "var(--chart-purple)",
+        "chart-pink": "var(--chart-pink)",
+        "chart-orange": "var(--chart-orange)",
+
         /* Template icon colors */
         "template-icon-metrics": "var(--template-icon-metrics)",
         "template-icon-performance": "var(--template-icon-performance)",
         "template-icon-scratch": "var(--template-icon-scratch)",
-        "template-icon-experiments": "var(--template-icon-experiments)",
       },
       borderRadius: {
         xxl: "calc(var(--radius) + 4px)",

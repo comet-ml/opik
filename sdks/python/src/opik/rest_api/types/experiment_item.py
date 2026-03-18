@@ -5,8 +5,9 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .assertion_result import AssertionResult
 from .comment import Comment
-from .execution_policy import ExecutionPolicy
+from .experiment_item_status import ExperimentItemStatus
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .feedback_score import FeedbackScore
 from .json_list_string import JsonListString
@@ -32,7 +33,8 @@ class ExperimentItem(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     trace_visibility_mode: typing.Optional[ExperimentItemTraceVisibilityMode] = None
     description: typing.Optional[str] = None
-    execution_policy: typing.Optional[ExecutionPolicy] = None
+    assertion_results: typing.Optional[typing.List[AssertionResult]] = None
+    status: typing.Optional[ExperimentItemStatus] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

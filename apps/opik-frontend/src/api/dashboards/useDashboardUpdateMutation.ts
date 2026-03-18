@@ -16,6 +16,8 @@ type UseDashboardUpdateMutationParams = {
 
 type UseDashboardUpdateMutationOptions = {
   skipDefaultError?: boolean;
+  retry?: number;
+  retryDelay?: number;
 };
 
 const useDashboardUpdateMutation = (
@@ -25,6 +27,8 @@ const useDashboardUpdateMutation = (
   const { toast } = useToast();
 
   return useMutation({
+    retry: options?.retry ?? 0,
+    retryDelay: options?.retryDelay,
     mutationFn: async ({ dashboard }: UseDashboardUpdateMutationParams) => {
       const { data } = await api.patch(
         DASHBOARDS_REST_ENDPOINT + dashboard.id,

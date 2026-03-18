@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeSelectAllColumnsIds } from "./ColumnsButton";
+import difference from "lodash/difference";
 
 /**
  * Tests for ColumnsButton excludeFromSelectAll logic
@@ -24,7 +24,7 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
         "metadata.model_name",
       ];
 
-      const selectAllColumnsIds = computeSelectAllColumnsIds(
+      const selectAllColumnsIds = difference(
         allColumnsIds,
         excludeFromSelectAll,
       );
@@ -42,7 +42,7 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
       ];
       const excludeFromSelectAll: string[] = [];
 
-      const selectAllColumnsIds = computeSelectAllColumnsIds(
+      const selectAllColumnsIds = difference(
         allColumnsIds,
         excludeFromSelectAll,
       );
@@ -60,7 +60,7 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
       ];
       const excludeFromSelectAll = ["metadata.time_to_first_token"];
 
-      const selectAllColumnsIds = computeSelectAllColumnsIds(
+      const selectAllColumnsIds = difference(
         allColumnsIds,
         excludeFromSelectAll,
       );
@@ -101,7 +101,6 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
       const selectedColumns = ["name", "duration", "input"];
       const selectAllColumnsIds = ["name", "duration", "input"];
 
-      // Metadata fields are not in selectedColumns, but that's OK
       const allColumnsSelected =
         selectAllColumnsIds.length > 0 &&
         selectAllColumnsIds.every((id) => selectedColumns.includes(id));
@@ -135,7 +134,6 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
         "metadata.model_name",
       ];
 
-      // Simulating toggleColumns(true) logic
       const currentlySelectedMetadataItems = selectedColumns.filter((id) =>
         excludeFromSelectAll.includes(id),
       );
@@ -153,7 +151,6 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
     });
 
     it("should deselect all columns including excluded ones", () => {
-      // Simulating toggleColumns(false) logic
       const newSelection: string[] = [];
 
       expect(newSelection).toEqual([]);
@@ -167,7 +164,6 @@ describe("ColumnsButton excludeFromSelectAll logic", () => {
         "metadata.model_name",
       ];
 
-      // Simulating toggleColumns(true) logic
       const currentlySelectedMetadataItems = selectedColumns.filter((id) =>
         excludeFromSelectAll.includes(id),
       );

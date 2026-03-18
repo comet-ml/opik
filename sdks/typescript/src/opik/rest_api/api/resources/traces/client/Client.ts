@@ -1455,9 +1455,10 @@ export class TracesClient {
         request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest = {},
         requestOptions?: TracesClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
-        const { projectId } = request;
+        const { projectId, excludeCategoryNames } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
+            exclude_category_names: excludeCategoryNames,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,

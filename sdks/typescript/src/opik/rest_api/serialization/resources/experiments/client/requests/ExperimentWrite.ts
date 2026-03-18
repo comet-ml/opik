@@ -13,7 +13,7 @@ import { ExperimentWriteType } from "../../types/ExperimentWriteType.js";
 export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWrite.Raw, OpikApi.ExperimentWrite> =
     core.serialization.object({
         id: core.serialization.string().optional(),
-        datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+        datasetName: core.serialization.property("dataset_name", core.serialization.string().nullable()),
         name: core.serialization.string().optional(),
         metadata: JsonListStringWrite.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
@@ -36,7 +36,7 @@ export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWr
 export declare namespace ExperimentWrite {
     export interface Raw {
         id?: string | null;
-        dataset_name: string;
+        dataset_name?: string | null;
         name?: string | null;
         metadata?: JsonListStringWrite.Raw | null;
         tags?: string[] | null;

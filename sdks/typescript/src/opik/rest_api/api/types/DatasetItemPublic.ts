@@ -14,6 +14,7 @@ export interface DatasetItemPublic {
     evaluators?: OpikApi.EvaluatorItemPublic[];
     executionPolicy?: OpikApi.ExecutionPolicyPublic;
     experimentItems?: OpikApi.ExperimentItemPublic[];
+    runSummariesByExperiment?: Record<string, OpikApi.ExperimentRunSummaryPublic>;
     datasetId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;

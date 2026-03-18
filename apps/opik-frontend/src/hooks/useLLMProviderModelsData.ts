@@ -34,6 +34,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 5.4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GPT_5_4_MINI,
+      label: "GPT 5.4 Mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_4_NANO,
+      label: "GPT 5.4 Nano",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_5_2,
       label: "GPT 5.2",
     },
@@ -937,6 +945,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mistralai/mistral-small-24b-instruct-2501:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_2603,
+      label: "mistralai/mistral-small-2603",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_3_1_24B_INSTRUCT,
       label: "mistralai/mistral-small-3.1-24b-instruct",
     },
@@ -1279,6 +1291,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4,
       label: "openai/gpt-5.4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_MINI,
+      label: "openai/gpt-5.4-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_NANO,
+      label: "openai/gpt-5.4-nano",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_PRO,
