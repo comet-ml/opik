@@ -175,7 +175,7 @@ const DashboardSectionHeader: React.FunctionComponent<
         setOpen={setShowDeleteDialog}
         onConfirm={onDeleteSection}
         title={`Delete ${title} section?`}
-        description={`This section will be removed from your dashboard. You can still undo this change before saving the dashboard.`}
+        description="Are you sure you want to delete this section? This action cannot be undone."
         confirmText={`Delete ${title}`}
         confirmButtonVariant="destructive"
       />
