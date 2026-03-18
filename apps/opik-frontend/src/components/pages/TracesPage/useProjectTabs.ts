@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
@@ -84,12 +84,24 @@ const useProjectTabs = (options: UseProjectTabsOptions) => {
     QUERY_PARAM_OPTIONS,
   );
 
-  // Legacy query param (read-only for migration)
+  // Legacy query params (read-only for migration)
   const [legacyType, setLegacyType] = useQueryParam(
     "type",
     StringParam,
     QUERY_PARAM_OPTIONS,
   );
+  const [legacyView, setLegacyView] = useQueryParam(
+    "view",
+    StringParam,
+    QUERY_PARAM_OPTIONS,
+  );
+
+  // One-time cleanup: clear stale ?view= param from old bookmarks
+  useEffect(() => {
+    if (legacyView) {
+      setLegacyView(undefined);
+    }
+  }, [legacyView, setLegacyView]);
 
   // Compute effective values: new params take precedence, fall back to legacy
   const { activeTab, logsType } = useMemo(() => {
@@ -104,8 +116,11 @@ const useProjectTabs = (options: UseProjectTabsOptions) => {
 
     // If new params exist, use them
     if (tabParam || logsTypeParam) {
+      // Map legacy "metrics" tab value to "insights"
+      const resolvedTab =
+        tabParam === "metrics" ? PROJECT_TAB.insights : tabParam;
       return {
-        activeTab: isProjectTab(tabParam) ? tabParam : DEFAULT_TAB,
+        activeTab: isProjectTab(resolvedTab) ? resolvedTab : DEFAULT_TAB,
         logsType: isLogsType(logsTypeParam)
           ? logsTypeParam
           : resolvedDefaultLogsType,
@@ -118,14 +133,36 @@ const useProjectTabs = (options: UseProjectTabsOptions) => {
       return { activeTab: PROJECT_TAB.logs, logsType: legacyType };
     }
 
+    // Map legacy ?type=metrics to insights
+    if (legacyType === "metrics") {
+      return {
+        activeTab: PROJECT_TAB.insights,
+        logsType: resolvedDefaultLogsType,
+      };
+    }
+
     if (isProjectTab(legacyType)) {
-      // ?type=metrics → Metrics tab, default logsType
       return { activeTab: legacyType, logsType: resolvedDefaultLogsType };
+    }
+
+    // If old ?view=dashboards bookmark, land on insights
+    if (legacyView === "dashboards") {
+      return {
+        activeTab: PROJECT_TAB.insights,
+        logsType: resolvedDefaultLogsType,
+      };
     }
 
     // No params at all → defaults
     return { activeTab: DEFAULT_TAB, logsType: resolvedDefaultLogsType };
-  }, [tabParam, logsTypeParam, legacyType, storedLogsType, threadCount]);
+  }, [
+    tabParam,
+    logsTypeParam,
+    legacyType,
+    legacyView,
+    storedLogsType,
+    threadCount,
+  ]);
 
   // Clear legacy param when writing new params
   const clearLegacy = useCallback(() => {

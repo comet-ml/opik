@@ -1,31 +1,30 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import {
   useDashboardStore,
   selectWidgetResolver,
   selectSetPreviewWidget,
+  selectRuntimeConfig,
 } from "@/store/DashboardStore";
-import WidgetConfigDialogAddStep from "./WidgetConfigDialogAddStep";
+import WidgetTypeSelector from "./WidgetTypeSelector";
+import WidgetConfigPreview from "./WidgetConfigPreview";
 import {
   DashboardWidget,
   WidgetConfigDialogProps,
   WidgetEditorHandle,
 } from "@/types/dashboard";
-import { createDefaultWidgetConfig } from "@/lib/dashboard/utils";
-
-enum DialogStep {
-  ADD = "add",
-  EDIT = "edit",
-}
+import {
+  createDefaultWidgetConfig,
+  getWidgetTypesForDashboard,
+} from "@/lib/dashboard/utils";
 
 const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   open,
@@ -35,50 +34,62 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   onSave,
 }) => {
   const isEditMode = !!widgetId;
-  const [currentStep, setCurrentStep] = useState<DialogStep>(
-    isEditMode ? DialogStep.EDIT : DialogStep.ADD,
-  );
   const editorRef = useRef<WidgetEditorHandle>(null);
 
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const getWidgetById = useDashboardStore((state) => state.getWidgetById);
   const previewWidget = useDashboardStore((state) => state.previewWidget);
   const setPreviewWidget = useDashboardStore(selectSetPreviewWidget);
+  const runtimeConfig = useDashboardStore(selectRuntimeConfig);
 
   const EditorComponent =
     previewWidget?.type && widgetResolver
       ? widgetResolver(previewWidget.type)?.Editor || null
       : null;
 
+  const metadata =
+    previewWidget?.type && widgetResolver
+      ? widgetResolver(previewWidget.type)?.metadata
+      : null;
+
   useEffect(() => {
-    if (!isEditMode && open) {
-      setCurrentStep(DialogStep.ADD);
-    } else if (isEditMode && widgetId) {
-      setCurrentStep(DialogStep.EDIT);
+    if (!open) return;
+
+    if (isEditMode && widgetId) {
       const widget = getWidgetById(sectionId, widgetId);
       if (widget) {
         setPreviewWidget(widget);
       }
+    } else {
+      const widgetTypes = getWidgetTypesForDashboard(
+        runtimeConfig.dashboardType,
+      );
+      if (widgetTypes.length > 0 && widgetResolver) {
+        const firstType = widgetTypes[0];
+        const newWidget = createDefaultWidgetConfig(firstType, widgetResolver);
+        setPreviewWidget({ ...newWidget, id: "preview" } as DashboardWidget);
+      }
     }
-  }, [isEditMode, open, widgetId, sectionId, getWidgetById, setPreviewWidget]);
+  }, [
+    isEditMode,
+    open,
+    widgetId,
+    sectionId,
+    getWidgetById,
+    setPreviewWidget,
+    widgetResolver,
+    runtimeConfig.dashboardType,
+  ]);
 
   useEffect(() => {
     if (!open) {
       setPreviewWidget(null);
-      setCurrentStep(isEditMode ? DialogStep.EDIT : DialogStep.ADD);
     }
-  }, [open, setPreviewWidget, isEditMode]);
+  }, [open, setPreviewWidget]);
 
   const handleSelectWidget = (widgetType: string) => {
     const newWidget = createDefaultWidgetConfig(widgetType, widgetResolver);
     setPreviewWidget({ ...newWidget, id: "preview" } as DashboardWidget);
-    setCurrentStep(DialogStep.EDIT);
-  };
-
-  const handleBack = () => {
-    if (currentStep === DialogStep.EDIT && !isEditMode) {
-      setCurrentStep(DialogStep.ADD);
-    }
   };
 
   const handleSave = async () => {
@@ -95,50 +106,53 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   };
 
   const dialogTitle = isEditMode ? "Edit widget" : "Add widget";
-  const dialogDescription =
-    currentStep === DialogStep.ADD
-      ? "Choose the type of widget you want to add. Widgets can use project metrics, or simple text to add context."
-      : isEditMode
-        ? "Adjust the data, visualization, or settings for this widget. Changes will update the dashboard automatically."
-        : "Adjust the data, visualization, or settings for this widget.";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl">
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
-          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
-        {currentStep === DialogStep.ADD && (
-          <div className="max-h-[50vh] overflow-y-auto">
-            <WidgetConfigDialogAddStep onSelectWidget={handleSelectWidget} />
+        <div className="grid h-[65vh] max-h-[800px] grid-cols-[1fr_460px] gap-4">
+          <div className="overflow-y-auto">
+            <div className="space-y-4 pb-2">
+              {!isEditMode && (
+                <WidgetTypeSelector
+                  selectedType={previewWidget?.type}
+                  onSelect={handleSelectWidget}
+                />
+              )}
+              {previewWidget?.type && metadata && (
+                <>
+                  <Separator />
+                  <div>
+                    <h3 className="comet-body-accented text-foreground">
+                      {metadata.title}
+                    </h3>
+                    {metadata.description && (
+                      <p className="comet-body-s text-light-slate">
+                        {metadata.description}
+                      </p>
+                    )}
+                  </div>
+                  {EditorComponent && <EditorComponent ref={editorRef} />}
+                </>
+              )}
+            </div>
           </div>
-        )}
+          <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+            <WidgetConfigPreview />
+          </div>
+        </div>
 
-        {currentStep === DialogStep.EDIT && EditorComponent && (
-          <EditorComponent ref={editorRef} />
-        )}
-
-        <DialogFooter className="flex flex-row justify-between gap-2 border-t pt-4 sm:flex-row sm:justify-between">
-          <div>
-            {currentStep === DialogStep.EDIT && !isEditMode && (
-              <Button variant="outline" onClick={handleBack}>
-                <ChevronLeft className="mr-2 size-4" />
-                Back
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCancel}>
-              Cancel
-            </Button>
-            {currentStep === DialogStep.EDIT && (
-              <Button onClick={handleSave}>
-                {isEditMode ? "Save changes" : "Add widget"}
-              </Button>
-            )}
-          </div>
+        <DialogFooter className="flex flex-row justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={handleCancel}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={!previewWidget}>
+            {isEditMode ? "Save changes" : "Add widget"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -99,7 +99,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
         setOpen={setOpenConfirmDialog}
         onConfirm={deleteDashboard}
         title="Delete dashboard"
-        description="Are you sure you want to delete this dashboard?"
+        description="Are you sure you want to delete this dashboard? This action cannot be undone."
         confirmText="Delete dashboard"
         confirmButtonVariant="destructive"
       />

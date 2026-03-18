@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import { Book, GraduationCap } from "lucide-react";
 import noDataTracesImageUrl from "/images/no-data-traces.png";
 import noDataSpansImageUrl from "/images/no-data-spans.png";
-import noDataMetricsImageUrl from "/images/no-data-metrics.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
@@ -10,7 +9,7 @@ import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type NoTracesPageProps = {
-  type?: TRACE_DATA_TYPE | "metrics";
+  type?: TRACE_DATA_TYPE;
 };
 
 const NoTracesPage: React.FC<NoTracesPageProps> = ({
@@ -24,8 +23,6 @@ const NoTracesPage: React.FC<NoTracesPageProps> = ({
         return noDataTracesImageUrl;
       case TRACE_DATA_TYPE.spans:
         return noDataSpansImageUrl;
-      case "metrics":
-        return noDataMetricsImageUrl;
       default:
         return noDataTracesImageUrl;
     }

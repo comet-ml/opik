@@ -4,6 +4,7 @@ import {
   useDashboardStore,
   selectAddWidget,
   selectUpdateWidget,
+  selectReadOnly,
 } from "@/store/DashboardStore";
 import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard";
 import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
@@ -15,6 +16,7 @@ const DashboardContent: React.FunctionComponent = () => {
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
   const [targetWidgetId, setTargetWidgetId] = useState<string | null>(null);
 
+  const readOnly = useDashboardStore(selectReadOnly);
   const addSection = useDashboardStore((state) => state.addSection);
   const addWidget = useDashboardStore(selectAddWidget);
   const updateWidget = useDashboardStore(selectUpdateWidget);
@@ -50,9 +52,11 @@ const DashboardContent: React.FunctionComponent = () => {
     <>
       <DashboardSectionsContainer />
 
-      <div className="text-clip rounded-md">
-        <AddSectionButton onAddSection={addSection} />
-      </div>
+      {!readOnly && (
+        <div className="text-clip rounded-md">
+          <AddSectionButton onAddSection={addSection} />
+        </div>
+      )}
 
       <WidgetConfigDialog
         open={widgetDialogOpen}
