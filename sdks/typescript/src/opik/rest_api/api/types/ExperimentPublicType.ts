@@ -4,5 +4,6 @@ export const ExperimentPublicType = {
     Regular: "regular",
     Trial: "trial",
     MiniBatch: "mini-batch",
+    Mutation: "mutation",
 } as const;
 export type ExperimentPublicType = (typeof ExperimentPublicType)[keyof typeof ExperimentPublicType];

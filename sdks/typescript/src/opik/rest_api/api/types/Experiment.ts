@@ -17,6 +17,7 @@ export interface Experiment {
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
     comments?: OpikApi.Comment[];
     traceCount?: number;
+    datasetItemCount?: number;
     createdAt?: Date;
     duration?: OpikApi.PercentageValues;
     totalEstimatedCost?: number;
