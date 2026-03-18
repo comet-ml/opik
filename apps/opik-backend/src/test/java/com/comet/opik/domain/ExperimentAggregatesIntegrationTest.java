@@ -946,13 +946,9 @@ class ExperimentAggregatesIntegrationTest {
 
         datasetResourceClient.createDatasetItems(batch, workspaceName, apiKey);
 
-        // Create experiment item
-        var itemIndex = new java.util.concurrent.atomic.AtomicInteger(0);
-        List<ExperimentItem> experimentItems = datasetItems.stream()
-                .map(datasetItem -> {
-                    int idx = itemIndex.getAndIncrement();
-
-                    // Create trace with output containing unique values per item for stable sorting
+        // Build all traces (unique output and duration per item for stable sorting)
+        var traces = IntStream.range(0, datasetItems.size())
+                .mapToObj(idx -> {
                     var outputNode = JsonUtils.getJsonNodeFromString(
                             "{\"result\": \"output-" + (char) ('a' + idx) + "-" + UUID.randomUUID() + "\"}");
                     var baseTrace = factory.manufacturePojo(Trace.class)
@@ -962,50 +958,50 @@ class ExperimentAggregatesIntegrationTest {
                             .visibilityMode(null)
                             .output(outputNode)
                             .build();
-                    // Override endTime to produce distinct durations per trace for stable sorting
-                    var trace = baseTrace.toBuilder()
+                    return baseTrace.toBuilder()
                             .endTime(baseTrace.startTime().plusSeconds((idx + 1) * 10L))
                             .build();
-
-                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-                    // Create spans for the trace
-
-                    var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
-                            .stream()
-                            .map(span -> span
-                                    .toBuilder()
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .parentSpanId(null)
-                                    .usage(spanResourceClient.getTokenUsage())
-                                    .build())
-                            .toList();
-
-                    spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-                    // Create feedback scores
-                    List<FeedbackScoreBatchItem> feedbackScoreItems = (List<FeedbackScoreBatchItem>) feedbackScores
-                            .stream()
-                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).builder()
-                                    .id(trace.id())
-                                    .projectName(projectName)
-                                    .name(name)
-                                    .value(BigDecimal.valueOf(Math.random() * 10))
-                                    .source(ScoreSource.SDK)
-                                    .build())
-                            .toList();
-
-                    if (!feedbackScoreItems.isEmpty()) {
-                        traceResourceClient.feedbackScores(feedbackScoreItems, apiKey, workspaceName);
-                    }
-
-                    return ExperimentItem.builder()
-                            .experimentId(experimentId)
-                            .datasetItemId(datasetItem.id())
-                            .traceId(trace.id())
-                            .build();
                 })
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        // Batch create all spans across all traces
+        var allSpans = traces.stream()
+                .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                        .stream()
+                        .map(span -> span.toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .parentSpanId(null)
+                                .usage(spanResourceClient.getTokenUsage())
+                                .build()))
+                .toList();
+        spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+        // Batch create all feedback scores across all traces
+        var allFeedbackScoreItems = traces.stream()
+                .flatMap(trace -> feedbackScores.stream()
+                        .map(name -> (FeedbackScoreBatchItem) factory
+                                .manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                .id(trace.id())
+                                .projectName(projectName)
+                                .name(name)
+                                .value(BigDecimal.valueOf(Math.random() * 10))
+                                .source(ScoreSource.SDK)
+                                .build()))
+                .toList();
+        if (!allFeedbackScoreItems.isEmpty()) {
+            traceResourceClient.feedbackScores(allFeedbackScoreItems, apiKey, workspaceName);
+        }
+
+        // Build experiment items linking dataset items to their corresponding traces by index
+        List<ExperimentItem> experimentItems = IntStream.range(0, datasetItems.size())
+                .mapToObj(i -> ExperimentItem.builder()
+                        .experimentId(experimentId)
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(traces.get(i).id())
+                        .build())
                 .toList();
 
         experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);
