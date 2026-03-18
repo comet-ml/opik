@@ -378,13 +378,13 @@ describe("buildSuiteResult", () => {
   });
 
   describe("pass rate: zero items", () => {
-    it("should return passRate=1.0 and allItemsPassed=true when no items exist", () => {
+    it("should return passRate=undefined and allItemsPassed=true when no items exist", () => {
       const evalResult = makeEvalResult([]);
 
       const result = buildSuiteResult(evalResult);
 
       expect(result.allItemsPassed).toBe(true);
-      expect(result.passRate).toBe(1.0);
+      expect(result.passRate).toBeUndefined();
       expect(result.itemsTotal).toBe(0);
       expect(result.itemsPassed).toBe(0);
     });

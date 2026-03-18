@@ -52,7 +52,7 @@
     --ring: 239 89% 64%;
 
     --warning: 348 86% 61%;
-    --success: 129 100% 42%;
+    --success: 142 64% 32%;
 
     /* Gray scale for utility classes */
     --gray-100: #f3f4f6;
@@ -84,10 +84,6 @@
     --template-icon-performance: #ef6868;
     --template-icon-scratch: #945fcf;
     --template-icon-experiments: #10b981;
-
-    /* DataTable colors */
-    --table-best-row-bg: #e6f7ed;
-    --table-best-row-hover-bg: #d0f0dc;
 
     /* Trace thread colors */
     --thread-active: #ebf2f5;
@@ -263,7 +259,7 @@
     --destructive-foreground: 210 40% 98%;
 
     --warning: 348 86% 61%;
-    --success: 129 100% 42%;
+    --success: 142 64% 40%;
 
     /* Gray scale for utility classes - Dark Mode */
     --gray-100: 217.2 32.6% 15%;
@@ -343,9 +339,6 @@
     --diff-added-border: #166534;
 
     /* DataTable colors - Dark Mode */
-    --table-best-row-bg: #29322f;
-    --table-best-row-hover-bg: #314136;
-
     /* Upload field colors - Dark Mode */
     --upload-icon-bg: 215 19.3% 34.5%;
 
@@ -572,11 +565,11 @@
   }
 
   .comet-table-row-best td {
-    background-color: var(--table-best-row-bg) !important;
+    background: hsl(var(--primary-foreground)) !important;
   }
 
   .comet-table-row-best:hover td {
-    background-color: var(--table-best-row-hover-bg) !important;
+    background: hsl(var(--primary-foreground)) !important;
   }
 
   .comet-table-row-active[data-row-active="true"] td {

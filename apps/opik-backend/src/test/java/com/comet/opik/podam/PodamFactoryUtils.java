@@ -2,6 +2,7 @@ package com.comet.opik.podam;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptVersion;
@@ -89,6 +90,7 @@ public class PodamFactoryUtils {
                 StartMultipartUploadRequestManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(Guardrail.class, GuardrailCheckTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(VisibilityMode.class, getVisibilityModeManufacturer());
+        strategy.addOrReplaceTypeManufacturer(ExperimentType.class, getExperimentTypeManufacturer());
         strategy.addOrReplaceTypeManufacturer(Project.Configuration.class,
                 ProjectConfigurationTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(LlmAsJudgeMessageContent.class,
@@ -104,6 +106,16 @@ public class PodamFactoryUtils {
             public VisibilityMode getType(DataProviderStrategy dataProviderStrategy,
                     AttributeMetadata attributeMetadata, ManufacturingContext manufacturingContext) {
                 return VisibilityMode.DEFAULT;
+            }
+        };
+    }
+
+    private static AbstractTypeManufacturer<ExperimentType> getExperimentTypeManufacturer() {
+        return new AbstractTypeManufacturer<>() {
+            @Override
+            public ExperimentType getType(DataProviderStrategy dataProviderStrategy,
+                    AttributeMetadata attributeMetadata, ManufacturingContext manufacturingContext) {
+                return ExperimentType.REGULAR;
             }
         };
     }

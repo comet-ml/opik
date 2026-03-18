@@ -32,10 +32,16 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", () => {
   return { LLMJudge: MockLLMJudge };
 });
 
-vi.mock("@/evaluation/suite_evaluators/validators", () => ({
-  validateEvaluators: vi.fn(),
-  validateExecutionPolicy: vi.fn(),
-}));
+vi.mock("@/evaluation/suite_evaluators/validators", async (importOriginal) => {
+  const original = await importOriginal<
+    typeof import("@/evaluation/suite_evaluators/validators")
+  >();
+  return {
+    ...original,
+    validateEvaluators: vi.fn(),
+    validateExecutionPolicy: vi.fn(),
+  };
+});
 
 vi.mock("@/evaluation/suite/evaluateSuite", () => ({
   evaluateSuite: vi.fn().mockResolvedValue({
@@ -102,39 +108,6 @@ describe("EvaluationSuite", () => {
       expect(validateEvaluators).not.toHaveBeenCalled();
     });
 
-    it("should validate evaluators and include them in item data", async () => {
-      const insertSpy = vi
-        .spyOn(testDataset, "insert")
-        .mockResolvedValue(undefined);
-
-      const mockEvaluator = new LLMJudge({
-        assertions: ["is accurate"],
-        name: "accuracy-judge",
-      });
-
-      await suite.addItem(
-        { input: "test" },
-        { evaluators: [mockEvaluator] }
-      );
-
-      expect(validateEvaluators).toHaveBeenCalledWith(
-        [mockEvaluator],
-        "item-level evaluators"
-      );
-      expect(insertSpy).toHaveBeenCalledWith([
-        expect.objectContaining({
-          input: "test",
-          evaluators: [
-            expect.objectContaining({
-              name: "accuracy-judge",
-              type: "llm_judge",
-              config: expect.any(Object),
-            }),
-          ],
-        }),
-      ]);
-    });
-
     it("should include execution policy in item data", async () => {
       const insertSpy = vi
         .spyOn(testDataset, "insert")
@@ -151,6 +124,78 @@ describe("EvaluationSuite", () => {
           executionPolicy: { runsPerItem: 3, passThreshold: 2 },
         }),
       ]);
+    });
+
+    it("should convert assertions shorthand to evaluator in item data", async () => {
+      const insertSpy = vi
+        .spyOn(testDataset, "insert")
+        .mockResolvedValue(undefined);
+
+      await suite.addItem(
+        { input: "test" },
+        { assertions: ["is accurate", "is concise"] }
+      );
+
+      expect(insertSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          input: "test",
+          evaluators: [
+            expect.objectContaining({
+              name: "llm_judge",
+              type: "llm_judge",
+            }),
+          ],
+        }),
+      ]);
+    });
+  });
+
+  describe("addItems", () => {
+    it("should batch insert items via dataset", async () => {
+      const insertSpy = vi
+        .spyOn(testDataset, "insert")
+        .mockResolvedValue(undefined);
+
+      await suite.addItems([
+        { data: { input: "hello", expected: "world" } },
+        { data: { input: "foo" }, assertions: ["is correct"] },
+      ]);
+
+      expect(insertSpy).toHaveBeenCalledTimes(1);
+      const insertedItems = insertSpy.mock.calls[0][0] as unknown[];
+      expect(insertedItems).toHaveLength(2);
+      expect(insertedItems[0]).toEqual(
+        expect.objectContaining({ input: "hello", expected: "world" })
+      );
+      expect(insertedItems[1]).toEqual(
+        expect.objectContaining({
+          input: "foo",
+          evaluators: [
+            expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
+          ],
+        })
+      );
+    });
+
+    it("should pass executionPolicy per item", async () => {
+      const insertSpy = vi
+        .spyOn(testDataset, "insert")
+        .mockResolvedValue(undefined);
+
+      await suite.addItems([
+        {
+          data: { input: "test" },
+          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        },
+      ]);
+
+      const insertedItems = insertSpy.mock.calls[0][0] as unknown[];
+      expect(insertedItems[0]).toEqual(
+        expect.objectContaining({
+          input: "test",
+          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        })
+      );
     });
   });
 
@@ -198,6 +243,29 @@ describe("EvaluationSuite", () => {
       expect(result.itemResults.has("item-1")).toBe(true);
     });
 
+    it("should pass model option to evaluateSuite as evaluatorModel", async () => {
+      const { evaluateSuite } = await import(
+        "@/evaluation/suite/evaluateSuite"
+      );
+      vi.mocked(evaluateSuite).mockResolvedValue({
+        experimentId: "exp-2",
+        experimentName: "test-exp-2",
+        testResults: [],
+        errors: [],
+      });
+
+      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
+
+      await suite.run(mockTask, {
+        experimentName: "test-experiment",
+        model: "claude-sonnet-4",
+      });
+
+      expect(evaluateSuite).toHaveBeenCalledWith(
+        expect.objectContaining({ evaluatorModel: "claude-sonnet-4" })
+      );
+    });
+
     it("should not call getVersionInfo separately (evaluateSuite handles everything)", async () => {
       const { evaluateSuite } = await import(
         "@/evaluation/suite/evaluateSuite"
@@ -236,28 +304,31 @@ describe("EvaluationSuite", () => {
     });
   });
 
-  describe("getEvaluators", () => {
+  describe("getAssertions", () => {
     it("should return empty array when versionInfo has no evaluators", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "v1",
         versionName: "v1",
       });
 
-      const evaluators = await suite.getEvaluators();
+      const assertions = await suite.getAssertions();
 
-      expect(evaluators).toEqual([]);
+      expect(assertions).toEqual([]);
     });
 
     it("should return empty array when versionInfo is undefined", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue(undefined);
 
-      const evaluators = await suite.getEvaluators();
+      const assertions = await suite.getAssertions();
 
-      expect(evaluators).toEqual([]);
+      expect(assertions).toEqual([]);
     });
 
-    it("should deserialize evaluators from versionInfo and call LLMJudge.fromConfig", async () => {
-      const mockJudge = { name: "judge" } as unknown as LLMJudge;
+    it("should deserialize evaluators from versionInfo and return assertion strings", async () => {
+      const mockJudge = {
+        name: "judge",
+        assertions: ["is correct", "is concise"],
+      } as unknown as LLMJudge;
       (LLMJudge.fromConfig as ReturnType<typeof vi.fn>).mockReturnValue(
         mockJudge
       );
@@ -268,23 +339,27 @@ describe("EvaluationSuite", () => {
           {
             name: "quality-judge",
             type: "llm_judge",
-            config: { schema: [{ name: "is_correct", type: "BOOLEAN" }] },
+            config: {
+              schema: [
+                { name: "is correct", type: "BOOLEAN" },
+                { name: "is concise", type: "BOOLEAN" },
+              ],
+            },
           },
         ],
         executionPolicy: { runsPerItem: 1, passThreshold: 1 },
       });
 
-      const evaluators = await suite.getEvaluators();
+      const assertions = await suite.getAssertions();
 
-      expect(evaluators).toEqual([mockJudge]);
-      expect(LLMJudge.fromConfig).toHaveBeenCalledWith(
-        { schema: [{ name: "is_correct", type: "BOOLEAN" }] },
-        undefined
-      );
+      expect(assertions).toEqual(["is correct", "is concise"]);
     });
 
-    it("should pass evaluatorModel override to LLMJudge.fromConfig", async () => {
-      const mockJudge = { name: "judge" } as unknown as LLMJudge;
+    it("should return a string[] (not LLMJudge[])", async () => {
+      const mockJudge = {
+        name: "judge",
+        assertions: ["is helpful"],
+      } as unknown as LLMJudge;
       (LLMJudge.fromConfig as ReturnType<typeof vi.fn>).mockReturnValue(
         mockJudge
       );
@@ -293,20 +368,40 @@ describe("EvaluationSuite", () => {
         id: "v1",
         evaluators: [
           {
-            name: "quality-judge",
+            name: "helpfulness-judge",
             type: "llm_judge",
-            config: { schema: [{ name: "is_correct", type: "BOOLEAN" }] },
+            config: { schema: [{ name: "is helpful", type: "BOOLEAN" }] },
           },
         ],
-        executionPolicy: { runsPerItem: 1, passThreshold: 1 },
       });
 
-      await suite.getEvaluators("claude-sonnet-4");
+      const assertions = await suite.getAssertions();
 
-      expect(LLMJudge.fromConfig).toHaveBeenCalledWith(
-        { schema: [{ name: "is_correct", type: "BOOLEAN" }] },
-        { model: "claude-sonnet-4" }
-      );
+      expect(Array.isArray(assertions)).toBe(true);
+      for (const a of assertions) {
+        expect(typeof a).toBe("string");
+      }
+    });
+  });
+
+  describe("getTags", () => {
+    it("should delegate to dataset.getTags and return tags", async () => {
+      const getTagsSpy = vi
+        .spyOn(testDataset, "getTags")
+        .mockResolvedValue(["tag-a", "tag-b"]);
+
+      const tags = await suite.getTags();
+
+      expect(getTagsSpy).toHaveBeenCalled();
+      expect(tags).toEqual(["tag-a", "tag-b"]);
+    });
+
+    it("should return empty array when dataset has no tags", async () => {
+      vi.spyOn(testDataset, "getTags").mockResolvedValue([]);
+
+      const tags = await suite.getTags();
+
+      expect(tags).toEqual([]);
     });
   });
 
@@ -343,8 +438,11 @@ describe("EvaluationSuite", () => {
   });
 
   describe("getItems", () => {
-    it("should return items with deserialized evaluators and resolved policy", async () => {
-      const mockJudge = { name: "item-judge" } as unknown as LLMJudge;
+    it("should return items with assertions (string[]) and resolved policy", async () => {
+      const mockJudge = {
+        name: "item-judge",
+        assertions: ["is quality", "is accurate"],
+      } as unknown as LLMJudge;
       (LLMJudge.fromConfig as ReturnType<typeof vi.fn>).mockReturnValue(
         mockJudge
       );
@@ -357,7 +455,12 @@ describe("EvaluationSuite", () => {
           {
             name: "item-judge",
             type: "llm_judge" as const,
-            config: { schema: [{ name: "quality", type: "BOOLEAN" }] },
+            config: {
+              schema: [
+                { name: "is quality", type: "BOOLEAN" },
+                { name: "is accurate", type: "BOOLEAN" },
+              ],
+            },
           },
         ],
         executionPolicy: { runsPerItem: 5, passThreshold: 3 },
@@ -381,26 +484,26 @@ describe("EvaluationSuite", () => {
 
       expect(items).toHaveLength(2);
 
-      // Item 1: has evaluators and custom policy
+      // Item 1: has assertions and custom policy
       expect(items[0].id).toBe("item-1");
       expect(items[0].data).toEqual({ input: "hello", expected: "world" });
-      expect(items[0].evaluators).toEqual([mockJudge]);
+      expect(items[0].assertions).toEqual(["is quality", "is accurate"]);
       expect(items[0].executionPolicy).toEqual({
         runsPerItem: 5,
         passThreshold: 3,
       });
 
-      // Item 2: no evaluators, falls back to suite-level policy
+      // Item 2: no assertions, falls back to suite-level policy
       expect(items[1].id).toBe("item-2");
       expect(items[1].data).toEqual({ input: "foo", expected: "bar" });
-      expect(items[1].evaluators).toEqual([]);
+      expect(items[1].assertions).toEqual([]);
       expect(items[1].executionPolicy).toEqual({
         runsPerItem: 1,
         passThreshold: 1,
       });
     });
 
-    it("should return empty evaluators for items without them", async () => {
+    it("should return empty assertions for items without them", async () => {
       const rawItem = new DatasetItem({
         id: "item-1",
         input: "test",
@@ -415,11 +518,21 @@ describe("EvaluationSuite", () => {
       const items = await suite.getItems();
 
       expect(items).toHaveLength(1);
-      expect(items[0].evaluators).toEqual([]);
+      expect(items[0].assertions).toEqual([]);
       expect(items[0].executionPolicy).toEqual({
         runsPerItem: 2,
         passThreshold: 1,
       });
+    });
+
+    it("should not take an evaluatorModel param (getItems has no model param)", async () => {
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([]);
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({ id: "v1" });
+
+      // getItems() should be callable without any arguments
+      const items = await suite.getItems();
+
+      expect(items).toEqual([]);
     });
   });
 
@@ -436,10 +549,12 @@ describe("EvaluationSuite", () => {
   });
 
   describe("update", () => {
-    it("should validate evaluators and call applyDatasetItemChanges", async () => {
+    it("should accept assertions and call applyDatasetItemChanges", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
         versionName: "v1",
+        evaluators: [],
+        executionPolicy: { runsPerItem: 1, passThreshold: 1 },
       });
 
       const applyChangesSpy = vi
@@ -452,33 +567,125 @@ describe("EvaluationSuite", () => {
             }) as never
         );
 
-      const mockEvaluator = new LLMJudge({
-        assertions: ["is correct"],
-        name: "correctness-judge",
-      });
-
       await suite.update({
-        evaluators: [mockEvaluator],
+        assertions: ["is correct"],
         executionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });
 
-      expect(validateEvaluators).toHaveBeenCalledWith(
-        [mockEvaluator],
-        "suite-level evaluators"
-      );
       expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
         override: false,
         body: {
           base_version: "version-1",
           evaluators: [
             expect.objectContaining({
-              name: "correctness-judge",
+              name: "llm_judge",
               type: "llm_judge",
             }),
           ],
           execution_policy: { runs_per_item: 3, pass_threshold: 2 },
         },
       });
+    });
+
+    it("should support partial update with assertions only (no executionPolicy)", async () => {
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
+        id: "version-1",
+        versionName: "v1",
+        evaluators: [],
+        executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+      });
+
+      const applyChangesSpy = vi
+        .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
+        .mockImplementation(
+          () =>
+            ({
+              then: (cb: (v: unknown) => unknown) =>
+                Promise.resolve(cb(undefined)),
+              [Symbol.toStringTag]: "HttpResponsePromise",
+            }) as never
+        );
+
+      await suite.update({ assertions: ["is correct"] });
+
+      // Should use current executionPolicy from versionInfo as fallback
+      expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+        override: false,
+        body: expect.objectContaining({
+          base_version: "version-1",
+          evaluators: [
+            expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
+          ],
+        }),
+      });
+    });
+
+    it("should support partial update with executionPolicy only (no assertions)", async () => {
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
+        id: "version-1",
+        versionName: "v1",
+        evaluators: [],
+        executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+      });
+
+      const applyChangesSpy = vi
+        .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
+        .mockImplementation(
+          () =>
+            ({
+              then: (cb: (v: unknown) => unknown) =>
+                Promise.resolve(cb(undefined)),
+              [Symbol.toStringTag]: "HttpResponsePromise",
+            }) as never
+        );
+
+      await suite.update({ executionPolicy: { runsPerItem: 5, passThreshold: 3 } });
+
+      expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+        override: false,
+        body: expect.objectContaining({
+          base_version: "version-1",
+          execution_policy: { runs_per_item: 5, pass_threshold: 3 },
+        }),
+      });
+    });
+
+    it("should support partial update with tags only (calls updateDataset, not applyDatasetItemChanges)", async () => {
+      const updateDatasetSpy = vi
+        .spyOn(opikClient.api.datasets, "updateDataset")
+        .mockImplementation(
+          () =>
+            ({
+              then: (cb: (v: unknown) => unknown) =>
+                Promise.resolve(cb(undefined)),
+              [Symbol.toStringTag]: "HttpResponsePromise",
+            }) as never
+        );
+
+      const applyChangesSpy = vi
+        .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
+        .mockImplementation(
+          () =>
+            ({
+              then: (cb: (v: unknown) => unknown) =>
+                Promise.resolve(cb(undefined)),
+              [Symbol.toStringTag]: "HttpResponsePromise",
+            }) as never
+        );
+
+      await suite.update({ tags: ["ci", "nightly"] });
+
+      expect(updateDatasetSpy).toHaveBeenCalledWith("suite-ds-id", {
+        name: "test-suite",
+        tags: ["ci", "nightly"],
+      });
+      expect(applyChangesSpy).not.toHaveBeenCalled();
+    });
+
+    it("should throw when none of assertions, executionPolicy, or tags are provided", async () => {
+      await expect(suite.update({})).rejects.toThrow(
+        "At least one of 'assertions', 'executionPolicy', or 'tags' must be provided."
+      );
     });
   });
 
@@ -548,6 +755,8 @@ describe("EvaluationSuite", () => {
     it("should call validateExecutionPolicy in update", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
+        evaluators: [],
+        executionPolicy: { runsPerItem: 1, passThreshold: 1 },
       });
       vi.spyOn(
         opikClient.api.datasets,
@@ -560,13 +769,8 @@ describe("EvaluationSuite", () => {
           }) as never
       );
 
-      const mockEvaluator = new LLMJudge({
-        assertions: ["is correct"],
-        name: "judge",
-      });
-
       await suite.update({
-        evaluators: [mockEvaluator],
+        assertions: ["is correct"],
         executionPolicy: { runsPerItem: 5, passThreshold: 3 },
       });
 

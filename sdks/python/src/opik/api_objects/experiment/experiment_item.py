@@ -12,6 +12,7 @@ class ExperimentItemReferences:
     dataset_item_id: str
     trace_id: str
     project_name: Optional[str] = None
+    execution_policy: Optional[Dict[str, Any]] = None
 
 
 @dataclasses.dataclass

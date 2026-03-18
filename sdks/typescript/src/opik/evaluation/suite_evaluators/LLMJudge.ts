@@ -98,6 +98,44 @@ export class LLMJudge extends BaseSuiteEvaluator {
     };
   }
 
+  private hasSameSettings(other: LLMJudge): boolean {
+    return (
+      this.modelName === other.modelName &&
+      this.temperature === other.temperature &&
+      this.seed === other.seed &&
+      this.trackMetric === other.trackMetric
+    );
+  }
+
+  static merged(judges: LLMJudge[]): LLMJudge | undefined {
+    if (judges.length <= 1) return undefined;
+
+    const first = judges[0];
+    if (!judges.every((j) => first.hasSameSettings(j))) {
+      return undefined;
+    }
+
+    const seen = new Set<string>();
+    const mergedAssertions: string[] = [];
+    for (const judge of judges) {
+      for (const assertion of judge.assertions) {
+        if (!seen.has(assertion)) {
+          seen.add(assertion);
+          mergedAssertions.push(assertion);
+        }
+      }
+    }
+
+    return new LLMJudge({
+      assertions: mergedAssertions,
+      name: first.name,
+      model: first.modelName,
+      seed: first.seed,
+      temperature: first.temperature,
+      track: first.trackMetric,
+    });
+  }
+
   static fromConfig(
     config: LLMJudgeConfig | Record<string, unknown>,
     options?: { model?: string; track?: boolean }

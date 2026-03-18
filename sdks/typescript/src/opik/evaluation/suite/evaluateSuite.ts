@@ -4,6 +4,7 @@ import { OpikClient } from "@/client/Client";
 import { OpikSingleton } from "@/client/SingletonClient";
 import { EvaluationEngine } from "../engine/EvaluationEngine";
 import { BaseMetric } from "../metrics/BaseMetric";
+import { LLMJudge } from "../suite_evaluators/LLMJudge";
 import { logger } from "@/utils/logger";
 import type { Prompt } from "@/prompt/Prompt";
 import { DatasetItemData } from "@/dataset/DatasetItem";
@@ -79,8 +80,16 @@ export async function evaluateSuite<T = Record<string, unknown>>(
     const itemEvaluators = item.evaluators
       ? deserializeEvaluators(item.evaluators, options.evaluatorModel)
       : [];
-    const mergedMetrics = [...suiteEvaluators, ...itemEvaluators];
-    itemMetricsMap.set(item.id, mergedMetrics);
+    const allMetrics = [...suiteEvaluators, ...itemEvaluators];
+
+    // Merge LLMJudge instances with identical settings into a single call
+    const judges = allMetrics.filter((m): m is LLMJudge => m instanceof LLMJudge);
+    const mergedJudge = LLMJudge.merged(judges);
+    const finalMetrics = mergedJudge
+      ? [mergedJudge, ...allMetrics.filter((m) => !(m instanceof LLMJudge))]
+      : allMetrics;
+
+    itemMetricsMap.set(item.id, finalMetrics);
 
     const resolvedPolicy = resolveItemExecutionPolicy(
       item.executionPolicy,

@@ -1,5 +1,67 @@
 import { describe, it, expect } from "vitest";
-import { convertOptimizationVariableFormat } from "./optimizations";
+import {
+  convertOptimizationVariableFormat,
+  checkIsEvaluationSuite,
+} from "./optimizations";
+import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
+
+const makeExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
+  id: "exp-1",
+  dataset_id: "ds-1",
+  dataset_name: "test-dataset",
+  type: EXPERIMENT_TYPE.REGULAR,
+  status: "completed",
+  name: "test-experiment",
+  trace_count: 10,
+  created_at: "2024-01-01T00:00:00Z",
+  last_updated_at: "2024-01-01T00:00:00Z",
+  ...overrides,
+});
+
+describe("checkIsEvaluationSuite", () => {
+  it("should return true when any experiment has evaluation_method 'evaluation_suite'", () => {
+    const experiments = [
+      makeExperiment({ evaluation_method: "dataset" }),
+      makeExperiment({ evaluation_method: "evaluation_suite" }),
+    ];
+    expect(checkIsEvaluationSuite(experiments)).toBe(true);
+  });
+
+  it("should return false when no experiment has evaluation_method 'evaluation_suite'", () => {
+    const experiments = [
+      makeExperiment({ evaluation_method: "dataset" }),
+      makeExperiment({ evaluation_method: "unknown" }),
+    ];
+    expect(checkIsEvaluationSuite(experiments)).toBe(false);
+  });
+
+  it("should return false for empty array", () => {
+    expect(checkIsEvaluationSuite([])).toBe(false);
+  });
+
+  it("should return false when evaluation_method is undefined and no experiment_scores", () => {
+    const experiments = [makeExperiment(), makeExperiment()];
+    expect(checkIsEvaluationSuite(experiments)).toBe(false);
+  });
+
+  it("should return true when all experiments have evaluation_method 'evaluation_suite'", () => {
+    const experiments = [
+      makeExperiment({ evaluation_method: "evaluation_suite" }),
+      makeExperiment({ evaluation_method: "evaluation_suite" }),
+    ];
+    expect(checkIsEvaluationSuite(experiments)).toBe(true);
+  });
+
+  it("should return false when experiment has scores but evaluation_method is not evaluation_suite", () => {
+    const experiments = [
+      makeExperiment({
+        evaluation_method: "dataset",
+        experiment_scores: [{ name: "pass_rate", value: 0.8 }],
+      }),
+    ];
+    expect(checkIsEvaluationSuite(experiments)).toBe(false);
+  });
+});
 
 describe("convertOptimizationVariableFormat", () => {
   describe("string content", () => {

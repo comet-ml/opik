@@ -111,13 +111,42 @@ class OptimizationServiceImpl implements OptimizationService {
     @WithSpan
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
-        return optimizationDAO.find(page, size, searchCriteria)
-                .flatMap(optimizationPage -> Mono.deferContextual(ctx -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    var enrichedOptimizations = enrichOptimizations(optimizationPage.content(), workspaceId);
-                    return Mono.just(optimizationPage.toBuilder()
-                            .content(enrichedOptimizations).build());
-                }));
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            var resolvedCriteria = resolveDatasetNameFilter(searchCriteria, workspaceId);
+
+            if (resolvedCriteria == null) {
+                return Mono.just(Optimization.OptimizationPage.empty(page, List.of()));
+            }
+
+            return optimizationDAO.find(page, size, resolvedCriteria)
+                    .flatMap(optimizationPage -> {
+                        var enrichedOptimizations = enrichOptimizations(optimizationPage.content(), workspaceId);
+                        return Mono.just(optimizationPage.toBuilder()
+                                .content(enrichedOptimizations).build());
+                    });
+        });
+    }
+
+    /**
+     * @return resolved criteria, or {@code null} if dataset name filter matched no datasets (caller should return empty results)
+     */
+    private OptimizationSearchCriteria resolveDatasetNameFilter(
+            OptimizationSearchCriteria searchCriteria, String workspaceId) {
+        if (StringUtils.isBlank(searchCriteria.datasetName())) {
+            return searchCriteria;
+        }
+
+        var datasetIds = datasetService.findIdsByPartialName(workspaceId, searchCriteria.datasetName());
+
+        if (datasetIds.isEmpty()) {
+            return null;
+        }
+
+        return searchCriteria.toBuilder()
+                .datasetIds(datasetIds)
+                .build();
     }
 
     @Override
@@ -366,8 +395,8 @@ class OptimizationServiceImpl implements OptimizationService {
                 .opikApiKey(opikApiKey)
                 .build();
 
-        // Enqueue to Redis RQ
-        queueProducer.enqueue(Queue.OPTIMIZER_CLOUD, jobMessage)
+        var queue = resolveQueue(optimization);
+        queueProducer.enqueue(queue, jobMessage)
                 .doOnSuccess(
                         jobId -> log.info("Studio optimization job enqueued successfully for id: '{}', jobId: '{}'",
                                 optimization.id(), jobId))
@@ -377,6 +406,10 @@ class OptimizationServiceImpl implements OptimizationService {
                     cancelOptimization(optimization.id(), workspaceId);
                 })
                 .subscribe();
+    }
+
+    private Queue resolveQueue(Optimization optimization) {
+        return Queue.OPTIMIZER_CLOUD;
     }
 
     private void cancelOptimization(UUID optimizationId, String workspaceId) {

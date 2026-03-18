@@ -100,6 +100,8 @@ public interface DatasetService {
 
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
 
+    List<UUID> findIdsByPartialName(String workspaceId, String name);
+
     long getDailyCreatedCount();
 
     void updateStatus(UUID id, String workspaceId, DatasetStatus status);
@@ -620,6 +622,14 @@ class DatasetServiceImpl implements DatasetService {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
             return dao.exists(datasetIds, workspaceId);
+        });
+    }
+
+    @Override
+    public List<UUID> findIdsByPartialName(@NonNull String workspaceId, @NonNull String name) {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return dao.findIdsByPartialName(workspaceId, DatasetDAO.escapeLikeMetacharacters(name));
         });
     }
 

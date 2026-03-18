@@ -368,6 +368,7 @@ class ExperimentItemMessage(BaseMessage):
     trace_id: str
     dataset_item_id: str
     project_name: Optional[str] = None
+    execution_policy: Optional[Dict[str, Any]] = None
 
     message_type = "ExperimentItemMessage"
 

@@ -1,10 +1,6 @@
 import React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  SquareDashedMousePointer,
-  MessageSquare,
-  ShieldAlert,
-} from "lucide-react";
+import { SquareDashedMousePointer, MessageSquare } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 import OptimizationTemplateCard from "./OptimizationTemplateCard";
@@ -16,10 +12,6 @@ const TEMPLATE_ICONS: Record<
   "opik-chatbot": {
     icon: MessageSquare,
     color: "text-template-icon-performance",
-  },
-  "jailbreak-password": {
-    icon: ShieldAlert,
-    color: "text-template-icon-metrics",
   },
 };
 
