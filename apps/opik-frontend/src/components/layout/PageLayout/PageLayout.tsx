@@ -14,8 +14,8 @@ import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDia
 const MOBILE_BREAKPOINT = 1024; // lg breakpoint in Tailwind
 
 // Fallback: load AssistantSidebar directly when plugin system is not active (dev mode)
-const AssistantSidebarFallback = lazy(() =>
-  import("@/plugins/comet/AssistantSidebar"),
+const AssistantSidebarFallback = lazy(
+  () => import("@/plugins/comet/AssistantSidebar"),
 );
 
 const PageLayout = () => {
@@ -38,10 +38,14 @@ const PageLayout = () => {
   });
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
-  const AssistantSidebarPlugin = usePluginsStore((state) => state.AssistantSidebar);
+  const AssistantSidebarPlugin = usePluginsStore(
+    (state) => state.AssistantSidebar,
+  );
 
   // Use plugin if available, otherwise fall back to direct lazy import
-  const AssistantSidebar = AssistantSidebarPlugin || (assistantEnabled ? AssistantSidebarFallback : null);
+  const AssistantSidebar =
+    AssistantSidebarPlugin ||
+    (assistantEnabled ? AssistantSidebarFallback : null);
 
   // Force sidebar collapsed on mobile, use stored preference on desktop
   const isMobile =

@@ -361,7 +361,6 @@ start_backend() {
     export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
     export REDIS_URL="${REDIS_URL:-redis://:opik@localhost:${REDIS_PORT}/0}"
     export ANALYTICS_DB_PORT="${CLICKHOUSE_HTTP_PORT}"
-    export TOGGLE_ASSISTANT_SIDEBAR_ENABLED="true"
 
     log_debug "Backend configured with:"
     log_debug "  SERVER_APPLICATION_PORT=$SERVER_APPLICATION_PORT"
