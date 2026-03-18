@@ -1,5 +1,6 @@
 from unittest import mock
 
+import httpx
 import pytest
 
 from opik.evaluation.local_runner_task import LocalRunnerTask
@@ -247,7 +248,7 @@ class TestLocalRunnerTask:
 
         assert output == {
             "input": {"input": "test"},
-            "output": "{}",
+            "output": {},
         }
 
     def test_call__id_key_filtered_from_inputs(
@@ -306,3 +307,99 @@ class TestLocalRunnerTask:
         }
         assert mock_rest_client.runners.get_job.call_count == 3
         assert patch_sleep.call_count == 2
+
+    def test_call__job_cancelled__raises_runtime_error(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-cancelled")
+        )
+        mock_rest_client.runners.get_job.return_value = _make_job("cancelled")
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+        )
+        with pytest.raises(RuntimeError, match="was cancelled"):
+            task({"input": "test"})
+
+    def test_call__timeout_less_than_poll_interval__polls_at_least_once(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-fast-timeout")
+        )
+        mock_rest_client.runners.get_job.return_value = _make_job("pending")
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+            timeout_seconds=1,
+            poll_interval_seconds=5,
+        )
+        with pytest.raises(TimeoutError, match="did not complete within 1s"):
+            task({"input": "test"})
+
+        assert mock_rest_client.runners.get_job.call_count == 1
+
+    def test_call__transient_network_error__retries_and_succeeds(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-flaky")
+        )
+        mock_rest_client.runners.get_job.side_effect = [
+            httpx.ConnectError("connection refused"),
+            _make_job("completed", result={"result": "recovered"}),
+        ]
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+            timeout_seconds=10,
+            poll_interval_seconds=2,
+        )
+        output = task({"input": "test"})
+
+        assert output == {
+            "input": {"input": "test"},
+            "output": "recovered",
+        }
+        assert mock_rest_client.runners.get_job.call_count == 2
+
+    def test_call__result_without_result_key__returns_dict_directly(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-dict")
+        )
+        mock_rest_client.runners.get_job.return_value = _make_job(
+            "completed", result={"answer": "42", "confidence": "high"}
+        )
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+        )
+        output = task({"input": "test"})
+
+        assert output == {
+            "input": {"input": "test"},
+            "output": {"answer": "42", "confidence": "high"},
+        }

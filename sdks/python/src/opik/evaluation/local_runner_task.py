@@ -1,24 +1,46 @@
 import logging
+import os
 import time
 from typing import Any, Dict, Optional
+
+import httpx
 
 from ..api_objects import opik_client, rest_helpers
 from ..rest_api import client as rest_api_client
 
 LOGGER = logging.getLogger(__name__)
 
+DEFAULT_TIMEOUT_SECONDS = int(
+    os.getenv("OPIK_LOCAL_RUNNER_TIMEOUT_SECONDS", "120")
+)
+DEFAULT_POLL_INTERVAL_SECONDS = int(
+    os.getenv("OPIK_LOCAL_RUNNER_POLL_INTERVAL_SECONDS", "2")
+)
+
+_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
+
 
 class LocalRunnerTask:
     """
     A callable task that submits jobs to the local runner and polls for completion.
-    Conforms to LLMTask protocol for use with evaluate() and EvaluationSuite.
+    Conforms to the ``LLMTask`` protocol (``Callable[[Dict[str, Any]], Dict[str, Any]]``)
+    for use with ``evaluate()`` and ``EvaluationSuite``.
+
+    When called, the instance:
+
+    1. Filters the ``"id"`` key from the input dict (dataset-item artefact).
+    2. Submits a job to the local runner via the REST API.
+    3. Polls until the job reaches a terminal status or the timeout expires.
+    4. Returns ``{"input": <original item>, "output": <job result>}``.
 
     Args:
         project_name: The project to submit jobs under.
         agent_name: The agent to execute the job.
         mask_id: Optional agent config override mask.
         timeout_seconds: Max time to wait for job completion.
+            Defaults to ``OPIK_LOCAL_RUNNER_TIMEOUT_SECONDS`` env var or 120.
         poll_interval_seconds: Interval between status polls.
+            Defaults to ``OPIK_LOCAL_RUNNER_POLL_INTERVAL_SECONDS`` env var or 2.
     """
 
     def __init__(
@@ -26,8 +48,8 @@ class LocalRunnerTask:
         project_name: str,
         agent_name: str,
         mask_id: Optional[str] = None,
-        timeout_seconds: int = 120,
-        poll_interval_seconds: int = 2,
+        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None:
         self._project_name = project_name
         self._agent_name = agent_name
@@ -66,14 +88,24 @@ class LocalRunnerTask:
 
     def _wait_for_job(self, job_id: str) -> Dict[str, Any]:
         rest_client = self._get_rest_client()
-        iterations = self._timeout_seconds // self._poll_interval_seconds
+        iterations = max(1, self._timeout_seconds // self._poll_interval_seconds)
 
         for _ in range(iterations):
-            job = rest_client.runners.get_job(job_id)
+            try:
+                job = rest_client.runners.get_job(job_id)
+            except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                LOGGER.warning(
+                    "Transient network error polling job %s: %s", job_id, exc
+                )
+                time.sleep(self._poll_interval_seconds)
+                continue
+
             if job.status == "completed":
                 return dict(job.result) if job.result else {}
             if job.status == "failed":
                 raise RuntimeError(f"Job {job_id} failed: {job.error}")
+            if job.status == "cancelled":
+                raise RuntimeError(f"Job {job_id} was cancelled")
             time.sleep(self._poll_interval_seconds)
 
         raise TimeoutError(
@@ -83,7 +115,8 @@ class LocalRunnerTask:
     def __call__(self, item: Dict[str, Any]) -> Dict[str, Any]:
         inputs = {k: v for k, v in item.items() if k != "id"}
         result = self._wait_for_job(self._submit_job(inputs))
+        output = result.get("result", result)
         return {
             "input": item,
-            "output": result.get("result", str(result)),
+            "output": output,
         }
