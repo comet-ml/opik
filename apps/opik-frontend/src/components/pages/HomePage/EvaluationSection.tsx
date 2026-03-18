@@ -93,7 +93,7 @@ const EvaluationSection: React.FC = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const {
-    permissions: { canViewExperiments },
+    permissions: { canViewExperiments, canCreateExperiments },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -170,9 +170,11 @@ const EvaluationSection: React.FC = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            <Button variant="link" onClick={handleNewExperimentClick}>
-              Create new experiment
-            </Button>
+            {canCreateExperiments && (
+              <Button variant="link" onClick={handleNewExperimentClick}>
+                Create new experiment
+              </Button>
+            )}
           </DataTableNoData>
         }
       />

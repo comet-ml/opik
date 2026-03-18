@@ -91,8 +91,10 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const canCreateExperiments = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_CREATE),
-    [checkNullablePermission],
+    () =>
+      canViewExperiments &&
+      checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_CREATE),
+    [canViewExperiments, checkNullablePermission],
   );
 
   const canViewDashboards = useMemo(
