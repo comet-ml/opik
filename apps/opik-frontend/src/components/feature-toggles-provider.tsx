@@ -60,7 +60,13 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
 
   useEffect(() => {
     if (data) {
-      setFeatures(data);
+      setFeatures({
+        ...data,
+        // Preserve dev-only overrides that the API won't know about
+        [FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED]:
+          data[FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED] ||
+          DEFAULT_STATE[FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED],
+      });
     }
   }, [data]);
 

@@ -8,6 +8,7 @@ export interface BridgeContext {
   projectName: string | null;
   authToken: string;
   baseApiUrl: string;
+  assistantBackendUrl: string;
   theme: BridgeTheme;
 }
 

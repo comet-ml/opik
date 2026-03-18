@@ -1,7 +1,15 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useParams } from "@tanstack/react-router";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { AssistantSidebarBridge } from "@/types/assistant-sidebar";
+import {
+  AssistantSidebarBridge,
+  BridgeContext,
+  HostEventMap,
+} from "@/types/assistant-sidebar";
+import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
+import useWorkspace from "@/plugins/comet/useWorkspace";
+import useProjectById from "@/api/projects/useProjectById";
 
 const BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_URL || "/ollie";
 
@@ -30,20 +38,25 @@ const loadStylesheet = (href: string): void => {
   document.head.appendChild(link);
 };
 
+type ContextChangedListener = (data: HostEventMap["context:changed"]) => void;
+
 const createBridge = (
   onWidthChangeRef: React.MutableRefObject<(w: number) => void>,
+  contextRef: React.MutableRefObject<BridgeContext>,
+  listenersRef: React.MutableRefObject<Set<ContextChangedListener>>,
 ): AssistantSidebarBridge => ({
   version: 1,
-  getContext: () => ({
-    workspaceId: "",
-    workspaceName: "",
-    projectId: null,
-    projectName: null,
-    authToken: "",
-    baseApiUrl: "/api",
-    theme: "light",
-  }),
-  subscribe: () => () => {},
+  getContext: () => contextRef.current,
+  subscribe: (event, callback) => {
+    if (event === "context:changed") {
+      const listener = callback as ContextChangedListener;
+      listenersRef.current.add(listener);
+      return () => {
+        listenersRef.current.delete(listener);
+      };
+    }
+    return () => {};
+  },
   emit: (event, data) => {
     if (event === "sidebar:resized") {
       onWidthChangeRef.current((data as { width: number }).width);
@@ -81,15 +94,61 @@ function suspendUntilScript(): boolean {
   }
 }
 
+function useBridgeContext(): BridgeContext {
+  const apiKey = useUserApiKey();
+  const workspaceName = useActiveWorkspaceName();
+  const workspace = useWorkspace();
+
+  const { projectId } = useParams({ strict: false }) as {
+    projectId?: string;
+  };
+  const { data: project } = useProjectById(
+    { projectId: projectId! },
+    { enabled: !!projectId },
+  );
+
+  const workspaceId = workspace?.workspaceId ?? "";
+  const projectName = project?.name ?? null;
+  const resolvedProjectId = projectId ?? null;
+
+  return useMemo<BridgeContext>(
+    () => ({
+      workspaceId,
+      workspaceName,
+      projectId: resolvedProjectId,
+      projectName,
+      authToken: apiKey,
+      baseApiUrl: "/api",
+      assistantBackendUrl: "/ollie-assist",
+      theme: "light",
+    }),
+    [workspaceId, workspaceName, resolvedProjectId, projectName, apiKey],
+  );
+}
+
 const AssistantSidebarContent: React.FC<AssistantSidebarProps> = ({
   onWidthChange,
 }) => {
   const scriptReady = suspendUntilScript();
+  const context = useBridgeContext();
 
   const onWidthChangeRef = useRef(onWidthChange);
   onWidthChangeRef.current = onWidthChange;
-  const bridgeRef = useRef(createBridge(onWidthChangeRef));
+
+  const contextRef = useRef(context);
+  contextRef.current = context;
+
+  const listenersRef = useRef<Set<ContextChangedListener>>(new Set());
+  const bridgeRef = useRef(
+    createBridge(onWidthChangeRef, contextRef, listenersRef),
+  );
   const mountedElRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    for (const listener of listenersRef.current) {
+      listener(context);
+    }
+  }, [context]);
 
   const containerRef = useCallback((el: HTMLDivElement | null) => {
     if (mountedElRef.current && window.OllieConsole) {
@@ -106,6 +165,7 @@ const AssistantSidebarContent: React.FC<AssistantSidebarProps> = ({
   if (!scriptReady) return null;
 
   return (
+    {/* eslint-disable-next-line tailwindcss/no-custom-classname */}
     <div className="assistant-sidebar-root absolute bottom-0 right-0 top-[var(--banner-height)] z-10">
       <div ref={containerRef} className="h-full" />
     </div>

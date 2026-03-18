@@ -461,7 +461,7 @@ start_frontend() {
     log_debug "Starting frontend with: npm run start"
 
     # Start frontend in background with interactive mode disabled
-    CI=true nohup npm run start > "$FRONTEND_LOG_FILE" 2>&1 &
+    CI=true VITE_ASSISTANT_SIDEBAR_ENABLED=true nohup npm run start > "$FRONTEND_LOG_FILE" 2>&1 &
     FRONTEND_PID=$!
     echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
 
