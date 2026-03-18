@@ -11,6 +11,7 @@ from .agent_config_value_history import AgentConfigValueHistory
 
 class AgentBlueprintHistory(UniversalBaseModel):
     id: typing.Optional[str] = None
+    name: typing.Optional[str] = None
     type: AgentBlueprintHistoryType
     description: typing.Optional[str] = None
     envs: typing.Optional[typing.List[str]] = None

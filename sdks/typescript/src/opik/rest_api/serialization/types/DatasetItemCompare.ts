@@ -7,6 +7,7 @@ import { DatasetItemCompareSource } from "./DatasetItemCompareSource.js";
 import { EvaluatorItemCompare } from "./EvaluatorItemCompare.js";
 import { ExecutionPolicyCompare } from "./ExecutionPolicyCompare.js";
 import { ExperimentItemCompare } from "./ExperimentItemCompare.js";
+import { ExperimentRunSummaryCompare } from "./ExperimentRunSummaryCompare.js";
 import { JsonNode } from "./JsonNode.js";
 
 export const DatasetItemCompare: core.serialization.ObjectSchema<
@@ -26,6 +27,10 @@ export const DatasetItemCompare: core.serialization.ObjectSchema<
     experimentItems: core.serialization.property(
         "experiment_items",
         core.serialization.list(ExperimentItemCompare).optional(),
+    ),
+    runSummariesByExperiment: core.serialization.property(
+        "run_summaries_by_experiment",
+        core.serialization.record(core.serialization.string(), ExperimentRunSummaryCompare).optional(),
     ),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -47,6 +52,7 @@ export declare namespace DatasetItemCompare {
         evaluators?: EvaluatorItemCompare.Raw[] | null;
         execution_policy?: ExecutionPolicyCompare.Raw | null;
         experiment_items?: ExperimentItemCompare.Raw[] | null;
+        run_summaries_by_experiment?: Record<string, ExperimentRunSummaryCompare.Raw> | null;
         dataset_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;

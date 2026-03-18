@@ -369,6 +369,42 @@ describe("Experiment entity operations", () => {
     });
   });
 
+  describe("getUrl", () => {
+    it("should return the experiment URL when datasetName is set", async () => {
+      const mockDatasetId = "mock-dataset-id";
+      vi.spyOn(opikClient, "getDataset").mockResolvedValue({
+        id: mockDatasetId,
+      } as never);
+
+      const url = await experiment.getUrl();
+
+      expect(url).toContain(mockDatasetId);
+      expect(url).toContain(experiment.id);
+    });
+
+    it("should throw when datasetName is undefined", async () => {
+      const experimentWithoutDataset = new Experiment(
+        { id: "test-id", name: "test-name" },
+        opikClient
+      );
+
+      await expect(experimentWithoutDataset.getUrl()).rejects.toThrow(
+        "Cannot get URL: the associated dataset has been deleted or is unavailable"
+      );
+    });
+
+    it("should throw when datasetName is null", async () => {
+      const experimentWithNullDataset = new Experiment(
+        { id: "test-id", name: "test-name", datasetName: null as never },
+        opikClient
+      );
+
+      await expect(experimentWithNullDataset.getUrl()).rejects.toThrow(
+        "Cannot get URL: the associated dataset has been deleted or is unavailable"
+      );
+    });
+  });
+
   describe("getItems", () => {
     it("should request items with correct parameters", async () => {
       const mockExperimentItem = createMockExperimentItemCompareRaw({

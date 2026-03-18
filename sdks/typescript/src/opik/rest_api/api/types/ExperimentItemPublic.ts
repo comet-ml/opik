@@ -13,5 +13,4 @@ export interface ExperimentItemPublic {
     createdBy?: string;
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemPublicTraceVisibilityMode;
-    executionPolicy?: OpikApi.ExecutionPolicyPublic;
 }

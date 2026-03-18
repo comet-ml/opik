@@ -17,7 +17,7 @@ import { PromptVersionLink } from "./PromptVersionLink.js";
 export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.Raw, OpikApi.Experiment> =
     core.serialization.object({
         id: core.serialization.string().optional(),
-        datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+        datasetName: core.serialization.property("dataset_name", core.serialization.string().nullable()),
         datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         projectName: core.serialization.property("project_name", core.serialization.string().optional()),
@@ -64,7 +64,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
 export declare namespace Experiment {
     export interface Raw {
         id?: string | null;
-        dataset_name: string;
+        dataset_name?: string | null;
         dataset_id?: string | null;
         project_id?: string | null;
         project_name?: string | null;
