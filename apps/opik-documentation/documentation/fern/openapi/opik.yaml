@@ -8327,6 +8327,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -8336,10 +8340,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8503,9 +8503,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -8859,6 +8859,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -8868,10 +8872,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8948,9 +8948,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -9209,6 +9209,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9218,10 +9222,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9403,9 +9403,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -9655,6 +9655,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9664,10 +9668,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9749,6 +9749,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9758,10 +9762,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -11158,6 +11158,8 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_name:
+          type: string
     DatasetItemsDelete:
       type: object
       properties:
@@ -11793,6 +11795,8 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_name:
+          type: string
     AvgValueStat_Public:
       type: object
       allOf:
@@ -12136,6 +12140,8 @@ components:
           format: int32
         dataset_version:
           type: string
+        project_name:
+          type: string
         filters:
           type: string
     DatasetUpdate:
@@ -12362,11 +12368,14 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
           format: uuid
-          readOnly: true
         project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          readOnly: true
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -12533,6 +12542,16 @@ components:
           minLength: 1
           type: string
           nullable: true
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -13293,11 +13312,14 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
           format: uuid
-          readOnly: true
         project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          readOnly: true
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -15866,10 +15888,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15998,10 +16020,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16093,10 +16115,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         exclude_blueprint_update_for_projects:
           uniqueItems: true
           type: array
@@ -16132,10 +16154,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16277,10 +16299,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array

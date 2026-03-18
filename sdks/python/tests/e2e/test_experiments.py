@@ -91,6 +91,7 @@ def test__find_experiment_items_for_dataset__happy_path(
     experiment_items_contents = experiments.find_experiment_items_for_dataset(
         dataset_name=dataset_name,
         experiment_ids=[retrieved_experiment.id],
+        project_name=opik_client.project_name,
     )
 
     assert len(experiment_items_contents) == 3
@@ -220,6 +221,7 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
         dataset_name=dataset_name,
         experiment_ids=[retrieved_experiment.id],
         filter_string="feedback_scores.equals_scoring_function = 0.0",
+        project_name=opik_client.project_name,
     )
 
     assert len(experiment_items_contents) == 1

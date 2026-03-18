@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock, Mock
 
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import Dataset
+from opik.api_objects.dataset.evaluation_suite import EvaluationSuite
 from opik.message_processing import messages
 from opik.types import BatchFeedbackScoreDict
 
@@ -354,29 +355,477 @@ def test_opik_client__log_traces_feedback_scores__no_valid_scores():
         mock_streamer.put.assert_not_called()
 
 
+class TestOpikClientCreateDataset:
+    """Tests for Opik.create_dataset() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_rest_datasets = self.opik_client_._rest_client.datasets
+
+        with (
+            patch.object(self.mock_rest_datasets, "create_dataset") as self.mock_create,
+            patch.object(
+                self.mock_rest_datasets,
+                "get_dataset_by_identifier",
+                return_value=Mock(id="some-dataset-id"),
+            ) as self.mock_get_by_identifier,
+            patch.object(
+                self.opik_client_, "_display_created_dataset_url"
+            ) as self.mock_display_url,
+        ):
+            yield
+
+    def test_create_dataset__no_project_name__uses_default_project(self):
+        """Verify create_dataset uses the client's default project when project_name is None."""
+        result = self.opik_client_.create_dataset(name="my-dataset")
+
+        self.mock_create.assert_called_once_with(
+            name="my-dataset",
+            description=None,
+            project_name="default-project",
+        )
+        assert isinstance(result, Dataset)
+        assert result.name == "my-dataset"
+        assert result.description is None
+        assert result.project_name == "default-project"
+
+    def test_create_dataset__explicit_project_name__uses_given_project(self):
+        """Verify create_dataset uses the provided project_name over the default."""
+        result = self.opik_client_.create_dataset(
+            name="my-dataset", project_name="custom-project"
+        )
+
+        self.mock_create.assert_called_once_with(
+            name="my-dataset",
+            description=None,
+            project_name="custom-project",
+        )
+        assert isinstance(result, Dataset)
+        assert result.name == "my-dataset"
+        assert result.description is None
+        assert result.project_name == "custom-project"
+
+    def test_create_dataset__with_description__passes_description_to_api(self):
+        """Verify create_dataset forwards the description to the REST API."""
+        result = self.opik_client_.create_dataset(
+            name="my-dataset", description="A test dataset"
+        )
+
+        self.mock_create.assert_called_once_with(
+            name="my-dataset",
+            description="A test dataset",
+            project_name="default-project",
+        )
+        assert result.description == "A test dataset"
+
+    def test_create_dataset__returns_dataset_with_zero_items(self):
+        """Verify create_dataset returns a Dataset with dataset_items_count=0."""
+        result = self.opik_client_.create_dataset(name="my-dataset")
+
+        assert result.dataset_items_count == 0
+
+    def test_create_dataset__logs_url_after_creation(self):
+        """Verify create_dataset calls _display_created_dataset_url with name and dataset id."""
+        result = self.opik_client_.create_dataset(name="my-dataset")
+        dataset_id = result.id  # triggers cached_property fetch
+
+        self.mock_display_url.assert_called_once_with(
+            dataset_name="my-dataset", dataset_id=dataset_id
+        )
+
+
 class TestOpikClientGetDataset:
-    """Tests for Opik.get_dataset() method with filter_string parameter."""
+    """Tests for Opik.get_dataset() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_rest_datasets = self.opik_client_._rest_client.datasets
+
+        self.mock_dataset_public = Mock()
+        self.mock_dataset_public.description = "Test description"
+        self.mock_dataset_public.dataset_items_count = 10
+
+        with (
+            patch.object(
+                self.mock_rest_datasets,
+                "get_dataset_by_identifier",
+                return_value=self.mock_dataset_public,
+            ) as self.mock_get_by_identifier,
+            patch.object(
+                self.mock_rest_datasets,
+                "stream_dataset_items",
+                return_value=iter([]),
+            ),
+        ):
+            yield
 
     def test_get_dataset__no_filter__returns_dataset(self):
         """Verify get_dataset without filter returns a Dataset object."""
-        opik_client_ = opik_client.Opik()
+        result = self.opik_client_.get_dataset(name="test_dataset")
+        assert result.name == "test_dataset"
+        assert result.description == "Test description"
+        assert result.dataset_items_count == 10
 
-        # Create a mock for the REST client response
-        mock_dataset_public = Mock()
-        mock_dataset_public.description = "Test description"
-        mock_dataset_public.dataset_items_count = 10
-
-        with patch.object(
-            opik_client_._rest_client.datasets,
-            "get_dataset_by_identifier",
-            return_value=mock_dataset_public,
-        ):
-            with patch.object(
-                opik_client_._rest_client.datasets,
-                "stream_dataset_items",
-                return_value=iter([]),
-            ):
-                result = opik_client_.get_dataset(name="test_dataset")
+    def test_get_dataset__no_project_name__returns_dataset_with_default_project(self):
+        """Verify get_dataset without project_name returns a Dataset using the default project."""
+        result = self.opik_client_.get_dataset(name="test_dataset")
 
         assert isinstance(result, Dataset)
         assert result.name == "test_dataset"
+        assert result.project_name == "default-project"
+
+        self.mock_get_by_identifier.assert_called_once_with(
+            dataset_name="test_dataset", project_name="default-project"
+        )
+
+    def test_get_dataset__explicit_project_name__uses_given_project(self):
+        """Verify get_dataset passes the explicit project_name to the REST client."""
+        result = self.opik_client_.get_dataset(
+            name="test_dataset", project_name="custom-project"
+        )
+
+        assert result.project_name == "custom-project"
+        self.mock_get_by_identifier.assert_called_once_with(
+            dataset_name="test_dataset", project_name="custom-project"
+        )
+
+
+class TestOpikClientCreateEvaluationSuite:
+    """Tests for Opik.create_evaluation_suite() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_rest_datasets = self.opik_client_._rest_client.datasets
+
+        with (
+            patch.object(
+                self.mock_rest_datasets, "create_dataset"
+            ) as self.mock_create_dataset,
+            patch.object(
+                self.mock_rest_datasets,
+                "get_dataset_by_identifier",
+                return_value=Mock(id="some-suite-id"),
+            ) as self.mock_get_by_identifier,
+            patch.object(
+                self.mock_rest_datasets, "apply_dataset_item_changes"
+            ) as self.mock_apply_changes,
+        ):
+            yield
+
+    def test_create_evaluation_suite__minimal__returns_suite(self):
+        """Verify create_evaluation_suite returns an EvaluationSuite with the given name."""
+        result = self.opik_client_.create_evaluation_suite(name="my-suite")
+
+        assert isinstance(result, EvaluationSuite)
+        assert result.name == "my-suite"
+
+    def test_create_evaluation_suite__no_project_name__uses_default_project(self):
+        """Verify create_evaluation_suite uses the client's default project when project_name is None."""
+        self.opik_client_.create_evaluation_suite(name="my-suite")
+
+        self.mock_create_dataset.assert_called_once()
+        assert (
+            self.mock_create_dataset.call_args[1]["project_name"] == "default-project"
+        )
+
+        self.mock_get_by_identifier.assert_called_once()
+        assert (
+            self.mock_get_by_identifier.call_args[1]["project_name"]
+            == "default-project"
+        )
+
+    def test_create_evaluation_suite__explicit_project_name__uses_given_project(self):
+        """Verify create_evaluation_suite uses the provided project_name over the default."""
+        self.opik_client_.create_evaluation_suite(
+            name="my-suite", project_name="custom-project"
+        )
+
+        assert self.mock_create_dataset.call_args[1]["project_name"] == "custom-project"
+        assert (
+            self.mock_get_by_identifier.call_args[1]["project_name"] == "custom-project"
+        )
+
+    def test_create_evaluation_suite__with_description__passes_description_to_api(self):
+        """Verify create_evaluation_suite forwards the description to the REST layer."""
+        self.opik_client_.create_evaluation_suite(
+            name="my-suite", description="A regression suite"
+        )
+
+        assert (
+            self.mock_create_dataset.call_args[1]["description"] == "A regression suite"
+        )
+
+    def test_create_evaluation_suite__with_tags__passes_tags_to_api(self):
+        """Verify create_evaluation_suite forwards tags to the REST layer."""
+        self.opik_client_.create_evaluation_suite(
+            name="my-suite", tags=["smoke", "regression"]
+        )
+
+        assert self.mock_create_dataset.call_args[1]["tags"] == ["smoke", "regression"]
+
+    def test_create_evaluation_suite__with_assertions__resolves_evaluators(self):
+        """Verify assertions are resolved into evaluators and forwarded via apply_dataset_item_changes."""
+        self.opik_client_.create_evaluation_suite(
+            name="my-suite",
+            assertions=["Response is helpful", "No hallucinations"],
+        )
+
+        apply_request = self.mock_apply_changes.call_args[1]["request"]
+        assert "evaluators" in apply_request
+        assert (
+            len(apply_request["evaluators"]) == 1
+        )  # single LLMJudge wrapping all assertions
+
+    def test_create_evaluation_suite__no_assertions__evaluators_not_in_request(self):
+        """Verify evaluators key is absent from the apply request when no assertions are provided."""
+        self.opik_client_.create_evaluation_suite(name="my-suite")
+
+        apply_request = self.mock_apply_changes.call_args[1]["request"]
+        assert "evaluators" not in apply_request
+
+    def test_create_evaluation_suite__with_execution_policy__passes_policy_to_api(self):
+        """Verify a valid execution policy is forwarded via apply_dataset_item_changes."""
+        policy = {"runs_per_item": 3, "pass_threshold": 2}
+        self.opik_client_.create_evaluation_suite(
+            name="my-suite", execution_policy=policy
+        )
+
+        apply_request = self.mock_apply_changes.call_args[1]["request"]
+        assert apply_request["execution_policy"] == {
+            "runs_per_item": 3,
+            "pass_threshold": 2,
+        }
+
+    def test_create_evaluation_suite__invalid_execution_policy__raises_value_error(
+        self,
+    ):
+        """Verify an invalid execution policy raises ValueError before any API call."""
+        with pytest.raises(ValueError):
+            self.opik_client_.create_evaluation_suite(
+                name="my-suite",
+                execution_policy={"runs_per_item": 3},  # missing pass_threshold
+            )
+
+        self.mock_create_dataset.assert_not_called()
+
+
+class TestOpikClientGetDatasets:
+    """Tests for Opik.get_datasets() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_rest_datasets = self.opik_client_._rest_client.datasets
+
+        mock_page = Mock()
+        mock_page.content = []
+
+        with (
+            patch.object(
+                self.mock_rest_datasets,
+                "find_datasets",
+                return_value=mock_page,
+            ) as self.mock_find_datasets,
+            patch.object(
+                self.mock_rest_datasets,
+                "stream_dataset_items",
+                return_value=iter([]),
+            ),
+            patch(
+                "opik.api_objects.rest_helpers.resolve_project_id_by_name",
+                return_value="resolved-project-id",
+            ) as self.mock_resolve_project_id,
+        ):
+            yield
+
+    def test_get_datasets__no_project_name__uses_default_project_id(self):
+        """Verify get_datasets resolves the default project name to an ID and passes it to find_datasets."""
+        self.opik_client_.get_datasets()
+
+        self.mock_resolve_project_id.assert_called_once_with(
+            self.opik_client_._rest_client, "default-project"
+        )
+        self.mock_find_datasets.assert_called_once()
+        assert (
+            self.mock_find_datasets.call_args[1]["project_id"] == "resolved-project-id"
+        )
+
+    def test_get_datasets__explicit_project_name__resolves_and_passes_project_id(self):
+        """Verify get_datasets resolves the explicit project_name to an ID and passes it to find_datasets."""
+        self.opik_client_.get_datasets(project_name="custom-project")
+
+        self.mock_resolve_project_id.assert_called_once_with(
+            self.opik_client_._rest_client, "custom-project"
+        )
+        assert (
+            self.mock_find_datasets.call_args[1]["project_id"] == "resolved-project-id"
+        )
+
+    def test_get_datasets__returns_list_of_datasets(self):
+        """Verify get_datasets returns a list of Dataset objects built from the API response."""
+        mock_dataset_fern = Mock()
+        mock_dataset_fern.name = "ds-1"
+        mock_dataset_fern.description = "desc"
+        mock_dataset_fern.dataset_items_count = 5
+
+        mock_page = Mock()
+        mock_page.content = [mock_dataset_fern]
+        self.mock_find_datasets.side_effect = [mock_page, Mock(content=[])]
+
+        result = self.opik_client_.get_datasets(project_name="custom-project")
+
+        assert len(result) == 1
+        assert isinstance(result[0], Dataset)
+
+        dataset = result[0]
+        assert dataset.name == "ds-1"
+        assert dataset.description == "desc"
+        assert dataset.dataset_items_count == 5
+        assert dataset.project_name == "custom-project"
+
+    def test_get_datasets__respects_max_results(self):
+        """Verify get_datasets stops after collecting max_results items."""
+        mock_dataset_fern = Mock()
+        mock_dataset_fern.name = "ds"
+        mock_dataset_fern.description = None
+        mock_dataset_fern.dataset_items_count = 0
+
+        mock_page = Mock()
+        mock_page.content = [mock_dataset_fern] * 10
+        self.mock_find_datasets.return_value = mock_page
+
+        result = self.opik_client_.get_datasets(max_results=3)
+
+        assert len(result) == 3
+
+
+class TestOpikClientGetEvaluationSuite:
+    """Tests for Opik.get_evaluation_suite() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_rest_datasets = self.opik_client_._rest_client.datasets
+
+        self.mock_dataset_fern = Mock()
+        self.mock_dataset_fern.description = "Suite description"
+        self.mock_dataset_fern.dataset_items_count = 0
+
+        with (
+            patch.object(
+                self.mock_rest_datasets,
+                "get_dataset_by_identifier",
+                return_value=self.mock_dataset_fern,
+            ) as self.mock_get_by_identifier,
+            patch.object(
+                self.mock_rest_datasets,
+                "stream_dataset_items",
+                return_value=iter([]),
+            ),
+        ):
+            yield
+
+    def test_get_evaluation_suite__returns_evaluation_suite(self):
+        """Verify get_evaluation_suite returns an EvaluationSuite with the correct name and dataset."""
+        result = self.opik_client_.get_evaluation_suite(name="my-suite")
+
+        assert isinstance(result, EvaluationSuite)
+        assert result.name == "my-suite"
+        assert result.dataset is not None
+
+    def test_get_evaluation_suite__no_project_name__uses_default_project(self):
+        """Verify get_evaluation_suite passes the default project name to get_dataset_by_identifier."""
+        self.opik_client_.get_evaluation_suite(name="my-suite")
+
+        self.mock_get_by_identifier.assert_called_once_with(
+            dataset_name="my-suite",
+            project_name="default-project",
+        )
+
+    def test_get_evaluation_suite__explicit_project_name__uses_given_project(self):
+        """Verify get_evaluation_suite passes the explicit project_name to get_dataset_by_identifier."""
+        self.opik_client_.get_evaluation_suite(
+            name="my-suite", project_name="custom-project"
+        )
+
+        self.mock_get_by_identifier.assert_called_once_with(
+            dataset_name="my-suite",
+            project_name="custom-project",
+        )
+
+
+class TestOpikClientCreateExperiment:
+    """Tests for Opik.create_experiment() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+
+        with patch.object(
+            self.opik_client_._rest_client.experiments, "create_experiment"
+        ) as self.mock_create_experiment:
+            yield
+
+    def test_create_experiment__returns_experiment(self):
+        """Verify create_experiment returns an Experiment with the correct dataset_name."""
+        from opik.api_objects.experiment import experiment as experiment_module
+
+        result = self.opik_client_.create_experiment(
+            dataset_name="my-dataset", project_name="custom-project"
+        )
+
+        assert isinstance(result, experiment_module.Experiment)
+        assert result.dataset_name == "my-dataset"
+        assert result.project_name == "custom-project"
+
+    def test_create_experiment__no_project_name__passes_default_project_name_to_api(
+        self,
+    ):
+        """Verify create_experiment passes default project_name to the REST API."""
+        result = self.opik_client_.create_experiment(dataset_name="my-dataset")
+
+        call_kwargs = self.mock_create_experiment.call_args[1]
+        assert call_kwargs["project_name"] == "default-project"
+        assert result.project_name == "default-project"
+
+    def test_create_experiment__explicit_project_name__passes_project_name_to_api(self):
+        """Verify create_experiment forwards an explicit project_name to the REST API."""
+        result = self.opik_client_.create_experiment(
+            dataset_name="my-dataset", project_name="custom-project"
+        )
+
+        call_kwargs = self.mock_create_experiment.call_args[1]
+        assert call_kwargs["project_name"] == "custom-project"
+        assert result.project_name == "custom-project"
+
+    def test_create_experiment__with_name__passes_name_to_api(self):
+        """Verify create_experiment forwards the experiment name to the REST API."""
+        self.opik_client_.create_experiment(
+            dataset_name="my-dataset", name="my-experiment"
+        )
+
+        call_kwargs = self.mock_create_experiment.call_args[1]
+        assert call_kwargs["name"] == "my-experiment"
+        assert call_kwargs["dataset_name"] == "my-dataset"
+
+    def test_create_experiment__with_tags__passes_tags_to_api(self):
+        """Verify create_experiment forwards tags to the REST API."""
+        self.opik_client_.create_experiment(
+            dataset_name="my-dataset", tags=["v1", "smoke"]
+        )
+
+        call_kwargs = self.mock_create_experiment.call_args[1]
+        assert call_kwargs["tags"] == ["v1", "smoke"]
+
+    def test_create_experiment__with_experiment_config__passes_metadata_to_api(self):
+        """Verify experiment_config is serialized into metadata and forwarded to the REST API."""
+        config = {"model": "gpt-4", "temperature": 0.5}
+        self.opik_client_.create_experiment(
+            dataset_name="my-dataset", experiment_config=config
+        )
+
+        call_kwargs = self.mock_create_experiment.call_args[1]
+        assert call_kwargs["metadata"] == config

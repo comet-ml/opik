@@ -8,13 +8,17 @@ from ...rest_api.types import experiment_public
 
 
 def get_experiment_data_by_name(
-    rest_client: rest_api.OpikApi, name: str
+    rest_client: rest_api.OpikApi,
+    name: str,
+    project_name: Optional[str],
 ) -> experiment_public.ExperimentPublic:
     # TODO: this method is deprecated and should be removed after
     #  deprecated Opik.get_experiment_by_name() will be removed.
     #  This function should not be used anywhere else except for deprecated logic as it is confusing and misleading
 
-    experiments = get_experiments_data_by_name(rest_client, name)
+    experiments = get_experiments_data_by_name(
+        rest_client, name, project_name=project_name
+    )
     for experiment in experiments:
         if experiment.name == name:
             return experiment
@@ -25,8 +29,10 @@ def get_experiment_data_by_name(
 def get_experiments_data_by_name(
     rest_client: rest_api.OpikApi,
     name: str,
+    project_name: Optional[str],
     max_results: Optional[int] = None,
 ) -> List[experiment_public.ExperimentPublic]:
+    # TODO: project_name should be passed to the rest_client.experiments.stream_experiments() method
     experiments = rest_stream_parser.read_and_parse_full_stream(
         read_source=lambda current_batch_size,
         last_retrieved_id: rest_client.experiments.stream_experiments(

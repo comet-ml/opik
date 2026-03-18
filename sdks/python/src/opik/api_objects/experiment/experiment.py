@@ -27,6 +27,7 @@ class Experiment:
         experiments_client: experiments_client.ExperimentsClient,
         prompts: Optional[List[base_prompt.BasePrompt]] = None,
         tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -36,6 +37,11 @@ class Experiment:
         self._streamer = streamer
         self._experiments_client = experiments_client
         self._tags = tags
+        self._project_name = project_name
+
+    @property
+    def project_name(self) -> Optional[str]:
+        return self._project_name
 
     @property
     def id(self) -> str:
