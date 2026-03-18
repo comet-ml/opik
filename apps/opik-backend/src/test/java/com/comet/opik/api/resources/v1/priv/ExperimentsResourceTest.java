@@ -1974,9 +1974,10 @@ class ExperimentsResourceTest {
                     .build();
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
-            var actual = getAndAssert(experimentId, experiment, workspaceName, apiKey);
-            assertThat(actual.projectId()).isEqualTo(projectId);
-            assertThat(actual.projectName()).isEqualTo(project.name());
+            var expectedExperiment = experiment.toBuilder()
+                    .projectId(projectId)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
         }
 
         @Test
@@ -1998,9 +1999,11 @@ class ExperimentsResourceTest {
                     .build();
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
-            var actual = getAndAssert(experimentId, experiment, workspaceName, apiKey);
-            assertThat(actual.projectId()).isNotNull();
-            assertThat(actual.projectName()).isEqualTo(newProjectName);
+            var createdProject = projectResourceClient.getByName(newProjectName, apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .projectId(createdProject.id())
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
         }
 
         @Test
