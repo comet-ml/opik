@@ -348,7 +348,11 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public Dataset findByName(@NonNull String workspaceId, @NonNull DatasetIdentifier identifier,
             Visibility visibility) {
-        UUID projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
+        UUID projectId = null;
+        if (StringUtils.isNotBlank(identifier.projectName())) {
+            projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName())
+                    .orElseThrow(() -> new NotFoundException("Project not found"));
+        }
         return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
     }
 

@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
@@ -145,7 +146,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService versionService;
-    private final @NonNull ProjectService projectService;
     private final @NonNull ExperimentDAO experimentDao;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
@@ -809,16 +809,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 request.datasetName(), !filters.isEmpty(),
                 request.datasetVersion(), workspaceId);
 
-        UUID resolvedProjectId = request.projectId() != null
-                ? request.projectId()
-                : projectService.findProjectIdByName(workspaceId, request.projectName()).orElse(null);
-        DatasetItemStreamRequest resolvedRequest = resolvedProjectId != null
-                ? request.toBuilder().projectId(resolvedProjectId).build()
-                : request;
-
         return Mono
-                .fromCallable(() -> datasetService.findByName(workspaceId, resolvedRequest.datasetName(),
-                        resolvedRequest.projectId(), visibility))
+                .fromCallable(() -> datasetService.findByName(workspaceId,
+                        DatasetIdentifier.builder()
+                                .datasetName(request.datasetName())
+                                .projectName(request.projectName())
+                                .build(),
+                        visibility))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(dataset -> Mono.deferContextual(ctx -> {
                     // Ensure dataset is migrated if lazy migration is enabled
