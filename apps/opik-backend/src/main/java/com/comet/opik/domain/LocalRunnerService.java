@@ -862,7 +862,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
     private PairingCodePayload claimPairingCode(String code, String workspaceId) {
         RBucket<String> pairBucket = redisClient.getBucket(pairKey(code));
-        String value = pairBucket.get();
+        String value = pairBucket.getAndDelete();
         if (value == null) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of("Invalid or expired pairing code")))
@@ -876,8 +876,6 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     .entity(new ErrorMessage(List.of("Pairing code belongs to a different workspace")))
                     .build());
         }
-
-        pairBucket.delete();
 
         return payload;
     }
