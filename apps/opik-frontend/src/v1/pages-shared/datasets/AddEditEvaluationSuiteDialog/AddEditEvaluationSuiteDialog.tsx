@@ -23,7 +23,6 @@ import {
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { Card } from "@/ui/card";
 import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -34,8 +33,6 @@ import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
 import { Dataset, DATASET_TYPE, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const ACCEPTED_TYPE = ".csv";
 
@@ -385,33 +382,6 @@ const AddEditEvaluationSuiteDialog = ({
                   }
                 />
               </Card>
-            </div>
-          )}
-          {!isEdit && (
-            <ExplainerDescription
-              className="mb-4"
-              {...EXPLAINERS_MAP[
-                EXPLAINER_ID.why_do_i_need_multiple_evaluation_suites
-              ]}
-            />
-          )}
-          {!isEdit && (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label>Type</Label>
-              <ToggleGroup
-                type="single"
-                value={type}
-                onValueChange={(val) => val && setType(val as DATASET_TYPE)}
-                variant="secondary"
-                className="w-fit"
-              >
-                <ToggleGroupItem value={DATASET_TYPE.DATASET}>
-                  Dataset
-                </ToggleGroupItem>
-                <ToggleGroupItem value={DATASET_TYPE.EVALUATION_SUITE}>
-                  Evaluation suite
-                </ToggleGroupItem>
-              </ToggleGroup>
             </div>
           )}
           <div className="flex flex-col gap-2 pb-4">
