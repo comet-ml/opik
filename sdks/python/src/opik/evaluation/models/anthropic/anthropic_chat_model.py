@@ -12,6 +12,8 @@ from . import message_adapter, response_parser
 
 LOGGER = logging.getLogger(__name__)
 
+DEFAULT_MAX_TOKENS = 4096
+
 
 def is_available() -> bool:
     return importlib.util.find_spec("anthropic") is not None
@@ -172,7 +174,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         }
         call_kwargs["model"] = self._api_model_name
         call_kwargs["messages"] = non_system_messages
-        call_kwargs.setdefault("max_tokens", 4096)
+        call_kwargs.setdefault("max_tokens", DEFAULT_MAX_TOKENS)
 
         if system_text:
             call_kwargs["system"] = system_text

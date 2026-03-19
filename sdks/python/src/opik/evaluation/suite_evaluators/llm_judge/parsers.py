@@ -33,10 +33,14 @@ def _resolve_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
     and strips ``title`` keys that add noise.
     """
     defs = schema.get("$defs", {})
+    _MAX_DEPTH = 50
 
-    def _resolve_node(node: Any) -> Any:
+    def _resolve_node(node: Any, depth: int = 0) -> Any:
+        if depth > _MAX_DEPTH:
+            return node
+
         if isinstance(node, list):
-            return [_resolve_node(item) for item in node]
+            return [_resolve_node(item, depth + 1) for item in node]
 
         if not isinstance(node, dict):
             return node
@@ -47,7 +51,7 @@ def _resolve_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
             if ref_path.startswith("#/$defs/"):
                 def_name = ref_path[len("#/$defs/") :]
                 resolved = copy.deepcopy(defs[def_name])
-                resolved = _resolve_node(resolved)
+                resolved = _resolve_node(resolved, depth + 1)
                 # Merge sibling keys (e.g. description) into the resolved object
                 for key, value in node.items():
                     if key != "$ref":
@@ -59,7 +63,7 @@ def _resolve_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
         for key, value in node.items():
             if key == "title":
                 continue
-            result[key] = _resolve_node(value)
+            result[key] = _resolve_node(value, depth + 1)
         return result
 
     resolved = _resolve_node(schema)
