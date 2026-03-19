@@ -2802,6 +2802,59 @@ class PromptResourceTest {
             retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
         }
 
+        @Test
+        @DisplayName("when prompt has no project and project_name is provided, then fall back to workspace-level and return it")
+        void whenPromptHasNoProjectAndProjectNameProvided__thenFallBackToWorkspaceAndReturnIt() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            // Create prompt version with no project (workspace-level)
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .build();
+
+            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve with a project name: project-level lookup misses, falls back to workspace-wide and finds it
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when project_name does not exist, then return not found")
+        void whenProjectNameDoesNotExist__thenReturnNotFound() {
+            var nonExistentProjectName = "project-" + UUID.randomUUID();
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name("any-prompt-name")
+                    .projectName(nonExistentProjectName)
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
     }
 
     @Nested
