@@ -92,20 +92,20 @@ def test_publish_version_and_retrieve__happyflow(
     )
     assert by_name.temperature == pytest.approx(0.5)
 
-    # Deploy v1 to PROD; env= fetch returns v1 despite v2 being latest.
+    # Deploy v1 to prod; env= fetch returns v1 despite v2 being latest.
     get_global_registry().clear()
     v1_cfg = opik_client.get_agent_config(
         fallback=MyConfig(temperature=0.0, model="fallback"),
         project_name=project_name,
         version=v1_name,
     )
-    v1_cfg.deploy_to("PROD")
+    v1_cfg.deploy_to("prod")
 
     get_global_registry().clear()
     by_env = opik_client.get_agent_config(
         fallback=MyConfig(temperature=0.0, model="fallback"),
         project_name=project_name,
-        env="PROD",
+        env="prod",
     )
     assert by_env.temperature == pytest.approx(0.5)
 

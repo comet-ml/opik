@@ -2342,7 +2342,7 @@ class Opik:
         *,
         fallback: _AgentConfigT,
         project_name: Optional[str] = None,
-        env: Optional[str] = "PROD",
+        env: Optional[str] = "prod",
         latest: bool = False,
         version: Optional[str] = None,
         timeout_in_seconds: Optional[int] = 5,
@@ -2354,7 +2354,7 @@ class Opik:
                 Used as the return value when the backend has no config, and
                 its type determines the return type.
             project_name: Opik project name. Defaults to the client's default.
-            env: Environment tag to fetch. Defaults to ``"PROD"``.
+            env: Environment tag to fetch. Defaults to ``"prod"``.
             latest: If ``True``, fetch the latest version regardless of env.
             version: Fetch a specific version by its name (as returned by
                 ``create_agent_config_version``).

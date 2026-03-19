@@ -225,7 +225,7 @@ class TestCreateAgentConfigVersion:
         call_kwargs = (
             mock_rest_client.agent_configs.create_or_update_envs.call_args.kwargs
         )
-        assert call_kwargs["envs"][0].env_name == "PROD"
+        assert call_kwargs["envs"][0].env_name == "prod"
         assert call_kwargs["envs"][0].blueprint_id == "bp-1"
 
     def test_subsequent_blueprint__not_auto_tagged_as_prod(
@@ -502,7 +502,7 @@ class TestGetAgentConfig:
         mock_opik_client.get_agent_config(fallback=fallback, timeout_in_seconds=3)
 
         mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
-            env_name="PROD",
+            env_name="prod",
             project_id="proj-1",
             mask_id=None,
             request_options=RequestOptions(timeout_in_seconds=3),
@@ -533,7 +533,7 @@ class TestGetAgentConfig:
 
         assert result.temp == pytest.approx(0.9)
         mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
-            env_name="PROD",
+            env_name="prod",
             project_id="proj-1",
             mask_id=None,
             request_options=None,
@@ -640,7 +640,7 @@ class TestEnvsAndIsFallback:
         bp = AgentBlueprintPublic(
             id="bp-1",
             type="blueprint",
-            envs=["PROD", "STAGING"],
+            envs=["prod", "STAGING"],
             values=[
                 AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
             ],
@@ -653,7 +653,7 @@ class TestEnvsAndIsFallback:
 
         result = mock_opik_client.get_agent_config(fallback=fallback)
 
-        assert result.envs == ["PROD", "STAGING"]
+        assert result.envs == ["prod", "STAGING"]
 
     def test_backend_config__no_envs__envs_is_none(
         self, mock_rest_client, mock_opik_client
@@ -781,7 +781,7 @@ class TestEnvsAndIsFallback:
                 id="bp-1",
                 name="v1",
                 type="blueprint",
-                envs=["PROD"],
+                envs=["prod"],
                 values=[
                     AgentConfigValuePublic(
                         key="MyConfig.temp", type="float", value="0.7"
@@ -792,7 +792,7 @@ class TestEnvsAndIsFallback:
 
         mock_opik_client.create_agent_config_version(cfg)
 
-        assert cfg.envs == ["PROD"]
+        assert cfg.envs == ["prod"]
 
 
 # ---------------------------------------------------------------------------
@@ -987,7 +987,7 @@ class TestGetAgentConfigWithMask:
             result = mock_opik_client.get_agent_config(fallback=fallback)
 
         mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
-            env_name="PROD",
+            env_name="prod",
             project_id="proj-1",
             mask_id="mask-abc",
             request_options=RequestOptions(timeout_in_seconds=5),
@@ -1042,7 +1042,7 @@ class TestGetAgentConfigWithMask:
         result = mock_opik_client.get_agent_config(fallback=fallback)
 
         mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
-            env_name="PROD",
+            env_name="prod",
             project_id="proj-1",
             mask_id=None,
             request_options=RequestOptions(timeout_in_seconds=5),
@@ -1058,10 +1058,10 @@ class TestGetAgentConfigWithMask:
         fallback = MyConfig(greeting="default")
 
         mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
-        # PROD env returns 404 (default in conftest)
+        # prod env returns 404 (default in conftest)
 
         with agent_config_context("mask-abc"):
-            with pytest.raises(AgentConfigNotFound, match="env='PROD'"):
+            with pytest.raises(AgentConfigNotFound, match="env='prod'"):
                 mock_opik_client.get_agent_config(fallback=fallback)
 
     def test_instance_resolved_without_mask__warns_when_mask_active_on_access(

@@ -200,7 +200,7 @@ class AgentConfig:
                 field_types=field_types,
             )
             if is_first_blueprint:
-                manager.tag_blueprint_with_env(env="PROD", blueprint_id=bp.id)
+                manager.tag_blueprint_with_env(env="prod", blueprint_id=bp.id)
 
         self._state.manager = manager
         self._state.blueprint_id = bp.id
@@ -216,7 +216,7 @@ class AgentConfig:
         ``get_agent_config``.
 
         Args:
-            env: Environment name (e.g. ``"PROD"``).
+            env: Environment name (e.g. ``"prod"``).
         """
         state = self._state
         if state.manager is None or state.blueprint_id is None:
