@@ -192,6 +192,7 @@ def verify_dataset(
     name: str,
     description: str = mock.ANY,
     dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
+    project_name: Optional[str] = mock.ANY,
 ):
     if not synchronization.until(
         lambda: opik_client.get_dataset(name=name) is not None,
@@ -201,6 +202,8 @@ def verify_dataset(
 
     actual_dataset = opik_client.get_dataset(name=name)
     assert actual_dataset.description == description
+    assert actual_dataset.name == name
+    assert actual_dataset.project_name == project_name
 
     actual_dataset_items = list(
         actual_dataset.__internal_api__stream_items_as_dataclasses__()
@@ -708,6 +711,7 @@ def verify_dataset_filtered_items(
     filter_string: str,
     expected_count: int,
     expected_inputs: Set[str],
+    project_name: Optional[str],
 ) -> None:
     """
     Verifies that filtering dataset items with filter_string returns the expected results.
@@ -718,8 +722,9 @@ def verify_dataset_filtered_items(
         filter_string: The filter string to apply
         expected_count: Expected number of items matching the filter
         expected_inputs: Set of expected question strings from input field
+        project_name: The name of the project to retrieve the dataset from, if any
     """
-    dataset = opik_client.get_dataset(name=dataset_name)
+    dataset = opik_client.get_dataset(name=dataset_name, project_name=project_name)
 
     filtered_items = dataset.get_items(filter_string=filter_string)
     assert len(filtered_items) == expected_count, (
