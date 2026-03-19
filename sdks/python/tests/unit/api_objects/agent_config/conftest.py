@@ -3,6 +3,8 @@ from unittest import mock
 import pytest
 
 from opik.api_objects import opik_client
+from opik.api_objects.span import span_data as span_data_mod
+from opik import context_storage
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
 
@@ -49,3 +51,12 @@ def clear_caches():
     from opik.api_objects.agent_config.cache import get_global_registry
 
     get_global_registry().clear()
+
+
+@pytest.fixture(autouse=True)
+def fake_track_context():
+    """Push a fake span so _resolve_from_backend's @track guard passes in all unit tests."""
+    span = span_data_mod.SpanData(trace_id="fake-trace", name="test-span")
+    context_storage.add_span_data(span)
+    yield
+    context_storage.pop_span_data()
