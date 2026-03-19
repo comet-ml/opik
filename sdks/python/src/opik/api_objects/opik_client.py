@@ -834,17 +834,22 @@ class Opik:
             project_name: The name of the project to search the threads for. If not provided,
                 the project name configured when the Client was created will be used.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
-                Uses the same format as ``search_traces``:
-                ``"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"``
+                The format is: ``"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"``
 
-                See :meth:`search_traces` for the full list of supported columns, operators,
-                and syntax rules. Threads support the same filter columns as traces.
+                Supported columns:
+                - ``id``: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - ``first_message``, ``last_message``: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - ``status``: Enum (=, !=)
+                - ``start_time``, ``end_time``, ``created_at``, ``last_updated_at``: DateTime (=, !=, >, >=, <, <=)
+                - ``feedback_scores``: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
+                - ``tags``, ``annotation_queue_ids``: List (=, !=, contains, not_contains, is_empty, is_not_empty)
+                - ``duration``, ``number_of_messages``: Numeric (=, !=, >, >=, <, <=)
 
-                Thread-specific filter examples:
-                - ``status = "inactive"`` - Filter by thread status
+                Examples:
+                - ``status = "active"`` - Filter by thread status
                 - ``id = "thread_123"`` - Filter by specific thread ID
                 - ``number_of_messages >= 5`` - Filter by message count
-                - ``duration > 300`` - Filter by thread duration (seconds)
+                - ``first_message contains "hello"`` - Filter by first message content
                 - ``feedback_scores.user_frustration > 0.5`` - Filter by feedback score
                 - ``tags contains "important"`` - Filter by tag
 

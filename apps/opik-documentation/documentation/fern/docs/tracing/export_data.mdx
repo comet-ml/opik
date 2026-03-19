@@ -100,79 +100,96 @@ You can use the `filter_string` (Python) / `filterString` (TypeScript) parameter
 
 ### Filtering with Opik Query Language (OQL)
 
-All search methods (`search_traces`, `search_spans`, and `search_threads`) accept a `filter_string` (Python) / `filterString` (TypeScript) parameter that uses the same Opik Query Language (OQL) syntax:
+All search methods (`search_traces`, `search_spans`, and `search_threads`) accept a `filter_string` (Python) / `filterString` (TypeScript) parameter that uses Opik Query Language (OQL):
 
 ```
 "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 ```
 
-**Supported columns and operators:**
+**Rules:**
+
+- String values must be wrapped in double quotes
+- Multiple conditions can be combined with `AND` (OR is not supported)
+- DateTime fields require ISO 8601 format (e.g., `"2024-01-01T00:00:00Z"`)
+- Use dot notation for nested fields: `metadata.model`, `feedback_scores.accuracy`
+
+Each entity type supports a different set of filter columns. The tables below list the available columns for each.
+
+#### Trace columns
 
 | Column                    | Type       | Operators                                                                   |
 | ------------------------- | ---------- | --------------------------------------------------------------------------- |
 | `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `name`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `created_by`              | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `input`, `output`         | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `thread_id`               | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `type`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `guardrails`              | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `experiment_id`           | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `start_time`, `end_time`  | DateTime   | `=`, `!=`, `>`, `>=`, `<`, `<=`                                             |
+| `created_at`, `last_updated_at` | DateTime | `=`, `!=`, `>`, `>=`, `<`, `<=`                                        |
+| `metadata`                | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `input_json`, `output_json` | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `feedback_scores`         | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `span_feedback_scores`    | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `tags`                    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `annotation_queue_ids`    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=` |
+| `duration`, `total_estimated_cost`, `llm_span_count` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=`              |
+| `error_info`              | Container  | `is_empty`, `is_not_empty`                                                  |
+
+#### Span columns
+
+| Column                    | Type       | Operators                                                                   |
+| ------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `name`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `input`, `output`         | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `model`                   | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `provider`                | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `status`                  | String     | `=`, `contains`, `not_contains`                                             |
-| `start_time`              | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
-| `end_time`                | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
-| `input`                   | String     | `=`, `contains`, `not_contains`                                             |
-| `output`                  | String     | `=`, `contains`, `not_contains`                                             |
-| `metadata`                | Dictionary | `=`, `contains`, `>`, `<`                                                   |
-| `feedback_scores`         | Numeric    | `=`, `>`, `<`, `>=`, `<=`, `is_empty`, `is_not_empty`                      |
-| `tags`                    | List       | `contains`                                                                  |
-| `usage.total_tokens`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `usage.prompt_tokens`     | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `usage.completion_tokens` | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `duration`                | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `number_of_messages`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `total_estimated_cost`    | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `trace_id`                | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `type`                    | Enum       | `=`, `!=`                                                                   |
+| `start_time`, `end_time`  | DateTime   | `=`, `!=`, `>`, `>=`, `<`, `<=`                                             |
+| `metadata`                | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `input_json`, `output_json` | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `feedback_scores`         | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `tags`                    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=` |
+| `duration`, `total_estimated_cost` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=`                                  |
+| `error_info`              | Container  | `is_empty`, `is_not_empty`                                                  |
 
-**Rules:**
+#### Thread columns
 
-- String values must be wrapped in double quotes
-- Multiple conditions can be combined with `AND` (OR is not supported)
-- DateTime fields require ISO 8601 format (e.g., "2024-01-01T00:00:00Z")
-- Use dot notation for nested objects: `metadata.model`, `feedback_scores.accuracy`
-
-Here are some examples of using `filter_string` / `filterString`:
+| Column                    | Type       | Operators                                                                   |
+| ------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `first_message`, `last_message` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `status`                  | Enum       | `=`, `!=`                                                                   |
+| `start_time`, `end_time`  | DateTime   | `=`, `!=`, `>`, `>=`, `<`, `<=`                                             |
+| `created_at`, `last_updated_at` | DateTime | `=`, `!=`, `>`, `>=`, `<`, `<=`                                        |
+| `feedback_scores`         | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `tags`                    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `annotation_queue_ids`    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `duration`, `number_of_messages` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=`                                       |
 
 <Tabs>
   <Tab value="Python" title="Python">
     ```python
     import opik
 
-    client = opik.Opik(
-        project_name="Default project"
-    )
+    client = opik.Opik(project_name="Default project")
 
-    # Filter by input content (works with traces, spans, and threads)
-    results = client.search_traces(filter_string='input contains "Opik"')
+    # Trace filters
+    traces = client.search_traces(filter_string='input contains "Opik"')
+    traces = client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
+    traces = client.search_traces(filter_string='usage.total_tokens > 1000')
+    traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
+    traces = client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
+    traces = client.search_traces(filter_string='tags contains "production"')
 
-    # Filter by date range
-    results = client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
-
-    # Filter by tag
-    results = client.search_traces(filter_string='tags contains "production"')
-
-    # Filter by token usage
-    results = client.search_traces(filter_string='usage.total_tokens > 1000')
-
-    # Filter by metadata
-    results = client.search_traces(filter_string='metadata.model = "gpt-4o"')
-
-    # Filter by feedback score presence
-    results = client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
-
-    # Filter by feedback score absence
-    results = client.search_traces(filter_string='feedback_scores.user_rating is_empty')
-
-    # The same filter syntax works for threads
+    # Thread filters
     threads = client.search_threads(filter_string='number_of_messages >= 5')
+    threads = client.search_threads(filter_string='first_message contains "hello"')
+    threads = client.search_threads(filter_string='status = "active"')
     ```
 
   </Tab>
@@ -180,44 +197,15 @@ Here are some examples of using `filter_string` / `filterString`:
     ```typescript
     import { Opik } from "opik";
 
-    const client = new Opik({
-      projectName: "Default project"
-    });
+    const client = new Opik({ projectName: "Default project" });
 
-    // Filter by input content
-    const traces1 = await client.searchTraces({
-      filterString: 'input contains "Opik"'
-    });
-
-    // Filter by date range
-    const traces2 = await client.searchTraces({
-      filterString: 'start_time >= "2024-01-01T00:00:00Z"'
-    });
-
-    // Filter by tag
-    const traces3 = await client.searchTraces({
-      filterString: 'tags contains "production"'
-    });
-
-    // Filter by token usage
-    const traces4 = await client.searchTraces({
-      filterString: 'usage.total_tokens > 1000'
-    });
-
-    // Filter by metadata
-    const traces5 = await client.searchTraces({
-      filterString: 'metadata.model = "gpt-4o"'
-    });
-
-    // Filter by feedback score presence
-    const traces6 = await client.searchTraces({
-      filterString: 'feedback_scores.user_rating is_not_empty'
-    });
-
-    // Filter by feedback score absence
-    const traces7 = await client.searchTraces({
-      filterString: 'feedback_scores.user_rating is_empty'
-    });
+    // Trace filters
+    const t1 = await client.searchTraces({ filterString: 'input contains "Opik"' });
+    const t2 = await client.searchTraces({ filterString: 'start_time >= "2024-01-01T00:00:00Z"' });
+    const t3 = await client.searchTraces({ filterString: 'usage.total_tokens > 1000' });
+    const t4 = await client.searchTraces({ filterString: 'metadata.model = "gpt-4o"' });
+    const t5 = await client.searchTraces({ filterString: 'feedback_scores.user_rating is_not_empty' });
+    const t6 = await client.searchTraces({ filterString: 'tags contains "production"' });
     ```
 
   </Tab>
@@ -227,11 +215,11 @@ Here are some examples of using `filter_string` / `filterString`:
 If your `feedback_scores` key contains spaces, you will need to wrap
 it in double quotes:
 
-`'feedback_score."My Score" > 0'`
+`'feedback_scores."My Score" > 0'`
 
-If the `feedback_score` key contains both spaces and double quotes, you will need to escape the double quotes as `""`:
+If the `feedback_scores` key contains both spaces and double quotes, you will need to escape the double quotes as `""`:
 
-`'feedback_score."Score ""with"" Quotes" > 0'`
+`'feedback_scores."Score ""with"" Quotes" > 0'`
 
 or by using different quotes, surrounding in triple-quotes, like this:
 
