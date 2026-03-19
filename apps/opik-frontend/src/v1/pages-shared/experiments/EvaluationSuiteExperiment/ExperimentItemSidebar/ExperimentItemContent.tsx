@@ -12,8 +12,6 @@ import {
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import NoData from "@/shared/NoData/NoData";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { Button } from "@/ui/button";
 import { Tag } from "@/ui/tag";
 import {
   DatasetItem,
@@ -113,22 +111,20 @@ const SingleExperimentSection: React.FC<SingleExperimentSectionProps> = ({
           <PassFailBadge status={resolvedStatus} />
         </div>
         {showGoToTraces && (
-          <TooltipWrapper content="Click to open original trace">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(event) => {
-                event.stopPropagation();
-                if (isFunction(openTrace) && activeItem.trace_id) {
-                  openTrace(activeItem.trace_id);
-                }
-              }}
-              className="shrink-0"
-            >
-              <ListTree className="mr-2 size-4 shrink-0" />
-              Trace
-            </Button>
-          </TooltipWrapper>
+          <Tag
+            variant="default"
+            size="md"
+            className="flex shrink-0 cursor-pointer items-center gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isFunction(openTrace) && activeItem.trace_id) {
+                openTrace(activeItem.trace_id);
+              }
+            }}
+          >
+            <ListTree className="size-3" />
+            Go to traces
+          </Tag>
         )}
       </div>
       <MultiRunTabs
