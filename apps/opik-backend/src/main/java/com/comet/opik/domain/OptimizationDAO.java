@@ -110,17 +110,21 @@ class OptimizationDAOImpl implements OptimizationDAO {
             WITH optimization_final AS (
                 SELECT
                     *
-                FROM optimizations
-                WHERE workspace_id = :workspace_id
-                <if(id)>AND id = :id <endif>
+                FROM (
+                    SELECT *
+                    FROM optimizations
+                    WHERE workspace_id = :workspace_id
+                    <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                    <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
+                    <if(id)>AND id = :id <endif>
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, dataset_id, id
+                )
+                WHERE 1=1
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
-                <if(dataset_id)>AND dataset_id = :dataset_id <endif>
-                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
-                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY workspace_id, dataset_id, id
             ), experiments_final AS (
                 SELECT
                     id,
@@ -156,8 +160,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 WHERE entity_type = :entity_type
                   AND workspace_id = :workspace_id
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_type, entity_id, name
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -170,8 +172,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 WHERE entity_type = :entity_type
                   AND workspace_id = :workspace_id
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_type, entity_id, author, name
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -272,7 +272,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 LEFT JOIN (
                     SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
                     FROM (
-                        SELECT *
+                        SELECT workspace_id, project_id, trace_id, parent_span_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
@@ -380,17 +380,21 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM (
                 SELECT
                     id
-                FROM optimizations
-                WHERE workspace_id = :workspace_id
-                <if(id)>AND id = :id <endif>
+                FROM (
+                    SELECT *
+                    FROM optimizations
+                    WHERE workspace_id = :workspace_id
+                    <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                    <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
+                    <if(id)>AND id = :id <endif>
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, dataset_id, id
+                )
+                WHERE 1=1
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
-                <if(dataset_id)>AND dataset_id = :dataset_id <endif>
-                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
-                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY workspace_id, dataset_id, id
             )
             ;
             """;
