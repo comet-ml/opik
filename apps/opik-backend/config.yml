@@ -699,7 +699,7 @@ s3Config:
 ollieStateConfig:
   # Default: 52428800 (50MB)
   # Description: Maximum upload size in bytes for ollie state persistence
-  maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE:-52428800}
+  maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
 # Attachments configuration
 attachmentsConfig:

@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.ollie.OllieStateService;
+import com.comet.opik.infrastructure.OllieStateConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,17 +13,21 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -38,9 +43,10 @@ public class OllieStateResource {
 
     private final @NonNull OllieStateService ollieStateService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull @Config("ollieStateConfig") OllieStateConfig ollieStateConfig;
 
     @PUT
-    @Consumes("*/*")
+    @Consumes("application/gzip")
     @Produces(MediaType.APPLICATION_JSON)
     @RateLimited(value = OLLIE_STATE_UPLOAD
             + ":{apiKey}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
@@ -50,7 +56,13 @@ public class OllieStateResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "429", description = "Rate limit exceeded", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    public Response upload(InputStream inputStream) throws IOException {
+    public Response upload(@HeaderParam(HttpHeaders.CONTENT_LENGTH) Long contentLength,
+            InputStream inputStream) throws IOException {
+        int maxSize = ollieStateConfig.getMaxUploadSizeBytes();
+        if (contentLength != null && contentLength > maxSize) {
+            throw new BadRequestException("Upload exceeds maximum size of %d bytes".formatted(maxSize));
+        }
+
         String userName = requestContext.get().getUserName();
         log.info("Upload ollie state for user '{}'", userName);
 
