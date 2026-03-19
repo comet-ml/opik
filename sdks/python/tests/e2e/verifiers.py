@@ -237,6 +237,7 @@ def verify_experiment(
     experiment_scores: Optional[Dict[str, float]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_version_id: Optional[str] = mock.ANY,  # type: ignore
+    project_name: Optional[str] = mock.ANY,
 ):
     rest_client = (
         opik_client._rest_client
@@ -257,6 +258,8 @@ def verify_experiment(
     assert experiment_content.name == experiment_name, (
         f"{experiment_content.name} != {experiment_name}"
     )
+
+    testlib.assert_equal(project_name, experiment_content.project_name)
 
     actual_scores_count = (
         0
@@ -792,6 +795,7 @@ def verify_evaluation_suite_result(
     experiment_items_count: int = mock.ANY,  # type: ignore
     total_feedback_scores: int = mock.ANY,  # type: ignore
     expected_score_names: Optional[Set[str]] = None,
+    project_name: Optional[str] = None,
 ):
     """
     Verify an EvaluationSuiteResult — both in-memory properties and persisted
@@ -809,6 +813,7 @@ def verify_evaluation_suite_result(
             across all experiment items.
         expected_score_names: If provided, the union of all score names
             across all experiment items must equal this set.
+        project_name: The project name associated with the evaluation suite.
     """
     if items_total is not mock.ANY:
         assert suite_result.items_total == items_total, (
@@ -832,8 +837,9 @@ def verify_evaluation_suite_result(
         return
 
     retrieved_experiment = opik_client.get_experiment_by_name(
-        suite_result.experiment_name
+        suite_result.experiment_name, project_name=project_name
     )
+    testlib.assert_equal(retrieved_experiment.name, suite_result.experiment_name)
     experiment_items = retrieved_experiment.get_items()
 
     assert len(experiment_items) == experiment_items_count, (

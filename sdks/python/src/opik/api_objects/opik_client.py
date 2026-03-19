@@ -1341,6 +1341,7 @@ class Opik:
             streamer=self._streamer,
             experiments_client=self.get_experiments_client(),
             tags=experiment_public.tags,
+            project_name=experiment_public.project_name,
         )
 
     def get_experiments_by_name(
@@ -1372,6 +1373,7 @@ class Opik:
                 streamer=self._streamer,
                 experiments_client=self.get_experiments_client(),
                 tags=public_experiment.tags,
+                project_name=public_experiment.project_name,
             )
             result.append(experiment_)
 
@@ -1406,6 +1408,7 @@ class Opik:
             streamer=self._streamer,
             experiments_client=self.get_experiments_client(),
             tags=experiment_public.tags,
+            project_name=experiment_public.project_name,
         )
 
     def end(self, timeout: Optional[int] = None) -> None:

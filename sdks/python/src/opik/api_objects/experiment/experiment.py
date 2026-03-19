@@ -140,6 +140,7 @@ class Experiment:
             experiment_ids=[self.id],
             truncate=truncate,
             max_results=max_results,
+            project_name=self._project_name,
         )
 
     def log_experiment_scores(
