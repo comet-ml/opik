@@ -60,18 +60,14 @@ def active_thread_and_project_name(
     return thread_id, temporary_project_name
 
 
-def _one_thread_is_active(
-    project_name: str, opik_client: opik.Opik
-) -> bool:
+def _one_thread_is_active(project_name: str, opik_client: opik.Opik) -> bool:
     threads = opik_client.search_threads(
         project_name=project_name, filter_string='status = "active"'
     )
     return len(threads) == 1
 
 
-def _all_threads_closed(
-    project_name: str, opik_client: opik.Opik
-) -> bool:
+def _all_threads_closed(project_name: str, opik_client: opik.Opik) -> bool:
     threads = opik_client.search_threads(
         project_name=project_name, filter_string='status = "active"'
     )
