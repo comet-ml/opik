@@ -319,17 +319,16 @@ def test_log_threads_feedback_scores__project_name_fallback_logic(
     )
 
     # Wait for threads to be closed
-    threads_client = opik_client.get_threads_client()
     from opik import synchronization
 
     def check_threads_closed() -> bool:
-        threads_p1 = threads_client.search_threads(
+        threads_p1 = opik_client.search_threads(
             project_name=project_1, filter_string=f'id = "{thread_id_p1}"'
         )
-        threads_p2 = threads_client.search_threads(
+        threads_p2 = opik_client.search_threads(
             project_name=project_2, filter_string=f'id = "{thread_id_p2}"'
         )
-        threads_default = threads_client.search_threads(
+        threads_default = opik_client.search_threads(
             project_name=project_default, filter_string=f'id = "{thread_id_default}"'
         )
         return (

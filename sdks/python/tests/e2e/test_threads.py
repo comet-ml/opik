@@ -36,11 +36,10 @@ def test_threads_client__search_threads__happy_path(
     opik_client: opik.Opik, active_threads_and_project: Tuple[list[str], str]
 ):
     active_threads, temporary_project_name = active_threads_and_project
-    threads_client = opik_client.get_threads_client()
 
     # Search for the first thread by ID filter
     filter_string = f'id = "{active_threads[0]}"'
-    threads = threads_client.search_threads(
+    threads = opik_client.search_threads(
         project_name=temporary_project_name, filter_string=filter_string
     )
     assert len(threads) == 1
@@ -48,7 +47,7 @@ def test_threads_client__search_threads__happy_path(
 
     # Search for all threads with active status
     filter_string = 'status = "active"'
-    threads = threads_client.search_threads(
+    threads = opik_client.search_threads(
         project_name=temporary_project_name, filter_string=filter_string
     )
     assert len(threads) == 2
@@ -60,7 +59,6 @@ def test_threads_client__log_threads_feedback_scores__happy_path(
     opik_client: opik.Opik, active_threads_and_project: Tuple[list[str], str]
 ):
     active_threads, temporary_project_name = active_threads_and_project
-    threads_client = opik_client.get_threads_client()
 
     # log feedback scores
     scores = [
@@ -79,7 +77,7 @@ def test_threads_client__log_threads_feedback_scores__happy_path(
             reason="some-reason-4",
         ),
     ]
-    threads_client.log_threads_feedback_scores(
+    opik_client.log_threads_feedback_scores(
         scores=scores, project_name=temporary_project_name
     )
 
@@ -112,7 +110,7 @@ def test_threads_client__close_thread__happy_path(
 
     opik_client.flush()
 
-    threads = threads_client.search_threads(
+    threads = opik_client.search_threads(
         project_name=temporary_project_name,
         filter_string='status = "active"',
     )
@@ -124,7 +122,7 @@ def test_threads_client__close_thread__happy_path(
         project_name=temporary_project_name,
     )
 
-    threads = threads_client.search_threads(
+    threads = opik_client.search_threads(
         project_name=temporary_project_name,
         filter_string='status = "active"',
     )
@@ -136,7 +134,6 @@ def test_threads_client__search_threads__filter_by_feedback_score(
 ):
     # Create a unique metric name to avoid conflicts with other tests
     unique_metric = f"test_metric_{str(uuid.uuid4()).replace('-', '_')[-8:]}"
-    threads_client = opik_client.get_threads_client()
 
     # Create thread with feedback score
     thread_with_score = str(uuid.uuid4())[-6:]
@@ -157,7 +154,7 @@ def test_threads_client__search_threads__filter_by_feedback_score(
     opik_client.flush()
 
     # Log feedback score to one thread
-    threads_client.log_threads_feedback_scores(
+    opik_client.log_threads_feedback_scores(
         scores=[
             BatchFeedbackScoreDict(
                 id=thread_with_score,
@@ -172,7 +169,7 @@ def test_threads_client__search_threads__filter_by_feedback_score(
 
     # Wait for feedback scores to propagate
     def check_feedback_score_logged() -> bool:
-        threads = threads_client.search_threads(
+        threads = opik_client.search_threads(
             project_name=temporary_project_name,
             filter_string=f"feedback_scores.{unique_metric} is_not_empty",
         )
@@ -181,7 +178,7 @@ def test_threads_client__search_threads__filter_by_feedback_score(
     synchronization.wait_for_done(lambda: check_feedback_score_logged(), timeout=30)
 
     # Test filtering with is_not_empty
-    threads_not_empty = threads_client.search_threads(
+    threads_not_empty = opik_client.search_threads(
         project_name=temporary_project_name,
         filter_string=f"feedback_scores.{unique_metric} is_not_empty",
     )
@@ -194,7 +191,7 @@ def test_threads_client__search_threads__filter_by_feedback_score(
     )
 
     # Test filtering with = operator
-    threads_with_value = threads_client.search_threads(
+    threads_with_value = opik_client.search_threads(
         project_name=temporary_project_name,
         filter_string=f"feedback_scores.{unique_metric} = 0.85",
     )
