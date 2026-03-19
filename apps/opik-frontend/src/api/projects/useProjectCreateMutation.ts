@@ -7,7 +7,7 @@ import api, {
 } from "@/api/api";
 import { Project } from "@/types/projects";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
 type UseProjectCreateMutationParams = {

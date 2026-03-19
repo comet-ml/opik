@@ -14,7 +14,7 @@ from . import stream_patchers
 
 LOGGER = logging.getLogger(__name__)
 
-KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "system", "tools"]
+KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "system", "tools", "output_format"]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["content"]
 
 

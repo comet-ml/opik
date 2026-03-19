@@ -5,12 +5,9 @@ import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import SidebarMenuItem, {
   MENU_ITEM_TYPE,
-} from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+} from "@/v1/layout/SideBar/MenuItem/SidebarMenuItem";
+import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
+import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import InviteUsersPopover from "./InviteUsersPopover";
 

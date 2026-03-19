@@ -6,14 +6,14 @@ import isArray from "lodash/isArray";
 import isNumber from "lodash/isNumber";
 import isObject from "lodash/isObject";
 import isString from "lodash/isString";
-import { TAG_VARIANTS } from "@/components/ui/tag";
+import { TAG_VARIANTS } from "@/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
 import { SPAN_TYPE, Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
 import { Filter } from "@/types/filters";
 import { createFilter } from "./filters";
-import { SPAN_TYPE_FILTER_COLUMN } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
+import { SPAN_TYPE_FILTER_COLUMN } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 

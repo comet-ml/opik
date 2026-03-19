@@ -7,9 +7,9 @@ import {
 import { MoveLeft } from "lucide-react";
 import React, { useEffect } from "react";
 
-import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
-import Loader from "@/components/shared/Loader/Loader";
-import { Button } from "@/components/ui/button";
+import PartialPageLayout from "@/v1/layout/PartialPageLayout/PartialPageLayout";
+import Loader from "@/shared/Loader/Loader";
+import { Button } from "@/ui/button";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAppStore, { useSetAppUser } from "@/store/AppStore";

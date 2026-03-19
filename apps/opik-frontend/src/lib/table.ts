@@ -1,7 +1,7 @@
 import { ColumnData } from "@/types/shared";
 import { ColumnDef } from "@tanstack/react-table";
-import TypeHeader from "@/components/shared/DataTableHeaders/TypeHeader";
-import TextCell from "@/components/shared/DataTableCells/TextCell";
+import TypeHeader from "@/shared/DataTableHeaders/TypeHeader";
+import TextCell from "@/shared/DataTableCells/TextCell";
 
 export const sortColumnsByOrder = <TColumnData>(
   columns: ColumnData<TColumnData>[],

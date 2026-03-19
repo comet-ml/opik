@@ -4,7 +4,7 @@ import get from "lodash/get";
 
 import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span } from "@/types/traces";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseSpanUpdateMutationParams = {
   projectId: string;

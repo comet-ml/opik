@@ -36,8 +36,10 @@ def track_anthropic(
 
     Supported methods (for all classes above) are:
         * `client.messages.create()`
+        * `client.messages.parse()`
         * `client.messages.stream()`
         * `client.beta.messages.create()`
+        * `client.beta.messages.parse()`
         * `client.beta.messages.stream()`
 
     Can be used within other Opik-tracked functions.
@@ -83,6 +85,12 @@ def track_anthropic(
         LOGGER,
     )
 
+    parse_decorator = decorator_factory.track(
+        type="llm",
+        name="anthropic_messages_parse",
+        project_name=project_name,
+        metadata=metadata,
+    )
     beta_create_decorator = decorator_factory.track(
         type="llm",
         name="anthropic_beta_messages_create",
@@ -95,6 +103,12 @@ def track_anthropic(
         project_name=project_name,
         metadata=metadata,
     )
+    beta_parse_decorator = decorator_factory.track(
+        type="llm",
+        name="anthropic_beta_messages_parse",
+        project_name=project_name,
+        metadata=metadata,
+    )
 
     anthropic_client.messages.create = create_decorator(
         anthropic_client.messages.create
@@ -103,18 +117,30 @@ def track_anthropic(
         anthropic_client.messages.stream
     )
     try:
+        anthropic_client.messages.parse = parse_decorator(
+            anthropic_client.messages.parse
+        )
+    except Exception:
+        LOGGER.debug(
+            "Failed to patch `client.messages.parse` method. "
+            "It is likely because the anthropic SDK version does not support it",
+            exc_info=True,
+        )
+    try:
         anthropic_client.beta.messages.create = beta_create_decorator(
             anthropic_client.beta.messages.create
         )
         anthropic_client.beta.messages.stream = beta_stream_decorator(
             anthropic_client.beta.messages.stream
         )
+        anthropic_client.beta.messages.parse = beta_parse_decorator(
+            anthropic_client.beta.messages.parse
+        )
     except AttributeError:
         LOGGER.debug(
-            "Failed to patch `client.beta.messages.create/stream` methods. It is likely because they were not implemented in the provided anthropic client",
+            "Failed to patch `client.beta.messages` methods. It is likely because they were not implemented in the provided anthropic client",
             exc_info=True,
         )
-
     try:
         anthropic_client.beta.messages.batches.create = batch_create_decorator(
             anthropic_client.beta.messages.batches.create

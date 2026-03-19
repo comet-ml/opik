@@ -80,6 +80,7 @@ export enum ManagementPermissionsNames {
   ONLINE_EVALUATION_RULE_UPDATE = "online_evaluation_rule_update",
   ALERT_UPDATE = "alert_update",
   TRACE_SPAN_THREAD_ANNOTATE = "trace_span_thread_annotate",
+  DASHBOARD_CREATE = "dashboard_create",
   TRACE_TAG = "trace_tag",
 }
 
