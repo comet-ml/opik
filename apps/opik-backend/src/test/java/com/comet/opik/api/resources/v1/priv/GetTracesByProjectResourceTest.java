@@ -28,6 +28,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TestWorkspace;
@@ -4142,8 +4143,10 @@ class GetTracesByProjectResourceTest {
                     .toList();
 
             assertThat(actualTraces)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                    .containsExactlyElementsOf(expectedTraces);
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                    .ignoringFields(IGNORED_FIELDS_TRACES)
+                    .isEqualTo(expectedTraces);
         }
 
         @ParameterizedTest
