@@ -612,6 +612,50 @@ class TestOpikClientCreateEvaluationSuite:
         self.mock_create_dataset.assert_not_called()
 
 
+class TestOpikClientDeleteDataset:
+    """Tests for Opik.delete_dataset() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_rest_datasets = self.opik_client_._rest_client.datasets
+
+        with patch.object(
+            self.mock_rest_datasets, "delete_dataset_by_name"
+        ) as self.mock_delete:
+            yield
+
+    def test_delete_dataset__no_project_name__uses_default_project(self):
+        """Verify delete_dataset resolves None project_name to the client's default project."""
+        self.opik_client_.delete_dataset(name="my-dataset")
+
+        self.mock_delete.assert_called_once_with(
+            dataset_name="my-dataset",
+            project_name="default-project",
+        )
+
+    def test_delete_dataset__explicit_project_name__uses_given_project(self):
+        """Verify delete_dataset forwards an explicit project_name to the REST API."""
+        self.opik_client_.delete_dataset(
+            name="my-dataset", project_name="custom-project"
+        )
+
+        self.mock_delete.assert_called_once_with(
+            dataset_name="my-dataset",
+            project_name="custom-project",
+        )
+
+    def test_delete_dataset__passes_correct_dataset_name(self):
+        """Verify delete_dataset forwards the dataset name unchanged to the REST API."""
+        self.opik_client_.delete_dataset(
+            name="target-dataset", project_name="some-project"
+        )
+
+        call_kwargs = self.mock_delete.call_args[1]
+        assert call_kwargs["dataset_name"] == "target-dataset"
+        assert call_kwargs["project_name"] == "some-project"
+
+
 class TestOpikClientGetDatasets:
     """Tests for Opik.get_datasets() method."""
 

@@ -947,14 +947,18 @@ class Opik:
 
         return experiments
 
-    def delete_dataset(self, name: str) -> None:
+    def delete_dataset(self, name: str, project_name: Optional[str] = None) -> None:
         """
         Delete dataset by name
 
         Args:
             name: The name of the dataset
+            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
         """
-        self._rest_client.datasets.delete_dataset_by_name(dataset_name=name)
+        project_name = self._resolve_project_name(project_name)
+        self._rest_client.datasets.delete_dataset_by_name(
+            dataset_name=name, project_name=project_name
+        )
 
     def create_dataset(
         self,

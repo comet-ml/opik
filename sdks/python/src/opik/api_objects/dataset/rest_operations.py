@@ -27,6 +27,7 @@ LOGGER = logging.getLogger(__name__)
 def stream_dataset_items(
     rest_client: OpikApi,
     dataset_name: str,
+    project_name: Optional[str],
     nb_samples: Optional[int] = None,
     batch_size: Optional[int] = None,
     dataset_item_ids: Optional[List[str]] = None,
@@ -39,6 +40,7 @@ def stream_dataset_items(
     Args:
         rest_client: The REST API client.
         dataset_name: Name of the dataset to stream items from.
+        project_name: Name of the project to stream items from.
         nb_samples: Maximum number of items to retrieve. If None, all items are streamed.
         batch_size: Maximum number of items to fetch per batch from the backend.
         dataset_item_ids: Optional list of specific item IDs to retrieve.
@@ -72,6 +74,7 @@ def stream_dataset_items(
             return rest_stream_parser.read_and_parse_stream(
                 stream=rest_client.datasets.stream_dataset_items(
                     dataset_name=dataset_name,
+                    project_name=project_name,
                     last_retrieved_id=last_retrieved_id,
                     steam_limit=batch_size,
                     filters=filters,
