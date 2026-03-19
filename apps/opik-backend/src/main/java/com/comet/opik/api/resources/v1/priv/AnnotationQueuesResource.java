@@ -226,6 +226,7 @@ public class AnnotationQueuesResource {
 
     @POST
     @Path("/{id}/items/add")
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_ANNOTATE)
     @Operation(operationId = "addItemsToAnnotationQueue", summary = "Add items to annotation queue", description = "Add traces or threads to annotation queue", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))

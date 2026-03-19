@@ -821,6 +821,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "minimax/minimax-m2.5:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_7,
+      label: "minimax/minimax-m2.7",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
       label: "mistralai/codestral-2501",
     },
@@ -1091,6 +1095,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_NANO_30B_A3B_FREE,
       label: "nvidia/nemotron-3-nano-30b-a3b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B,
+      label: "nvidia/nemotron-3-super-120b-a12b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE,
@@ -1807,6 +1815,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_FLASH,
       label: "xiaomi/mimo-v2-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_OMNI,
+      label: "xiaomi/mimo-v2-omni",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_PRO,
+      label: "xiaomi/mimo-v2-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,

@@ -11,6 +11,7 @@ import java.util.List;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.forbidden;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -65,6 +66,17 @@ public class AuthTestUtils {
                         .willReturn(aResponse()
                                 .withStatus(200)
                                 .withBody(workspaceId)));
+    }
+
+    public static void mockTargetWorkspaceDenyPermission(
+            WireMockServer server, String apiKey, String workspaceName, String requiredPermission) {
+        server.stubFor(
+                post(urlPathEqualTo("/opik/auth"))
+                        .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .withRequestBody(
+                                matchingJsonPath("$.requiredPermissions[0]", equalTo(requiredPermission)))
+                        .willReturn(forbidden()));
     }
 
     public static void mockSessionCookieTargetWorkspace(WireMockServer server, String sessionToken,

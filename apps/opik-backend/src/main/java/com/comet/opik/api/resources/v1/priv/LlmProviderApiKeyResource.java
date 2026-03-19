@@ -7,6 +7,8 @@ import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -103,6 +105,7 @@ public class LlmProviderApiKeyResource {
     }
 
     @POST
+    @RequiredPermissions(WorkspaceUserPermission.AI_PROVIDER_UPDATE)
     @Operation(operationId = "storeLlmProviderApiKey", summary = "Store LLM Provider's ApiKey", description = "Store LLM Provider's ApiKey", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/proxy/api_key/{apiKeyId}", schema = @Schema(implementation = String.class))}),
@@ -125,6 +128,7 @@ public class LlmProviderApiKeyResource {
 
     @PATCH
     @Path("{id}")
+    @RequiredPermissions(WorkspaceUserPermission.AI_PROVIDER_UPDATE)
     @Operation(operationId = "updateLlmProviderApiKey", summary = "Update LLM Provider's ApiKey", description = "Update LLM Provider's ApiKey", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -145,6 +149,7 @@ public class LlmProviderApiKeyResource {
 
     @POST
     @Path("/delete")
+    @RequiredPermissions(WorkspaceUserPermission.AI_PROVIDER_UPDATE)
     @Operation(operationId = "deleteLlmProviderApiKeysBatch", summary = "Delete LLM Provider's ApiKeys", description = "Delete LLM Provider's ApiKeys batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
