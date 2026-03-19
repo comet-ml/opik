@@ -10,58 +10,93 @@ title: Platform Architecture
 
 Opik's architecture consists of multiple services that each handle a specific role, including:
 
-- **A backend service**: Java + Dropwizard.
-- **A frontend application**: TypeScript + React, served by Nginx.
+- **A Java backend service**: Java 21 + Dropwizard — REST API, authentication, business logic, and database migrations.
+- **A Python backend service**: Flask + Gunicorn — evaluator execution, sandboxed code execution, and optimization workflows.
+- **A frontend application**: TypeScript + React SPA, served by Nginx which also reverse-proxies API requests to the backend.
+- **SDKs**: Python and TypeScript clients that batch telemetry data and send it to the backend via REST/HTTP.
 - **Data stores**:
-  - ClickHouse for large-scale data ingestion and fast queries (e.g., for traces or experiments).
-    - With Zookeeper to coordinate the cluster.
-    - With an Operator to provide operational and performance metrics.
-  - MySQL for transactional data.
-  - Redis for caching, rate limiting, distributed locks and streams.
+  - ClickHouse for large-scale analytical data (traces, spans, experiments, feedback scores).
+    - With Zookeeper for cluster coordination.
+    - Managed by the Altinity ClickHouse Operator in Kubernetes.
+  - MySQL for transactional data (projects, datasets, prompts, workspaces).
+  - Redis for caching, rate limiting, distributed locks, and streams (online evaluation, experiment aggregation, job queues).
+  - MinIO (S3-compatible) for object storage (attachments, artifacts, file uploads).
 
 <Frame>
   <img src="/img/self-host/architecture.png" alt="Architecture Diagram" />
 </Frame>
 
-## Backend Service
+## Java Backend Service
 
-Opik's backend uses Java 21 LTS and Dropwizard 4, structured as a RESTful web service offering public API
+Opik's main backend uses Java 21 LTS and Dropwizard, structured as a RESTful web service offering public API
 endpoints for core functionality. Full API documentation is available [here](/reference/rest-api/overview).
 
-For observability Opik uses OpenTelemetry due its vendor-neutral approach and wide support across languages
+Key responsibilities:
+
+- **REST API**: Exposes endpoints for traces, spans, experiments, datasets, prompts, feedback scores, and more.
+- **Authentication and authorization**: Workspace-scoped permissions with API key and session-based authentication.
+- **Database management**: Connects to ClickHouse (via R2DBC reactive driver) for analytics, MySQL (via JDBI) for transactional state, Redis (via Redisson) for caching and streams, and MinIO for file storage.
+- **Event processing**: In-memory event bus (Guava AsyncEventBus) with virtual threads, plus Redis Streams for distributed async workflows like online scoring and experiment aggregation.
+- **Schema migrations**: Liquibase-based migrations for both MySQL and ClickHouse, run automatically on startup.
+- **LLM proxy**: Integrates with multiple LLM providers (OpenAI, Anthropic, Google Gemini, and others) for the playground and LLM-as-judge evaluators.
+
+For observability, Opik uses OpenTelemetry due to its vendor-neutral approach and wide support across languages
 and frameworks. It provides a single, consistent way to collect telemetry data from all services and applications.
 
-_You can find the full backend codebase in Github under the [`apps/opik-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-backend) folder._
+_You can find the full backend codebase in GitHub under the [`apps/opik-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-backend) folder._
+
+## Python Backend Service
+
+Opik includes a Python backend service (Flask + Gunicorn) that handles workloads requiring Python execution:
+
+- **Evaluators**: Executes custom Python evaluation code in sandboxed subprocesses with configurable timeouts, memory limits, and network isolation.
+- **Optimization Studio**: Runs LLM-based optimization and prompt engineering workflows with concurrent job management.
+- **Background jobs**: Uses Redis Queue (RQ) for asynchronous job processing, including evaluation runs and optimization tasks.
+
+The Java backend calls the Python backend for evaluator execution, and both services share Redis for job coordination.
+
+_You can find the full Python backend codebase in GitHub under the [`apps/opik-python-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-python-backend) folder._
 
 ## Frontend Application
 
-Opik's frontend is a TypeScript + React application served by Nginx. It provides a user-friendly interface for
-interacting with the backend services. The frontend is built using a modular approach, with each module
-encapsulating a specific feature or functionality.
+Opik's frontend is a TypeScript + React single-page application built with Vite and served by Nginx. The Nginx
+server handles two roles:
 
-_You can find the full frontend codebase in Github under the [`apps/opik-frontend`](https://github.com/comet-ml/opik/tree/main/apps/opik-frontend) folder._
+- **Static file serving**: Serves the built React SPA with SPA-style routing (fallback to `index.html`).
+- **API reverse proxy**: Routes `/api/*` requests to the Java backend by stripping the `/api` prefix and proxying to port 8080. This includes WebSocket upgrade support for streaming endpoints.
 
-## SDK's
+The frontend uses TanStack Router for file-based routing, TanStack React Query for server state management, and Zustand for client-side state.
 
-Opik provides SDKs for Python, and JavaScript. These SDKs allow developers to interact with Opik's backend
-services programmatically. The SDKs are designed to be easy to use and provide a high-level abstraction over
-the REST API and many additional features.
+_You can find the full frontend codebase in GitHub under the [`apps/opik-frontend`](https://github.com/comet-ml/opik/tree/main/apps/opik-frontend) folder._
 
-_You can find the full SDK codebase in Github under the [`sdks/python`](https://github.com/comet-ml/opik/tree/main/sdks/python) for the Python SDK
+## SDKs
+
+Opik provides SDKs for Python and TypeScript. Both SDKs implement asynchronous batching to optimize network
+efficiency — they accumulate individual trace and span operations and send them as bulk requests to the backend's
+batch endpoints (`POST /v1/private/traces/batch`, `POST /v1/private/spans/batch`, etc.).
+
+| | Python SDK | TypeScript SDK |
+|---|---|---|
+| **HTTP client** | httpx | fetch API |
+| **Batching** | Message queue + batch manager with memory-capped batches (50MB) | Debounce-based batch queue (default 300ms / 100 items) |
+| **Retries** | Exponential backoff (0.5s–10s) | Default 2 retries |
+
+_You can find the SDK codebases in GitHub under [`sdks/python`](https://github.com/comet-ml/opik/tree/main/sdks/python) for the Python SDK
 and [`sdks/typescript`](https://github.com/comet-ml/opik/tree/main/sdks/typescript) for the TypeScript SDK._
 
 ## ClickHouse
 
-ClickHouse is a column-oriented database management system developed by Yandex. It is optimized for fast analytics on large datasets and is capable of processing hundreds of millions to more than a billion rows and tens of gigabytes of data per single server per second.
+ClickHouse is a column-oriented OLAP database optimized for fast analytics on large datasets. Opik uses ClickHouse
+for data that requires near real-time ingestion and analytical queries:
 
-Opik uses ClickHouse for datasets that require near real-time ingestion and analytical queries, such as:
+- Traces and spans (LLM call records)
+- Feedback scores and evaluations
+- Experiment items and results
+- Dataset items
 
-- LLM calls and traces
-- Feedback scores
-- Datasets and experiments
-- Experiments
+The backend connects to ClickHouse via HTTP (port 8123) using a reactive R2DBC driver for non-blocking queries. Async inserts are enabled for high-throughput ingestion with configurable batching and deduplication.
 
-The image below details the schema used by Opik in ClickHouse:
+In Kubernetes deployments, ClickHouse is managed by the [Altinity ClickHouse Operator](https://github.com/Altinity/clickhouse-operator), which handles cluster provisioning, scaling, and monitoring. Zookeeper provides distributed coordination for replica synchronization.
 
 <Frame>
   <img src="/img/self-host/clickhouse-schema.png" alt="ClickHouse Schema" />
@@ -72,13 +107,15 @@ The image below details the schema used by Opik in ClickHouse:
 
 ## MySQL
 
-Opik uses MySQL for transactional data, it provides ACID-compliant transactional storage for Opik's lower-volume but critical data, such as:
+Opik uses MySQL for ACID-compliant transactional storage of lower-volume but critical data:
 
+- Workspace and user management
+- Project metadata
+- Dataset and prompt definitions (with versioning)
 - Feedback definitions
-- Metadata containers e.g., projects that group related traces
-- Configuration data
+- Automation rules and alert configurations
 
-The image below details the schema used by Opik in MySQL:
+The backend connects via JDBC with connection pooling and supports AWS RDS with IAM authentication for cloud deployments.
 
 <Frame>
   <img src="/img/self-host/mysql-schema.png" alt="MySQL Schema" />
@@ -89,17 +126,31 @@ The image below details the schema used by Opik in MySQL:
 
 ## Redis
 
-Redis is an in-memory data structure store, used as a database, cache, and message broker. It supports a vast range of data structures. Opik uses Redis for:
+Redis serves multiple roles in Opik's architecture:
 
-- A distributed cache: for high-speed lookups.
-- A distributed lock: for coordinating safe access to certain shared resources.
-- A rate limiter: to enforce throughput limits and protect scalability.
-- A streaming mechanism: Redis streams power Opik's Online evaluation functionality; future iterations may integrate Kafka or similar platforms for even higher scalability.
+- **Distributed cache**: High-speed lookups for sessions, API key resolution, and frequently accessed data.
+- **Distributed locks**: Coordinating safe access to shared resources across backend replicas (configurable TTL).
+- **Rate limiting**: Token-bucket rate limiting to enforce throughput limits per user and workspace.
+- **Streams**: Redis Streams power asynchronous workflows:
+  - *Online evaluation*: Consumer groups process LLM-as-judge scoring and Python evaluator results with automatic message claiming for fault tolerance.
+  - *Experiment aggregation*: Debounced recomputation of experiment metrics across distributed backend instances.
+- **Job queue**: Redis Queue (RQ) coordinates background jobs between the Java backend and the Python backend for evaluator execution and optimization tasks.
+
+## MinIO (S3-Compatible Storage)
+
+Opik uses MinIO as an S3-compatible object store for binary data that doesn't belong in the relational or analytical databases:
+
+- Trace attachments (logs, screenshots, etc.)
+- Dataset file uploads (CSV imports)
+- Experiment artifacts
+- Custom evaluation code
+
+In production deployments, MinIO can be replaced with any S3-compatible storage service (e.g., AWS S3, Google Cloud Storage).
 
 ## Observability
 
-Opik is built and runs on top of open-source infrastructure (MySQL, Redis, Kubernetes, and more), making it straightforward to integrate with popular observability stacks such as Grafana and Prometheus. Specifically:
+Opik is built on top of open-source infrastructure (MySQL, Redis, ClickHouse, Kubernetes), making it straightforward to integrate with popular observability stacks such as Grafana and Prometheus:
 
-- The backend uses OpenTelemetry for vendor-neutral instrumentation.
-- ClickHouse deployments include an operator for real-time performance monitoring and metric exports to Grafana/Prometheus.
-- Other components (MySQL, Redis, Kubernetes) also have well-documented strategies for monitoring.
+- **OpenTelemetry**: All three application services (Java backend, Python backend, and frontend Nginx) support OpenTelemetry instrumentation. An optional OpenTelemetry Collector can be deployed to aggregate traces and metrics, forwarding them to Jaeger, Grafana, or any OTLP-compatible backend.
+- **ClickHouse Operator**: Provides real-time performance monitoring and metric exports to Grafana/Prometheus.
+- **Standard monitoring**: MySQL, Redis, and Kubernetes all have well-documented strategies for monitoring with Prometheus exporters and Grafana dashboards.
