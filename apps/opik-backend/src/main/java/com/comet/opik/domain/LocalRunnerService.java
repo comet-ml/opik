@@ -450,8 +450,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         RBlockingDeque<String> blockingDeque = redisClient.getBlockingDeque(pendingKey);
         Duration timeout = Duration.ofSeconds(runnerConfig.getNextJobPollTimeout().toSeconds());
 
-        return Mono.fromCompletionStage(
-                blockingDeque.moveAsync(timeout, DequeMoveArgs.pollFirst().addLastTo(activeKey)))
+        return Mono.defer(() -> Mono.fromCompletionStage(
+                blockingDeque.moveAsync(timeout, DequeMoveArgs.pollFirst().addLastTo(activeKey))))
+                .filter(jobIdStr -> jobIdStr != null)
                 .flatMap(jobIdStr -> {
                     RMapReactive<String, String> jobMap = reactiveRedisClient.getMap(
                             jobKey(UUID.fromString(jobIdStr)), StringCodec.INSTANCE);
