@@ -35,6 +35,58 @@ def project_name(opik_client: opik.Opik):
         pass
 
 
+def test_multi_class_and_field_removal_dedup__happyflow(
+    opik_client: opik.Opik,
+    project_name: str,
+):
+    """Publishing a second config class or removing a field must not create duplicate versions."""
+
+    class ConfigA(opik.AgentConfig):
+        temperature: float
+        model: str
+
+    class ConfigB(opik.AgentConfig):
+        retries: int
+
+    # Publish both classes into the same project — each creates one new version.
+    opik_client.create_agent_config_version(
+        ConfigA(temperature=0.5, model="gpt-4"), project_name=project_name
+    )
+    v_after_b = opik_client.create_agent_config_version(
+        ConfigB(retries=3), project_name=project_name
+    )
+
+    # Re-publishing ConfigA with the same values must be a no-op. The latest blueprint
+    # now contains both ConfigA and ConfigB keys, but ConfigA values are unchanged so
+    # it should return the current latest version rather than creating a new one.
+    get_global_registry().clear()
+    v_a_again = opik_client.create_agent_config_version(
+        ConfigA(temperature=0.5, model="gpt-4"), project_name=project_name
+    )
+    assert v_a_again == v_after_b, (
+        "same values after another class was added should be a no-op"
+    )
+
+    # Publish ConfigA with the model field removed locally — remaining value unchanged.
+    class ConfigA(opik.AgentConfig):  # type: ignore[no-redef]
+        temperature: float
+
+    get_global_registry().clear()
+    v_a_reduced = opik_client.create_agent_config_version(
+        ConfigA(temperature=0.5), project_name=project_name
+    )
+    assert v_a_reduced == v_after_b, (
+        "removing a field whose value is unchanged should be a no-op"
+    )
+
+    # Confirm history has exactly 2 entries (one per class, no duplicates).
+    project_id = opik_client.rest_client.projects.retrieve_project(name=project_name).id
+    history = opik_client.rest_client.agent_configs.get_blueprint_history(
+        project_id=project_id
+    ).content
+    assert len(history) == 2
+
+
 def test_publish_version_and_retrieve__happyflow(
     opik_client: opik.Opik,
     project_name: str,

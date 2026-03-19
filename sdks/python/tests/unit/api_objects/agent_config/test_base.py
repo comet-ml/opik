@@ -159,6 +159,68 @@ class TestCreateAgentConfigVersion:
         mock_rest_client.agent_configs.create_agent_config.assert_not_called()
         assert result == "v1"
 
+    def test_same_values_but_blueprint_has_extra_class_keys__no_op__happyflow(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+
+        cfg = MyConfig(temp=0.7)
+
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key="MyConfig.temp", type="float", value="0.7"
+                    ),
+                    # Keys from a different config class stored in the same project
+                    AgentConfigValuePublic(
+                        key="OtherConfig.some_field", type="string", value="hello"
+                    ),
+                ],
+            )
+        )
+
+        result = mock_opik_client.create_agent_config_version(cfg)
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+        assert result == "v1"
+
+    def test_local_field_removed_but_remaining_values_match__no_op__happyflow(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float  # model field was removed locally
+
+        cfg = MyConfig(temp=0.7)
+
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key="MyConfig.temp", type="float", value="0.7"
+                    ),
+                    # model was in a prior version but removed from the local class
+                    AgentConfigValuePublic(
+                        key="MyConfig.model", type="string", value="gpt-4"
+                    ),
+                ],
+            )
+        )
+
+        result = mock_opik_client.create_agent_config_version(cfg)
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+        assert result == "v1"
+
     def test_different_values__creates_new_version__happyflow(
         self, mock_rest_client, mock_opik_client
     ):

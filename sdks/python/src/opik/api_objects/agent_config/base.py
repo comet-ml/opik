@@ -167,9 +167,15 @@ class AgentConfig:
         blueprint: typing.Any,
         fields_with_values: typing.Dict[str, tuple],
     ) -> bool:
-        bp_keys = set(blueprint.keys())
+        # Only consider blueprint keys that belong to this config class (same prefix).
+        # The blueprint may contain keys from other config classes in the same project.
+        class_prefix = type(self).__name__ + "."
+        bp_keys = {k for k in blueprint.keys() if k.startswith(class_prefix)}
         local_keys = set(fields_with_values.keys())
-        if bp_keys != local_keys:
+        # A locally removed field does not trigger a new version — only check that
+        # every local key exists in the blueprint (not the reverse).
+        missing_locally = local_keys - bp_keys
+        if missing_locally:
             return False
 
         for key, (py_type, value, _desc) in fields_with_values.items():
