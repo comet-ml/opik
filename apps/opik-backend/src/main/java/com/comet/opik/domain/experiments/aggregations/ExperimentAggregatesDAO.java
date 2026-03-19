@@ -519,7 +519,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     name,
                     toDecimal64(
                         greatest(
-                            least(if(isFinite(avg(toFloat64(passed))), avg(toFloat64(passed)), 0), 1.0),
+                            least(if(isFinite(avg(toFloat64(passed = 'passed'))), avg(toFloat64(passed = 'passed')), 0), 1.0),
                             0.0
                         ),
                         9

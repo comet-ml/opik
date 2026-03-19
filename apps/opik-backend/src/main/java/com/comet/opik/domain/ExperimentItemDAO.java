@@ -369,10 +369,7 @@ class ExperimentItemDAO {
                       entity_id,
                       toJSONString(
                           groupArray(
-                              CAST(
-                                  (name, passed, reason),
-                                  'Tuple(value String, passed UInt8, reason String)'
-                              )
+                              tuple(name AS value, passed, reason)
                           )
                       ) AS assertions_array
                   FROM assertion_results

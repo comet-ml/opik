@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -106,7 +107,9 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                     .bind("entity_id" + i, item.id())
                     .bind("project_id" + i, item.projectId())
                     .bind("name" + i, item.name())
-                    .bind("passed" + i, item.value().compareTo(BigDecimal.ONE) >= 0 ? 1 : 0)
+                    .bind("passed" + i, item.value().compareTo(BigDecimal.ONE) >= 0
+                            ? AssertionStatus.PASSED.getValue()
+                            : AssertionStatus.FAILED.getValue())
                     .bind("source" + i, item.source().getValue())
                     .bind("reason" + i, getValueOrDefault(item.reason()));
         }

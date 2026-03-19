@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AssertionResult;
+import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentRunSummary;
@@ -39,14 +40,14 @@ class AssertionResultMapperTest {
     void enrichWithAssertions_allAssertionsPass_statusPassed() {
         var item = baseItem().build();
         var json = """
-                [{"value":"Should link to docs","passed":1,"reason":"Links found"},
-                 {"value":"Should be concise","passed":1,"reason":"Under 200 words"}]
+                [{"value":"Should link to docs","passed":"passed","reason":"Links found"},
+                 {"value":"Should be concise","passed":"passed","reason":"Under 200 words"}]
                 """;
 
         var result = AssertionResultMapper.enrichWithAssertions(item, json);
 
         assertThat(result.assertionResults()).hasSize(2);
-        assertThat(result.assertionResults()).allMatch(AssertionResult::passed);
+        assertThat(result.assertionResults()).allMatch(r -> AssertionStatus.PASSED.equals(r.passed()));
         assertThat(result.status()).isEqualTo(RunStatus.PASSED);
     }
 
@@ -54,23 +55,23 @@ class AssertionResultMapperTest {
     void enrichWithAssertions_someAssertionsFail_statusFailed() {
         var item = baseItem().build();
         var json = """
-                [{"value":"Should link to docs","passed":1,"reason":"Links found"},
-                 {"value":"Should be concise","passed":0,"reason":"Too long"}]
+                [{"value":"Should link to docs","passed":"passed","reason":"Links found"},
+                 {"value":"Should be concise","passed":"failed","reason":"Too long"}]
                 """;
 
         var result = AssertionResultMapper.enrichWithAssertions(item, json);
 
         assertThat(result.assertionResults()).hasSize(2);
         assertThat(result.status()).isEqualTo(RunStatus.FAILED);
-        assertThat(result.assertionResults().get(0).passed()).isTrue();
-        assertThat(result.assertionResults().get(1).passed()).isFalse();
+        assertThat(result.assertionResults().get(0).passed()).isEqualTo(AssertionStatus.PASSED);
+        assertThat(result.assertionResults().get(1).passed()).isEqualTo(AssertionStatus.FAILED);
     }
 
     @Test
     void enrichWithAssertions_allAssertionsFail_statusFailed() {
         var item = baseItem().build();
         var json = """
-                [{"value":"Should link to docs","passed":0,"reason":"No links found"}]
+                [{"value":"Should link to docs","passed":"failed","reason":"No links found"}]
                 """;
 
         var result = AssertionResultMapper.enrichWithAssertions(item, json);
@@ -82,7 +83,7 @@ class AssertionResultMapperTest {
     @Test
     void computeRunSummaries_singleRunWithAssertions_returnsSummary() {
         var item = baseItem()
-                .assertionResults(List.of(AssertionResult.builder().value("a").passed(true).build()))
+                .assertionResults(List.of(AssertionResult.builder().value("a").passed(AssertionStatus.PASSED).build()))
                 .status(RunStatus.PASSED)
                 .build();
 
@@ -100,13 +101,16 @@ class AssertionResultMapperTest {
         var experimentId = UUID.randomUUID();
         var items = List.of(
                 baseItem().experimentId(experimentId)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(true).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.PASSED).build()))
                         .status(RunStatus.PASSED).build(),
                 baseItem().experimentId(experimentId)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(false).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.FAILED).build()))
                         .status(RunStatus.FAILED).build(),
                 baseItem().experimentId(experimentId)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(true).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.PASSED).build()))
                         .status(RunStatus.PASSED).build());
 
         Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);
@@ -124,13 +128,16 @@ class AssertionResultMapperTest {
         var policy = ExecutionPolicy.builder().runsPerItem(3).passThreshold(3).build();
         var items = List.of(
                 baseItem().experimentId(experimentId).executionPolicy(policy)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(true).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.PASSED).build()))
                         .status(RunStatus.PASSED).build(),
                 baseItem().experimentId(experimentId).executionPolicy(policy)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(false).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.FAILED).build()))
                         .status(RunStatus.FAILED).build(),
                 baseItem().experimentId(experimentId).executionPolicy(policy)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(true).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.PASSED).build()))
                         .status(RunStatus.PASSED).build());
 
         Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);
@@ -148,13 +155,16 @@ class AssertionResultMapperTest {
         var policy = ExecutionPolicy.builder().runsPerItem(3).passThreshold(2).build();
         var items = List.of(
                 baseItem().experimentId(experimentId).executionPolicy(policy)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(true).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.PASSED).build()))
                         .status(RunStatus.PASSED).build(),
                 baseItem().experimentId(experimentId).executionPolicy(policy)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(false).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.FAILED).build()))
                         .status(RunStatus.FAILED).build(),
                 baseItem().experimentId(experimentId).executionPolicy(policy)
-                        .assertionResults(List.of(AssertionResult.builder().value("a").passed(true).build()))
+                        .assertionResults(
+                                List.of(AssertionResult.builder().value("a").passed(AssertionStatus.PASSED).build()))
                         .status(RunStatus.PASSED).build());
 
         Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);

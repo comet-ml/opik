@@ -452,7 +452,7 @@ class ExperimentDAO {
                 SELECT
                     entity_id,
                     name,
-                    if(count() = 1, any(toFloat64(passed)), avg(toFloat64(passed))) AS value
+                    if(count() = 1, any(toFloat64(passed = 'passed')), avg(toFloat64(passed = 'passed'))) AS value
                 FROM (
                     SELECT
                         workspace_id,
@@ -1341,7 +1341,7 @@ class ExperimentDAO {
                 SELECT
                     entity_id,
                     name,
-                    if(count() = 1, any(toFloat64(passed)), avg(toFloat64(passed))) AS value
+                    if(count() = 1, any(toFloat64(passed = 'passed')), avg(toFloat64(passed = 'passed'))) AS value
                 FROM (
                     SELECT
                         workspace_id,

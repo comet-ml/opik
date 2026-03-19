@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.assertion_results ON CL
     project_id      FixedString(36),
     workspace_id    String,
     name            String,
-    passed          UInt8                DEFAULT 0,
+    passed          Enum8('passed' = 0, 'failed' = 1),
     reason          String               DEFAULT '',
     source          Enum8('sdk' = 1, 'ui' = 2, 'online_scoring' = 3),
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),

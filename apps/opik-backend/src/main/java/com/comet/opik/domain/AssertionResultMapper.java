@@ -1,12 +1,12 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AssertionResult;
+import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentRunSummary;
 import com.comet.opik.api.RunStatus;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,7 @@ class AssertionResultMapper {
     private static final TypeReference<List<AssertionResultRow>> ASSERTION_LIST_TYPE = new TypeReference<>() {
     };
 
-    record AssertionResultRow(String value, int passed, String reason) {
+    record AssertionResultRow(String value, AssertionStatus passed, String reason) {
     }
 
     static ExperimentItem enrichWithAssertions(@NonNull ExperimentItem item, @Nullable String assertionsJson) {
@@ -37,8 +38,8 @@ class AssertionResultMapper {
 
         List<AssertionResultRow> rows;
         try {
-            rows = JsonUtils.getMapper().readValue(assertionsJson, ASSERTION_LIST_TYPE);
-        } catch (JsonProcessingException e) {
+            rows = JsonUtils.readValue(assertionsJson, ASSERTION_LIST_TYPE);
+        } catch (UncheckedIOException e) {
             log.warn("Failed to parse assertions_array JSON", e);
             return item;
         }
@@ -50,12 +51,13 @@ class AssertionResultMapper {
         var assertionResults = rows.stream()
                 .map(row -> AssertionResult.builder()
                         .value(row.value())
-                        .passed(row.passed() >= 1)
+                        .passed(row.passed())
                         .reason(row.reason())
                         .build())
                 .toList();
 
-        boolean allPassed = assertionResults.stream().allMatch(AssertionResult::passed);
+        boolean allPassed = assertionResults.stream()
+                .allMatch(r -> AssertionStatus.PASSED.equals(r.passed()));
 
         return item.toBuilder()
                 .assertionResults(assertionResults)

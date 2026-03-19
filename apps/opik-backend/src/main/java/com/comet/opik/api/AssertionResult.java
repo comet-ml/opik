@@ -10,6 +10,6 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AssertionResult(
         String value,
-        boolean passed,
+        AssertionStatus passed,
         String reason) {
 }

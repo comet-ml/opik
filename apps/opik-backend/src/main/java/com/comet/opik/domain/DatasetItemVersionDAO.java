@@ -1050,15 +1050,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     entity_id,
                     toJSONString(
                         groupArray(
-                            CAST(
-                                (name, passed, reason),
-                                'Tuple(value String, passed UInt8, reason String)'
-                            )
+                            tuple(name AS value, passed, reason)
                         )
                     ) AS assertions_array
                 FROM assertion_results FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 GROUP BY entity_id
             )
