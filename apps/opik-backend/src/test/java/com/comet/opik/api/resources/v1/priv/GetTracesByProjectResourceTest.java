@@ -28,6 +28,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TestWorkspace;
@@ -66,6 +67,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -4141,8 +4143,13 @@ class GetTracesByProjectResourceTest {
                             .build())
                     .toList();
 
+            var config = RecursiveComparisonConfiguration.builder()
+                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
+                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                    .build();
+
             assertThat(actualTraces)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
+                    .usingRecursiveFieldByFieldElementComparator(config)
                     .containsExactlyElementsOf(expectedTraces);
         }
 
