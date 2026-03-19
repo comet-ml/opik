@@ -98,7 +98,9 @@ You can use the `filter_string` (Python) / `filterString` (TypeScript) parameter
   </Tab>
 </Tabs>
 
-The `filter_string` (Python) / `filterString` (TypeScript) parameter should be a string in the following format using Opik Query Language (OQL):
+### Filtering with Opik Query Language (OQL)
+
+All search methods (`search_traces`, `search_spans`, and `search_threads`) accept a `filter_string` (Python) / `filterString` (TypeScript) parameter that uses the same Opik Query Language (OQL) syntax:
 
 ```
 "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
@@ -137,7 +139,7 @@ The `filter_string` (Python) / `filterString` (TypeScript) parameter should be a
 - DateTime fields require ISO 8601 format (e.g., "2024-01-01T00:00:00Z")
 - Use dot notation for nested objects: `metadata.model`, `feedback_scores.accuracy`
 
-Here are some full examples of using `filter_string` / `filterString` values in searches:
+Here are some examples of using `filter_string` / `filterString`:
 
 <Tabs>
   <Tab value="Python" title="Python">
@@ -148,28 +150,29 @@ Here are some full examples of using `filter_string` / `filterString` values in 
         project_name="Default project"
     )
 
-    # Search for traces where the input contains text
-    traces = client.search_traces(
-      filter_string='input contains "Opik"'
-    )
+    # Filter by input content (works with traces, spans, and threads)
+    results = client.search_traces(filter_string='input contains "Opik"')
 
-    # Search for traces that were logged after a specific date
-    traces = client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
+    # Filter by date range
+    results = client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
 
-    # Search for traces that have a specific tag
-    traces = client.search_traces(filter_string='tags contains "production"')
+    # Filter by tag
+    results = client.search_traces(filter_string='tags contains "production"')
 
-    # Search for traces based on the number of tokens used
-    traces = client.search_traces(filter_string='usage.total_tokens > 1000')
+    # Filter by token usage
+    results = client.search_traces(filter_string='usage.total_tokens > 1000')
 
-    # Search for traces based on the model used
-    traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
+    # Filter by metadata
+    results = client.search_traces(filter_string='metadata.model = "gpt-4o"')
 
-    # Search for traces that have a feedback score (not empty)
-    traces = client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
+    # Filter by feedback score presence
+    results = client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
 
-    # Search for traces that don't have a feedback score (empty)
-    traces = client.search_traces(filter_string='feedback_scores.user_rating is_empty')
+    # Filter by feedback score absence
+    results = client.search_traces(filter_string='feedback_scores.user_rating is_empty')
+
+    # The same filter syntax works for threads
+    threads = client.search_threads(filter_string='number_of_messages >= 5')
     ```
 
   </Tab>
@@ -181,37 +184,37 @@ Here are some full examples of using `filter_string` / `filterString` values in 
       projectName: "Default project"
     });
 
-    // Search for traces where the input contains text
+    // Filter by input content
     const traces1 = await client.searchTraces({
       filterString: 'input contains "Opik"'
     });
 
-    // Search for traces that were logged after a specific date
+    // Filter by date range
     const traces2 = await client.searchTraces({
       filterString: 'start_time >= "2024-01-01T00:00:00Z"'
     });
 
-    // Search for traces that have a specific tag
+    // Filter by tag
     const traces3 = await client.searchTraces({
       filterString: 'tags contains "production"'
     });
 
-    // Search for traces based on the number of tokens used
+    // Filter by token usage
     const traces4 = await client.searchTraces({
       filterString: 'usage.total_tokens > 1000'
     });
 
-    // Search for traces based on the model used
+    // Filter by metadata
     const traces5 = await client.searchTraces({
       filterString: 'metadata.model = "gpt-4o"'
     });
 
-    // Search for traces that have a feedback score (not empty)
+    // Filter by feedback score presence
     const traces6 = await client.searchTraces({
       filterString: 'feedback_scores.user_rating is_not_empty'
     });
 
-    // Search for traces that don't have a feedback score (empty)
+    // Filter by feedback score absence
     const traces7 = await client.searchTraces({
       filterString: 'feedback_scores.user_rating is_empty'
     });
@@ -238,7 +241,7 @@ or by using different quotes, surrounding in triple-quotes, like this:
 
 ### Exporting spans
 
-You can export spans using the [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans) method. This methods allows you to search for spans based on `trace_id` or based on a filter string.
+You can export spans using the [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans) method. This method allows you to search for spans based on `trace_id` or based on a filter string.
 
 #### Exporting spans based on `trace_id`
 
@@ -269,12 +272,6 @@ spans = client.search_spans(
   filter_string='input contains "Opik"'
 )
 ```
-
-<Tip>
-  The `filter_string` parameter should follow the same format as the
-  `filter_string` parameter in the `Opik.search_traces` method as [defined
-  above](#search-for-specific-traces).
-</Tip>
 
 ### Exporting threads
 
@@ -325,12 +322,6 @@ threads = client.search_threads(
   filter_string='tags contains "important"'
 )
 ```
-
-<Tip>
-  The `filter_string` parameter should follow the same format as the
-  `filter_string` parameter in the `Opik.search_traces` method as [defined
-  above](#search-for-specific-traces).
-</Tip>
 
 ## Using the Opik REST API
 
