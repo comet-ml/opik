@@ -220,9 +220,7 @@ export class ExperimentsClient {
      * @param {ExperimentsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.experiments.createExperiment({
-     *         datasetName: "dataset_name"
-     *     })
+     *     await client.experiments.createExperiment({})
      */
     public createExperiment(
         request: OpikApi.ExperimentWrite,

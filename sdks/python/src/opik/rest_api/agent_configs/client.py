@@ -151,6 +151,43 @@ class AgentConfigsClient:
         )
         return _response.data
 
+    def set_env_by_blueprint_name(
+        self,
+        env_name: str,
+        project_id: str,
+        *,
+        blueprint_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Sets an environment to point to a blueprint identified by name
+
+        Parameters
+        ----------
+        env_name : str
+
+        project_id : str
+
+        blueprint_name : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.set_env_by_blueprint_name(env_name='env_name', project_id='project_id', blueprint_name='blueprint_name', )
+        """
+        _response = self._raw_client.set_env_by_blueprint_name(
+            env_name, project_id, blueprint_name=blueprint_name, request_options=request_options
+        )
+        return _response.data
+
     def get_blueprint_by_id(
         self,
         blueprint_id: str,
@@ -182,6 +219,44 @@ class AgentConfigsClient:
         client.agent_configs.get_blueprint_by_id(blueprint_id='blueprint_id', )
         """
         _response = self._raw_client.get_blueprint_by_id(blueprint_id, mask_id=mask_id, request_options=request_options)
+        return _response.data
+
+    def get_blueprint_by_name(
+        self,
+        project_id: str,
+        name: str,
+        *,
+        mask_id: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AgentBlueprintPublic:
+        """
+        Retrieves a specific blueprint by its name within a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        name : str
+
+        mask_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AgentBlueprintPublic
+            Blueprint retrieved
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.get_blueprint_by_name(project_id='project_id', name='name', )
+        """
+        _response = self._raw_client.get_blueprint_by_name(
+            project_id, name, mask_id=mask_id, request_options=request_options
+        )
         return _response.data
 
     def get_blueprint_history(
@@ -429,6 +504,46 @@ class AsyncAgentConfigsClient:
         )
         return _response.data
 
+    async def set_env_by_blueprint_name(
+        self,
+        env_name: str,
+        project_id: str,
+        *,
+        blueprint_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Sets an environment to point to a blueprint identified by name
+
+        Parameters
+        ----------
+        env_name : str
+
+        project_id : str
+
+        blueprint_name : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.set_env_by_blueprint_name(env_name='env_name', project_id='project_id', blueprint_name='blueprint_name', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.set_env_by_blueprint_name(
+            env_name, project_id, blueprint_name=blueprint_name, request_options=request_options
+        )
+        return _response.data
+
     async def get_blueprint_by_id(
         self,
         blueprint_id: str,
@@ -464,6 +579,47 @@ class AsyncAgentConfigsClient:
         """
         _response = await self._raw_client.get_blueprint_by_id(
             blueprint_id, mask_id=mask_id, request_options=request_options
+        )
+        return _response.data
+
+    async def get_blueprint_by_name(
+        self,
+        project_id: str,
+        name: str,
+        *,
+        mask_id: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AgentBlueprintPublic:
+        """
+        Retrieves a specific blueprint by its name within a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        name : str
+
+        mask_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AgentBlueprintPublic
+            Blueprint retrieved
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.get_blueprint_by_name(project_id='project_id', name='name', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_blueprint_by_name(
+            project_id, name, mask_id=mask_id, request_options=request_options
         )
         return _response.data
 

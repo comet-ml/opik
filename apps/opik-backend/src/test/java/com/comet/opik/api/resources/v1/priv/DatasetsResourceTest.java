@@ -567,7 +567,7 @@ class DatasetsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(dataset.name()).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -803,7 +803,7 @@ class DatasetsResourceTest {
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
             mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
 
-            var request = new DatasetItemStreamRequest(name, null, null, null, null);
+            var request = DatasetItemStreamRequest.builder().datasetName(name).build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -1059,7 +1059,7 @@ class DatasetsResourceTest {
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(dataset.name()).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -1293,7 +1293,7 @@ class DatasetsResourceTest {
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, WORKSPACE_ID);
             mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
-            var request = new DatasetItemStreamRequest(name, null, null, null, null);
+            var request = DatasetItemStreamRequest.builder().datasetName(name).build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -1625,7 +1625,7 @@ class DatasetsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(dataset.name()).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -1647,12 +1647,61 @@ class DatasetsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new DatasetIdentifier(name)))) {
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(name).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
             }
+        }
+
+        @Test
+        @DisplayName("when retrieving dataset by name with project_name filter, then return dataset")
+        void getDatasetByIdentifier__whenProjectNameFilter__thenReturnDataset() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .projectId(projectId)
+                    .build();
+
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var identifier = DatasetIdentifier.builder()
+                    .datasetName(dataset.name())
+                    .projectName(projectName)
+                    .build();
+
+            var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, apiKey, workspaceName);
+            assertThat(actualEntity).usingRecursiveComparison()
+                    .ignoringFields(DATASET_IGNORED_FIELDS)
+                    .isEqualTo(dataset.toBuilder().projectId(projectId).build());
+        }
+
+        @Test
+        @DisplayName("when retrieving dataset by name with non-existing project_name, then return dataset without project scope")
+        void getDatasetByIdentifier__whenNonExistingProjectName__thenReturnDatasetWithoutProjectScope() {
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .build();
+
+            createAndAssert(dataset);
+
+            var identifier = DatasetIdentifier.builder()
+                    .datasetName(dataset.name())
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
+                    .build();
+
+            var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, API_KEY, TEST_WORKSPACE);
+            assertThat(actualEntity).usingRecursiveComparison()
+                    .ignoringFields(DATASET_IGNORED_FIELDS)
+                    .isEqualTo(dataset);
         }
 
         @Test
@@ -2960,18 +3009,15 @@ class DatasetsResourceTest {
 
                         createAndAssert(dataset, apiKey, workspaceName);
 
-                        Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        Experiment experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .type(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .promptVersion(
                                         Experiment.PromptVersionLink.builder()
                                                 .promptId(promptVersion.promptId())
                                                 .id(promptVersion.id())
                                                 .commit(promptVersion.commit())
                                                 .build())
-                                .promptVersions(null)
                                 .build();
 
                         createAndAssert(
@@ -2982,13 +3028,9 @@ class DatasetsResourceTest {
                         experiment = getExperiment(apiKey, workspaceName, experiment);
 
                         // Create trial experiment for the same dataset, should not be included in experiment count
-                        Experiment trial = factory.manufacturePojo(Experiment.class).toBuilder()
+                        Experiment trial = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .type(ExperimentType.TRIAL)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
-                                .promptVersions(null)
                                 .build();
 
                         createAndAssert(
@@ -3041,12 +3083,9 @@ class DatasetsResourceTest {
 
                         createAndAssert(dataset, apiKey, workspaceName);
 
-                        Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        Experiment experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .type(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
                                 .promptVersions(List.of(
                                         Experiment.PromptVersionLink.builder()
                                                 .promptId(promptVersion.promptId())
@@ -3470,7 +3509,7 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(dataset.name()).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -3499,7 +3538,7 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(dataset.name()).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -4383,6 +4422,105 @@ class DatasetsResourceTest {
 
             assertThat(actualItems).hasSize(items.size());
             assertPage(items.reversed(), actualItems);
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with project_name filter, then return items")
+        void streamDataItems__whenProjectNameFilter__thenReturnItems() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dataset = buildDataset().toBuilder().id(null).projectId(projectId).build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
+                    .build();
+
+            putAndAssert(batch, workspaceName, apiKey);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(dataset.name())
+                    .projectName(projectName)
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, apiKey,
+                    workspaceName);
+
+            assertThat(actualItems).hasSize(items.size());
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with project_id filter, then return items")
+        void streamDataItems__whenProjectIdFilter__thenReturnItems() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dataset = buildDataset().toBuilder().id(null).projectId(projectId).build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
+                    .build();
+
+            putAndAssert(batch, workspaceName, apiKey);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(dataset.name())
+                    .projectId(projectId)
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, apiKey,
+                    workspaceName);
+
+            assertThat(actualItems).hasSize(items.size());
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with non-existing project_name, then return items without project scope")
+        void streamDataItems__whenNonExistingProjectName__thenReturnItemsWithoutProjectScope() {
+            var items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualItems).hasSize(items.size());
         }
     }
 
@@ -6154,12 +6292,8 @@ class DatasetsResourceTest {
             // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
-                                .promptVersions(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -6370,12 +6504,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
-                    .promptVersion(null)
-                    .promptVersions(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -6572,12 +6702,8 @@ class DatasetsResourceTest {
             // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
-                                .promptVersion(null)
-                                .promptVersions(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -7366,12 +7492,8 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
             // Create experiment
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
-                    .promptVersion(null)
-                    .promptVersions(null)
                     .build();
 
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
@@ -7968,12 +8090,8 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
             // Create experiment
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8133,12 +8251,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8216,12 +8330,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8288,12 +8398,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8390,12 +8496,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8541,12 +8643,8 @@ class DatasetsResourceTest {
             // Create 5 experiments linked to the dataset
             List<UUID> experimentIds = IntStream.range(0, 5)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -8600,12 +8698,8 @@ class DatasetsResourceTest {
             // Create 2 experiments linked to the dataset
             List<UUID> experimentIds = IntStream.range(0, 2)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -8634,12 +8728,8 @@ class DatasetsResourceTest {
             // Create 3 more experiments linked to the dataset
             List<UUID> otherExperimentIds = IntStream.range(0, 3)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })
@@ -8685,12 +8775,8 @@ class DatasetsResourceTest {
             // Create experiments but no experiment items (no traces linked)
             List<UUID> experimentIds = IntStream.range(0, 2)
                     .mapToObj(i -> {
-                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
-                                .promptVersion(null)
-                                .promptVersions(null)
-                                .datasetVersionId(null)
-                                .datasetVersionSummary(null)
                                 .build();
                         return experimentResourceClient.create(experiment, apiKey, workspaceName);
                     })

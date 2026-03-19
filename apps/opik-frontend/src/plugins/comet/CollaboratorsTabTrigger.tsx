@@ -1,4 +1,4 @@
-import { TabsTrigger } from "@/components/ui/tabs";
+import { TabsTrigger } from "@/ui/tabs";
 import useUserPermission from "./useUserPermission";
 
 export interface CollaboratorsTabTriggerProps {

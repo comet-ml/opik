@@ -12,6 +12,10 @@ import type * as OpikApi from "../../../../index.js";
  *     }
  */
 export interface DashboardWrite {
+    /** Project ID. Takes precedence over project_name when both are provided. */
+    projectId?: string;
+    /** For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dashboard is created at workspace level. */
+    projectName?: string;
     name: string;
     type?: OpikApi.DashboardWriteType;
     scope?: OpikApi.DashboardWriteScope;

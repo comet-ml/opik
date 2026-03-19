@@ -1562,4 +1562,138 @@ class AgentConfigsResourceTest {
             assertConfigValues(expectedValues, latestBlueprint.values());
         }
     }
+
+    @Nested
+    @DisplayName("Delete Environment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteEnvironment {
+
+        @Test
+        @DisplayName("Success: delete existing environment, then getBlueprintByEnv returns 404")
+        void deleteEnv__whenEnvExists__thenSoftDeleted() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Test blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprintId = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.createOrUpdateEnvs(
+                    AgentConfigEnvUpdate.builder()
+                            .projectId(projectId)
+                            .envs(List.of(AgentConfigEnv.builder()
+                                    .envName("staging")
+                                    .blueprintId(blueprintId)
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            agentConfigsResourceClient.getBlueprintByEnv("staging", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            agentConfigsResourceClient.deleteEnv("staging", projectId, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            agentConfigsResourceClient.getBlueprintByEnv("staging", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Success: deleting non-existent environment returns 204 (idempotent)")
+        void deleteEnv__whenEnvDoesNotExist__thenReturn204() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Test blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.deleteEnv("nonexistent", projectId, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("Success: deleting env does not affect other envs on same project")
+        void deleteEnv__whenMultipleEnvs__thenOnlyTargetDeleted() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Test blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprintId = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.createOrUpdateEnvs(
+                    AgentConfigEnvUpdate.builder()
+                            .projectId(projectId)
+                            .envs(List.of(
+                                    AgentConfigEnv.builder().envName("staging").blueprintId(blueprintId).build(),
+                                    AgentConfigEnv.builder().envName("prod").blueprintId(blueprintId).build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            agentConfigsResourceClient.deleteEnv("staging", projectId, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            agentConfigsResourceClient.getBlueprintByEnv("staging", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+
+            agentConfigsResourceClient.getBlueprintByEnv("prod", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+        }
+
+        @Test
+        @DisplayName("Success: deleting already deleted env returns 204 (idempotent)")
+        void deleteEnv__whenAlreadyDeleted__thenReturn204() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Test blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprintId = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.createOrUpdateEnvs(
+                    AgentConfigEnvUpdate.builder()
+                            .projectId(projectId)
+                            .envs(List.of(AgentConfigEnv.builder()
+                                    .envName("staging")
+                                    .blueprintId(blueprintId)
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            agentConfigsResourceClient.deleteEnv("staging", projectId, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            agentConfigsResourceClient.deleteEnv("staging", projectId, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+    }
 }

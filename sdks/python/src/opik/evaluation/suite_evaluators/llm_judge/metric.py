@@ -6,14 +6,27 @@ in the backend and used with evaluation suites. The evaluator can
 evaluate one or more assertions/criteria against the agent's output.
 """
 
+import logging
 from typing import Any, Dict, List, Optional
+
+import tenacity
 
 from opik.evaluation.models import models_factory
 from opik.evaluation.metrics import score_result
+from opik.exceptions import LLMJudgeParseError
 
 from opik.evaluation.suite_evaluators import base
 from . import config as llm_judge_config
 from . import parsers
+
+LOGGER = logging.getLogger(__name__)
+
+_RETRY_POLICY = tenacity.retry(
+    retry=tenacity.retry_if_exception_type(LLMJudgeParseError),
+    stop=tenacity.stop_after_attempt(3),
+    before_sleep=tenacity.before_sleep_log(LOGGER, logging.WARNING),
+    reraise=True,
+)
 
 
 LLM_JUDGE_SYSTEM_PROMPT = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
@@ -226,6 +239,20 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
         """
+        try:
+            return self._generate_and_parse(input=input, output=output)
+        except LLMJudgeParseError as e:
+            LOGGER.warning(
+                "LLMJudge scoring failed after retries: %s", e, exc_info=True
+            )
+            return e.results
+
+    @_RETRY_POLICY
+    def _generate_and_parse(
+        self,
+        input: Any,
+        output: Any,
+    ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
         llm_query = _generate_prompt(
             input=input,
@@ -235,7 +262,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.response_format
         )
-
         return schema.parse(model_output)
 
     async def ascore(
@@ -257,6 +283,20 @@ class LLMJudge(base.BaseSuiteEvaluator):
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
         """
+        try:
+            return await self._agenerate_and_parse(input=input, output=output)
+        except LLMJudgeParseError as e:
+            LOGGER.warning(
+                "LLMJudge async scoring failed after retries: %s", e, exc_info=True
+            )
+            return e.results
+
+    @_RETRY_POLICY
+    async def _agenerate_and_parse(
+        self,
+        input: Any,
+        output: Any,
+    ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
         llm_query = _generate_prompt(
             input=input,
@@ -266,7 +306,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=schema.response_format
         )
-
         return schema.parse(model_output)
 
     def to_config(self) -> llm_judge_config.LLMJudgeConfig:

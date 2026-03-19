@@ -169,3 +169,18 @@ class SearchTimeoutError(OpikException):
     """Exception raised when a search times out."""
 
     pass
+
+
+class LLMJudgeParseError(OpikException):
+    """Raised when LLMJudge output fails validation.
+
+    Carries the partial ``ScoreResult`` list so callers can inspect what was
+    parsed before the error was raised.
+    """
+
+    def __init__(self, results: list, message: str) -> None:
+        self.results = results
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message

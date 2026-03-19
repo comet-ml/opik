@@ -13,8 +13,16 @@ export interface OptimizationPublic {
     datasetId?: string;
     numTrials?: number;
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
+    experimentScores?: OpikApi.FeedbackScoreAveragePublic[];
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;
     lastUpdatedBy?: string;
+    baselineObjectiveScore?: number;
+    bestObjectiveScore?: number;
+    baselineDuration?: number;
+    bestDuration?: number;
+    baselineCost?: number;
+    bestCost?: number;
+    totalOptimizationCost?: number;
 }

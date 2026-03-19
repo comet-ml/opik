@@ -9,6 +9,7 @@ from .dataset_item_compare_source import DatasetItemCompareSource
 from .evaluator_item_compare import EvaluatorItemCompare
 from .execution_policy_compare import ExecutionPolicyCompare
 from .experiment_item_compare import ExperimentItemCompare
+from .experiment_run_summary_compare import ExperimentRunSummaryCompare
 from .json_node import JsonNode
 
 
@@ -24,6 +25,7 @@ class DatasetItemCompare(UniversalBaseModel):
     evaluators: typing.Optional[typing.List[EvaluatorItemCompare]] = None
     execution_policy: typing.Optional[ExecutionPolicyCompare] = None
     experiment_items: typing.Optional[typing.List[ExperimentItemCompare]] = None
+    run_summaries_by_experiment: typing.Optional[typing.Dict[str, ExperimentRunSummaryCompare]] = None
     dataset_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

@@ -1,5 +1,6 @@
 export interface Permissions {
   canViewExperiments: boolean;
+  canCreateExperiments: boolean;
   canViewDashboards: boolean;
   canViewDatasets: boolean;
   canDeleteProjects: boolean;
@@ -17,6 +18,7 @@ export interface Permissions {
   canUpdateOnlineEvaluationRules: boolean;
   canUpdateAlerts: boolean;
   canAnnotateTraceSpanThread: boolean;
+  canCreateDashboards: boolean;
   canTagTrace: boolean;
 }
 
@@ -28,6 +30,7 @@ export interface PermissionsContextValue {
 export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
   permissions: {
     canViewExperiments: true,
+    canCreateExperiments: true,
     canViewDashboards: true,
     canViewDatasets: true,
     canDeleteProjects: true,
@@ -45,6 +48,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canUpdateOnlineEvaluationRules: true,
     canUpdateAlerts: true,
     canAnnotateTraceSpanThread: true,
+    canCreateDashboards: true,
     canTagTrace: true,
   },
   isPending: false,

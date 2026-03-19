@@ -149,6 +149,6 @@ className={cn("border", { "border-destructive": hasError })}
 
 ## Component Placement
 
-- **Reusable**: `components/shared/`
+- **Reusable**: `shared/`
 - **Page-specific**: Same folder as parent component
-- **Low-level UI**: `components/ui/`
+- **Low-level UI**: `ui/`

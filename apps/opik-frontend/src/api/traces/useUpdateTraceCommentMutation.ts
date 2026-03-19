@@ -8,7 +8,7 @@ import api, {
   TRACES_KEY,
   TRACES_REST_ENDPOINT,
 } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseUpdateTraceCommentMutationParams = {
   commentId: string;

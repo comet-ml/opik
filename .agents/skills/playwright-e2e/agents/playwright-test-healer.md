@@ -88,7 +88,7 @@ When a locator fails because no reliable selector exists for an element, you are
 this.page.locator('.some-dynamic-class > div:nth-child(2)')
 
 // Fix: add data-testid to the React component
-// In apps/opik-frontend/src/components/SomeComponent.tsx:
+// In apps/opik-frontend/src/v1/SomeComponent.tsx:
 //   <div data-testid="trace-detail-sidebar">...</div>
 
 // After: robust test ID in page object
