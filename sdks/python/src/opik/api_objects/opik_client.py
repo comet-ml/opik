@@ -890,9 +890,9 @@ class Opik:
 
     def get_datasets(
         self,
-        project_name: Optional[str] = None,
         max_results: int = 100,
         sync_items: bool = True,
+        project_name: Optional[str] = None,
     ) -> List[dataset.Dataset]:
         """
         Returns all datasets up to the specified limit.
@@ -931,6 +931,7 @@ class Opik:
         Returns:
             List[experiment.Experiment]: A list of experiment objects.
         """
+        project_name = self._resolve_project_name(project_name)
         dataset_id = dataset_rest_operations.get_dataset_id(
             self._rest_client, dataset_name=dataset_name, project_name=project_name
         )
@@ -1308,7 +1309,7 @@ class Opik:
         self._rest_client.experiments.update_experiment(id, **request_params)
 
     def get_experiment_by_name(
-        self, name: str, project_name: Optional[str]
+        self, name: str, project_name: Optional[str] = None
     ) -> experiment.Experiment:
         """
         Returns an existing experiment by its name.
