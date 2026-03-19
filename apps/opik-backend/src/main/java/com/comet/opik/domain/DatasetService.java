@@ -350,8 +350,7 @@ class DatasetServiceImpl implements DatasetService {
             Visibility visibility) {
         UUID projectId = null;
         if (StringUtils.isNotBlank(identifier.projectName())) {
-            projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName())
-                    .orElseThrow(() -> new NotFoundException("Project not found"));
+            projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
         }
         return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
     }
