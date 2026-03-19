@@ -15,25 +15,25 @@ import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBod
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { AssertionAggregation, Experiment } from "@/types/datasets";
+import { AssertionScoreAverage, Experiment } from "@/types/datasets";
 
 type AssertionRowData = {
   name: string;
-} & Record<string, AssertionAggregation | string | undefined>;
+} & Record<string, AssertionScoreAverage | string | undefined>;
 
-type AssertionAggregationMap = Record<
+type AssertionScoreMap = Record<
   string,
-  Record<string, AssertionAggregation>
+  Record<string, AssertionScoreAverage>
 >;
 
-function getAssertionAggregationMap(
+function getAssertionScoreMap(
   experiments: Experiment[],
-): AssertionAggregationMap {
-  return experiments.reduce<AssertionAggregationMap>((acc, e) => {
-    acc[e.id] = (e.assertion_aggregations ?? []).reduce<
-      Record<string, AssertionAggregation>
-    >((a, agg) => {
-      a[agg.name] = agg;
+): AssertionScoreMap {
+  return experiments.reduce<AssertionScoreMap>((acc, e) => {
+    acc[e.id] = (e.assertion_scores ?? []).reduce<
+      Record<string, AssertionScoreAverage>
+    >((a, score) => {
+      a[score.name] = score;
       return a;
     }, {});
     return acc;
@@ -41,16 +41,16 @@ function getAssertionAggregationMap(
 }
 
 interface GetAssertionRowsArguments {
-  aggregationMap: AssertionAggregationMap;
+  scoreMap: AssertionScoreMap;
   experimentsIds: string[];
 }
 
 function getAssertionRowsForExperiments({
-  aggregationMap,
+  scoreMap,
   experimentsIds,
 }: GetAssertionRowsArguments): AssertionRowData[] {
   const names = uniq(
-    Object.values(aggregationMap).reduce<string[]>(
+    Object.values(scoreMap).reduce<string[]>(
       (acc, map) => acc.concat(Object.keys(map)),
       [],
     ),
@@ -58,9 +58,9 @@ function getAssertionRowsForExperiments({
 
   return names.map((name) => {
     const data = experimentsIds.reduce<
-      Record<string, AssertionAggregation | undefined>
+      Record<string, AssertionScoreAverage | undefined>
     >((acc, id) => {
-      acc[id] = aggregationMap[id]?.[name] ?? undefined;
+      acc[id] = scoreMap[id]?.[name] ?? undefined;
       return acc;
     }, {});
 
@@ -130,14 +130,14 @@ const ExperimentAssertionsTab: React.FunctionComponent<
     return retVal;
   }, [experimentsIds, experiments]);
 
-  const aggregationMap = useMemo(
-    () => getAssertionAggregationMap(experiments),
+  const scoreMap = useMemo(
+    () => getAssertionScoreMap(experiments),
     [experiments],
   );
 
   const rows = useMemo(
-    () => getAssertionRowsForExperiments({ aggregationMap, experimentsIds }),
-    [aggregationMap, experimentsIds],
+    () => getAssertionRowsForExperiments({ scoreMap, experimentsIds }),
+    [scoreMap, experimentsIds],
   );
 
   const noDataText = isCompare
