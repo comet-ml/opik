@@ -649,12 +649,10 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit, UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptDAO promptDAO = handle.attach(PromptDAO.class);
-            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+        Prompt prompt = findByName(workspaceId, name, projectId);
 
-            // Use strict project lookup: no fallback to workspace-level when projectId is explicitly provided
-            Prompt prompt = promptDAO.findByName(name, workspaceId, projectId);
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
