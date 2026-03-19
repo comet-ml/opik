@@ -88,7 +88,7 @@ const getMenuItems = ({
                 path: "/$workspaceName/evaluation-suites",
                 type: MENU_ITEM_TYPE.router,
                 icon: ListChecks,
-                label: "Evaluation suites",
+                label: "Datasets",
                 count: "evaluation_suites",
               },
             ]
