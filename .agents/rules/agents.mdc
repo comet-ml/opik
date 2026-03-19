@@ -12,6 +12,15 @@ alwaysApply: true
 - `sdks/typescript/**` → TypeScript SDK skill
 - `tests_end_to_end/**` → Playwright E2E skill
 
+## Frontend v1/v2 Structure
+- `apps/opik-frontend/src/v1/` → current Opik 1 UI (layout, pages, pages-shared)
+- `apps/opik-frontend/src/v2/` → next Opik 2 UI (layout, pages, pages-shared)
+- All new FE development targets v2 only
+- v1 changes only on special request — v1 is maintained but not actively developed
+- v1 MUST NOT import from v2; v2 MUST NOT import from v1
+- Both share: ui/, shared/, api/, types/, store/, hooks/, lib/, constants/, contexts/, plugins/
+- Shared components: backward-compatible changes only; must not be version-aware (no `isV2` props)
+
 ## Task Approach
 - Complex features → Plan before implementing
 - Bug fixes → Reproduce with test first

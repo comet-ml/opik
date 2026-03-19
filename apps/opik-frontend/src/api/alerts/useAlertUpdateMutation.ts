@@ -4,7 +4,7 @@ import get from "lodash/get";
 
 import api, { ALERTS_KEY, ALERTS_REST_ENDPOINT } from "@/api/api";
 import { Alert } from "@/types/alerts";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseAlertUpdateMutationParams = {
   alert: Partial<Alert>;

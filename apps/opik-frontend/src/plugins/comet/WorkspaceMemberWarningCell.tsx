@@ -1,8 +1,8 @@
 import { CellContext } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
-import { Tag } from "@/components/ui/tag";
-import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Tag } from "@/ui/tag";
+import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { WorkspaceMember } from "./types";
 
 const WorkspaceMemberWarningCell = (

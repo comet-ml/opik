@@ -4,7 +4,7 @@ import get from "lodash/get";
 import isObject from "lodash/isObject";
 
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { Prompt, PROMPT_TYPE } from "@/types/prompts";
 import { extractIdFromLocation } from "@/lib/utils";
 

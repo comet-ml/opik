@@ -5,7 +5,7 @@ import api, {
   WORKSPACE_CONFIG_KEY,
 } from "@/api/api";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { WorkspaceConfig } from "@/types/workspaces";
 
 type UseWorkspaceConfigMutationParams = {

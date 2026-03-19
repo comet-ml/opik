@@ -6,7 +6,7 @@ import {
   DatasetExpansionRequest,
   DatasetExpansionResponse,
 } from "@/types/datasets";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseDatasetExpansionMutationParams = {
   datasetId: string;

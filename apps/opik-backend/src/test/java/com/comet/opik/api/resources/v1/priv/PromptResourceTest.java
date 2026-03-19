@@ -582,7 +582,10 @@ class PromptResourceTest {
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
-            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+            var promptVersionRetrieve = PromptVersionRetrieve.builder()
+                    .name(request.name())
+                    .commit(promptVersion.commit())
+                    .build();
 
             try (var actualResponse = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
@@ -925,7 +928,10 @@ class PromptResourceTest {
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+            var promptVersionRetrieve = PromptVersionRetrieve.builder()
+                    .name(request.name())
+                    .commit(promptVersion.commit())
+                    .build();
 
             try (var actualResponse = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
@@ -2541,21 +2547,24 @@ class PromptResourceTest {
                     // Retrieve by prompt name and commit null
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
-                                    promptVersion2, promptName) -> new PromptVersionRetrieve(promptName, null),
+                                    promptVersion2,
+                                    promptName) -> PromptVersionRetrieve.builder().name(promptName).build(),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion2),
                     // Retrieve by prompt name and first commit
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
                                     promptVersion2,
-                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion.commit()),
+                                    promptName) -> PromptVersionRetrieve.builder().name(promptName)
+                                            .commit(promptVersion.commit()).build(),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion),
                     // Retrieve by prompt name and last commit
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
                                     promptVersion2,
-                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion2.commit()),
+                                    promptName) -> PromptVersionRetrieve.builder().name(promptName)
+                                            .commit(promptVersion2.commit()).build(),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion2));
         }
@@ -2605,18 +2614,19 @@ class PromptResourceTest {
             return Stream.of(
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
-                                    prompt) -> new PromptVersionRetrieve(prompt.name(),
-                                            RandomStringUtils.randomAlphanumeric(8)),
+                                    prompt) -> PromptVersionRetrieve.builder().name(prompt.name())
+                                            .commit(RandomStringUtils.randomAlphanumeric(8)).build(),
                             "Prompt version not found"),
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
-                                    prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
-                                            promptVersion.commit()),
+                                    prompt) -> PromptVersionRetrieve.builder()
+                                            .name(RandomStringUtils.randomAlphanumeric(10))
+                                            .commit(promptVersion.commit()).build(),
                             "Prompt not found"),
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
-                                    prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
-                                            null),
+                                    prompt) -> PromptVersionRetrieve.builder()
+                                            .name(RandomStringUtils.randomAlphanumeric(10)).build(),
                             "Prompt not found"));
         }
 
@@ -2642,15 +2652,20 @@ class PromptResourceTest {
         public Stream<Arguments> when__promptVersionRetrieveRequestIsInvalid__thenReturnError() {
             return Stream.of(
                     arguments(
-                            new PromptVersionRetrieve(null, null),
+                            PromptVersionRetrieve.builder().build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
                             new ErrorMessage(List.of("name must not be blank"))),
                     arguments(
-                            new PromptVersionRetrieve("", null),
+                            PromptVersionRetrieve.builder().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
-                            new ErrorMessage(List.of("name must not be blank"))));
+                            new ErrorMessage(List.of("name must not be blank"))),
+                    arguments(
+                            PromptVersionRetrieve.builder().name("valid-name").projectName("").build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            ErrorMessage.class,
+                            new ErrorMessage(List.of("projectName must not be blank"))));
         }
 
         @Test
@@ -2679,7 +2694,7 @@ class PromptResourceTest {
                     .build();
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null);
+            var retrieveRequest = PromptVersionRetrieve.builder().name(prompt.name()).build();
 
             retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
         }
@@ -2713,9 +2728,131 @@ class PromptResourceTest {
                     .build();
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null);
+            var retrieveRequest = PromptVersionRetrieve.builder().name(prompt.name()).build();
 
             retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("Success: should retrieve prompt version scoped by project_name")
+        void shouldRetrievePromptVersionScopedByProjectName() {
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .projectId(projectId)
+                    .build();
+
+            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when project_name does not match the prompt's project, then fall back to workspace-level and return it")
+        void whenProjectNameDoesNotMatchPromptProject__thenFallBackToWorkspaceAndReturnIt() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var otherProjectName = "project-" + UUID.randomUUID();
+            var otherProjectId = projectResourceClient.createProject(otherProjectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            // Create the prompt version under otherProject
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .projectId(otherProjectId)
+                    .build();
+
+            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve using a different project name: project-level lookup misses, falls back to workspace-wide and finds it
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when prompt has no project and project_name is provided, then fall back to workspace-level and return it")
+        void whenPromptHasNoProjectAndProjectNameProvided__thenFallBackToWorkspaceAndReturnIt() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            // Create prompt version with no project (workspace-level)
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .build();
+
+            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve with a project name: project-level lookup misses, falls back to workspace-wide and finds it
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when project_name does not exist, fall back to workspace-wide, prompt not found, then return not found")
+        void whenProjectNameDoesNotExist__thenReturnNotFound() {
+            var nonExistentProjectName = "project-" + UUID.randomUUID();
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name("any-prompt-name-" + UUID.randomUUID())
+                    .projectName(nonExistentProjectName)
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
         }
 
     }

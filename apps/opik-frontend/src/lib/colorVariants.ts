@@ -1,4 +1,4 @@
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
+import { TAG_VARIANTS_COLOR_MAP } from "@/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 import { CSS_VAR_TO_HEX, HEX_COLOR_REGEX } from "@/constants/colorVariants";
 

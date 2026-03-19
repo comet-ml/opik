@@ -3,7 +3,7 @@ import get from "lodash/get";
 import api, { OPTIMIZATIONS_KEY, OPTIMIZATIONS_REST_ENDPOINT } from "@/api/api";
 import { Optimization } from "@/types/optimizations";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 

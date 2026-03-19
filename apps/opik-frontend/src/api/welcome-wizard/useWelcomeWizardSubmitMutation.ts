@@ -5,7 +5,7 @@ import {
   WelcomeWizardTracking,
 } from "@/types/welcome-wizard";
 import { WELCOME_WIZARD_QUERY_KEY } from "./useWelcomeWizardStatus";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 const submitWelcomeWizard = async (submission: WelcomeWizardSubmission) => {
   const { data } = await api.post<WelcomeWizardTracking>(

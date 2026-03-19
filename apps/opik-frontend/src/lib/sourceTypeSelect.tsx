@@ -3,7 +3,7 @@ import { ListTree, LucideIcon, SquareStack } from "lucide-react";
 
 import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { DropdownOption } from "@/types/shared";
-import { SelectItem } from "@/components/ui/select";
+import { SelectItem } from "@/ui/select";
 
 export const SOURCE_OPTIONS: DropdownOption<string>[] = [
   { value: TRACE_DATA_TYPE.traces, label: "Traces" },

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 
 import api, { THREADS_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import {
   TagUpdateFields,
   buildTagUpdatePayload,
