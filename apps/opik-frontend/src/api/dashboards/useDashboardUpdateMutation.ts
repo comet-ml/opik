@@ -8,7 +8,7 @@ import api, {
   DASHBOARDS_REST_ENDPOINT,
 } from "@/api/api";
 import { Dashboard } from "@/types/dashboard";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseDashboardUpdateMutationParams = {
   dashboard: Partial<Dashboard>;

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useTheme } from "@/components/theme-provider";
+import { useTheme } from "@/v1/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 
 export type JsonViewThemeProps = {

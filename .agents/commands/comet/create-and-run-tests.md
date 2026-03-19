@@ -71,15 +71,15 @@ This workflow will:
   # Backend - Run specific test classes or packages
   mvn test -Dtest="UserServiceTest"
   mvn test -Dtest="UserServiceTest#shouldCreateUser_whenValidRequest"
-  
-  # Frontend - Run tests for changed components
+
+  # Frontend - Run tests for changed v1
   npm test -- UserProfile.test.tsx
-  npm test -- --run src/components/UserProfile/
-  
+  npm test -- --run src/v1/UserProfile/
+
   # Python SDK - Run specific test files or functions
   pytest tests/unit/test_user_service.py
   pytest tests/unit/test_user_service.py::test_create_user__happyflow
-  
+
   # TypeScript SDK - Run specific test files
   npm test -- UserService.test.ts
   ```
@@ -127,14 +127,14 @@ void shouldCreateUser_whenValidRequest() {
         .name("John Doe")
         .email("john@example.com")
         .build();
-    
+
     var expectedId = "user-123";
     when(idGenerator.generate()).thenReturn(expectedId);
     when(userDao.create(any(User.class))).thenReturn(expectedUser);
-    
+
     // When
     var actualUser = userService.createUser(request);
-    
+
     // Then
     assertThat(actualUser).isEqualTo(expectedUser);
     verify(userDao).create(any(User.class));
@@ -152,10 +152,10 @@ test('should render user profile with data', async () => {
   // Given
   const mockUser = { id: '1', name: 'John Doe', email: 'john@example.com' };
   vi.mocked(useUser).mockReturnValue({ data: mockUser, isLoading: false });
-  
+
   // When
   render(<UserProfile userId="1" />);
-  
+
   // Then
   expect(screen.getByText('John Doe')).toBeInTheDocument();
   expect(screen.getByText('john@example.com')).toBeInTheDocument();
@@ -172,10 +172,10 @@ test('should render user profile with data', async () => {
 def test_create_user__happyflow(fake_backend):
     # Given
     request = UserCreateRequest(name="John Doe", email="john@example.com")
-    
+
     # When
     actual_user = user_service.create_user(request)
-    
+
     # Then
     assert actual_user is not None
     assert actual_user.name == request.name
@@ -195,10 +195,10 @@ test('should create user when valid request', async () => {
     ok: true,
     json: async () => mockUser,
   } as Response);
-  
+
   // When
   const result = await client.createUser({ name: 'John Doe' });
-  
+
   // Then
   expect(result).toEqual(mockUser);
 });
@@ -275,7 +275,7 @@ test('should create user when valid request', async () => {
   ```bash
   # For new tests
   git commit -m "Revision X: Add comprehensive tests for <feature>"
-  
+
   # For test fixes
   git commit -m "Revision X: Fix failing test cases"
   ```

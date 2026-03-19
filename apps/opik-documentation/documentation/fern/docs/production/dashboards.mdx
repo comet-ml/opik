@@ -7,118 +7,131 @@ og:title: Dashboards - Opik
 title: Dashboards
 ---
 
-Dashboards allow you to create customizable views for monitoring your LLM applications. You can track project metrics like token usage, cost, and feedback scores, as well as compare experiment results across different runs.
+Dashboards allow you to create customizable views for monitoring your LLM applications. You can track project metrics like trace volume, cost, latency, and feedback scores, as well as compare experiment results across different runs.
+
+Opik provides two ways to visualize data:
+
+- **Insights** — built-in and custom views embedded directly in project and experiment pages for quick, in-context monitoring
+- **Workspace dashboards** — standalone dashboards accessible from the sidebar for cross-project analysis
 
 <Frame>
-  <img src="/img/production/dashboard_example.png" alt="Dashboard" />
+  <img src="/img/production/dashboard_example.png" alt="Project Overview — built-in Insights view" />
 </Frame>
-
-<Note>
-  Dashboards are currently in Beta. The feature is fully functional but may
-  receive updates based on user feedback. We are actively working on expanding
-  dashboard capabilities and will be adding new features in the near future.
-</Note>
 
 If you have any feedback or feature requests for dashboards, please [open an issue on GitHub](https://github.com/comet-ml/opik/issues).
 
+## Dashboard types
+
+Every dashboard has a **type** that determines what kind of data it works with and which widgets are available:
+
+| Type | Purpose | Available widgets |
+|------|---------|-------------------|
+| **Multi-project** | Track metrics across one or more projects (traces, threads, cost, latency) | Time series, Single metric, Markdown |
+| **Experiments** | Compare feedback scores and results across experiment runs | Metrics, Leaderboard, Markdown |
+
 ## Accessing dashboards
 
-Dashboards are available in three locations within Opik:
+### Dashboards page
 
-1. **Dashboards page**: Access the standalone dashboards page from the sidebar navigation to create and manage all your dashboards.
+Access the standalone Dashboards page from the sidebar navigation to create and manage workspace-level dashboards. The dashboards list includes a **Type** column showing whether each dashboard is Multi-project or Experiments.
 
-2. **Project page**: Switch to the Dashboards tab within any project to view metrics specific to that project's traces and threads.
+### Project page — Insights tab
 
-3. **Experiment page**: When comparing experiments, use the Dashboards tab to visualize feedback scores across different experiment runs.
+Within any project, the **Insights** tab provides built-in and custom views for monitoring that project's traces, threads, and quality metrics.
 
-## Dashboard templates
+### Compare Experiments — Insights tab
 
-Opik provides pre-built templates to help you get started quickly:
+When comparing experiments, the **Insights** tab shows a built-in read-only view with experiment comparison charts.
+
+## Insights tab
+
+The Insights tab provides curated, in-context monitoring views directly within project and experiment pages.
+
+### Project Insights
+
+When you open a project's Insights tab, you land on the built-in **Project Overview** view — a read-only dashboard covering key health metrics: trace volume, errors, latency, cost, feedback scores, and thread activity.
+
+#### Custom views
+
+Beyond the built-in view, you can create custom Insight views for your project:
+
+1. Open the **views selector** dropdown in the Insights tab
+2. Click **Add new** at the bottom
+3. Enter a name for your view
+
+Custom views are fully editable — you can add sections, configure widgets, and rearrange the layout. The current project is automatically set as the data source for all widgets.
+
+**Views selector dropdown:**
+
+- Search box at the top for filtering views
+- Built-in "Project Overview" is always listed first with a "Built-in" tag
+- Custom views appear below with their widget count and last modified date
+- **Add new** button at the bottom
 
 <Frame>
-  <img
-    src="/img/production/dashboard_templates.png"
-    alt="Dashboard templates"
-  />
+  <img src="/img/production/dashboard_insights_views_selector.png" alt="Views selector dropdown" />
 </Frame>
 
-### Performance overview template
+**View actions** (available on hover for custom views):
 
-A comprehensive template for monitoring project performance including:
+- **Edit name** — rename the view
+- **Duplicate** — create a copy of the view
+- **Delete** — remove the view (this action cannot be undone)
 
-- **Traces and Threads volume**: Track the number of traces and threads over time
-- **Quality metrics**: Monitor feedback scores for both traces and threads
-- **Duration and Latency**: Analyze trace and thread duration trends
-- **Summary cards**: Quick overview of traces, threads, errors, latency, and cost
+You can also **duplicate the built-in view** to create an editable copy as a custom view.
 
-<Frame>
-  <img
-    src="/img/production/dashboard_performance_overview.png"
-    alt="Performance overview template"
-  />
-</Frame>
+The Insights tab has its own time range selector, separate from the Logs tab. Each tab remembers its own time range across sessions.
 
-### Project metrics template
+### Experiment Insights
 
-Focused on operational metrics for your project:
-
-- **Token usage**: Monitor token consumption over time
-- **Estimated cost**: Track spending trends
-- **Feedback scores**: View quality metrics for traces and threads
-- **Trace and thread counts**: Monitor volume trends
-- **Duration metrics**: Analyze performance over time
-- **Failed guardrails**: Track guardrail violations
-
-### Experiment insights template
-
-Designed for comparing experiment results:
-
-- **Feedback scores radar chart**: Compare multiple metrics across experiments at a glance
-- **Feedback scores distribution**: Detailed bar chart comparison of scores
+When comparing experiments, the Insights tab shows a single built-in read-only view displaying experiment comparison charts for the currently selected experiments. There is no view selector — only the built-in view is available.
 
 <Frame>
-  <img
-    src="/img/production/dashboard_experiment_comparison.png"
-    alt="Experiment insights template"
-  />
+  <img src="/img/production/dashboard_insights_experiment.png" alt="Experiment Insights tab" />
 </Frame>
 
 ## Widget types
 
-Dashboards support several widget types that you can add to your sections:
+Dashboards support several widget types. The available types depend on the dashboard type (Multi-project or Experiments).
 
-### Project metrics widget
+### Time series widget (Multi-project)
 
-Displays time-series charts for project metrics over time. This widget visualizes how your metrics change and trend over time. Supports both line and bar chart visualizations for flexible data presentation.
+Displays time-series charts for project metrics over time. Supports both line and bar chart visualizations.
 
 **Available metrics:**
 
-- **Trace feedback scores** - View quality metrics for traces over time
-- **Number of traces** - Monitor trace volume trends
-- **Trace duration** - Analyze trace performance trends
-- **Token usage** - Monitor token consumption over time
-- **Estimated cost** - Track spending trends
-- **Failed guardrails** - Track guardrail violations over time
-- **Number of threads** - Monitor thread volume trends
-- **Thread duration** - Analyze thread performance trends
-- **Thread feedback scores** - View quality metrics for threads over time
+- **Trace feedback scores** - Quality metrics for traces over time
+- **Number of traces** - Trace volume trends
+- **Trace duration** - Trace performance trends
+- **Token usage** - Token consumption over time
+- **Estimated cost** - Spending trends
+- **Failed guardrails** - Guardrail violations over time
+- **Number of threads** - Thread volume trends
+- **Thread duration** - Thread performance trends
+- **Thread feedback scores** - Quality metrics for threads over time
 
 **Configuration options:**
 
-- **Project**: Select a specific project or use the dashboard's default project
+- **Project**: Select the project to pull data from
 - **Metric type**: Choose from any of the metrics listed above
-- **Chart type**: Line chart (best for trends) or Bar chart (good for period comparisons)
+- **Chart type**: Line chart (best for trends) or Bar chart (good for volume/period comparisons)
+- **Breakdown**: Optionally group data by a field to see per-group patterns. Available fields depend on the data source:
+  - Trace metrics: Tags, Name, Has error, Error type, Metadata key
+  - Span metrics: Tags, Name, Has error, Error type, Metadata key, Model, Provider, Span type
+  - Thread metrics: Tags
+
+  When a breakdown is active, use the **aggregation toggle** to control how data is bucketed: **Total** shows one value per group for the entire date range, while **Time-based** shows values in time buckets (hourly, daily, or weekly). Click a label in the chart legend to navigate directly to the traces list filtered to that group.
 - **Filters**: Apply trace or thread filters to focus on specific data based on tags, metadata, or other attributes
 - **Feedback scores**: When using feedback score metrics, optionally select specific scores to display (leave empty to show all)
 
 <Frame>
   <img
     src="/img/production/dashboard_widget_project_metrics.png"
-    alt="Project metrics widget example"
+    alt="Time series widget example"
   />
 </Frame>
 
-### Project statistics widget
+### Single metric widget (Multi-project)
 
 Shows a single metric value with a compact card display. Ideal for summary dashboards and key performance indicators.
 
@@ -157,45 +170,31 @@ Shows a single metric value with a compact card display. Ideal for summary dashb
 <Frame>
   <img
     src="/img/production/dashboard_widget_project_stats.png"
-    alt="Project statistics widget example"
+    alt="Single metric widget example"
   />
 </Frame>
 
-### Experiments metrics widget
+### Metrics widget (Experiments)
 
-Compares feedback scores across multiple experiments. Ideal for visualizing A/B test results and prompt iteration outcomes. Supports multiple chart types and flexible data selection methods.
+Compares feedback scores across multiple experiments. Ideal for visualizing A/B test results and prompt iteration outcomes.
 
 **Chart types:**
 
 - **Line chart** - Show trends across experiments (default)
-- **Bar chart** - View detailed score distributions side by side - ideal for precise comparisons
-- **Radar chart** - Compare multiple feedback scores across experiments in a radial view - great for seeing overall performance patterns
-
-**Data selection methods:**
-
-- **Filter and group**: Dynamically filter and aggregate experiment results. You can:
-
-  - Filter by dataset (e.g., only experiments from a specific dataset)
-  - Filter by configuration metadata (e.g., model="gpt-4", temperature="0.7")
-  - Group by dataset to compare results across different datasets
-  - Group by configuration keys (e.g., group by model or prompt version) to aggregate feedback scores - supports up to 5 grouping levels for hierarchical comparisons
-  - Best for: creating dashboards that automatically include new experiments matching your criteria
-
-- **Select experiments**: Manually select specific experiments to compare (up to 10 at a time). When creating widgets from the Experiment page (Compare experiments view), you can use this mode to visualize the experiments you're currently comparing. Best for:
-  - Comparing specific experiment runs you want to highlight
-  - A/B testing with a fixed set of experiments
-  - Creating focused comparisons for presentations or reports
+- **Bar chart** - View detailed score distributions side by side
+- **Radar chart** - Compare multiple feedback scores across experiments in a radial view
 
 **Configuration options:**
 
-- **Data source**: Choose between "Filter and group" or "Select experiments" mode
-- **Filters** (Filter and group mode only): Filter experiments by:
-  - Dataset - show only experiments from a specific dataset
-  - Configuration - filter by metadata keys and values (e.g., model="gpt-4")
-- **Groups** (Filter and group mode only): Group aggregated results by:
-  - Dataset - compare results across different datasets
-  - Configuration - group by metadata keys to aggregate feedback scores (e.g., group by model type)
-- **Experiments** (Select experiments mode only): Manually select specific experiments from your list (limited to 10 experiments)
+- **Filters**: Filter experiments by:
+  - Dataset — show only experiments from a specific dataset
+  - Configuration — filter by metadata keys and values (e.g., model="gpt-4")
+  - Experiment IDs — include specific experiments by ID
+- **Groups** (collapsible, collapsed by default): Group aggregated results by:
+  - Dataset — compare results across different datasets
+  - Configuration — group by metadata keys to aggregate feedback scores (e.g., group by model type)
+  - Supports up to 5 grouping levels for hierarchical comparisons
+- **Max experiments**: Limit the number of experiments displayed
 - **Chart type**: Choose line, bar, or radar chart visualization
 - **Metrics**: Optionally display only specific feedback scores (leave empty to show all)
 
@@ -206,36 +205,30 @@ Compares feedback scores across multiple experiments. Ideal for visualizing A/B 
   />
 </Frame>
 
+### Leaderboard widget (Experiments)
+
+Displays a table comparing experiments with configurable columns. Useful for ranking experiments by specific metrics and comparing results at a glance.
+
+**Configuration options:**
+
+- **Filters**: Same filtering options as the Metrics widget (dataset, configuration, experiment IDs)
+- **Groups**: Same grouping options as the Metrics widget
+- **Max experiments**: Limit the number of experiments displayed
+- **Columns**: Select and reorder which columns to display. The columns menu shows all available columns with a "N of N selected" indicator and drag handles for reordering
+- **Ranking**: Rank experiments by a specific metric. Options are "No ranking" (default) and any available feedback score metric. When "No ranking" is selected, the ranking order option is disabled
+
+<Frame>
+  <img src="/img/production/dashboard_widget_leaderboard.png" alt="Leaderboard widget example" />
+</Frame>
+
 ### Markdown text widget
 
-Add custom notes, descriptions, or documentation to your dashboard using markdown formatting. Use this widget to:
+Available for both Multi-project and Experiments dashboards. Add custom notes, descriptions, or documentation using markdown formatting. Use this widget to:
 
 - Add section headers and explanations
 - Document dashboard purpose and context
 - Include links to related resources
 - Add team notes or guidelines
-
-**Example markdown content:**
-
-```markdown
-## Production Metrics Dashboard
-
-This dashboard monitors our production LLM application performance.
-
-**Key Metrics:**
-
-- Token usage should stay under 100K/day
-- Average latency target: < 500ms
-- Error rate threshold: < 1%
-
-**Weekly Review Schedule:**
-
-- Monday: Review cost trends
-- Wednesday: Check quality metrics
-- Friday: Performance analysis
-
-For more details, see our [Monitoring Guidelines](https://your-docs-link.com)
-```
 
 <Frame>
   <img
@@ -244,23 +237,33 @@ For more details, see our [Monitoring Guidelines](https://your-docs-link.com)
   />
 </Frame>
 
-## Creating a dashboard
+## Creating a workspace dashboard
 
-### From the Dashboards page
-
-1. Navigate to the Dashboards page from the sidebar
+1. Navigate to the **Dashboards** page from the sidebar
 2. Click **Create new dashboard**
-3. Enter a name and optional description
-4. Select a template to start from, or begin with a blank dashboard
+3. Select the dashboard type: **Multi-project** or **Experiments**
+4. Enter a name (description is optional)
 5. Click **Create**
 
-### From the Dashboards tab
+<Frame>
+  <img src="/img/production/dashboard_create_dialog.png" alt="Create dashboard dialog" />
+</Frame>
 
-When viewing a project or comparing experiments:
+## Adding and configuring widgets
 
-1. Switch to the **Dashboards** tab
-2. Use the dropdown to select an existing dashboard or create a new one
-3. New dashboards inherit the current project or experiment context
+When you click the **+** button within a section, a unified widget configuration modal opens:
+
+1. **Select a widget type** from the clickable cards at the top. The available types depend on the dashboard type:
+   - **Multi-project**: Time series, Single metric, Markdown
+   - **Experiments**: Metrics, Leaderboard, Markdown
+2. Configure the widget settings below. The configuration area updates based on the selected widget type.
+3. Each widget has its own **project or experiment selector** — there are no global dashboard defaults. For Insight views, the current project is automatically set.
+4. For chart widgets, select the **visualization type** (line, bar, or radar) using clickable cards.
+5. Click **Save** to add the widget.
+
+<Frame>
+  <img src="/img/production/dashboard_add_widget.png" alt="Add widget dialog" />
+</Frame>
 
 ## Customizing dashboards
 
@@ -271,22 +274,6 @@ Dashboards are organized into sections, each containing one or more widgets:
 1. Click **Add section** at the bottom of the dashboard
 2. Give the section a title
 3. Add widgets to the section
-
-### Adding widgets
-
-1. Click the **+** button within a section
-2. Select the widget type from the available options
-3. Configure the widget settings:
-   - Title and subtitle
-   - Metric type (for metrics widgets)
-   - Chart type (line, bar, or radar)
-   - Filters to narrow the data
-   - Feedback scores to display (where applicable)
-4. Click **Save** to add the widget
-
-<Frame>
-  <img src="/img/production/dashboard_add_widget.png" alt="Add widget dialog" />
-</Frame>
 
 ### Editing widgets
 
@@ -305,34 +292,22 @@ Click on a section title to collapse or expand it. The collapsed state is preser
 
 ## Date range filtering
 
-Project-based widgets respect the global date range filter:
-
-1. Use the date picker in the dashboard toolbar
-2. Select a preset range (Last 24 hours, Last 7 days, etc.) or choose custom dates
-3. Applicable widgets automatically update to show data within the selected range
+Use the date picker in the toolbar to filter data by time range. Select a preset range (Last 24 hours, Last 7 days, etc.) or choose custom dates.
 
 **Widgets that use date range filtering:**
 
-- Project metrics widget - filters time-series data to the selected range
-- Project statistics widget - calculates statistics within the selected range
+- Time series widget - filters time-series data to the selected range
+- Single metric widget - calculates statistics within the selected range
 
 **Widgets not affected by date range:**
 
 - Experiments metrics widget - displays experiment results regardless of date
+- Leaderboard widget - displays experiment results regardless of date
 - Markdown text widget - static content
 
 ## Saving changes
 
-Dashboards auto-detect changes. When you make modifications:
-
-1. The **Save** and **Discard** buttons appear in the toolbar
-2. Click **Save** to persist your changes
-3. Click **Discard** to revert to the last saved state
-
-<Warning>
-  Unsaved changes will be lost if you navigate away. A confirmation dialog will
-  appear if you try to leave with unsaved changes.
-</Warning>
+All dashboard changes are **saved automatically**. Built-in Insight views are read-only — duplicate them to create an editable copy.
 
 ## Sharing dashboards
 
@@ -342,26 +317,7 @@ To share your current dashboard view:
 2. The URL is copied to your clipboard
 3. Share this URL with team members who have access to the workspace
 
-The shared URL includes the dashboard ID and any active filters, so recipients see the same view.
-
-## Working with templates
-
-### Using a template
-
-Templates provide a starting point for common monitoring scenarios:
-
-1. When creating a new dashboard, select a template
-2. The dashboard is populated with pre-configured sections and widgets
-3. Customize as needed for your specific use case
-
-### Saving as a new dashboard
-
-If you've customized a template and want to save it:
-
-1. Make your modifications to the template view
-2. Click **Save as new dashboard**
-3. Enter a name for your new dashboard
-4. The dashboard is saved to your workspace and can be accessed from the Dashboards page
+The shared URL includes the dashboard ID, active date range, and any active filters, so recipients see the same view.
 
 ## Next steps
 

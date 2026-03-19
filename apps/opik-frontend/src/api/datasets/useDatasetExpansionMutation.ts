@@ -6,7 +6,7 @@ import {
   DatasetExpansionRequest,
   DatasetExpansionResponse,
 } from "@/types/datasets";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseDatasetExpansionMutationParams = {
   datasetId: string;
@@ -30,7 +30,7 @@ const useDatasetExpansionMutation = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Dataset expansion successful",
+        title: "Evaluation suite expansion successful",
         description: "Synthetic samples have been generated successfully",
       });
     },
@@ -41,7 +41,9 @@ const useDatasetExpansionMutation = () => {
       };
 
       let message =
-        errorData?.message || errorData?.detail || "Failed to expand dataset";
+        errorData?.message ||
+        errorData?.detail ||
+        "Failed to expand evaluation suite";
 
       // Handle specific model not supported error
       if (message.includes("model not supported")) {
@@ -51,7 +53,7 @@ const useDatasetExpansionMutation = () => {
       }
 
       toast({
-        title: "Dataset expansion failed",
+        title: "Evaluation suite expansion failed",
         description: message,
         variant: "destructive",
       });

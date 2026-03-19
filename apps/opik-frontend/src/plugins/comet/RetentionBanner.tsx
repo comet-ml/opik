@@ -7,13 +7,13 @@ import { QUOTA_TYPE } from "@/plugins/comet/types/quotas";
 import useWorkspaceQuotas from "@/plugins/comet/api/useWorkspaceQuotas";
 import useUser from "@/plugins/comet/useUser";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import { ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import { buildUrl } from "@/plugins/comet/utils";
 import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 interface RetentionBannerProps {
   onChangeHeight: (height: number) => void;

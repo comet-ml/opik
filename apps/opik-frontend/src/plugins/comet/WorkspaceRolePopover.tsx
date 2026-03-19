@@ -1,6 +1,6 @@
 import React from "react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { SelectContent, SelectItem } from "@/components/ui/select";
+import { Checkbox } from "@/ui/checkbox";
+import { SelectContent, SelectItem } from "@/ui/select";
 import { cn } from "@/lib/utils";
 import useManageUsersRolePopover from "@/plugins/comet/WorkspaceRoleCell/useManageUsersRolePopover";
 

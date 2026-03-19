@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import get from "lodash/get";
 
 import api, { BASE_OPIK_AI_URL, TRACE_ANALYZER_REST_ENDPOINT } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseTraceAnalyzerFeedbackDeleteMutationParams = {
   traceId: string;

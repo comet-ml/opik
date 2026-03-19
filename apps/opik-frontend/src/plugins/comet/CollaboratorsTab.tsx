@@ -10,19 +10,16 @@ import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useWorkspaceEmailInvites from "@/plugins/comet/useWorkspaceEmailInvites";
 import useUserPermission from "@/plugins/comet/useUserPermission";
-import DataTable from "@/components/shared/DataTable/DataTable";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import Loader from "@/components/shared/Loader/Loader";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import DataTable from "@/shared/DataTable/DataTable";
+import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
+import SearchInput from "@/shared/SearchInput/SearchInput";
+import Loader from "@/shared/Loader/Loader";
+import { Button } from "@/ui/button";
+import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import InviteUsersPopover from "./InviteUsersPopover";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
-import TimeCell from "@/components/shared/DataTableCells/TimeCell";
+import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 import {
@@ -34,7 +31,7 @@ import {
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell";
 import WorkspaceMemberWarningCell from "./WorkspaceMemberWarningCell";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import { generateActionsColumDef } from "@/shared/DataTable/utils";
 import { WorkspaceRolesProvider } from "./WorkspaceRolesContext";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";

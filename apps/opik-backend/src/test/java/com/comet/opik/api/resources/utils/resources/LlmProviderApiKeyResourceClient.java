@@ -51,6 +51,35 @@ public class LlmProviderApiKeyResourceClient {
         }
     }
 
+    public Response callCreateProviderApiKey(ProviderApiKey providerApiKey, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(providerApiKey));
+    }
+
+    public Response callUpdateProviderApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(providerApiKeyUpdate));
+    }
+
+    public Response callDeleteProviderApiKeys(Set<UUID> ids, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new BatchDelete(ids)));
+    }
+
     public Response createProviderApiKey(
             String body, String apiKey, String workspaceName, int expectedStatus) {
 

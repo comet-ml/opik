@@ -76,8 +76,8 @@ import { SquareArrowOutUpRight } from "lucide-react";
 import get from "lodash/get";
 
 // 3. Internal imports (@/) — no strict ordering required
-import { Button } from "@/components/ui/button";
-import DataTable from "@/components/shared/DataTable/DataTable";
+import { Button } from "@/ui/button";
+import DataTable from "@/shared/DataTable/DataTable";
 import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import { cn } from "@/lib/utils";
