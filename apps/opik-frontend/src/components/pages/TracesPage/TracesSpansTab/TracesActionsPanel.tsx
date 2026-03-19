@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { MessageSquarePlus, Tag, Trash } from "lucide-react";
 import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
@@ -12,6 +12,7 @@ import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import EvaluateButton from "@/components/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
+import BulkAnnotateDialog from "@/components/pages-shared/traces/BulkAnnotateDialog/BulkAnnotateDialog";
 import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -112,6 +113,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           isLoading={isRulesLoading}
         />
       )}
+      {type === TRACE_DATA_TYPE.traces && (
+        <BulkAnnotateDialog
+          key={`annotate-${resetKeyRef.current}`}
+          open={open === 5}
+          setOpen={setOpen}
+          selectedRows={selectedRows}
+          projectId={projectId}
+        />
+      )}
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
@@ -131,6 +141,21 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           <Tag />
         </Button>
       </TooltipWrapper>
+      {type === TRACE_DATA_TYPE.traces && (
+        <TooltipWrapper content="Annotate traces">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => {
+              setOpen(5);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <MessageSquarePlus />
+          </Button>
+        </TooltipWrapper>
+      )}
       {showEvaluate && (
         <EvaluateButton
           isNoRules={!rules?.length}
