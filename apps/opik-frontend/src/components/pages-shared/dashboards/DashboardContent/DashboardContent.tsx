@@ -22,11 +22,6 @@ const DashboardContent: React.FunctionComponent = () => {
   const updateWidget = useDashboardStore(selectUpdateWidget);
 
   useEffect(() => {
-    if (readOnly) {
-      useDashboardStore.getState().setOnAddEditWidgetCallback(null);
-      return;
-    }
-
     useDashboardStore
       .getState()
       .setOnAddEditWidgetCallback(({ sectionId, widgetId }) => {
@@ -38,7 +33,7 @@ const DashboardContent: React.FunctionComponent = () => {
     return () => {
       useDashboardStore.getState().setOnAddEditWidgetCallback(null);
     };
-  }, [readOnly]);
+  }, []);
 
   const handleSaveWidget = useCallback(
     (widgetData: DashboardWidget) => {

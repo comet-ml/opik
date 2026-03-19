@@ -20,7 +20,6 @@ import {
   selectDuplicateWidget,
   selectDeleteWidget,
   selectOnAddEditWidgetCallback,
-  selectReadOnly,
 } from "@/store/DashboardStore";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 
@@ -49,7 +48,6 @@ const DashboardWidgetActionsMenu: React.FunctionComponent<
   hideDelete = false,
   onOpenChange,
 }) => {
-  const readOnly = useDashboardStore(selectReadOnly);
   const [open, setOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -108,8 +106,6 @@ const DashboardWidgetActionsMenu: React.FunctionComponent<
 
   const hasStandardActions = !hideEdit || !hideDuplicate || showMove;
   const showSeparator = hasStandardActions && !hideDelete;
-
-  if (readOnly) return null;
 
   return (
     <>

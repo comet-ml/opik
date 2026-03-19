@@ -9,7 +9,7 @@ const HORIZONTAL_PADDING = 40;
 
 interface DashboardSectionTitleProps {
   title: string;
-  onChange?: (title: string) => void;
+  onChange: (title: string) => void;
 }
 
 const DashboardSectionTitle: React.FunctionComponent<
@@ -39,15 +39,10 @@ const DashboardSectionTitle: React.FunctionComponent<
     }
   }, [isEditing]);
 
-  const handleStartEdit = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (onChange) {
-        setIsEditing(true);
-      }
-    },
-    [onChange],
-  );
+  const handleStartEdit = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(true);
+  }, []);
 
   const handleSaveEdit = useCallback(() => {
     setIsEditing(false);
@@ -124,16 +119,14 @@ const DashboardSectionTitle: React.FunctionComponent<
       ) : (
         <>
           <span className="text-sm font-medium text-foreground">{title}</span>
-          {onChange && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 opacity-0 transition-opacity group-hover/title:opacity-100 group-hover:opacity-100"
-              onClick={handleStartEdit}
-            >
-              <Pencil className="size-3.5 text-muted-slate" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 opacity-0 transition-opacity group-hover/title:opacity-100 group-hover:opacity-100"
+            onClick={handleStartEdit}
+          >
+            <Pencil className="size-3.5 text-muted-slate" />
+          </Button>
         </>
       )}
     </div>

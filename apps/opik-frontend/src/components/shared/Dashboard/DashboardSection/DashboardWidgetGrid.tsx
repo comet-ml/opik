@@ -39,12 +39,12 @@ interface DashboardWidgetGridProps {
 const DashboardWidgetGrid: React.FunctionComponent<
   DashboardWidgetGridProps
 > = ({ sectionId, widgets, layout }) => {
-  const readOnly = useDashboardStore(selectReadOnly);
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const updateLayout = useDashboardStore(selectUpdateLayout);
+  const readOnly = useDashboardStore(selectReadOnly);
   const { permissions } = usePermissions();
 
   const handleAddWidget = () => {
@@ -78,6 +78,8 @@ const DashboardWidgetGrid: React.FunctionComponent<
       margin={GRID_MARGIN}
       containerPadding={CONTAINER_PADDING}
       onLayoutChange={handleLayoutChange}
+      isDraggable={!readOnly}
+      isResizable={!readOnly}
       draggableHandle=".comet-drag-handle"
       useCSSTransforms
       preventCollision={false}
@@ -85,8 +87,6 @@ const DashboardWidgetGrid: React.FunctionComponent<
       isBounded={true}
       maxRows={Infinity}
       autoSize={true}
-      isDraggable={!readOnly}
-      isResizable={!readOnly}
     >
       {widgets.map((widget) => {
         const widgetType = widget.type || WIDGET_TYPE.PROJECT_METRICS;
