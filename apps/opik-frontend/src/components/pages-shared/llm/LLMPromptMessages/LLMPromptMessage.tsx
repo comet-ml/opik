@@ -208,6 +208,7 @@ const LLMPromptMessage = forwardRef<
         ? focusedVariableKey || "Find variable"
         : null;
 
+    // Sync the inline variable hint (ghost text after "{{") with the CodeMirror editor
     useEffect(() => {
       const view = editorViewRef.current;
       if (!view) return;
