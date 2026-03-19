@@ -222,6 +222,19 @@ public class AgentConfigsResourceClient {
         }
     }
 
+    public void deleteEnv(String envName, UUID projectId, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var actualResponse = client
+                .target(ENVIRONMENTS_BY_NAME_PATH.formatted(baseURI, envName, projectId))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
     public AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size,
             String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = client

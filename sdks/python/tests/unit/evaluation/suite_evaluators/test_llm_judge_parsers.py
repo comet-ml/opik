@@ -3,6 +3,18 @@ import json
 import pytest
 
 from opik.evaluation.suite_evaluators.llm_judge import parsers as llm_judge_parsers
+from opik.exceptions import LLMJudgeParseError
+
+
+_INLINED_ASSERTION = {
+    "properties": {
+        "score": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "confidence": {"maximum": 1.0, "minimum": 0.0, "type": "number"},
+    },
+    "required": ["score", "reason", "confidence"],
+    "type": "object",
+}
 
 
 class TestResponseSchema:
@@ -149,12 +161,14 @@ class TestResponseSchema:
         assert results[2].value is True
         assert results[2].metadata == {"confidence": 0.7}
 
-    def test_parse__invalid_json__returns_failed_results(self):
+    def test_parse__invalid_json__raises_with_failed_results(self):
         schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
         content = "not valid json"
 
-        results = schema.parse(content)
+        with pytest.raises(LLMJudgeParseError) as exc_info:
+            schema.parse(content)
 
+        results = exc_info.value.results
         assert len(results) == 1
         assert results[0].name == "Response is accurate"
         assert results[0].value == 0.0
@@ -163,7 +177,7 @@ class TestResponseSchema:
         assert "Failed to parse model output" in results[0].reason
         assert results[0].metadata["raw_output"] == content
 
-    def test_parse__missing_assertion__returns_failed_results(self):
+    def test_parse__missing_assertion__raises_with_failed_results(self):
         schema = llm_judge_parsers.ResponseSchema(
             ["Response is accurate", "Response is helpful"]
         )
@@ -177,14 +191,16 @@ class TestResponseSchema:
             }
         )
 
-        results = schema.parse(content)
+        with pytest.raises(LLMJudgeParseError) as exc_info:
+            schema.parse(content)
 
+        results = exc_info.value.results
         assert len(results) == 2
         assert all(r.scoring_failed is True for r in results)
         assert all(r.value == 0.0 for r in results)
         assert all(r.category_name == "suite_assertion" for r in results)
 
-    def test_parse__missing_required_field__returns_failed_results(self):
+    def test_parse__missing_required_field__raises_with_failed_results(self):
         schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
         content = json.dumps(
             {
@@ -194,8 +210,10 @@ class TestResponseSchema:
             }
         )
 
-        results = schema.parse(content)
+        with pytest.raises(LLMJudgeParseError) as exc_info:
+            schema.parse(content)
 
+        results = exc_info.value.results
         assert len(results) == 1
         assert results[0].scoring_failed is True
         assert results[0].value == 0.0
@@ -253,31 +271,13 @@ class TestResponseSchema:
         schema = llm_judge_parsers.ResponseSchema(["Response is factually accurate"])
 
         assert schema.response_format.model_json_schema() == {
-            "$defs": {
-                "AssertionResultItem": {
-                    "properties": {
-                        "score": {"title": "Score", "type": "boolean"},
-                        "reason": {"title": "Reason", "type": "string"},
-                        "confidence": {
-                            "maximum": 1.0,
-                            "minimum": 0.0,
-                            "title": "Confidence",
-                            "type": "number",
-                        },
-                    },
-                    "required": ["score", "reason", "confidence"],
-                    "title": "AssertionResultItem",
-                    "type": "object",
-                }
-            },
             "properties": {
                 "assertion_1": {
-                    "$ref": "#/$defs/AssertionResultItem",
+                    **_INLINED_ASSERTION,
                     "description": "Response is factually accurate",
-                }
+                },
             },
             "required": ["assertion_1"],
-            "title": "LLMJudgeResponse",
             "type": "object",
         }
 
@@ -290,28 +290,23 @@ class TestResponseSchema:
             ]
         )
 
-        json_schema = schema.response_format.model_json_schema()
-
-        assert json_schema["title"] == "LLMJudgeResponse"
-        assert json_schema["type"] == "object"
-        assert json_schema["required"] == [
-            "assertion_1",
-            "assertion_2",
-            "assertion_3",
-        ]
-        assert json_schema["properties"] == {
-            "assertion_1": {
-                "$ref": "#/$defs/AssertionResultItem",
-                "description": "Response is factually accurate",
+        assert schema.response_format.model_json_schema() == {
+            "properties": {
+                "assertion_1": {
+                    **_INLINED_ASSERTION,
+                    "description": "Response is factually accurate",
+                },
+                "assertion_2": {
+                    **_INLINED_ASSERTION,
+                    "description": "Response does not contain hallucinations",
+                },
+                "assertion_3": {
+                    **_INLINED_ASSERTION,
+                    "description": "Response directly answers the user's question",
+                },
             },
-            "assertion_2": {
-                "$ref": "#/$defs/AssertionResultItem",
-                "description": "Response does not contain hallucinations",
-            },
-            "assertion_3": {
-                "$ref": "#/$defs/AssertionResultItem",
-                "description": "Response directly answers the user's question",
-            },
+            "required": ["assertion_1", "assertion_2", "assertion_3"],
+            "type": "object",
         }
 
     def test_json_schema__long_assertion__key_stays_short_description_has_full_text(

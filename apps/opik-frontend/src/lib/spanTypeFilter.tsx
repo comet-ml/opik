@@ -3,8 +3,8 @@ import React from "react";
 import { SPAN_TYPE } from "@/types/traces";
 import { DropdownOption } from "@/types/shared";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
-import { SelectItem } from "@/components/ui/select";
-import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import { SelectItem } from "@/ui/select";
+import BaseTraceDataTypeIcon from "@/v1/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 
 export const getSpanTypeOptions = (isGuardrailsEnabled: boolean) => [
   { value: SPAN_TYPE.general, label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general] },

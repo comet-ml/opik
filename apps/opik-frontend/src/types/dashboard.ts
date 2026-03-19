@@ -1,5 +1,5 @@
 import { Filters } from "@/types/filters";
-import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
+import { DateRangeSerializedValue } from "@/shared/DateRangeSelect";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { Groups } from "@/types/groups";
 import { CHART_TYPE } from "@/constants/chart";

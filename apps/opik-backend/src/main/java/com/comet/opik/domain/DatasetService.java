@@ -86,6 +86,8 @@ public interface DatasetService {
 
     Dataset findByName(String workspaceId, DatasetCriteria criteria, Visibility visibility);
 
+    Dataset findByName(String workspaceId, DatasetIdentifier identifier, Visibility visibility);
+
     void delete(DatasetIdentifier identifier);
 
     void delete(UUID id);
@@ -341,6 +343,16 @@ class DatasetServiceImpl implements DatasetService {
     @Override
     public Dataset findByName(@NonNull String workspaceId, @NonNull DatasetCriteria criteria, Visibility visibility) {
         return findByName(workspaceId, criteria.name(), criteria.projectId(), visibility);
+    }
+
+    @Override
+    public Dataset findByName(@NonNull String workspaceId, @NonNull DatasetIdentifier identifier,
+            Visibility visibility) {
+        UUID projectId = null;
+        if (StringUtils.isNotBlank(identifier.projectName())) {
+            projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
+        }
+        return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
     }
 
     /**

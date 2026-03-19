@@ -1,9 +1,14 @@
+import importlib.util
+import logging
+import sys
 from typing import Optional, Any, Dict
 
-from opik import config
+from opik import config, _logging
 
 from .litellm import litellm_chat_model
 from . import base_model
+
+LOGGER = logging.getLogger(__name__)
 
 _MODEL_CACHE: Dict[Any, base_model.OpikBaseModel] = {}
 
@@ -48,7 +53,43 @@ def get(
 
     cache_key = _make_cache_key(model_name, track, model_kwargs)
     if cache_key not in _MODEL_CACHE:
-        _MODEL_CACHE[cache_key] = litellm_chat_model.LiteLLMChatModel(
-            model_name=model_name, track=track, **model_kwargs
-        )
+        _MODEL_CACHE[cache_key] = _create_model(model_name, track, model_kwargs)
     return _MODEL_CACHE[cache_key]
+
+
+def _is_anthropic_model(model_name: str) -> bool:
+    return model_name.startswith("anthropic/") or model_name.startswith("claude")
+
+
+def _should_use_anthropic_native(model_name: str) -> bool:
+    if not _is_anthropic_model(model_name):
+        return False
+    if "anthropic" in sys.modules:
+        return True
+    if importlib.util.find_spec("anthropic") is not None:
+        return True
+    _logging.log_once_at_level(
+        logging.WARNING,
+        "Anthropic SDK is not installed. Falling back to LiteLLM for model '%s'. "
+        "Install it with `pip install anthropic` for a more stable experience.",
+        LOGGER,
+        model_name,
+    )
+    return False
+
+
+def _create_model(
+    model_name: str, track: bool, model_kwargs: Dict[str, Any]
+) -> base_model.OpikBaseModel:
+    if _should_use_anthropic_native(model_name):
+        LOGGER.debug(
+            "Using native Anthropic SDK for model %s",
+            model_name,
+        )
+        from .anthropic.anthropic_chat_model import AnthropicChatModel
+
+        return AnthropicChatModel(model_name=model_name, track=track, **model_kwargs)
+
+    return litellm_chat_model.LiteLLMChatModel(
+        model_name=model_name, track=track, **model_kwargs
+    )

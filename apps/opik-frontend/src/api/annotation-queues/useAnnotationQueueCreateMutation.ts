@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import api, {
   ANNOTATION_QUEUES_REST_ENDPOINT,
   ANNOTATION_QUEUES_KEY,

@@ -5,7 +5,7 @@ import api, {
   PROVIDERS_KEYS_KEY,
 } from "@/api/api";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { PartialProviderKeyUpdate } from "@/types/providers";
 
 type UseProviderKeysCreateMutationParams = {

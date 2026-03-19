@@ -3,8 +3,8 @@ import { FlaskConical, LayoutGridIcon, LucideIcon } from "lucide-react";
 
 import { DASHBOARD_TYPE, DASHBOARD_TYPE_LABELS } from "@/types/dashboard";
 import { DropdownOption } from "@/types/shared";
-import { SelectItem } from "@/components/ui/select";
-import { TagProps } from "@/components/ui/tag";
+import { SelectItem } from "@/ui/select";
+import { TagProps } from "@/ui/tag";
 
 export const DASHBOARD_TYPE_OPTIONS: DropdownOption<string>[] = Object.entries(
   DASHBOARD_TYPE_LABELS,

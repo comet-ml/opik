@@ -3,7 +3,7 @@ import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Dataset } from "@/types/datasets";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseDatasetUpdateMutationParams = {
   dataset: Partial<Dataset>;

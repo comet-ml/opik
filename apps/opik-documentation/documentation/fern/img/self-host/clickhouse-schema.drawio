@@ -1,0 +1,165 @@
+<mxfile host="app.diagrams.net" version="26.0.7">
+  <diagram name="ClickHouse Schema" id="clickhouse-schema">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ TITLE ============ -->
+        <mxCell id="title" value="&lt;font style=&quot;font-size:16px;&quot;&gt;&lt;b&gt;ClickHouse Schema (Analytics)&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#888888&quot; style=&quot;font-size:11px;&quot;&gt;All tables use ReplicatedReplacingMergeTree &amp;middot; Partitioned by workspace_id&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="30" y="0" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ============ ROW 1: CORE OBSERVABILITY ============ -->
+
+        <!-- traces -->
+        <mxCell id="traces" value="&lt;b style='font-size:12px'&gt;traces&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;workspace_id&lt;br&gt;project_id&lt;br&gt;thread_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="160" height="105" as="geometry" />
+        </mxCell>
+
+        <!-- spans -->
+        <mxCell id="spans" value="&lt;b style='font-size:12px'&gt;spans&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;trace_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;parent_span_id&lt;br&gt;project_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="260" y="60" width="160" height="105" as="geometry" />
+        </mxCell>
+
+        <!-- feedback_scores -->
+        <mxCell id="feedback_scores" value="&lt;b style='font-size:12px'&gt;feedback_scores&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;entity_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;entity_type &lt;i&gt;(trace|span)&lt;/i&gt;&lt;br&gt;name&lt;br&gt;project_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="490" y="60" width="180" height="105" as="geometry" />
+        </mxCell>
+
+        <!-- authored_feedback_scores -->
+        <mxCell id="authored_fb" value="&lt;b style='font-size:12px'&gt;authored_feedback_scores&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;entity_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;entity_type&lt;br&gt;author&lt;br&gt;name&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="740" y="60" width="200" height="105" as="geometry" />
+        </mxCell>
+
+        <!-- ============ ROW 2: SUPPORTING TABLES ============ -->
+
+        <!-- trace_threads -->
+        <mxCell id="trace_threads" value="&lt;b style='font-size:12px'&gt;trace_threads&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;thread_id&lt;br&gt;project_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="30" y="220" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- comments -->
+        <mxCell id="comments" value="&lt;b style='font-size:12px'&gt;comments&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;entity_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;entity_type &lt;i&gt;(trace|span)&lt;/i&gt;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="260" y="220" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- attachments -->
+        <mxCell id="attachments" value="&lt;b style='font-size:12px'&gt;attachments&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;entity_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;entity_type &lt;i&gt;(trace|span)&lt;/i&gt;&lt;br&gt;container_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="490" y="220" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- guardrails -->
+        <mxCell id="guardrails" value="&lt;b style='font-size:12px'&gt;guardrails&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;entity_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;entity_type &lt;i&gt;(trace|span)&lt;/i&gt;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="730" y="220" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ============ ROW 3: DATASETS & EXPERIMENTS ============ -->
+
+        <!-- dataset_items -->
+        <mxCell id="dataset_items" value="&lt;b style='font-size:12px'&gt;dataset_items&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;dataset_id&lt;br&gt;trace_id&lt;br&gt;span_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="30" y="380" width="170" height="105" as="geometry" />
+        </mxCell>
+
+        <!-- dataset_item_versions -->
+        <mxCell id="dataset_item_versions" value="&lt;b style='font-size:12px'&gt;dataset_item_versions&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;dataset_item_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;dataset_id&lt;br&gt;dataset_version_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="30" y="540" width="190" height="105" as="geometry" />
+        </mxCell>
+
+        <!-- experiments -->
+        <mxCell id="experiments" value="&lt;b style='font-size:12px'&gt;experiments&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;dataset_id&lt;br&gt;project_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="340" y="380" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- experiment_items -->
+        <mxCell id="experiment_items" value="&lt;b style='font-size:12px'&gt;experiment_items&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;experiment_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;dataset_item_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;trace_id &lt;i&gt;(FK)&lt;/i&gt;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="340" y="530" width="180" height="105" as="geometry" />
+        </mxCell>
+
+        <!-- experiment_aggregates -->
+        <mxCell id="exp_aggregates" value="&lt;b style='font-size:12px'&gt;experiment_aggregates&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;dataset_id&lt;br&gt;project_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="600" y="380" width="190" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- optimizations -->
+        <mxCell id="optimizations" value="&lt;b style='font-size:12px'&gt;optimizations&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;dataset_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="600" y="530" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- annotation_queues -->
+        <mxCell id="annotation_queues" value="&lt;b style='font-size:12px'&gt;annotation_queues&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;id &lt;i&gt;(PK)&lt;/i&gt;&lt;br&gt;project_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="840" y="380" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- annotation_queue_items -->
+        <mxCell id="annotation_queue_items" value="&lt;b style='font-size:12px'&gt;annotation_queue_items&lt;/b&gt;&lt;hr size='1' style='margin:4px 0'&gt;&lt;span style='font-size:10px;color:#555'&gt;queue_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;item_id &lt;i&gt;(FK)&lt;/i&gt;&lt;br&gt;project_id&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;spacingTop=4;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="840" y="510" width="190" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ============ LEGEND ============ -->
+        <mxCell id="legend-blue" value="&lt;span style='font-size:10px'&gt;Core data&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="680" width="80" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-purple" value="&lt;span style='font-size:10px'&gt;Supporting&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="120" y="680" width="80" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-yellow" value="&lt;span style='font-size:10px'&gt;Aggregates&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="210" y="680" width="80" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- ============ RELATIONSHIP EDGES ============ -->
+
+        <!-- traces → spans -->
+        <mxCell id="e-traces-spans" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf;" edge="1" parent="1" source="traces" target="spans">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- traces → feedback_scores -->
+        <mxCell id="e-traces-fb" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="spans" target="feedback_scores">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- traces → trace_threads -->
+        <mxCell id="e-traces-threads" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;" edge="1" parent="1" source="traces" target="trace_threads">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- traces → comments -->
+        <mxCell id="e-traces-comments" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;" edge="1" parent="1" source="spans" target="comments">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- spans → attachments -->
+        <mxCell id="e-spans-attach" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="feedback_scores" target="attachments">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- dataset_items → dataset_item_versions -->
+        <mxCell id="e-di-div" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#6c8ebf;" edge="1" parent="1" source="dataset_items" target="dataset_item_versions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- dataset_items → experiment_items -->
+        <mxCell id="e-di-ei" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="dataset_items" target="experiment_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- experiments → experiment_items -->
+        <mxCell id="e-exp-ei" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#6c8ebf;" edge="1" parent="1" source="experiments" target="experiment_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- experiments → experiment_aggregates -->
+        <mxCell id="e-exp-agg" style="endArrow=ERone;startArrow=ERone;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#d6b656;" edge="1" parent="1" source="experiments" target="exp_aggregates">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- annotation_queues → annotation_queue_items -->
+        <mxCell id="e-aq-aqi" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;" edge="1" parent="1" source="annotation_queues" target="annotation_queue_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
