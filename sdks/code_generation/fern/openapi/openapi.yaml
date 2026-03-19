@@ -319,6 +319,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Agent Configs
+      summary: Delete environment
+      description: Soft-deletes an environment by setting its ended_at timestamp
+      operationId: deleteEnv
+      parameters:
+      - name: env_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Environment deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/agent-configs/blueprints/{blueprint_id}:
     get:
       tags:
@@ -8503,9 +8530,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -8948,9 +8975,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -9403,9 +9430,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -16129,6 +16156,16 @@ components:
             description: Optional set of project IDs to exclude from automatic blueprint
               creation when this prompt version is committed.
             format: uuid
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If provided, scopes the prompt to the specified project. Ignored\
+            \ when project_id is provided."
     Prompt_Detail:
       required:
       - name
@@ -16348,6 +16385,10 @@ components:
           type: string
         commit:
           type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If provided, scopes the search to the specified project"
     Prompt_Updatable:
       required:
       - name

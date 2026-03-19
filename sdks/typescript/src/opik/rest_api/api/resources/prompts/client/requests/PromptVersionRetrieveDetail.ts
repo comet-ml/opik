@@ -9,4 +9,6 @@
 export interface PromptVersionRetrieveDetail {
     name: string;
     commit?: string;
+    /** If provided, scopes the search to the specified project */
+    projectName?: string;
 }
