@@ -637,9 +637,11 @@ class PromptServiceImpl implements PromptService {
     @Override
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit, String projectName) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        UUID projectId = StringUtils.isNotBlank(projectName)
-                ? projectService.findProjectIdByName(workspaceId, projectName).orElse(null)
-                : null;
+        UUID projectId = null;
+        if (StringUtils.isNotBlank(projectName)) {
+            projectId = projectService.findProjectIdByName(workspaceId, projectName)
+                    .orElseThrow(() -> new NotFoundException("Project not found: '%s'".formatted(projectName)));
+        }
         return retrievePromptVersion(name, commit, projectId);
     }
 
