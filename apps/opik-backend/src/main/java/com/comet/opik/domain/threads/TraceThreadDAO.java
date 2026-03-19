@@ -165,10 +165,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 ORDER BY workspace_id DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id
             ) wc ON tt.workspace_id = wc.workspace_id
-            WHERE tt.last_updated_at \< parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive \> 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
+            WHERE tt.last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
             ORDER BY tt.last_updated_at
             LIMIT :limit
-            SETTINGS log_comment = '<log_comment>'
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
@@ -185,7 +184,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 LIMIT 1 BY id
             ) tt
             WHERE tt.status != :status
-            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -388,9 +386,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     public Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
         return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(FIND_PENDING_CLOSURE_THREADS_SQL,
-                    "find_pending_closure_threads", "", "");
-            var statement = connection.createStatement(template.render())
+            var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
                     .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("default_timeout_seconds", defaultTimeoutToMarkThreadAsInactive.toSeconds())
                     .bind("limit", limit);
@@ -404,7 +400,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     @Override
     public Mono<Long> openThread(@NonNull UUID projectId, @NonNull String threadId) {
         return asyncTemplate.nonTransaction(connection -> {
-            var openThreadsSql = getSTWithLogComment(OPEN_CLOSURE_THREADS_SQL, "open_thread", "", "");
+            var openThreadsSql = TemplateUtils.newST(OPEN_CLOSURE_THREADS_SQL);
             List<String> threadIds = List.of(threadId);
 
             openThreadsSql.add("thread_ids", threadIds);
@@ -426,7 +422,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-            var closureThreadsSql = getSTWithLogComment(OPEN_CLOSURE_THREADS_SQL, "close_thread", "", "");
+            var closureThreadsSql = TemplateUtils.newST(OPEN_CLOSURE_THREADS_SQL);
             closureThreadsSql.add("thread_ids", threadIds);
 
             var statement = connection.createStatement(closureThreadsSql.render())
