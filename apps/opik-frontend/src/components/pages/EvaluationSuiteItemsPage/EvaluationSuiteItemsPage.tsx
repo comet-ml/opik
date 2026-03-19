@@ -122,7 +122,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
       toast({
         title: "New version created",
         description:
-          "Your evaluation suite changes have been saved as a new version. You can now use it to run experiments in the SDK or the Playground.",
+          "Your changes have been saved as a new version. You can now use it to run experiments in the SDK or the Playground.",
         actions: [
           <ToastAction
             variant="link"
@@ -260,7 +260,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
         setOpen={setDiscardDialogOpen}
         onConfirm={handleDiscardChanges}
         title="Discard changes"
-        description="Discarding will remove all unsaved edits to this evaluation suite. This action can't be undone. Are you sure you want to continue?"
+        description={`Discarding will remove all unsaved edits to this ${isEvaluationSuite ? "evaluation suite" : "dataset"}. This action can't be undone. Are you sure you want to continue?`}
         confirmText="Discard changes"
         confirmButtonVariant="destructive"
       />
@@ -283,7 +283,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               </Tag>
             )}
             <h1 className="comet-title-l truncate break-words">
-              {suite?.name ?? "Evaluation suite"}
+              {suite?.name ?? (isEvaluationSuite ? "Evaluation suite" : "Dataset")}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -311,6 +311,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               datasetName={suite?.name}
               datasetId={suiteId}
               datasetVersionId={latestVersion?.id}
+              isEvalSuite={isEvaluationSuite}
             />
             {isEvaluationSuite && (
               <Button

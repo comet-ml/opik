@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -82,6 +83,7 @@ const AddEditEvaluationSuiteDialog = ({
   );
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
+  const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.DATASET);
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string>(
@@ -97,6 +99,7 @@ const AddEditEvaluationSuiteDialog = ({
       setCsvFile(undefined);
       setCsvError(undefined);
       setCsvData(undefined);
+      setType(DATASET_TYPE.DATASET);
       if (!dataset) {
         setName("");
         setDescription("");
@@ -113,12 +116,11 @@ const AddEditEvaluationSuiteDialog = ({
   const isValid =
     name.length > 0 &&
     (isEdit || hideUpload || !csvRequired || hasValidCsvFile);
-  const title = isEdit
-    ? "Edit evaluation suite"
-    : "Create a new evaluation suite";
-  const buttonText = isEdit
-    ? "Update evaluation suite"
-    : "Create evaluation suite";
+
+  const typeLabel =
+    type === DATASET_TYPE.EVALUATION_SUITE ? "evaluation suite" : "dataset";
+  const title = isEdit ? "Edit" : "Create new";
+  const buttonText = isEdit ? "Update" : "Create new";
 
   // Determine which mode we're in and set limits accordingly
   const fileSizeLimit = isCsvUploadEnabled
@@ -240,8 +242,8 @@ const AddEditEvaluationSuiteDialog = ({
         setNameError("This name already exists");
       } else {
         toast({
-          title: `Error saving evaluation suite`,
-          description: errorMessage || `Failed to ${action} evaluation suite`,
+          title: "Error saving",
+          description: errorMessage || `Failed to ${action}`,
           variant: "destructive",
         });
         setOpen(false);
@@ -273,7 +275,7 @@ const AddEditEvaluationSuiteDialog = ({
           dataset: {
             name,
             ...(description && { description }),
-            type: DATASET_TYPE.EVALUATION_SUITE,
+            type,
           },
         },
         {
@@ -288,6 +290,7 @@ const AddEditEvaluationSuiteDialog = ({
     dataset,
     name,
     description,
+    type,
     createMutate,
     onCreateSuccessHandler,
     setOpen,
@@ -392,11 +395,32 @@ const AddEditEvaluationSuiteDialog = ({
               ]}
             />
           )}
+          {!isEdit && (
+            <div className="flex flex-col gap-2 pb-4">
+              <Label>Type</Label>
+              <ToggleGroup
+                type="single"
+                value={type}
+                onValueChange={(val) =>
+                  val && setType(val as DATASET_TYPE)
+                }
+                variant="secondary"
+                className="w-fit"
+              >
+                <ToggleGroupItem value={DATASET_TYPE.DATASET}>
+                  Dataset
+                </ToggleGroupItem>
+                <ToggleGroupItem value={DATASET_TYPE.EVALUATION_SUITE}>
+                  Evaluation suite
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          )}
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="evaluationSuiteName">Name</Label>
             <Input
               id="evaluationSuiteName"
-              placeholder="Evaluation suite name"
+              placeholder="Name"
               value={name}
               className={
                 nameError &&
@@ -425,7 +449,7 @@ const AddEditEvaluationSuiteDialog = ({
             <Label htmlFor="evaluationSuiteDescription">Description</Label>
             <Textarea
               id="evaluationSuiteDescription"
-              placeholder="Evaluation suite description"
+              placeholder="Description"
               className="min-h-20"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
@@ -491,8 +515,8 @@ const AddEditEvaluationSuiteDialog = ({
         setOpen={setConfirmOpen}
         onCancel={submitHandler}
         title="File can't be uploaded"
-        description="This file cannot be uploaded because it does not pass validation. If you continue, the evaluation suite will be created without any items. You can add items manually later, or go back and upload a valid file."
-        cancelText="Create empty evaluation suite"
+        description={`This file cannot be uploaded because it does not pass validation. If you continue, the ${typeLabel} will be created without any items. You can add items manually later, or go back and upload a valid file.`}
+        cancelText={`Create empty ${typeLabel}`}
         confirmText="Go back"
       />
     </Dialog>

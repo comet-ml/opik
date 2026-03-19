@@ -17,6 +17,7 @@ export interface UseEvaluationSuiteDropdownProps {
   datasetId?: string;
   datasetVersionId?: string;
   disabled?: boolean;
+  isEvalSuite?: boolean;
 }
 
 function UseEvaluationSuiteDropdown({
@@ -24,6 +25,7 @@ function UseEvaluationSuiteDropdown({
   datasetId = "",
   datasetVersionId,
   disabled = false,
+  isEvalSuite = true,
 }: UseEvaluationSuiteDropdownProps) {
   const resetKeyRef = useRef(0);
   const resetDialogKeyRef = useRef(0);
@@ -68,14 +70,14 @@ function UseEvaluationSuiteDropdown({
         open={openConfirmDialog}
         setOpen={setOpenConfirmDialog}
         onConfirm={handleLoadPlayground}
-        title="Load evaluation suite into playground"
-        description="Loading this evaluation suite into the Playground will replace any unsaved changes. This action cannot be undone."
-        confirmText="Load evaluation suite"
+        title={`Load ${isEvalSuite ? "evaluation suite" : "dataset"} into playground`}
+        description={`Loading this ${isEvalSuite ? "evaluation suite" : "dataset"} into the Playground will replace any unsaved changes. This action cannot be undone.`}
+        confirmText={`Load ${isEvalSuite ? "evaluation suite" : "dataset"}`}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={disabled}>
-            Use suite
+            {isEvalSuite ? "Use suite" : "Use dataset"}
             <ChevronDown className="ml-2 size-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -88,7 +90,7 @@ function UseEvaluationSuiteDropdown({
             <div className="comet-body-s flex flex-col">
               <span>Open in Playground</span>
               <span className="text-light-slate">
-                Test prompts over your evaluation suite and run evaluations
+                Test prompts over your {isEvalSuite ? "evaluation suite" : "dataset"} and run evaluations
                 interactively
               </span>
             </div>
@@ -105,7 +107,7 @@ function UseEvaluationSuiteDropdown({
               <div className="comet-body-s flex flex-col">
                 <span>Run an experiment</span>
                 <span className="text-light-slate">
-                  Use this evaluation suite to run an experiment using the
+                  Use this {isEvalSuite ? "evaluation suite" : "dataset"} to run an experiment using the
                   Python SDK
                 </span>
               </div>

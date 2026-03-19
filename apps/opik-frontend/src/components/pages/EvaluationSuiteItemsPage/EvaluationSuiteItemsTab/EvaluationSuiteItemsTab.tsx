@@ -290,7 +290,7 @@ function EvaluationSuiteItemsTab({
     defaultValue: {},
   });
 
-  const itemLabel = "suite items";
+  const itemLabel = isEvaluationSuite ? "suite items" : "dataset items";
 
   const noDataText = useMemo(() => {
     if (isDraftMode && deletedIds.size > 0 && totalCount !== deletedIds.size) {
@@ -589,7 +589,7 @@ function EvaluationSuiteItemsTab({
             size="sm"
             onClick={handleNewDatasetItemClick}
           >
-            Add suite item
+            {isEvaluationSuite ? "Add suite item" : "Add dataset item"}
           </Button>
         </div>
       </div>
@@ -597,15 +597,15 @@ function EvaluationSuiteItemsTab({
         <StatusMessage
           icon={Loader2}
           iconClassName="animate-spin"
-          title="Your suite is still loading"
-          description="Some results or counts may update as more data becomes available. You can continue exploring while the full suite loads."
+          title={isEvaluationSuite ? "Your suite is still loading" : "Your dataset is still loading"}
+          description={`Some results or counts may update as more data becomes available. You can continue exploring while the full ${isEvaluationSuite ? "suite" : "dataset"} loads.`}
           className="mb-4"
         />
       )}
       {showSuccessMessage && (
         <StatusMessage
           icon={Check}
-          title="Your suite fully loaded"
+          title={isEvaluationSuite ? "Your suite fully loaded" : "Your dataset fully loaded"}
           description="All items are now available."
           className="mb-4"
         />

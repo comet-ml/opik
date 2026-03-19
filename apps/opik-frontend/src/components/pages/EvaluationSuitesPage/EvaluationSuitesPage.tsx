@@ -394,7 +394,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
           <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
-            Create new evaluation suite
+            Create new
           </Button>
         </div>
       </div>
@@ -414,7 +414,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewSuiteClick}>
-                Create new evaluation suite
+                Create new
               </Button>
             )}
           </DataTableNoData>

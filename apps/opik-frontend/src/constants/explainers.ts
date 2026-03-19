@@ -283,7 +283,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.why_do_i_need_multiple_evaluation_suites]: {
     id: EXPLAINER_ID.why_do_i_need_multiple_evaluation_suites,
     description:
-      "Create different evaluation suites to evaluate your LLM application in different contexts, scenarios, or environments.",
+      "Create datasets and evaluation suites to evaluate your LLM application in different contexts, scenarios, or environments.",
   },
   [EXPLAINER_ID.what_format_is_this_to_add_my_evaluation_suite_item]: {
     id: EXPLAINER_ID.what_format_is_this_to_add_my_evaluation_suite_item,
