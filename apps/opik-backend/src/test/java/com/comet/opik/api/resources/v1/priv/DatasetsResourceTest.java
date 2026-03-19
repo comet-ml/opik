@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AssertionStatus;
+import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.Comment;
@@ -7655,7 +7655,7 @@ class DatasetsResourceTest {
             assertThat(actualExpItem.experimentId()).isEqualTo(experimentId);
 
             assertThat(actualExpItem.assertionResults()).hasSize(2);
-            assertThat(actualExpItem.assertionResults()).allMatch(r -> r.passed() == AssertionStatus.PASSED);
+            assertThat(actualExpItem.assertionResults()).allMatch(AssertionResult::passed);
             assertThat(actualExpItem.status()).isEqualTo(RunStatus.PASSED);
 
             assertThat(actualExpItem.feedbackScores()).hasSize(1);
@@ -7798,7 +7798,7 @@ class DatasetsResourceTest {
 
             // Suite experiment item has assertion results and status
             assertThat(suiteItem.assertionResults()).hasSize(1);
-            assertThat(suiteItem.assertionResults().getFirst().passed()).isEqualTo(AssertionStatus.PASSED);
+            assertThat(suiteItem.assertionResults().getFirst().passed()).isTrue();
             assertThat(suiteItem.status()).isEqualTo(RunStatus.PASSED);
             assertThat(suiteItem.feedbackScores()).isNull();
 
@@ -8031,11 +8031,11 @@ class DatasetsResourceTest {
                     .findFirst().orElseThrow();
 
             assertThat(itemA.assertionResults()).hasSize(1);
-            assertThat(itemA.assertionResults().getFirst().passed()).isEqualTo(AssertionStatus.PASSED);
+            assertThat(itemA.assertionResults().getFirst().passed()).isTrue();
             assertThat(itemA.status()).isEqualTo(RunStatus.PASSED);
 
             assertThat(itemB.assertionResults()).hasSize(1);
-            assertThat(itemB.assertionResults().getFirst().passed()).isEqualTo(AssertionStatus.FAILED);
+            assertThat(itemB.assertionResults().getFirst().passed()).isFalse();
             assertThat(itemB.status()).isEqualTo(RunStatus.FAILED);
 
             assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull();

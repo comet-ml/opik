@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.AssertionScoreAverage;
-import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
@@ -8218,7 +8218,7 @@ class ExperimentsResourceTest {
 
             var streamedItem = streamedItems.getFirst();
             assertThat(streamedItem.assertionResults()).hasSize(2);
-            assertThat(streamedItem.assertionResults()).allMatch(r -> r.passed() == AssertionStatus.PASSED);
+            assertThat(streamedItem.assertionResults()).allMatch(AssertionResult::passed);
             assertThat(streamedItem.status()).isEqualTo(RunStatus.PASSED);
             assertThat(streamedItem.feedbackScores()).hasSize(1);
             assertThat(streamedItem.feedbackScores().getFirst().name()).isEqualTo("accuracy");
@@ -8261,11 +8261,11 @@ class ExperimentsResourceTest {
             assertThat(streamedItem.assertionResults())
                     .anySatisfy(r -> {
                         assertThat(r.value()).isEqualTo("Should link to docs");
-                        assertThat(r.passed()).isEqualTo(AssertionStatus.PASSED);
+                        assertThat(r.passed()).isTrue();
                     })
                     .anySatisfy(r -> {
                         assertThat(r.value()).isEqualTo("Should be concise");
-                        assertThat(r.passed()).isEqualTo(AssertionStatus.FAILED);
+                        assertThat(r.passed()).isFalse();
                         assertThat(r.reason()).isEqualTo("Too long");
                     });
             assertThat(streamedItem.feedbackScores()).isNull();

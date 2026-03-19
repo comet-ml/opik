@@ -51,13 +51,13 @@ class AssertionResultMapper {
         var assertionResults = rows.stream()
                 .map(row -> AssertionResult.builder()
                         .value(row.value())
-                        .passed(row.passed())
+                        .passed(AssertionStatus.PASSED == row.passed())
                         .reason(row.reason())
                         .build())
                 .toList();
 
         boolean allPassed = assertionResults.stream()
-                .allMatch(r -> AssertionStatus.PASSED.equals(r.passed()));
+                .allMatch(AssertionResult::passed);
 
         return item.toBuilder()
                 .assertionResults(assertionResults)
