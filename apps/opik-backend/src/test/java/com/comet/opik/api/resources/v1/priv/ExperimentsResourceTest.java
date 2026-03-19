@@ -5817,12 +5817,14 @@ class ExperimentsResourceTest {
                     .build();
             traceResourceClient.createTrace(traceProject2, apiKey, workspaceName);
 
-            // Both experiments share the same name
+            // Both experiments share the same name but belong to different projects
             var experimentName = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(36);
-            var experiment1 = experimentResourceClient.createPartialExperiment().name(experimentName).build();
+            var experiment1 = experimentResourceClient.createPartialExperiment().name(experimentName)
+                    .projectId(project1Id).build();
             experimentResourceClient.create(experiment1, apiKey, workspaceName);
 
-            var experiment2 = experimentResourceClient.createPartialExperiment().name(experimentName).build();
+            var experiment2 = experimentResourceClient.createPartialExperiment().name(experimentName)
+                    .projectId(project2Id).build();
             experimentResourceClient.create(experiment2, apiKey, workspaceName);
 
             // Items in experiment1 belong to project1
