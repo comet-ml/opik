@@ -26,7 +26,6 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
-import jakarta.annotation.Nullable;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -664,23 +663,12 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public FeedbackScoreNames getTraceThreadsFeedbackScoreNames(UUID projectId, String apiKey, String workspaceName) {
-        return getTraceThreadsFeedbackScoreNames(projectId, null, apiKey, workspaceName);
-    }
-
-    public FeedbackScoreNames getTraceThreadsFeedbackScoreNames(UUID projectId,
-            @Nullable Set<String> excludeCategoryNames, String apiKey, String workspaceName) {
-
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("feedback-scores")
                 .path("names");
 
         webTarget = webTarget.queryParam("project_id", projectId);
-        if (excludeCategoryNames != null) {
-            for (String categoryName : excludeCategoryNames) {
-                webTarget = webTarget.queryParam("exclude_category_names", categoryName);
-            }
-        }
 
         try (var actualResponse = webTarget
                 .request()

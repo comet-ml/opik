@@ -43,6 +43,7 @@ public class DatasetItemResultMapper {
     private static final int COMMENT_INDEX = 11;
     /** Tuple index for execution_policy, added after description (index 17) in the experiment_items_array */
     private static final int EXECUTION_POLICY_INDEX = 18;
+    private static final int ASSERTIONS_INDEX = 19;
 
     private DatasetItemResultMapper() {
     }
@@ -55,39 +56,46 @@ public class DatasetItemResultMapper {
         var experimentItems = Arrays.stream(experimentItemsArrays)
                 .filter(experimentItem -> CollectionUtils.isNotEmpty(experimentItem) &&
                         !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(experimentItem.get(2).toString()))
-                .map(experimentItem -> ExperimentItem.builder()
-                        .id(UUID.fromString(experimentItem.get(0).toString()))
-                        .experimentId(UUID.fromString(experimentItem.get(1).toString()))
-                        .datasetItemId(UUID.fromString(experimentItem.get(2).toString()))
-                        .traceId(UUID.fromString(experimentItem.get(3).toString()))
-                        .input(getJsonNodeOrNull(experimentItem.get(4)))
-                        .output(getJsonNodeOrNull(experimentItem.get(5)))
-                        .feedbackScores(getFeedbackScores(experimentItem.get(6)))
-                        .createdAt(Instant.parse(experimentItem.get(7).toString()))
-                        .lastUpdatedAt(Instant.parse(experimentItem.get(8).toString()))
-                        .createdBy(experimentItem.get(9).toString())
-                        .lastUpdatedBy(experimentItem.get(10).toString())
-                        .comments(experimentItem.size() > COMMENT_INDEX ? getComments(experimentItem.get(11)) : null)
-                        .duration((Double) experimentItem.get(12))
-                        .totalEstimatedCost(getTotalEstimatedCost(experimentItem))
-                        .usage(getUsage(experimentItem))
-                        .traceVisibilityMode(Optional.ofNullable(experimentItem.get(15))
-                                .map(Object::toString)
-                                .filter(StringUtils::isNotBlank)
-                                .flatMap(VisibilityMode::fromString)
-                                .orElse(null))
-                        .description(Optional.ofNullable(experimentItem.get(17))
-                                .map(Object::toString)
-                                .filter(StringUtils::isNotBlank)
-                                .orElse(null))
-                        .executionPolicy(experimentItem.size() > EXECUTION_POLICY_INDEX
-                                ? ExecutionPolicyMapper.fromJson(
-                                        Optional.ofNullable(experimentItem.get(EXECUTION_POLICY_INDEX))
-                                                .map(Object::toString)
-                                                .orElse(null))
-                                : null)
-                        .build())
-                .map(AssertionResultMapper::enrichWithAssertions)
+                .map(experimentItem -> {
+                    var item = ExperimentItem.builder()
+                            .id(UUID.fromString(experimentItem.get(0).toString()))
+                            .experimentId(UUID.fromString(experimentItem.get(1).toString()))
+                            .datasetItemId(UUID.fromString(experimentItem.get(2).toString()))
+                            .traceId(UUID.fromString(experimentItem.get(3).toString()))
+                            .input(getJsonNodeOrNull(experimentItem.get(4)))
+                            .output(getJsonNodeOrNull(experimentItem.get(5)))
+                            .feedbackScores(getFeedbackScores(experimentItem.get(6)))
+                            .createdAt(Instant.parse(experimentItem.get(7).toString()))
+                            .lastUpdatedAt(Instant.parse(experimentItem.get(8).toString()))
+                            .createdBy(experimentItem.get(9).toString())
+                            .lastUpdatedBy(experimentItem.get(10).toString())
+                            .comments(
+                                    experimentItem.size() > COMMENT_INDEX ? getComments(experimentItem.get(11)) : null)
+                            .duration((Double) experimentItem.get(12))
+                            .totalEstimatedCost(getTotalEstimatedCost(experimentItem))
+                            .usage(getUsage(experimentItem))
+                            .traceVisibilityMode(Optional.ofNullable(experimentItem.get(15))
+                                    .map(Object::toString)
+                                    .filter(StringUtils::isNotBlank)
+                                    .flatMap(VisibilityMode::fromString)
+                                    .orElse(null))
+                            .description(Optional.ofNullable(experimentItem.get(17))
+                                    .map(Object::toString)
+                                    .filter(StringUtils::isNotBlank)
+                                    .orElse(null))
+                            .executionPolicy(experimentItem.size() > EXECUTION_POLICY_INDEX
+                                    ? ExecutionPolicyMapper.fromJson(
+                                            Optional.ofNullable(experimentItem.get(EXECUTION_POLICY_INDEX))
+                                                    .map(Object::toString)
+                                                    .orElse(null))
+                                    : null)
+                            .build();
+                    var assertionsJson = experimentItem.size() > ASSERTIONS_INDEX
+                            ? Optional.ofNullable(experimentItem.get(ASSERTIONS_INDEX)).map(Object::toString)
+                                    .orElse(null)
+                            : null;
+                    return AssertionResultMapper.enrichWithAssertions(item, assertionsJson);
+                })
                 .toList();
 
         return experimentItems.isEmpty() ? null : experimentItems;

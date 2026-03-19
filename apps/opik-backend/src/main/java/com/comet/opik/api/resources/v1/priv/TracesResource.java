@@ -504,15 +504,14 @@ public class TracesResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(
-            @QueryParam("project_id") UUID projectId,
-            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
+            @QueryParam("project_id") UUID projectId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Find feedback score names by project_id '{}', on workspaceId '{}'",
                 projectId, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getTraceFeedbackScoreNames(projectId, excludeCategoryNames)
+                .getTraceFeedbackScoreNames(projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by project_id '{}', on workspaceId '{}'",
@@ -967,8 +966,7 @@ public class TracesResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findTraceThreadsFeedbackScoreNames(
-            @QueryParam("project_id") UUID projectId,
-            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
+            @QueryParam("project_id") UUID projectId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -976,7 +974,7 @@ public class TracesResource {
                 projectId, workspaceId);
 
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getTraceThreadsFeedbackScoreNames(projectId, excludeCategoryNames)
+                .getTraceThreadsFeedbackScoreNames(projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
