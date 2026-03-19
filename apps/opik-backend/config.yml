@@ -344,6 +344,19 @@ rateLimit:
       userFacingBucketName: single_tracing_ops
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for single tracing operations. Please try again later."
+    ollieStateUpload:
+      # Default: 4
+      # Description: how many ollie state uploads are allowed in the specified time bucket (per API key)
+      limit: ${RATE_LIMIT_OLLIE_STATE_UPLOAD:-4}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_OLLIE_STATE_UPLOAD_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Ollie-State-Upload
+      # Description: User facing bucket name
+      userFacingBucketName: ollie_state_upload
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for ollie state uploads. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
@@ -681,6 +694,12 @@ s3Config:
   s3Url: ${S3_URL:-http://localhost:9001}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
+
+# Ollie state persistence configuration
+ollieStateConfig:
+  # Default: 52428800 (50MB)
+  # Description: Maximum upload size in bytes for ollie state persistence
+  maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
 # Attachments configuration
 attachmentsConfig:

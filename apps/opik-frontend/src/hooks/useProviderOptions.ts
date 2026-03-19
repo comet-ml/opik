@@ -1,13 +1,13 @@
 import { useMemo } from "react";
 import { PROVIDER_TYPE, ProviderObject } from "@/types/providers";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
 import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
 import {
   buildComposedProviderKey,
   getProviderDisplayName,
 } from "@/lib/provider";
-import { ProviderGridOption } from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
+import { ProviderGridOption } from "@/v1/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 
 interface UseProviderOptionsParams {
   configuredProvidersList?: ProviderObject[];

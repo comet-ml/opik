@@ -2,6 +2,7 @@ import typing
 
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
+from opik.rest_api.core.request_options import RequestOptions
 from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
 from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
 from opik.rest_api.types.agent_config_env import AgentConfigEnv
@@ -11,8 +12,8 @@ from .blueprint import Blueprint
 from . import type_helpers
 
 
-class AgentConfig:
-    """Project-level agent config entity."""
+class AgentConfigManager:
+    """Project-level agent config entity — internal REST operations."""
 
     def __init__(
         self,
@@ -74,42 +75,54 @@ class AgentConfig:
     def get_blueprint(
         self,
         *,
-        id: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
         env: typing.Optional[str] = None,
         mask_id: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        timeout_in_seconds: typing.Optional[int] = None,
     ) -> typing.Optional[Blueprint]:
-        """Fetch a blueprint by ID, environment name, or latest.
+        """Fetch a blueprint by name, environment name, or latest.
 
-        Priority: ``id`` > ``env`` > latest. Returns ``None`` if not found.
+        Priority: ``name`` > ``env`` > latest.
+        Returns ``None`` if not found.
 
         Args:
-            id: Fetch the blueprint with this exact ID.
+            name: Fetch the blueprint with this version name.
             env: Fetch the blueprint tagged with this environment name.
             mask_id: ID of a mask blueprint to overlay on the result.
             field_types: Mapping of prefixed field key to Python type used
                 for deserialising backend values.
+            timeout_in_seconds: HTTP request timeout in seconds.
         """
+        request_options: typing.Optional[RequestOptions] = (
+            RequestOptions(timeout_in_seconds=timeout_in_seconds)
+            if timeout_in_seconds is not None
+            else None
+        )
         try:
-            if id is not None:
-                raw = self._rest_client.agent_configs.get_blueprint_by_id(
-                    id, mask_id=mask_id
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, self._project_name
+            )
+            if name is not None:
+                raw = self._rest_client.agent_configs.get_blueprint_by_name(
+                    project_id=project_id,
+                    name=name,
+                    mask_id=mask_id,
+                    request_options=request_options,
+                )
+            elif env is not None:
+                raw = self._rest_client.agent_configs.get_blueprint_by_env(
+                    env_name=env,
+                    project_id=project_id,
+                    mask_id=mask_id,
+                    request_options=request_options,
                 )
             else:
-                project_id = rest_helpers.resolve_project_id_by_name(
-                    self._rest_client, self._project_name
+                raw = self._rest_client.agent_configs.get_latest_blueprint(
+                    project_id=project_id,
+                    mask_id=mask_id,
+                    request_options=request_options,
                 )
-                if env is not None:
-                    raw = self._rest_client.agent_configs.get_blueprint_by_env(
-                        env_name=env,
-                        project_id=project_id,
-                        mask_id=mask_id,
-                    )
-                else:
-                    raw = self._rest_client.agent_configs.get_latest_blueprint(
-                        project_id=project_id,
-                        mask_id=mask_id,
-                    )
         except rest_api_core.ApiError as e:
             if e.status_code == 404:
                 return None

@@ -6,7 +6,7 @@ import api, {
 } from "@/api/api";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import useAppStore from "@/store/AppStore";
 
 type UseOptimizationStopMutationParams = {

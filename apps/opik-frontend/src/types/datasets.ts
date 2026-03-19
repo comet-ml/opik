@@ -6,6 +6,10 @@ import {
   UsageData,
 } from "@/types/shared";
 import { CommentItems } from "./comment";
+import { ExperimentItemStatus, ExecutionPolicy } from "./evaluation-suites";
+
+export type { ExecutionPolicy };
+export type RunStatus = "passed" | "failed";
 
 export interface Dataset {
   id: string;
@@ -18,6 +22,7 @@ export interface Dataset {
   most_recent_optimization_at: string;
   last_created_optimization_at: string;
   optimization_count: number;
+  type?: DATASET_TYPE;
   tags?: string[];
   created_at: string;
   last_updated_at: string;
@@ -40,10 +45,17 @@ export interface DatasetVersion {
   change_description?: string;
   metadata?: Record<string, unknown>;
   tags?: string[];
+  evaluators?: Evaluator[];
+  execution_policy?: ExecutionPolicy;
   created_at: string;
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
+}
+
+export enum DATASET_TYPE {
+  DATASET = "dataset",
+  EVALUATION_SUITE = "evaluation_suite",
 }
 
 export enum DATASET_STATUS {
@@ -67,9 +79,10 @@ export enum DATASET_ITEM_DRAFT_STATUS {
   // deleted items are filtered out, not shown
 }
 
-export interface ExecutionPolicy {
-  runs_per_item?: number;
-  pass_threshold?: number;
+export interface Evaluator {
+  name: string;
+  type: string;
+  config: Record<string, unknown>;
 }
 
 export interface DatasetItem {
@@ -79,6 +92,8 @@ export interface DatasetItem {
   trace_id?: string;
   span_id?: string;
   tags?: string[];
+  description?: string;
+  evaluators?: Evaluator[];
   execution_policy?: ExecutionPolicy;
   created_at: string;
   last_updated_at: string;
@@ -114,6 +129,11 @@ export enum EXPERIMENT_TYPE {
   MUTATION = "mutation",
 }
 
+export enum EVALUATION_METHOD {
+  DATASET = "dataset",
+  EVALUATION_SUITE = "evaluation_suite",
+}
+
 export interface Experiment {
   id: string;
   dataset_id: string;
@@ -126,6 +146,7 @@ export interface Experiment {
   project_name?: string;
   optimization_id?: string;
   type: EXPERIMENT_TYPE;
+  evaluation_method?: EVALUATION_METHOD;
   status: string;
   metadata?: object;
   name: string;
@@ -142,24 +163,18 @@ export interface Experiment {
   total_count?: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
-  evaluation_method?: string;
+  assertion_aggregations?: AssertionAggregation[];
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
 }
 
-export interface AssertionResult {
-  value: string;
-  passed: boolean;
-  reason?: string;
-}
-
-export type RunStatus = "passed" | "failed";
-
-export interface ExperimentRunSummary {
-  passed_runs: number;
-  total_runs: number;
-  status: RunStatus;
+export interface EvalSuiteExperiment extends Experiment {
+  evaluation_method: EVALUATION_METHOD.EVALUATION_SUITE;
+  pass_rate: number;
+  passed_count: number;
+  total_count: number;
+  assertion_aggregations: AssertionAggregation[];
 }
 
 export interface ExperimentItem {
@@ -171,14 +186,33 @@ export interface ExperimentItem {
   input: object;
   output: object;
   feedback_scores?: TraceFeedbackScore[];
-  assertion_results?: AssertionResult[];
-  status?: RunStatus;
   duration?: number;
   usage?: UsageData;
   total_estimated_cost?: number;
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
+  status?: ExperimentItemStatus;
+  assertion_results?: AssertionResult[];
+}
+
+export interface AssertionResult {
+  value: string;
+  passed: boolean;
+  reason?: string;
+}
+
+export interface AssertionAggregation {
+  name: string;
+  pass_rate: number;
+  passed_count: number;
+  total_count: number;
+}
+
+export interface ExperimentRunSummary {
+  passed_runs: number;
+  total_runs: number;
+  status: ExperimentItemStatus;
 }
 
 export interface ExperimentsCompare extends DatasetItem {
@@ -191,6 +225,9 @@ export interface ExperimentsAggregations {
   trace_count: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
+  pass_rate?: number;
+  passed_count?: number;
+  total_count?: number;
   duration?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];

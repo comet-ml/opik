@@ -3,7 +3,7 @@ import { AxiosError } from "axios";
 import get from "lodash/get";
 
 import api, { THREADS_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseCreateThreadCommentMutationParams = {
   threadId: string;

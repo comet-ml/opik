@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useServerSync } from "@/components/server-sync-provider";
+import { useServerSync } from "@/v1/server-sync-provider";
 import { resolveColor, resolveChartColorMap } from "@/lib/colorVariants";
 
 const useWorkspaceColorMap = () => {

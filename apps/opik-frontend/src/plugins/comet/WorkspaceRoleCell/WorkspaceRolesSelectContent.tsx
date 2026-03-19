@@ -1,4 +1,4 @@
-import { SelectContent, SelectItem } from "@/components/ui/select";
+import { SelectContent, SelectItem } from "@/ui/select";
 import { WorkspaceRole } from "@/plugins/comet/types";
 
 interface WorkspaceRolesSelectContentProps {

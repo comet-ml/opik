@@ -1,4 +1,5 @@
 import gzip
+import logging
 from typing import Optional, Dict, Any, Union, Iterable, AsyncIterable, Mapping
 import httpx
 import os
@@ -6,6 +7,10 @@ import json as jsonlib
 
 from . import hooks, package_version
 import platform
+
+LOGGER = logging.getLogger(__name__)
+
+DEPRECATION_HEADER = "X-Opik-Deprecation"
 
 
 CABundlePath = str
@@ -82,6 +87,7 @@ class OpikHttpxClient(httpx.Client):
     def __init__(self, compress_json_requests: bool = True, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.compress_json_requests = compress_json_requests
+        self.warnings: Dict[str, bool] = {}
 
     def build_request(
         self,
@@ -128,3 +134,17 @@ class OpikHttpxClient(httpx.Client):
             timeout=timeout,
             extensions=extensions,
         )
+
+    def send(self, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+        response = super().send(request, **kwargs)
+        deprecation_message = response.headers.get(DEPRECATION_HEADER)
+        if deprecation_message:
+            message = "Deprecation warning for %s %s: %s"
+            request_key = f"{request.method}:{request.url.path}"
+            if request_key not in self.warnings:
+                self.warnings[request_key] = True
+                LOGGER.warning(
+                    message, request.method, request.url, deprecation_message
+                )
+
+        return response

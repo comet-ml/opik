@@ -322,6 +322,82 @@ def test_models_factory_track_parameter_creates_separate_instances(monkeypatch):
     assert model_tracked is model_tracked_2
 
 
+class TestExtractMessageContent:
+    def test_returns_content_when_present(self):
+        choice = {"message": {"content": "hello"}}
+        assert litellm_chat_model._extract_message_content(choice) == "hello"
+
+    def test_returns_none_when_no_content_and_no_tool_calls(self):
+        choice = {"message": {"content": None}}
+        assert litellm_chat_model._extract_message_content(choice) is None
+
+    def test_falls_back_to_structured_output_tool_call(self):
+        choice = {
+            "message": {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "json_tool_call",
+                            "arguments": '{"assertion_1": {"score": true, "reason": "ok", "confidence": 0.9}}',
+                        }
+                    }
+                ],
+            }
+        }
+        result = litellm_chat_model._extract_message_content(choice)
+        assert '"assertion_1"' in result
+        assert '"score": true' in result
+
+    def test_falls_back_to_structured_output_tool_call_from_object_message(self):
+        choice = {
+            "message": SimpleNamespace(
+                content=None,
+                tool_calls=[
+                    SimpleNamespace(
+                        function=SimpleNamespace(
+                            name="json_tool_call",
+                            arguments='{"score": true}',
+                        )
+                    )
+                ],
+            )
+        }
+        assert litellm_chat_model._extract_message_content(choice) == '{"score": true}'
+
+    def test_ignores_non_structured_output_tool_calls(self):
+        choice = {
+            "message": {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"city": "Paris"}',
+                        }
+                    }
+                ],
+            }
+        }
+        assert litellm_chat_model._extract_message_content(choice) is None
+
+    def test_prefers_content_over_tool_calls(self):
+        choice = {
+            "message": {
+                "content": "direct content",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "json_tool_call",
+                            "arguments": "should not use this",
+                        }
+                    }
+                ],
+            }
+        }
+        assert litellm_chat_model._extract_message_content(choice) == "direct content"
+
+
 @pytest.mark.parametrize(
     "track,expected_calls",
     [
