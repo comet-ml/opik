@@ -2,14 +2,18 @@ import gzip
 import json
 from unittest import mock
 
+import pytest
+import respx
+
 from opik import httpx_client
-import opik.hooks
 from opik.httpx_client import (
     CONNECT_TIMEOUT_SECONDS,
+    DEPRECATION_HEADER,
+    POOL_TIMEOUT_SECONDS,
     READ_TIMEOUT_SECONDS,
     WRITE_TIMEOUT_SECONDS,
-    POOL_TIMEOUT_SECONDS,
 )
+import opik.hooks
 
 
 def test_json_compression__compressed_if_json(respx_mock):
@@ -114,3 +118,67 @@ def test_get_httpx_client__no_hooks():
         None, None, check_tls_certificate=False, compress_json_requests=True
     )
     assert client is not None
+
+
+class TestOpikHttpxClientDeprecationHeader:
+    """Tests for X-Opik-Deprecation response header handling."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.client = httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        )
+
+        yield
+
+        self.client.close()
+
+    @respx.mock
+    def test_deprecation_header_present__logged_only_once_for_same_path(
+        self, capture_log
+    ):
+        """Verify the same deprecation warning is not repeated across multiple calls to the same path."""
+        rx_url = "https://foo.bar/api/v1/deprecated"
+        respx.get(rx_url).respond(200, headers={DEPRECATION_HEADER: "deprecated"})
+
+        self.client.get(rx_url)
+        self.client.get(rx_url)
+
+        assert len(capture_log.records) == 1
+        assert capture_log.records[0].levelname == "WARNING"
+        assert (
+            capture_log.records[0].message
+            == f"Deprecation warning for GET {rx_url}: deprecated"
+        )
+
+    @respx.mock
+    def test_deprecation_header_absent__no_warning_logged_and_response_still_returned(
+        self,
+    ):
+        """Verify no warning is logged when the response does not contain X-Opik-Deprecation and the response is returned normally."""
+        rx_url = "https://foo.bar/api/v1/normal"
+        respx.get(rx_url).respond(200)
+
+        with mock.patch("opik.httpx_client.LOGGER") as mock_logger:
+            response = self.client.get(rx_url)
+
+        mock_logger.warning.assert_not_called()
+        assert response.status_code == 200
+
+    @respx.mock
+    def test_deprecation_header_present__warning_logged_and_response_still_returned(
+        self, capture_log
+    ):
+        """Verify the response is returned normally even when the deprecation header is present."""
+        rx_url = "https://localhost/api/v2/deprecated"
+        respx.get(rx_url).respond(200, headers={DEPRECATION_HEADER: "deprecated"})
+
+        response = self.client.get(rx_url)
+
+        assert capture_log.records[0].levelname == "WARNING"
+        assert (
+            capture_log.records[0].message
+            == f"Deprecation warning for GET {rx_url}: deprecated"
+        )
+
+        assert response.status_code == 200

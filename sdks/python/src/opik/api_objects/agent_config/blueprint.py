@@ -118,6 +118,10 @@ class Blueprint:
         return self._raw.id
 
     @property
+    def name(self) -> typing.Optional[str]:
+        return self._raw.name
+
+    @property
     def description(self) -> typing.Optional[str]:
         return self._raw.description
 
