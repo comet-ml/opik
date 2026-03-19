@@ -811,7 +811,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     private void purgeRunner(UUID runnerId, String workspaceId, String userName) {
-        log.info("Purging dead runner {} from workspace {}", runnerId, workspaceId);
+        log.info("Purging dead runner '{}' from workspace '{}'", runnerId, workspaceId);
 
         String projectIdStr = redisClient.<String, String>getMap(runnerKey(runnerId)).get(FIELD_PROJECT_ID);
 
@@ -890,7 +890,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         if (oldRunnerIdStr != null && !oldRunnerIdStr.equals(newRunnerId.toString())) {
             UUID oldRunnerId = UUID.fromString(oldRunnerIdStr);
             redisClient.getBucket(runnerHeartbeatKey(oldRunnerId)).delete();
-            log.info("Evicted runner {} in workspace {}", oldRunnerId, workspaceId);
+            log.info("Evicted runner '{}' in workspace '{}'", oldRunnerId, workspaceId);
         }
     }
 
@@ -1135,19 +1135,19 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId));
         Map<String, String> fields = jobMap.readAllMap();
         if (fields.isEmpty()) {
-            throw new NotFoundException("Job not found: " + jobId);
+            throw new NotFoundException("Job not found: '%s'".formatted(jobId));
         }
         if (!workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
-            throw new NotFoundException("Job not found: " + jobId);
+            throw new NotFoundException("Job not found: '%s'".formatted(jobId));
         }
         String runnerIdStr = fields.get(FIELD_RUNNER_ID);
         if (runnerIdStr == null) {
-            throw new NotFoundException("Job not found: " + jobId);
+            throw new NotFoundException("Job not found: '%s'".formatted(jobId));
         }
         RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
                 workspaceUserRunnersKey(workspaceId, userName));
         if (!userRunners.contains(runnerIdStr)) {
-            throw new NotFoundException("Job not found: " + jobId);
+            throw new NotFoundException("Job not found: '%s'".formatted(jobId));
         }
         return new ValidatedJob(jobMap, fields);
     }

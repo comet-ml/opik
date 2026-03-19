@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -63,7 +64,7 @@ public class LocalRunnerConfig {
     private Duration pairingRunnerTtl = Duration.seconds(600);
 
     @Valid @JsonProperty
-    private int reaperMaxRunnersPerCycle = 100;
+    @Min(1) private int reaperMaxRunnersPerCycle = 100;
 
     @Valid @JsonProperty
     private int maxAgentsPerRunner = 50;
