@@ -16,6 +16,7 @@ import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -440,6 +441,75 @@ public class ExperimentResourceClient {
                 .get()) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return response.readEntity(FeedbackScoreNames.class);
+        }
+    }
+
+    public Experiment.ExperimentPage getProjectExperimentsWithSortingField(
+            UUID projectId, int page, int size, String name, List<SortingField> sortingFields,
+            List<? extends ExperimentFilter> filters, String apiKey, String workspaceName) {
+        var sorting = CollectionUtils.isNotEmpty(sortingFields)
+                ? toURLEncodedQueryParam(sortingFields)
+                : null;
+        return getProjectExperiments(projectId, page, size, null, null, name, false, sorting, filters, false, apiKey,
+                workspaceName, HttpStatus.SC_OK);
+    }
+
+    public Experiment.ExperimentPage getProjectExperiments(
+            UUID projectId, int page, int size, UUID datasetId, Set<ExperimentType> types, String name,
+            boolean datasetDeleted, String sorting, List<? extends ExperimentFilter> filters, boolean forceSorting,
+            String apiKey, String workspaceName, int expectedStatus) {
+        return getProjectExperiments(projectId, page, size, datasetId, types, name, datasetDeleted, sorting, filters,
+                forceSorting, null, null, apiKey, workspaceName, expectedStatus);
+    }
+
+    public Experiment.ExperimentPage getProjectExperiments(
+            UUID projectId, int page, int size, UUID datasetId, Set<ExperimentType> types, String name,
+            boolean datasetDeleted, String sorting, List<? extends ExperimentFilter> filters, boolean forceSorting,
+            UUID optimizationId, Set<UUID> experimentIds,
+            String apiKey, String workspaceName, int expectedStatus) {
+
+        WebTarget webTarget = client.target("%s/v1/private/projects/%s/experiments".formatted(baseURI, projectId))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("datasetId", datasetId);
+        }
+        if (optimizationId != null) {
+            webTarget = webTarget.queryParam("optimization_id", optimizationId);
+        }
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
+        }
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+        if (datasetDeleted) {
+            webTarget = webTarget.queryParam("dataset_deleted", true);
+        }
+        if (sorting != null) {
+            webTarget = webTarget.queryParam("sorting", sorting);
+        }
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+        if (CollectionUtils.isNotEmpty(experimentIds)) {
+            webTarget = webTarget.queryParam("experiment_ids", JsonUtils.writeValueAsString(experimentIds));
+        }
+        if (forceSorting) {
+            webTarget = webTarget.queryParam("force_sorting", true);
+        }
+
+        try (Response response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Experiment.ExperimentPage.class);
+            }
+            return null;
         }
     }
 
