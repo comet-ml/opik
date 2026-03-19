@@ -694,7 +694,7 @@ export class OpikClient {
         {
           id: experimentData.id,
           name: experimentData.name,
-          datasetName: experimentData.datasetName,
+          datasetName: experimentData.datasetName ?? undefined,
         },
         this
       );
@@ -734,7 +734,7 @@ export class OpikClient {
             {
               id: exp.id,
               name: exp.name,
-              datasetName: exp.datasetName,
+              datasetName: exp.datasetName ?? undefined,
             },
             this
           )
@@ -806,7 +806,7 @@ export class OpikClient {
               {
                 id: exp.id,
                 name: exp.name,
-                datasetName: exp.datasetName,
+                datasetName: exp.datasetName ?? undefined,
               },
               this
             )

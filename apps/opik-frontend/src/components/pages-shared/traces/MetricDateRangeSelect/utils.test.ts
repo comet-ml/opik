@@ -21,7 +21,7 @@ describe("calculateIntervalStartAndEnd", () => {
 
   describe("when end date is today", () => {
     it("should use current time as end and calculate start based on difference for <= 1 day range", () => {
-      const today = new Date("2024-01-15");
+      const today = dayjs(mockCurrentDate).startOf("day").toDate();
       const dateRange: DateRangeValue = {
         from: today,
         to: today, // Same day
@@ -41,8 +41,11 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should use current time as end and calculate start based on difference for 1 day range", () => {
-      const today = new Date("2024-01-15");
-      const yesterday = new Date("2024-01-14");
+      const today = dayjs(mockCurrentDate).startOf("day").toDate();
+      const yesterday = dayjs(mockCurrentDate)
+        .subtract(1, "day")
+        .startOf("day")
+        .toDate();
       const dateRange: DateRangeValue = {
         from: yesterday,
         to: today,
@@ -62,8 +65,11 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should use current time as end and calculate start based on difference for > 1 day range", () => {
-      const today = new Date("2024-01-15");
-      const threeDaysAgo = new Date("2024-01-12");
+      const today = dayjs(mockCurrentDate).startOf("day").toDate();
+      const threeDaysAgo = dayjs(mockCurrentDate)
+        .subtract(3, "days")
+        .startOf("day")
+        .toDate();
       const dateRange: DateRangeValue = {
         from: threeDaysAgo,
         to: today,
@@ -83,8 +89,11 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should handle week-long range ending today", () => {
-      const today = new Date("2024-01-15");
-      const weekAgo = new Date("2024-01-08");
+      const today = dayjs(mockCurrentDate).startOf("day").toDate();
+      const weekAgo = dayjs(mockCurrentDate)
+        .subtract(7, "days")
+        .startOf("day")
+        .toDate();
       const dateRange: DateRangeValue = {
         from: weekAgo,
         to: today,
@@ -183,8 +192,11 @@ describe("calculateIntervalStartAndEnd", () => {
 
   describe("edge cases", () => {
     it("should handle exact boundary of 1 day difference with today", () => {
-      const today = new Date("2024-01-15");
-      const oneDayAgo = new Date("2024-01-14");
+      const today = dayjs(mockCurrentDate).startOf("day").toDate();
+      const oneDayAgo = dayjs(mockCurrentDate)
+        .subtract(1, "day")
+        .startOf("day")
+        .toDate();
       const dateRange: DateRangeValue = {
         from: oneDayAgo,
         to: today,

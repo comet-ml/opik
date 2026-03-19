@@ -235,7 +235,11 @@ class ProjectsClient:
         return _response.data
 
     def find_feedback_score_names_by_project_ids(
-        self, *, project_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_ids: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNames:
         """
         Find Feedback Score names By Project Ids
@@ -243,6 +247,8 @@ class ProjectsClient:
         Parameters
         ----------
         project_ids : typing.Optional[str]
+
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -259,7 +265,7 @@ class ProjectsClient:
         client.projects.find_feedback_score_names_by_project_ids()
         """
         _response = self._raw_client.find_feedback_score_names_by_project_ids(
-            project_ids=project_ids, request_options=request_options
+            project_ids=project_ids, exclude_category_names=exclude_category_names, request_options=request_options
         )
         return _response.data
 
@@ -653,7 +659,11 @@ class AsyncProjectsClient:
         return _response.data
 
     async def find_feedback_score_names_by_project_ids(
-        self, *, project_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_ids: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNames:
         """
         Find Feedback Score names By Project Ids
@@ -661,6 +671,8 @@ class AsyncProjectsClient:
         Parameters
         ----------
         project_ids : typing.Optional[str]
+
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -680,7 +692,7 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_feedback_score_names_by_project_ids(
-            project_ids=project_ids, request_options=request_options
+            project_ids=project_ids, exclude_category_names=exclude_category_names, request_options=request_options
         )
         return _response.data
 

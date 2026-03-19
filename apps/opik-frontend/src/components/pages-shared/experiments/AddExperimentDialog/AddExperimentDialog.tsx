@@ -19,6 +19,8 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useIsPhone } from "@/hooks/useIsPhone";
+import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -160,8 +162,6 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
   },
 ];
 
-import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
-
 const ALL_EVALUATOR_OPTIONS: MetricOption[] = [
   ...HEURISTICS_MODELS_OPTIONS.map((m) => ({
     ...m,
@@ -182,6 +182,10 @@ type AddExperimentDialogProps = {
 const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
 > = ({ open, setOpen, datasetName: initialDatasetName = "" }) => {
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
+
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
   const { isPhonePortrait } = useIsPhone();
@@ -464,7 +468,7 @@ eval_results = evaluate(
   );
 
   return (
-    <SideDialog open={open} setOpen={openChangeHandler}>
+    <SideDialog open={open && canCreateExperiments} setOpen={openChangeHandler}>
       <div className="pb-20">
         <div className="pb-8">
           <SheetTitle>Create a new experiment</SheetTitle>

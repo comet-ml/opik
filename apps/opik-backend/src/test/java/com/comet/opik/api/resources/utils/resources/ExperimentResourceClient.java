@@ -80,11 +80,13 @@ public class ExperimentResourceClient {
                 .optimizationId(null)
                 .usage(null)
                 .projectId(null)
+                .projectName(null)
                 .datasetVersionId(null)
                 .datasetVersionSummary(null)
                 .passRate(null)
                 .passedCount(null)
-                .totalCount(null);
+                .totalCount(null)
+                .datasetItemCount(null);
     }
 
     public List<Experiment> generateExperimentList() {

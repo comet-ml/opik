@@ -277,10 +277,9 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
       <CardContent className="flex min-h-0 flex-1 flex-col px-5 pb-4">
         <div className="flex shrink-0 items-center justify-between">
           <Link
-            to="/$workspaceName/optimizations/$datasetId/$optimizationId/compare"
+            to="/$workspaceName/optimizations/$optimizationId/trials"
             params={{
               workspaceName,
-              datasetId: experiment.dataset_id,
               optimizationId: optimization.id,
             }}
             search={{ trials: [experiment.id] }}

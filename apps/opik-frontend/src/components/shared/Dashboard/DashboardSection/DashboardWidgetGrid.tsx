@@ -24,7 +24,7 @@ import {
   selectReadOnly,
 } from "@/store/DashboardStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { applyWidgetPermissions } from "@/components/shared/Dashboard/widgets/widgetRegistry";
+import { applyWidgetPermissions } from "@/lib/dashboard/permissions";
 import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
 import DashboardWidgetDisabled from "../DashboardWidget/DashboardWidgetDisabled";
 
@@ -61,8 +61,12 @@ const DashboardWidgetGrid: React.FunctionComponent<
   );
 
   if (isEmpty(widgets)) {
-    if (readOnly) return null;
-    return <DashboardWidgetGridEmpty onAddWidget={handleAddWidget} />;
+    return (
+      <DashboardWidgetGridEmpty
+        onAddWidget={handleAddWidget}
+        readOnly={readOnly}
+      />
+    );
   }
 
   return (

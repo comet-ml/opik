@@ -84,10 +84,11 @@ const DashboardSectionHeader: React.FunctionComponent<
         )}
       </div>
 
-      <DashboardSectionTitle
-        title={title}
-        onChange={readOnly ? undefined : onUpdateTitle}
-      />
+      {readOnly ? (
+        <span className="truncate text-sm font-medium">{title}</span>
+      ) : (
+        <DashboardSectionTitle title={title} onChange={onUpdateTitle} />
+      )}
 
       {!readOnly && (
         <>
@@ -166,18 +167,18 @@ const DashboardSectionHeader: React.FunctionComponent<
           >
             <GripHorizontal className="size-4" />
           </div>
-
-          <ConfirmDialog
-            open={showDeleteDialog}
-            setOpen={setShowDeleteDialog}
-            onConfirm={onDeleteSection}
-            title={`Delete ${title} section?`}
-            description={`This section will be removed from your dashboard. You can still undo this change before saving the dashboard.`}
-            confirmText={`Delete ${title}`}
-            confirmButtonVariant="destructive"
-          />
         </>
       )}
+
+      <ConfirmDialog
+        open={showDeleteDialog}
+        setOpen={setShowDeleteDialog}
+        onConfirm={onDeleteSection}
+        title={`Delete ${title} section?`}
+        description="Are you sure you want to delete this section? This action cannot be undone."
+        confirmText={`Delete ${title}`}
+        confirmButtonVariant="destructive"
+      />
     </div>
   );
 };

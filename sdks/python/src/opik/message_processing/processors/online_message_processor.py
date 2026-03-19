@@ -372,6 +372,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 dataset_item_id=item.dataset_item_id,
                 trace_id=item.trace_id,
                 project_name=item.project_name,
+                execution_policy=item.execution_policy,
             )
             for item in message.batch
         ]

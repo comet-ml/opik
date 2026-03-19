@@ -58,19 +58,18 @@ const DashboardContent: React.FunctionComponent = () => {
       <DashboardSectionsContainer />
 
       {!readOnly && (
-        <>
-          <div className="text-clip rounded-md">
-            <AddSectionButton onAddSection={addSection} />
-          </div>
-          <WidgetConfigDialog
-            open={widgetDialogOpen}
-            onOpenChange={setWidgetDialogOpen}
-            sectionId={targetSectionId || ""}
-            widgetId={targetWidgetId || undefined}
-            onSave={handleSaveWidget}
-          />
-        </>
+        <div className="text-clip rounded-md">
+          <AddSectionButton onAddSection={addSection} />
+        </div>
       )}
+
+      <WidgetConfigDialog
+        open={widgetDialogOpen}
+        onOpenChange={setWidgetDialogOpen}
+        sectionId={targetSectionId || ""}
+        widgetId={targetWidgetId || undefined}
+        onSave={handleSaveWidget}
+      />
     </>
   );
 };

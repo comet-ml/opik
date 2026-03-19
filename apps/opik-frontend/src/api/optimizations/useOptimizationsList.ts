@@ -43,7 +43,7 @@ export const getOptimizationsList = async (
       workspace_name: workspaceName,
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
       ...processFilters(filters),
-      ...(search && { name: search }),
+      ...(search && { dataset_name: search }),
       ...(datasetId && { dataset_id: datasetId }),
       size,
       page,

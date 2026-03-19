@@ -14,6 +14,11 @@ from .dataset_version_summary_public import DatasetVersionSummaryPublic
 class DatasetPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project ID. Takes precedence over project_name when both are provided.
+    """
+
     type: typing.Optional[DatasetPublicType] = None
     visibility: typing.Optional[DatasetPublicVisibility] = None
     tags: typing.Optional[typing.List[str]] = None

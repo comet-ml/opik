@@ -12,6 +12,8 @@ export const Prompt: core.serialization.ObjectSchema<serializers.Prompt.Raw, Opi
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         description: core.serialization.string().optional(),
         template: core.serialization.string().optional(),
         metadata: JsonNode.optional(),
@@ -32,6 +34,8 @@ export declare namespace Prompt {
     export interface Raw {
         id?: string | null;
         name: string;
+        project_id?: string | null;
+        project_name?: string | null;
         description?: string | null;
         template?: string | null;
         metadata?: JsonNode.Raw | null;

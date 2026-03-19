@@ -1,335 +1,294 @@
-import React, { useState, useMemo, useCallback } from "react";
-import useChartConfig from "@/hooks/useChartConfig";
-import { Dot, XAxis, CartesianGrid, YAxis, AreaChart, Area } from "recharts";
-import { LineDot } from "recharts/types/cartesian/Line";
-import debounce from "lodash/debounce";
-
-import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
-import OptimizationProgressTooltip from "./OptimizationProgressTooltip";
-import ChartHorizontalLegend from "@/components/shared/Charts/ChartHorizontalLegend/ChartHorizontalLegend";
+import React, { useMemo, useRef, useState } from "react";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartLegend,
-} from "@/components/ui/chart";
+  XAxis,
+  CartesianGrid,
+  YAxis,
+  ComposedChart,
+  Scatter,
+  Customized,
+} from "recharts";
+
+import { ChartContainer } from "@/components/ui/chart";
 import {
   DEFAULT_CHART_GRID_PROPS,
   DEFAULT_CHART_TICK,
 } from "@/constants/chart";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+import { AggregatedCandidate } from "@/types/optimizations";
+import ChartTooltip from "./ChartTooltip";
 import {
-  extractSecondaryScoreNames,
-  getScoreValue,
-  generateDistinctColorMap,
+  TRIAL_STATUS_COLORS,
+  TRIAL_STATUS_LABELS,
+  TRIAL_STATUS_ORDER,
+  CandidateDataPoint,
+  buildParentChildEdges,
 } from "./optimizationChartUtils";
+import type { InProgressInfo } from "./optimizationChartUtils";
+import {
+  OVERLAP_SPACING,
+  CHART_MARGIN,
+  X_AXIS_PADDING,
+  X_DOMAIN_EXTRA,
+} from "./chartConstants";
+import useScatterDot from "./ScatterDot";
+import type { DotPosition } from "./ScatterDot";
+import useChartEdges from "./ChartEdges";
+import useGhostCandidate from "./GhostCandidate";
 
-export type DataRecord = {
-  entityId: string;
-  entityName: string;
-  createdDate: string;
-  value: number | null;
-  allFeedbackScores?: { name: string; value: number }[];
-};
-
-export type ChartData = {
-  data: DataRecord[];
-  objectiveName: string;
-};
+const GHOST_ID = "__ghost__";
 
 type OptimizationProgressChartContentProps = {
-  bestEntityId?: string;
-  chartData: ChartData;
+  chartData: CandidateDataPoint[];
+  candidates: AggregatedCandidate[];
+  bestCandidateId?: string;
+  objectiveName: string;
+  selectedTrialId?: string;
+  onTrialSelect?: (trialId: string) => void;
+  onTrialClick?: (candidateId: string) => void;
+  isEvaluationSuite?: boolean;
+  isInProgress?: boolean;
+  inProgressInfo?: InProgressInfo;
+};
+
+const CHART_CONFIG = {
+  score: { label: "Score", color: "var(--color-blue)" },
 };
 
 const OptimizationProgressChartContent: React.FC<
   OptimizationProgressChartContentProps
-> = ({ chartData, bestEntityId }) => {
-  const { objectiveName, data } = chartData;
-  const [activeLine, setActiveLine] = useState<string | null>(null);
-  const [position, setPosition] = useState<
-    { x: number; y: number } | undefined
-  >();
+> = ({
+  chartData,
+  candidates,
+  bestCandidateId,
+  objectiveName,
+  selectedTrialId,
+  onTrialSelect,
+  onTrialClick,
+  isEvaluationSuite,
+  isInProgress = false,
+  inProgressInfo,
+}) => {
+  const steps = useMemo(() => {
+    const s = new Set(chartData.map((d) => d.stepIndex));
+    return Array.from(s).sort((a, b) => a - b);
+  }, [chartData]);
 
-  // Extract all score names (main objective + secondary scores)
-  const secondaryScoreNames = useMemo(
-    () => extractSecondaryScoreNames(data, objectiveName),
-    [data, objectiveName],
-  );
+  const positionedData = useMemo(() => {
+    return chartData.map((d) => ({
+      ...d,
+      x: d.stepIndex,
+    }));
+  }, [chartData]);
 
-  const allScoreNames = useMemo(
-    () => [objectiveName, ...secondaryScoreNames],
-    [objectiveName, secondaryScoreNames],
-  );
+  const ghostStep = useMemo(() => {
+    if (!isInProgress || steps.length === 0 || !inProgressInfo) return null;
+    return inProgressInfo.stepIndex;
+  }, [isInProgress, steps, inProgressInfo]);
 
-  // Generate distinct color map for all scores
-  const customColorMap = useMemo(
-    () => generateDistinctColorMap(objectiveName, secondaryScoreNames),
-    [objectiveName, secondaryScoreNames],
-  );
+  const { overlapOffsets, ghostXOffset } = useMemo(() => {
+    const groups = new Map<string, string[]>();
+    for (const d of chartData) {
+      const key = `${d.stepIndex}:${d.value}`;
+      const list = groups.get(key) ?? [];
+      list.push(d.candidateId);
+      groups.set(key, list);
+    }
 
-  const config = useChartConfig(allScoreNames, undefined, customColorMap);
+    // Include ghost in overlap groups so it spreads evenly with siblings
+    if (ghostStep != null && inProgressInfo) {
+      // Ghost has null value — group it with the parent's value at ghost step
+      // Find the parent's score to determine which group the ghost joins
+      const parentData = chartData.find((d) =>
+        inProgressInfo.parentCandidateIds.includes(d.candidateId),
+      );
+      const ghostValue = parentData?.value ?? null;
+      const ghostKey = `${ghostStep}:${ghostValue}`;
+      const list = groups.get(ghostKey) ?? [];
+      list.push(GHOST_ID);
+      groups.set(ghostKey, list);
+    }
 
-  const mainObjectiveColor = config[objectiveName].color as string;
-
-  // Collect all values (main objective + secondary scores) for Y-axis scaling
-  const values = useMemo(() => {
-    const allValues: DataRecord["value"][] = [];
-    data.forEach((record) => {
-      // Main objective value
-      allValues.push(record.value);
-      // Secondary scores values
-      secondaryScoreNames.forEach((scoreName) => {
-        allValues.push(getScoreValue(record, scoreName));
+    const offsets = new Map<string, number>();
+    for (const ids of groups.values()) {
+      if (ids.length <= 1) continue;
+      const totalWidth = (ids.length - 1) * OVERLAP_SPACING;
+      ids.forEach((id, i) => {
+        offsets.set(id, -totalWidth / 2 + i * OVERLAP_SPACING);
       });
-    });
-    return allValues;
-  }, [data, secondaryScoreNames]);
+    }
+
+    return {
+      overlapOffsets: offsets,
+      ghostXOffset: offsets.get(GHOST_ID) ?? 0,
+    };
+  }, [chartData, ghostStep, inProgressInfo]);
+
+  const values = useMemo(
+    () => positionedData.map((d) => d.value),
+    [positionedData],
+  );
 
   const {
     width: tickWidth,
     ticks,
     domain,
     yTickFormatter,
-    interval: tickInterval,
   } = useChartTickDefaultConfig(values, {
     maxTickPrecision: 2,
     targetTickCount: 3,
     showMinMaxDomain: true,
   });
 
-  const renderHeader = useCallback(
-    ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { entityName, createdDate } = payload[0].payload;
-
-      return (
-        <>
-          <div className="comet-body-xs-accented mb-0.5 truncate">
-            {entityName}
-          </div>
-          <div className="comet-body-xs mb-1 text-light-slate">
-            {createdDate}
-          </div>
-        </>
-      );
-    },
-    [],
-  );
-
-  // There is no way to subscribe to any event when the chart is rendered
-  // onAnimationEnd is called before dots are rendered
-  // we use this function to update the position of the popover
-  const updatePositionDebounced = useMemo(
-    () =>
-      debounce((val: { x: number; y: number }) => {
-        if (val) {
-          const { x, y } = val;
-          setPosition((state) => {
-            if (state?.x !== x || state?.y !== y) {
-              return {
-                x,
-                y,
-              };
-            }
-
-            return state;
-          });
-        }
-      }, 100),
-    [],
-  );
-
-  const renderPopover = () => {
-    if (!position) return null;
-
-    const topCorrection = 12;
-
-    const bgStyles: React.CSSProperties = {
-      backgroundColor: `color-mix(in srgb, ${mainObjectiveColor} 10%, white 100%)`,
-    };
-
-    return (
-      <div
-        style={
-          {
-            "--main-objective-color": mainObjectiveColor,
-            top: position.y,
-            left: position.x,
-            transform: `translate(-50%, calc(-100% - ${topCorrection}px))`,
-          } as React.CSSProperties
-        }
-        className="pointer-events-none absolute z-10"
-      >
-        <div
-          className="comet-body-s rounded px-2 py-1 text-[--main-objective-color]"
-          style={bgStyles}
-        >
-          Best prompt
-        </div>
-        <div
-          className="mx-auto -mt-1.5 size-2.5 rotate-45 rounded-[2px]"
-          style={bgStyles}
-        ></div>
-      </div>
-    );
-  };
-
-  // Render dot for main objective (primary score)
-  const renderMainDot: LineDot = (props) => {
-    const { key, ...rest } = props;
-    const color = config[props.name as string].color;
-    const height = 80;
-    const radius = 8;
-    if (props.payload.entityId === bestEntityId) {
-      updatePositionDebounced({ x: props.cx, y: props.cy });
-      return (
-        <React.Fragment key={key}>
-          <Dot {...rest} fill={color} strokeWidth={0} r={radius} />
-          <Dot
-            r={5}
-            fill={color}
-            cx={props.cx}
-            cy={props.cy}
-            strokeWidth={1.5}
-            stroke="white"
-          />
-          <rect
-            x={props.cx - 0.75}
-            y={props.cy + radius}
-            width="1.5"
-            height={height - props.cy}
-            fill={color}
-          />
-        </React.Fragment>
-      );
+  const candidateMap = useMemo(() => {
+    const map = new Map<string, AggregatedCandidate>();
+    for (const c of candidates) {
+      map.set(c.candidateId, c);
     }
+    return map;
+  }, [candidates]);
 
-    return (
-      <Dot key={key} {...rest} fill={color} strokeWidth={1.5} stroke="white" />
-    );
-  };
+  const edges = useMemo(() => buildParentChildEdges(chartData), [chartData]);
 
-  // Render smaller, less prominent dots for secondary scores
-  const renderSecondaryDot: LineDot = (props) => {
-    const { key, ...rest } = props;
-    const color = config[props.name as string].color;
-    const smallRadius = 5; // Slightly larger for better visibility
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dotPositionsRef = useRef<Map<string, DotPosition>>(new Map());
 
-    return (
-      <Dot
-        key={key}
-        {...rest}
-        fill={color}
-        strokeWidth={1.2}
-        stroke="white"
-        r={smallRadius}
-      />
-    );
-  };
+  const [hoveredTrial, setHoveredTrial] = useState<{
+    candidateId: string;
+    cx: number;
+    cy: number;
+  } | null>(null);
+
+  const pulsingCandidateId = useMemo(() => {
+    if (!isInProgress || inProgressInfo) return undefined;
+    // Find the last "passed" candidate at the highest step
+    const passed = chartData
+      .filter((d) => d.status === "passed")
+      .sort((a, b) => b.stepIndex - a.stepIndex || b.value! - a.value! || 0);
+    return passed[0]?.candidateId;
+  }, [isInProgress, inProgressInfo, chartData]);
+
+  const renderScatterDot = useScatterDot({
+    dotPositionsRef,
+    overlapOffsets,
+    bestCandidateId,
+    pulsingCandidateId,
+    selectedTrialId,
+    onTrialSelect,
+    onTrialClick,
+    isEvaluationSuite,
+    setHoveredTrial,
+  });
+
+  const renderEdges = useChartEdges({ dotPositionsRef, edges });
+
+  const renderGhostCandidate = useGhostCandidate({
+    dotPositionsRef,
+    ghostStep,
+    ghostXOffset,
+    inProgressInfo,
+    chartData,
+    onTrialSelect,
+    onTrialClick,
+  });
+
+  const xDomain = useMemo(() => {
+    if (steps.length === 0) return [0, 1];
+    const maxDataStep = steps[steps.length - 1];
+    const max =
+      ghostStep != null ? Math.max(maxDataStep, ghostStep) : maxDataStep;
+    return [0, max + X_DOMAIN_EXTRA];
+  }, [steps, ghostStep]);
 
   return (
-    <div className="relative">
-      {renderPopover()}
-      <ChartContainer config={config} className="h-40 w-full">
-        <AreaChart
-          data={chartData.data}
-          margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
+    <div ref={containerRef} className="relative">
+      <ChartContainer config={CHART_CONFIG} className="h-48 w-full">
+        <ComposedChart data={positionedData} margin={CHART_MARGIN}>
           <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
           <XAxis
+            dataKey="x"
+            type="number"
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            interval={tickInterval}
-            tickFormatter={(value) => data[value]?.entityName}
+            ticks={
+              ghostStep != null && !steps.includes(ghostStep)
+                ? [...steps, ghostStep]
+                : steps
+            }
+            tickFormatter={(value) => `Step ${value}`}
+            domain={xDomain}
+            padding={X_AXIS_PADDING}
           />
           <YAxis
             width={tickWidth}
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            interval={tickInterval}
             ticks={ticks}
             tickFormatter={yTickFormatter}
             domain={domain}
           />
-          <ChartTooltip
+
+          {/* Scatter renders BEFORE Customized so dot positions are
+              captured in the ref before renderEdges reads them. */}
+          <Scatter
+            name={objectiveName}
+            dataKey="value"
+            shape={renderScatterDot as never}
             isAnimationActive={false}
-            content={
-              <OptimizationProgressTooltip
-                objectiveName={objectiveName}
-                renderHeader={renderHeader}
-              />
-            }
-          />
-          <ChartLegend
-            content={
-              <ChartHorizontalLegend
-                setActiveLine={setActiveLine}
-                chartId="optimization-progress-chart"
-              />
-            }
-          />
-          <defs>
-            <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-              <stop
-                offset="5%"
-                stopColor={mainObjectiveColor}
-                stopOpacity={0.2}
-              />
-              <stop
-                offset="75%"
-                stopColor={mainObjectiveColor}
-                stopOpacity={0}
-              />
-            </linearGradient>
-          </defs>
-
-          {/* Main objective line with prominent styling */}
-          <Area
-            type="linear"
-            key={objectiveName}
-            dataKey={(record) => record.value}
-            name={config[objectiveName].label as string}
-            stroke={mainObjectiveColor}
-            fillOpacity={
-              activeLine === null || activeLine === objectiveName ? 1 : 0.2
-            }
-            fill="url(#area)"
-            dot={renderMainDot}
-            activeDot={{ strokeWidth: 2, stroke: "white" }}
-            strokeWidth={2.5}
-            strokeOpacity={
-              activeLine === null || activeLine === objectiveName ? 1 : 0.2
-            }
-            animationDuration={100}
-            connectNulls={false}
           />
 
-          {/* Secondary score lines with subtle styling */}
-          {secondaryScoreNames.map((scoreName) => {
-            const scoreColor = config[scoreName].color as string;
-            const isHighlighted = activeLine === scoreName;
-            const isDimmed = activeLine !== null && activeLine !== scoreName;
-            return (
-              <Area
-                type="linear"
-                key={scoreName}
-                dataKey={(record) => getScoreValue(record, scoreName)}
-                name={config[scoreName].label as string}
-                stroke={scoreColor}
-                fillOpacity={0}
-                fill="transparent"
-                dot={renderSecondaryDot}
-                activeDot={{ strokeWidth: 1.5, stroke: "white", r: 5 }}
-                strokeWidth={isHighlighted ? 1.5 : 1.0}
-                strokeOpacity={isDimmed ? 0.15 : isHighlighted ? 0.8 : 0.5}
-                animationDuration={100}
-                connectNulls={false}
-              />
-            );
-          })}
-        </AreaChart>
+          {/* Edges render on top of dots in SVG paint order, but they are
+              thin translucent lines so the dots remain clearly visible. */}
+          <Customized component={renderEdges} />
+
+          {/* Ghost candidate with animated connector during optimization */}
+          {isInProgress && <Customized component={renderGhostCandidate} />}
+        </ComposedChart>
       </ChartContainer>
+
+      {hoveredTrial != null &&
+        containerRef.current != null &&
+        (() => {
+          const c = candidateMap.get(hoveredTrial.candidateId);
+          if (!c) return null;
+          return (
+            <ChartTooltip
+              hoveredTrial={hoveredTrial}
+              candidate={c}
+              chartData={chartData}
+              isEvaluationSuite={isEvaluationSuite}
+            />
+          );
+        })()}
+
+      <div className="mt-1 flex items-center justify-center gap-4">
+        {isEvaluationSuite ? (
+          TRIAL_STATUS_ORDER.filter((s) =>
+            chartData.some((d) => d.status === s),
+          ).map((s) => (
+            <div key={s} className="flex items-center gap-1.5">
+              <span
+                className="size-2.5 rounded-full"
+                style={{ backgroundColor: TRIAL_STATUS_COLORS[s] }}
+              />
+              <span className="comet-body-xs text-muted-slate">
+                {TRIAL_STATUS_LABELS[s]}
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span
+              className="size-2.5 rounded-full"
+              style={{ backgroundColor: TRIAL_STATUS_COLORS.passed }}
+            />
+            <span className="comet-body-xs text-muted-slate">
+              {objectiveName}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

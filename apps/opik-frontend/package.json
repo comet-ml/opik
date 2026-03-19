@@ -129,7 +129,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.1",
-    "dependency-cruiser": "^17.3.6",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query-devtools": "^5.45.0",
     "@tanstack/router-devtools": "^1.36.3",
@@ -153,6 +152,7 @@
     "@vitejs/plugin-react-swc": "^3.7.0",
     "@vitest/ui": "^3.0.5",
     "autoprefixer": "^10.4.19",
+    "dependency-cruiser": "^17.3.6",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",

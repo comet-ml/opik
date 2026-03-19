@@ -920,7 +920,11 @@ class TracesClient:
         return _response.data
 
     def find_trace_threads_feedback_score_names(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
         Find Trace Threads Feedback Score names
@@ -928,6 +932,8 @@ class TracesClient:
         Parameters
         ----------
         project_id : typing.Optional[str]
+
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -944,7 +950,7 @@ class TracesClient:
         client.traces.find_trace_threads_feedback_score_names()
         """
         _response = self._raw_client.find_trace_threads_feedback_score_names(
-            project_id=project_id, request_options=request_options
+            project_id=project_id, exclude_category_names=exclude_category_names, request_options=request_options
         )
         return _response.data
 
@@ -2577,7 +2583,11 @@ class AsyncTracesClient:
         return _response.data
 
     async def find_trace_threads_feedback_score_names(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
         Find Trace Threads Feedback Score names
@@ -2585,6 +2595,8 @@ class AsyncTracesClient:
         Parameters
         ----------
         project_id : typing.Optional[str]
+
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2604,7 +2616,7 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_trace_threads_feedback_score_names(
-            project_id=project_id, request_options=request_options
+            project_id=project_id, exclude_category_names=exclude_category_names, request_options=request_options
         )
         return _response.data
 

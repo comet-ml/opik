@@ -4,6 +4,7 @@ import type * as OpikApi from "../index.js";
 
 export interface AgentBlueprintPublic {
     id?: string;
+    name?: string;
     type: OpikApi.AgentBlueprintPublicType;
     description?: string;
     envs?: string[];

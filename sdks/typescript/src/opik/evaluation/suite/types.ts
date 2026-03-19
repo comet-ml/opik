@@ -13,6 +13,16 @@ export const DEFAULT_EXECUTION_POLICY: Required<ExecutionPolicy> = {
 };
 
 /**
+ * A single item to be added to an evaluation suite via `addItems()`.
+ */
+export interface EvaluationSuiteItem {
+  data: Record<string, unknown>;
+  assertions?: string[];
+  description?: string;
+  executionPolicy?: ExecutionPolicy;
+}
+
+/**
  * Result of an individual item in the evaluation suite.
  */
 export type ItemResult = {
@@ -31,7 +41,7 @@ export type EvaluationSuiteResult = {
   allItemsPassed: boolean;
   itemsPassed: number;
   itemsTotal: number;
-  passRate: number;
+  passRate: number | undefined;
   itemResults: Map<string, ItemResult>;
   experimentId: string;
   experimentName?: string;

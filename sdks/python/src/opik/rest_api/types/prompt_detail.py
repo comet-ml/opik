@@ -12,6 +12,11 @@ from .prompt_version_detail import PromptVersionDetail
 class PromptDetail(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project ID. Takes precedence over project_name when both are provided.
+    """
+
     description: typing.Optional[str] = None
     template_structure: typing.Optional[PromptDetailTemplateStructure] = pydantic.Field(default=None)
     """

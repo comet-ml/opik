@@ -1,5 +1,6 @@
 export interface Permissions {
   canViewExperiments: boolean;
+  canCreateExperiments: boolean;
   canViewDashboards: boolean;
   canViewDatasets: boolean;
   canDeleteProjects: boolean;
@@ -29,6 +30,7 @@ export interface PermissionsContextValue {
 export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
   permissions: {
     canViewExperiments: true,
+    canCreateExperiments: true,
     canViewDashboards: true,
     canViewDatasets: true,
     canDeleteProjects: true,

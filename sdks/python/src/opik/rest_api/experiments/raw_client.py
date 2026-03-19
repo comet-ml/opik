@@ -218,8 +218,8 @@ class RawExperimentsClient:
     def create_experiment(
         self,
         *,
-        dataset_name: str,
         id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -238,9 +238,9 @@ class RawExperimentsClient:
 
         Parameters
         ----------
-        dataset_name : str
-
         id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -1264,8 +1264,8 @@ class AsyncRawExperimentsClient:
     async def create_experiment(
         self,
         *,
-        dataset_name: str,
         id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1284,9 +1284,9 @@ class AsyncRawExperimentsClient:
 
         Parameters
         ----------
-        dataset_name : str
-
         id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
 
         name : typing.Optional[str]
 

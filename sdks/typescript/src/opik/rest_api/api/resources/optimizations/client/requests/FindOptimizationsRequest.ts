@@ -9,6 +9,7 @@ export interface FindOptimizationsRequest {
     size?: number;
     datasetId?: string;
     name?: string;
+    datasetName?: string;
     datasetDeleted?: boolean;
     filters?: string;
 }

@@ -15,6 +15,7 @@ import { MAX_GROUP_LEVELS } from "@/constants/groups";
 import { ColumnData } from "@/types/shared";
 import { cn, generateRandomString } from "@/lib/utils";
 import GroupsContent from "@/components/shared/GroupsContent/GroupsContent";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 export type GroupValidationError = {
   field?: { message?: string };
@@ -36,6 +37,8 @@ type GroupsAccordionSectionProps<TColumnData> = {
   errors?: (GroupValidationError | undefined)[];
   hideSorting?: boolean;
   hideBorder?: boolean;
+  disabled?: boolean;
+  disabledTooltip?: string;
 };
 
 const GroupsAccordionSection = <TColumnData,>({
@@ -49,6 +52,8 @@ const GroupsAccordionSection = <TColumnData,>({
   errors,
   hideSorting = false,
   hideBorder = false,
+  disabled = false,
+  disabledTooltip,
 }: GroupsAccordionSectionProps<TColumnData>) => {
   const handleAddGroup = useCallback(() => {
     if (groups.length >= MAX_GROUP_LEVELS) return;
@@ -70,17 +75,29 @@ const GroupsAccordionSection = <TColumnData,>({
     });
 
   return (
-    <Accordion type="single" collapsible className={className}>
-      <AccordionItem value="groups" className={hideBorder ? "" : "border-t"}>
-        <AccordionTrigger
-          className={cn(
-            "h-11 py-1.5 hover:no-underline",
-            hasErrors &&
-              "text-destructive hover:text-destructive active:text-destructive",
-          )}
-        >
-          {label} {groups.length > 0 && `(${groups.length})`}
-        </AccordionTrigger>
+    <Accordion
+      type="single"
+      collapsible
+      className={className}
+      value={disabled ? "" : undefined}
+    >
+      <AccordionItem
+        value="groups"
+        className={cn(hideBorder ? "" : "border-t", disabled && "opacity-50")}
+      >
+        <TooltipWrapper content={disabled ? disabledTooltip : null}>
+          <AccordionTrigger
+            className={cn(
+              "h-11 py-1.5 hover:no-underline",
+              hasErrors &&
+                "text-destructive hover:text-destructive active:text-destructive",
+              disabled &&
+                "cursor-default hover:text-current active:text-current",
+            )}
+          >
+            {label} {groups.length > 0 && `(${groups.length})`}
+          </AccordionTrigger>
+        </TooltipWrapper>
         <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
           <Description>{description}</Description>
           <div className="space-y-3">

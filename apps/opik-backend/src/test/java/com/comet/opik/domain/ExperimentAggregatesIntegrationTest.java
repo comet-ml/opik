@@ -86,10 +86,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class ExperimentAggregatesIntegrationTest {
 
-    // Fields to ignore when comparing Experiment objects - we only care about aggregated fields
+    // Fields to ignore in recursive comparison: id is a lookup key,
+    // timestamps differ due to timing, and the remaining fields are not stored
+    // in experiment_aggregates (they are computed/joined in the raw FIND path).
+    // The not-stored fields are explicitly asserted as null below.
     private static final String[] EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE = new String[]{
-            "id", "datasetName", "projectName", "createdAt", "lastUpdatedAt",
-            "promptVersion", "datasetVersionSummary",
+            "id", "createdAt", "lastUpdatedAt",
+            "datasetName", "projectName", "promptVersion",
+            "datasetVersionSummary", "datasetItemCount",
     };
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -476,6 +480,23 @@ class ExperimentAggregatesIntegrationTest {
                 .ignoringFields(EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE)
                 .ignoringCollectionOrderInFields("experimentScores", "feedbackScores")
                 .isEqualTo(rawExperiment);
+
+        // Fields not stored in experiment_aggregates table are expected to be null
+        assertThat(experimentFromAggregates.datasetName())
+                .as("datasetName is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.projectName())
+                .as("projectName is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.promptVersion())
+                .as("promptVersion is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.datasetVersionSummary())
+                .as("datasetVersionSummary is not stored in aggregates")
+                .isNull();
+        assertThat(experimentFromAggregates.datasetItemCount())
+                .as("datasetItemCount is not stored in aggregates")
+                .isNull();
     }
 
     @ParameterizedTest(name = "Group by {0}")
@@ -925,13 +946,9 @@ class ExperimentAggregatesIntegrationTest {
 
         datasetResourceClient.createDatasetItems(batch, workspaceName, apiKey);
 
-        // Create experiment item
-        var itemIndex = new java.util.concurrent.atomic.AtomicInteger(0);
-        List<ExperimentItem> experimentItems = datasetItems.stream()
-                .map(datasetItem -> {
-                    int idx = itemIndex.getAndIncrement();
-
-                    // Create trace with output containing unique values per item for stable sorting
+        // Build all traces (unique output and duration per item for stable sorting)
+        var traces = IntStream.range(0, datasetItems.size())
+                .mapToObj(idx -> {
                     var outputNode = JsonUtils.getJsonNodeFromString(
                             "{\"result\": \"output-" + (char) ('a' + idx) + "-" + UUID.randomUUID() + "\"}");
                     var baseTrace = factory.manufacturePojo(Trace.class)
@@ -941,50 +958,50 @@ class ExperimentAggregatesIntegrationTest {
                             .visibilityMode(null)
                             .output(outputNode)
                             .build();
-                    // Override endTime to produce distinct durations per trace for stable sorting
-                    var trace = baseTrace.toBuilder()
+                    return baseTrace.toBuilder()
                             .endTime(baseTrace.startTime().plusSeconds((idx + 1) * 10L))
                             .build();
-
-                    traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-                    // Create spans for the trace
-
-                    var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
-                            .stream()
-                            .map(span -> span
-                                    .toBuilder()
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .parentSpanId(null)
-                                    .usage(spanResourceClient.getTokenUsage())
-                                    .build())
-                            .toList();
-
-                    spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-                    // Create feedback scores
-                    List<FeedbackScoreBatchItem> feedbackScoreItems = (List<FeedbackScoreBatchItem>) feedbackScores
-                            .stream()
-                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).builder()
-                                    .id(trace.id())
-                                    .projectName(projectName)
-                                    .name(name)
-                                    .value(BigDecimal.valueOf(Math.random() * 10))
-                                    .source(ScoreSource.SDK)
-                                    .build())
-                            .toList();
-
-                    if (!feedbackScoreItems.isEmpty()) {
-                        traceResourceClient.feedbackScores(feedbackScoreItems, apiKey, workspaceName);
-                    }
-
-                    return ExperimentItem.builder()
-                            .experimentId(experimentId)
-                            .datasetItemId(datasetItem.id())
-                            .traceId(trace.id())
-                            .build();
                 })
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        // Batch create all spans across all traces
+        var allSpans = traces.stream()
+                .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                        .stream()
+                        .map(span -> span.toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .parentSpanId(null)
+                                .usage(spanResourceClient.getTokenUsage())
+                                .build()))
+                .toList();
+        spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+        // Batch create all feedback scores across all traces
+        var allFeedbackScoreItems = traces.stream()
+                .flatMap(trace -> feedbackScores.stream()
+                        .map(name -> (FeedbackScoreBatchItem) factory
+                                .manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                .id(trace.id())
+                                .projectName(projectName)
+                                .name(name)
+                                .value(BigDecimal.valueOf(Math.random() * 10))
+                                .source(ScoreSource.SDK)
+                                .build()))
+                .toList();
+        if (!allFeedbackScoreItems.isEmpty()) {
+            traceResourceClient.feedbackScores(allFeedbackScoreItems, apiKey, workspaceName);
+        }
+
+        // Build experiment items linking dataset items to their corresponding traces by index
+        List<ExperimentItem> experimentItems = IntStream.range(0, datasetItems.size())
+                .mapToObj(i -> ExperimentItem.builder()
+                        .experimentId(experimentId)
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(traces.get(i).id())
+                        .build())
                 .toList();
 
         experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);

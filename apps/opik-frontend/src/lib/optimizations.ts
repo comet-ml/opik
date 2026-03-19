@@ -2,9 +2,16 @@ import {
   OPTIMIZER_TYPE,
   OPTIMIZATION_STATUS,
   METRIC_TYPE,
+  Optimization,
   OptimizerParameters,
   MetricParameters,
+  AggregatedCandidate,
+  ExperimentOptimizationMetadata,
 } from "@/types/optimizations";
+import { AggregatedFeedbackScore } from "@/types/shared";
+import { aggregateExperimentMetrics } from "@/lib/experiment-metrics";
+import { getFeedbackScore } from "@/lib/feedback-scores";
+import { Experiment } from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
@@ -32,13 +39,34 @@ import { parseComposedProviderType } from "@/lib/provider";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Filters } from "@/types/filters";
 
+export const getBaselineCandidate = (
+  candidates?: AggregatedCandidate[],
+): AggregatedCandidate | undefined =>
+  candidates?.find((c) => c.stepIndex === 0);
+
 export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
 };
 
+export const getBestOptimizationScore = (
+  row: Pick<
+    Optimization,
+    "feedback_scores" | "experiment_scores" | "objective_name"
+  >,
+): AggregatedFeedbackScore | undefined =>
+  getFeedbackScore(row.feedback_scores ?? [], row.objective_name) ??
+  getFeedbackScore(row.experiment_scores ?? [], row.objective_name);
+
 export const extractMetricNameFromCode = (code: string): string => {
   return extractMetricNameFromPythonCode(code) || "code";
 };
+
+export const getObjectiveLabel = (
+  isEvaluationSuite?: boolean,
+  objectiveName?: string,
+): string => (isEvaluationSuite ? "Pass rate" : objectiveName ?? "Accuracy");
+
+export const MAX_EXPERIMENTS_LOADED = 1000;
 
 export const IN_PROGRESS_OPTIMIZATION_STATUSES: OPTIMIZATION_STATUS[] = [
   OPTIMIZATION_STATUS.RUNNING,
@@ -158,6 +186,169 @@ export const getOptimizationDefaultConfigByProvider = (
   }
 
   return {};
+};
+
+export const checkIsEvaluationSuite = (experiments: Experiment[]): boolean => {
+  return experiments.some((e) => e.evaluation_method === "evaluation_suite");
+};
+
+export const getOptimizationMetadata = (
+  metadata: object | undefined,
+  experimentId: string,
+): ExperimentOptimizationMetadata => {
+  if (metadata) {
+    const m = metadata as Record<string, unknown>;
+    if (typeof m.step_index === "number") {
+      return {
+        step_index: m.step_index,
+        candidate_id: (m.candidate_id as string) ?? "",
+        parent_candidate_ids: (m.parent_candidate_ids as string[]) ?? [],
+        configuration: m.configuration as
+          | ExperimentOptimizationMetadata["configuration"]
+          | undefined,
+      };
+    }
+    return {
+      step_index: -1,
+      candidate_id: experimentId,
+      parent_candidate_ids: [],
+      configuration: m.configuration as
+        | ExperimentOptimizationMetadata["configuration"]
+        | undefined,
+    };
+  }
+  return {
+    step_index: -1,
+    candidate_id: experimentId,
+    parent_candidate_ids: [],
+  };
+};
+
+export const aggregateCandidates = (
+  experiments: Experiment[],
+  objectiveName: string | undefined,
+): AggregatedCandidate[] => {
+  const groups = new Map<
+    string,
+    {
+      experiments: Experiment[];
+      meta: ExperimentOptimizationMetadata;
+    }
+  >();
+
+  for (const exp of experiments) {
+    const meta = getOptimizationMetadata(exp.metadata, exp.id);
+    const key = meta.candidate_id;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.experiments.push(exp);
+      if (
+        meta.step_index >= 0 &&
+        (existing.meta.step_index < 0 ||
+          meta.step_index < existing.meta.step_index)
+      ) {
+        existing.meta = meta;
+      }
+    } else {
+      groups.set(key, { experiments: [exp], meta });
+    }
+  }
+
+  const candidates: AggregatedCandidate[] = [];
+
+  for (const [candidateId, group] of groups) {
+    const exps = group.experiments.sort((a, b) =>
+      a.created_at.localeCompare(b.created_at),
+    );
+    const meta = group.meta;
+
+    const metrics = aggregateExperimentMetrics(exps, objectiveName);
+
+    candidates.push({
+      id: candidateId,
+      candidateId,
+      stepIndex: meta.step_index,
+      parentCandidateIds: meta.parent_candidate_ids,
+      trialNumber: 0,
+      score: metrics.score,
+      runtimeCost: metrics.cost,
+      latencyP50: metrics.latency,
+      totalTraceCount: metrics.totalTraceCount,
+      totalDatasetItemCount: metrics.totalDatasetItemCount,
+      passedCount: metrics.passedCount,
+      totalCount: metrics.totalCount,
+      experimentIds: exps.map((e) => e.id),
+      name: exps[0].name,
+      created_at: exps[0].created_at,
+    });
+  }
+
+  candidates.sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  return candidates.map((c, i) => {
+    const isOldStyle = c.stepIndex === -1;
+    return {
+      ...c,
+      stepIndex: isOldStyle ? i : c.stepIndex,
+      parentCandidateIds:
+        isOldStyle && i > 0
+          ? [candidates[i - 1].candidateId]
+          : c.parentCandidateIds,
+      trialNumber: i + 1,
+    };
+  });
+};
+
+export const mergeExperimentScores = (
+  feedbackScores: AggregatedFeedbackScore[] | undefined,
+  experimentScores: AggregatedFeedbackScore[] | undefined,
+): AggregatedFeedbackScore[] => {
+  if (!experimentScores?.length) return [];
+  const existingNames = new Set(feedbackScores?.map((s) => s.name) ?? []);
+  return experimentScores.filter((s) => !existingNames.has(s.name));
+};
+
+export const CANDIDATE_SORT_FIELD_MAP: Record<
+  string,
+  keyof AggregatedCandidate | undefined
+> = {
+  name: "trialNumber",
+  step: "stepIndex",
+  id: "id",
+  objective_name: "score",
+  runtime_cost: "runtimeCost",
+  latency: "latencyP50",
+  trace_count: "totalDatasetItemCount",
+  created_at: "created_at",
+};
+
+export const sortCandidates = (
+  candidates: AggregatedCandidate[],
+  sortedColumns: { id: string; desc: boolean }[],
+): AggregatedCandidate[] => {
+  if (!sortedColumns.length) return candidates;
+
+  const { id: columnId, desc } = sortedColumns[0];
+  const field = CANDIDATE_SORT_FIELD_MAP[columnId];
+  if (!field) return candidates;
+
+  return [...candidates].sort((a, b) => {
+    const aVal = a[field];
+    const bVal = b[field];
+
+    if (aVal == null && bVal == null) return 0;
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+
+    let cmp: number;
+    if (typeof aVal === "number" && typeof bVal === "number") {
+      cmp = aVal - bVal;
+    } else {
+      cmp = String(aVal).localeCompare(String(bVal));
+    }
+
+    return desc ? -cmp : cmp;
+  });
 };
 
 export const convertOptimizationVariableFormat = (

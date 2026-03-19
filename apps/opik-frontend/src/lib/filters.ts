@@ -1,6 +1,6 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
-import { Filter } from "@/types/filters";
+import { Filter, Filters } from "@/types/filters";
 import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
@@ -116,6 +116,28 @@ export const generateExperimentIdFilter = (experimentId?: string) => {
   ];
 };
 
+export const generateDashboardScopeFilter = (scope: string): Filter[] => [
+  createFilter({
+    id: `dashboard-scope-filter-${scope}`,
+    field: "scope",
+    type: COLUMN_TYPE.string,
+    operator: "=",
+    value: scope,
+  }),
+];
+
+export const generateDashboardTypeFilter = (
+  dashboardType: string,
+): Filter[] => [
+  createFilter({
+    id: `dashboard-type-filter-${dashboardType}`,
+    field: "type",
+    type: COLUMN_TYPE.string,
+    operator: "=",
+    value: dashboardType,
+  }),
+];
+
 export const generateAnnotationQueueIdFilter = (annotationQueueId?: string) => {
   if (!annotationQueueId) return [];
 
@@ -223,6 +245,28 @@ export const processFilters = (
   }
 
   return retVal;
+};
+
+export const EXPERIMENT_IDS_FILTER_FIELD = "experiment_ids";
+
+export const extractExperimentIdsFilter = (
+  filters: Filters,
+): { experimentIds: string[]; remainingFilters: Filters } => {
+  const experimentIdsFilter = filters.find(
+    (f) => f.field === EXPERIMENT_IDS_FILTER_FIELD,
+  );
+
+  const remainingFilters = filters.filter(
+    (f) => f.field !== EXPERIMENT_IDS_FILTER_FIELD,
+  );
+
+  const experimentIds = experimentIdsFilter?.value
+    ? String(experimentIdsFilter.value)
+        .split(",")
+        .filter((id) => id.length > 0)
+    : [];
+
+  return { experimentIds, remainingFilters };
 };
 
 export const mapDynamicColumnTypesToColumnType = (

@@ -84,6 +84,8 @@ public interface DatasetService {
 
     Dataset findByName(String workspaceId, String name, UUID projectId, Visibility visibility);
 
+    Dataset findByName(String workspaceId, DatasetCriteria criteria, Visibility visibility);
+
     void delete(DatasetIdentifier identifier);
 
     void delete(UUID id);
@@ -99,6 +101,8 @@ public interface DatasetService {
     BiInformationResponse getDatasetBIInformation();
 
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
+
+    List<UUID> findIdsByPartialName(String workspaceId, String name);
 
     long getDailyCreatedCount();
 
@@ -332,6 +336,11 @@ class DatasetServiceImpl implements DatasetService {
                 name, dataset.id(), workspaceId, projectId);
 
         return verifyVisibility(dataset, visibility);
+    }
+
+    @Override
+    public Dataset findByName(@NonNull String workspaceId, @NonNull DatasetCriteria criteria, Visibility visibility) {
+        return findByName(workspaceId, criteria.name(), criteria.projectId(), visibility);
     }
 
     /**
@@ -620,6 +629,14 @@ class DatasetServiceImpl implements DatasetService {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
             return dao.exists(datasetIds, workspaceId);
+        });
+    }
+
+    @Override
+    public List<UUID> findIdsByPartialName(@NonNull String workspaceId, @NonNull String name) {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return dao.findIdsByPartialName(workspaceId, DatasetDAO.escapeLikeMetacharacters(name));
         });
     }
 
