@@ -46,6 +46,6 @@ def mock_opik_client(mock_rest_client):
 @pytest.fixture(autouse=True)
 def clear_caches():
     yield
-    from opik.api_objects.agent_config.cache import _registry
+    from opik.api_objects.agent_config.cache import get_global_registry
 
-    _registry.clear()
+    get_global_registry().clear()

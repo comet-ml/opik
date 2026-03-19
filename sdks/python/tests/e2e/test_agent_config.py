@@ -4,7 +4,7 @@ from typing import Annotated
 import pytest
 import opik
 from opik import opik_context
-from opik.api_objects.agent_config.cache import _registry
+from opik.api_objects.agent_config.cache import get_global_registry
 from opik.api_objects.agent_config.config import AgentConfigManager
 from opik.api_objects.agent_config.context import agent_config_context
 
@@ -21,7 +21,7 @@ def _unique_project_name() -> str:
 @pytest.fixture(autouse=True)
 def clear_caches_after_test():
     yield
-    _registry.clear()
+    get_global_registry().clear()
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def test_publish_version_and_retrieve__happyflow(
     assert isinstance(v1_name, str) and v1_name != ""
 
     # Publishing the same values again must be a no-op (1 entry in history).
-    _registry.clear()
+    get_global_registry().clear()
     opik_client.create_agent_config_version(
         MyConfig(temperature=0.5, model="gpt-3.5"), project_name=project_name
     )
@@ -67,14 +67,14 @@ def test_publish_version_and_retrieve__happyflow(
     )
 
     # Publishing different values creates a new version.
-    _registry.clear()
+    get_global_registry().clear()
     v2_name = opik_client.create_agent_config_version(
         MyConfig(temperature=0.8, model="gpt-4"), project_name=project_name
     )
     assert v2_name != v1_name
 
     # latest=True returns v2.
-    _registry.clear()
+    get_global_registry().clear()
     latest = opik_client.get_agent_config(
         fallback=MyConfig(temperature=0.0, model="fallback"),
         project_name=project_name,
@@ -84,7 +84,7 @@ def test_publish_version_and_retrieve__happyflow(
     assert latest.model == "gpt-4"
 
     # version= by name returns v1.
-    _registry.clear()
+    get_global_registry().clear()
     by_name = opik_client.get_agent_config(
         fallback=MyConfig(temperature=0.0, model="fallback"),
         project_name=project_name,
@@ -93,7 +93,7 @@ def test_publish_version_and_retrieve__happyflow(
     assert by_name.temperature == pytest.approx(0.5)
 
     # Deploy v1 to PROD; env= fetch returns v1 despite v2 being latest.
-    _registry.clear()
+    get_global_registry().clear()
     v1_cfg = opik_client.get_agent_config(
         fallback=MyConfig(temperature=0.0, model="fallback"),
         project_name=project_name,
@@ -101,7 +101,7 @@ def test_publish_version_and_retrieve__happyflow(
     )
     v1_cfg.deploy_to("PROD")
 
-    _registry.clear()
+    get_global_registry().clear()
     by_env = opik_client.get_agent_config(
         fallback=MyConfig(temperature=0.0, model="fallback"),
         project_name=project_name,
@@ -129,7 +129,7 @@ def test_prompt_field_and_trace_metadata__happyflow(
         project_name=project_name,
     )
 
-    _registry.clear()
+    get_global_registry().clear()
 
     result = opik_client.get_agent_config(
         fallback=PromptConfig(system_prompt=prompt_v1, temperature=0.0),
@@ -186,7 +186,7 @@ def test_mask_overrides_config__happyflow(
         MyConfig(temperature=0.5, model="gpt-4"), project_name=project_name
     )
 
-    _registry.clear()
+    get_global_registry().clear()
 
     manager = AgentConfigManager(
         project_name=project_name,
@@ -194,7 +194,7 @@ def test_mask_overrides_config__happyflow(
     )
     mask_id = manager.create_mask(parameters={"MyConfig.temperature": 0.9})
 
-    _registry.clear()
+    get_global_registry().clear()
 
     with agent_config_context(mask_id):
         result = opik_client.get_agent_config(

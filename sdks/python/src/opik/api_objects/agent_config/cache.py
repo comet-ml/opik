@@ -170,6 +170,10 @@ class SharedCacheRegistry:
 _registry = SharedCacheRegistry()
 
 
+def get_global_registry() -> SharedCacheRegistry:
+    return _registry
+
+
 # ---------------------------------------------------------------------------
 # Module-level helpers (used by base.py and opik_client.py)
 # ---------------------------------------------------------------------------

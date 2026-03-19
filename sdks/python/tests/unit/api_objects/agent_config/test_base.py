@@ -7,7 +7,7 @@ import pytest
 
 from opik.api_objects.agent_config.base import AgentConfig
 from opik.api_objects.agent_config.blueprint import Blueprint
-from opik.api_objects.agent_config.cache import _registry, get_cached_config
+from opik.api_objects.agent_config.cache import get_global_registry, get_cached_config
 from opik.api_objects.agent_config.context import agent_config_context
 from opik.exceptions import AgentConfigNotFound, OpikException
 from opik.rest_api import core as rest_api_core
@@ -729,7 +729,7 @@ class TestEnvsAndIsFallback:
         live = mock_opik_client.get_agent_config(fallback=fallback, latest=True)
         assert live.is_fallback is False
 
-        _registry.clear()
+        get_global_registry().clear()
         _ = live.temp  # triggers _resolve_field against empty cache
 
         assert live.is_fallback is True
@@ -756,7 +756,7 @@ class TestEnvsAndIsFallback:
         mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
 
         live = mock_opik_client.get_agent_config(fallback=fallback, latest=True)
-        _registry.clear()
+        get_global_registry().clear()
         _ = live.temp  # cache is empty → is_fallback=True
         assert live.is_fallback is True
 
