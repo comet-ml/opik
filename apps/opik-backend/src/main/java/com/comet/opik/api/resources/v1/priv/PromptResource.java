@@ -369,7 +369,7 @@ public class PromptResource {
                 request.name(), request.commit(), workspaceId);
 
         PromptVersion promptVersion = promptService.retrievePromptVersion(
-                request.name(), request.commit());
+                request.name(), request.commit(), request.projectName());
 
         log.info("Retrieved prompt name '{}'  with commit '{}' on workspace_id '{}'", request.name(),
                 request.commit(), workspaceId);
