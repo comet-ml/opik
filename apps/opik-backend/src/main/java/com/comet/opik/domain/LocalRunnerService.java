@@ -30,15 +30,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.redisson.api.RBatch;
-import org.redisson.api.RBlockingDequeReactive;
+import org.redisson.api.RBlockingDeque;
 import org.redisson.api.RBucket;
 import org.redisson.api.RList;
-import org.redisson.api.RListReactive;
 import org.redisson.api.RMap;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RSet;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.queue.DequeMoveArgs;
 import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Mono;
 
@@ -51,7 +51,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @ImplementedBy(LocalRunnerServiceImpl.class)
 public interface LocalRunnerService {
@@ -448,18 +447,17 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         String pendingKey = pendingJobsKey(runnerId);
         String activeKey = activeJobsKey(runnerId);
 
-        RBlockingDequeReactive<String> blockingDeque = reactiveRedisClient.getBlockingDeque(pendingKey,
-                StringCodec.INSTANCE);
+        RBlockingDeque<String> blockingDeque = redisClient.getBlockingDeque(pendingKey);
+        Duration timeout = Duration.ofSeconds(runnerConfig.getNextJobPollTimeout().toSeconds());
 
-        return blockingDeque.pollFirst(runnerConfig.getNextJobPollTimeout().toSeconds(), TimeUnit.SECONDS)
+        return Mono.fromCompletionStage(
+                blockingDeque.moveAsync(timeout, DequeMoveArgs.pollFirst().addLastTo(activeKey)))
                 .flatMap(jobIdStr -> {
-                    RListReactive<String> activeList = reactiveRedisClient.getList(activeKey, StringCodec.INSTANCE);
                     RMapReactive<String, String> jobMap = reactiveRedisClient.getMap(
                             jobKey(UUID.fromString(jobIdStr)), StringCodec.INSTANCE);
                     String now = Instant.now().toString();
 
-                    return activeList.add(jobIdStr)
-                            .then(jobMap.put(FIELD_STATUS, LocalRunnerJobStatus.RUNNING.getValue()))
+                    return jobMap.put(FIELD_STATUS, LocalRunnerJobStatus.RUNNING.getValue())
                             .then(jobMap.put(FIELD_STARTED_AT, now))
                             .then(jobMap.put(FIELD_LAST_HEARTBEAT, now))
                             .then(jobMap.readAllMap())
