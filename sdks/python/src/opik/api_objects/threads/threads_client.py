@@ -103,7 +103,7 @@ class ThreadsClient:
             >>> from opik import Opik
             >>> client = Opik(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME")
             >>> thread_id = "your_thread_id"
-            >>> threads = client.get_threads_client().search_threads(
+            >>> threads = client.search_threads(
             >>>     project_name="Demo Project",
             >>>     filter_string=f'id = "{thread_id}"',
             >>>     max_results=10)

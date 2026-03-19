@@ -67,6 +67,7 @@ from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
 from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
+from ..rest_api import TraceThread
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
     dataset_public,
@@ -818,6 +819,73 @@ class Opik:
         """
         self.get_threads_client().log_threads_feedback_scores(
             scores=scores, project_name=project_name
+        )
+
+    def search_threads(
+        self,
+        project_name: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        max_results: int = 1000,
+        truncate: bool = True,
+    ) -> List[TraceThread]:
+        """Search for threads in a given project based on specific criteria.
+
+        Args:
+            project_name: The name of the project to search the threads for. If not provided,
+                the project name configured when the Client was created will be used.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `status`: String field (=, contains, not_contains only)
+                - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+                - `input`, `output`: String fields for content (=, contains, not_contains only)
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.model")
+                - `feedback_scores`: Numeric field (use dot notation, e.g., "feedback_scores.accuracy")
+                - `tags`: List field (use "contains" operator only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
+                - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
+
+                Supported operators by column:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `status`: =, contains, not_contains
+                - `start_time`, `end_time`: =, >, <, >=, <=
+                - `input`, `output`: =, contains, not_contains
+                - `metadata`: =, contains, >, <
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
+                - `tags`: contains (only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
+
+                Examples:
+                - `status = "inactive"` - Filter by thread status
+                - `id = "thread_123"` - Filter by specific thread ID
+                - `duration > 300` - Filter by thread duration (seconds)
+                - `number_of_messages >= 5` - Filter by message count
+                - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
+                - `tags contains "important"` - Filter by tag
+
+                If not provided, all threads in the project will be returned up to the limit.
+            max_results: The maximum number of threads to retrieve. The default value is 1000.
+            truncate: Whether to truncate image data stored in input, output, or metadata.
+
+        Returns:
+            List[TraceThread]: A list of TraceThread objects that match the search criteria.
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> threads = client.search_threads(
+            >>>     project_name="Demo Project",
+            >>>     filter_string='id = "thread_123"',
+            >>>     max_results=10,
+            >>> )
+        """
+        return self.get_threads_client().search_threads(
+            project_name=project_name,
+            filter_string=filter_string,
+            max_results=max_results,
+            truncate=truncate,
         )
 
     def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:

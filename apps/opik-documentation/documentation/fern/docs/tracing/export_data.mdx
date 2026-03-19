@@ -8,20 +8,21 @@ title: Export by SDK, REST, and UI
 toc_max_heading_level: 4
 ---
 
-When working with Opik, it is important to be able to export traces and spans so that you can use them to fine-tune your models or run deeper analysis.
+When working with Opik, it is important to be able to export traces, spans, and threads so that you can use them to fine-tune your models or run deeper analysis.
 
-You can export the traces you have logged to the Opik platform using:
+You can export the data you have logged to the Opik platform using:
 
-1. Using the Opik SDK: You can use the Python SDK methods ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces) and [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans)) or the TypeScript SDK method (`client.searchTraces()`) to export traces and spans.
+1. Using the Opik SDK: You can use the Python SDK methods ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces), [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans), and [`Opik.search_threads`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_threads)) or the TypeScript SDK method (`client.searchTraces()`) to export traces, spans, and threads.
 2. Using the Opik REST API: You can use the [`/traces`](/reference/rest-api/traces/get-traces-by-project) and [`/spans`](/reference/rest-api/spans/get-spans-by-project) endpoints to export traces and spans.
 3. Using the UI: Once you have selected the traces or spans you want to export, you can click on the `Export CSV` button in the `Actions` dropdown.
 
 <Tip>
-  The recommended way to export traces is to use the SDK methods in the Opik
+  The recommended way to export data is to use the SDK methods in the Opik
   Python SDK
-  ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces)
+  ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces),
+  [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans),
   and
-  [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans))
+  [`Opik.search_threads`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_threads))
   or TypeScript SDK (`client.searchTraces()`).
 </Tip>
 
@@ -266,6 +267,62 @@ client = opik.Opik()
 spans = client.search_spans(
   project_name="Default project",
   filter_string='input contains "Opik"'
+)
+```
+
+<Tip>
+  The `filter_string` parameter should follow the same format as the
+  `filter_string` parameter in the `Opik.search_traces` method as [defined
+  above](#search-for-specific-traces).
+</Tip>
+
+### Exporting threads
+
+You can export threads using the [`Opik.search_threads`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_threads) method. This method allows you to search for conversational threads in a project.
+
+#### Exporting all threads
+
+To export all threads, you will need to specify a `max_results` value that is higher than the total number of threads in your project:
+
+```python
+import opik
+
+client = opik.Opik()
+
+threads = client.search_threads(project_name="Default project", max_results=1000000)
+```
+
+#### Search for specific threads
+
+You can use the `filter_string` parameter to search for specific threads:
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Search for a specific thread by ID
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='id = "thread_123"'
+)
+
+# Search for threads with many messages
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='number_of_messages >= 5'
+)
+
+# Search for threads with a specific feedback score
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='feedback_scores.user_satisfaction > 0.8'
+)
+
+# Search for threads by tag
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='tags contains "important"'
 )
 ```
 
