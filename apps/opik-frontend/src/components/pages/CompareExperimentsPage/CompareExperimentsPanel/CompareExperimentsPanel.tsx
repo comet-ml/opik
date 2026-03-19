@@ -13,12 +13,11 @@ import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ExperimentsCompare } from "@/types/datasets";
-import { OnChangeFn } from "@/types/shared";
+import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
-import { COLUMN_TYPE } from "@/types/shared";
 import DataTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
 
 type CompareExperimentsPanelProps = {

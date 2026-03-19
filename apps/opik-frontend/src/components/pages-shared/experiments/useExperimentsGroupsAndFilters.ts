@@ -26,7 +26,7 @@ export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: "Evaluation suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },

@@ -18,7 +18,7 @@ type DatasetSelectBoxProps = {
 const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   value,
   onValueChange,
-  placeholder = "Select a dataset",
+  placeholder = "Select an evaluation suite",
   className,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);

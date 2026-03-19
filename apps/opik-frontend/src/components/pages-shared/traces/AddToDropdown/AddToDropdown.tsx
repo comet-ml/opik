@@ -79,7 +79,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
               disabled={disabled}
             >
               <Database className="mr-2 size-4" />
-              Dataset
+              Evaluation suite
             </DropdownMenuItem>
           )}
           {showAddToQueue && (

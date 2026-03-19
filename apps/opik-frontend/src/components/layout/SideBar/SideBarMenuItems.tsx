@@ -166,7 +166,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
 
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
-    datasets: datasetsData?.total,
+    evaluation_suites: datasetsData?.total,
     experiments: experimentsData?.total,
     prompts: promptsData?.total,
     rules: rulesData?.total,

@@ -15,7 +15,7 @@ import {
   OptimizerParameters,
   MetricParameters,
 } from "@/types/optimizations";
-import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
+import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import AlgorithmConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/MetricConfigs";
 import {
@@ -28,7 +28,6 @@ import DatasetSamplePreview from "./DatasetSamplePreview";
 
 type OptimizationsNewConfigSidebarProps = {
   form: UseFormReturn<OptimizationConfigFormType>;
-  workspaceName: string;
   optimizerType: OPTIMIZER_TYPE;
   metricType: METRIC_TYPE;
   datasetSample: Record<string, unknown> | null;
@@ -45,7 +44,6 @@ const OptimizationsNewConfigSidebar: React.FC<
   OptimizationsNewConfigSidebarProps
 > = ({
   form,
-  workspaceName,
   optimizerType,
   metricType,
   datasetSample,
@@ -107,18 +105,18 @@ const OptimizationsNewConfigSidebar: React.FC<
           render={({ field }) => (
             <FormItem>
               <FormLabel className="comet-body-s-accented flex items-center gap-1">
-                Dataset
+                Evaluation suite
                 <ExplainerIcon
-                  {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_section]}
+                  {...EXPLAINERS_MAP[
+                    EXPLAINER_ID.whats_the_evaluation_suite_section
+                  ]}
                 />
               </FormLabel>
               <FormControl>
                 <DatasetSelectBox
                   value={field.value}
-                  onChange={onDatasetChange}
-                  workspaceName={workspaceName}
-                  showClearButton={false}
-                  buttonClassName="h-10 w-full"
+                  onValueChange={(id) => onDatasetChange(id)}
+                  className="h-10 w-full"
                 />
               </FormControl>
               <FormMessage />

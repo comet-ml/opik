@@ -212,22 +212,22 @@
   },
   {
     "type": "cycle",
-    "from": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemData.ts",
-    "to": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+    "from": "src/components/pages-shared/datasets/DatasetItemEditor/hooks/useDatasetItemData.ts",
+    "to": "src/components/pages-shared/datasets/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
     "rule": {
       "severity": "error",
       "name": "no-circular"
     },
     "cycle": [
       {
-        "name": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+        "name": "src/components/pages-shared/datasets/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
         "dependencyTypes": [
           "local",
           "import"
         ]
       },
       {
-        "name": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemData.ts",
+        "name": "src/components/pages-shared/datasets/DatasetItemEditor/hooks/useDatasetItemData.ts",
         "dependencyTypes": [
           "local",
           "import"
@@ -237,22 +237,22 @@
   },
   {
     "type": "cycle",
-    "from": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemData.ts",
-    "to": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+    "from": "src/components/pages-shared/datasets/Legacy/DatasetItemEditor/hooks/useDatasetItemData.ts",
+    "to": "src/components/pages-shared/datasets/Legacy/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
     "rule": {
       "severity": "error",
       "name": "no-circular"
     },
     "cycle": [
       {
-        "name": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+        "name": "src/components/pages-shared/datasets/Legacy/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
         "dependencyTypes": [
           "local",
           "import"
         ]
       },
       {
-        "name": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemData.ts",
+        "name": "src/components/pages-shared/datasets/Legacy/DatasetItemEditor/hooks/useDatasetItemData.ts",
         "dependencyTypes": [
           "local",
           "import"
@@ -613,15 +613,6 @@
     "type": "module",
     "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/utils.ts",
     "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/utils.ts",
-    "rule": {
-      "severity": "info",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/components/pages/DatasetItemsPage/DatasetItemEditorLegacy/hooks/useDatasetItemNavigation.ts",
-    "to": "src/components/pages/DatasetItemsPage/DatasetItemEditorLegacy/hooks/useDatasetItemNavigation.ts",
     "rule": {
       "severity": "info",
       "name": "no-orphans"

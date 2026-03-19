@@ -7,7 +7,6 @@ import OptimizationsNewConfigSidebar from "./OptimizationsNewConfigSidebar";
 const OptimizationsNewPageContent: React.FC = () => {
   const {
     form,
-    workspaceName,
     isSubmitting,
     optimizerType,
     metricType,
@@ -50,7 +49,6 @@ const OptimizationsNewPageContent: React.FC = () => {
 
         <OptimizationsNewConfigSidebar
           form={form}
-          workspaceName={workspaceName}
           optimizerType={optimizerType}
           metricType={metricType}
           datasetSample={datasetSample}

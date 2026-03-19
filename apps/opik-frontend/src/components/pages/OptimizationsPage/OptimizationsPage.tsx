@@ -123,7 +123,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
 export const FILTER_COLUMNS = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: "Evaluation suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
