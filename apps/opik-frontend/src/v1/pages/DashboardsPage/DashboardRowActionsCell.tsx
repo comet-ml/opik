@@ -14,12 +14,17 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { Dashboard } from "@/types/dashboard";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
 import AddEditCloneDashboardDialog from "@/v1/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DashboardRowActionsCell: React.FunctionComponent<
   CellContext<Dashboard, unknown>
 > = (context) => {
   const resetKeyRef = useRef(0);
   const dashboard = context.row.original;
+
+  const {
+    permissions: { canCreateDashboards },
+  } = usePermissions();
 
   const { mutate: deleteDashboardMutate } = useDashboardBatchDeleteMutation();
 
@@ -68,10 +73,12 @@ export const DashboardRowActionsCell: React.FunctionComponent<
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleClone}>
-            <Copy className="mr-2 size-4" />
-            Clone
-          </DropdownMenuItem>
+          {canCreateDashboards && (
+            <DropdownMenuItem onClick={handleClone}>
+              <Copy className="mr-2 size-4" />
+              Clone
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleDelete} variant="destructive">
             <Trash className="mr-2 size-4" />

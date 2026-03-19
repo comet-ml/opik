@@ -23,9 +23,7 @@ import {
   DEPRECATED_PROJECT_PERFORMANCE_ID,
 } from "@/lib/dashboard/templates";
 import { Separator } from "@/ui/separator";
-import { cn } from "@/lib/utils";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
@@ -36,14 +34,11 @@ interface InsightsTabProps {
 
 const DEFAULT_TEMPLATE = PROJECT_TEMPLATE_LIST[0];
 const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
-const DefaultTemplateIcon = DEFAULT_TEMPLATE.icon;
 
 const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
   projectId,
 }) => {
   const workspaceName = useActiveWorkspaceName();
-  const { permissions } = usePermissions();
-  const { canViewDashboards } = permissions;
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
     localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
@@ -59,7 +54,6 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
   // - no selection or deprecated ID → fall back to default template
   useEffect(() => {
     const needsDefault =
-      !canViewDashboards ||
       !dashboardId ||
       dashboardId === DEPRECATED_PROJECT_METRICS_ID ||
       dashboardId === DEPRECATED_PROJECT_PERFORMANCE_ID;
@@ -67,7 +61,7 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
     if (needsDefault && dashboardId !== DEFAULT_TEMPLATE_ID) {
       setDashboardId(DEFAULT_TEMPLATE_ID);
     }
-  }, [dashboardId, setDashboardId, canViewDashboards]);
+  }, [dashboardId, setDashboardId]);
 
   const { dashboard, isPending, saveStatus } = useDashboardLifecycle({
     dashboardId: dashboardId || null,
@@ -117,24 +111,12 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
         direction="bidirectional"
         limitWidth
       >
-        {canViewDashboards ? (
-          <InsightsViewSelector
-            value={dashboardId || null}
-            onChange={setDashboardId}
-            onViewCreated={handleDashboardCreated}
-            onViewDeleted={handleDashboardDeleted}
-          />
-        ) : (
-          <div className="flex h-8 items-center gap-1.5 rounded-md border px-3">
-            <DefaultTemplateIcon
-              className={cn("size-3.5 shrink-0", DEFAULT_TEMPLATE.iconColor)}
-            />
-            <span className="comet-body-s-accented text-foreground">
-              {DEFAULT_TEMPLATE.name}
-            </span>
-          </div>
-        )}
-
+        <InsightsViewSelector
+          value={dashboardId || null}
+          onChange={setDashboardId}
+          onViewCreated={handleDashboardCreated}
+          onViewDeleted={handleDashboardDeleted}
+        />
         <div className="flex shrink-0 items-center gap-2">
           <DashboardAutoSaveIndicator saveStatus={saveStatus} />
           <MetricDateRangeSelect
