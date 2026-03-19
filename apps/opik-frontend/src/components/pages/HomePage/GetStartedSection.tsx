@@ -28,7 +28,7 @@ const GetStartedSection = () => {
   );
 
   const {
-    permissions: { canViewExperiments },
+    permissions: { canCreateExperiments },
   } = usePermissions();
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
@@ -50,7 +50,7 @@ const GetStartedSection = () => {
           </div>
           <div className="comet-body-s">Log a trace</div>
         </div>
-        {canViewExperiments && (
+        {canCreateExperiments && (
           <div
             onClick={openNewExperimentDialog}
             className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:shadow-action-card dark:hover:bg-primary-foreground dark:hover:shadow-none"

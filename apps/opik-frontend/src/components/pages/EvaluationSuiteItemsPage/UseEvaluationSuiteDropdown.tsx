@@ -31,7 +31,7 @@ function UseEvaluationSuiteDropdown({
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const {
-    permissions: { canViewExperiments },
+    permissions: { canViewExperiments, canCreateExperiments },
   } = usePermissions();
 
   const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
@@ -93,7 +93,7 @@ function UseEvaluationSuiteDropdown({
               </span>
             </div>
           </DropdownMenuItem>
-          {canViewExperiments && (
+          {canCreateExperiments && (
             <DropdownMenuItem
               onClick={() => {
                 resetDialogKeyRef.current += 1;

@@ -30,6 +30,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -84,6 +85,8 @@ public interface ProjectService {
     List<Project> findByIds(String workspaceId, Set<UUID> ids);
 
     List<Project> findByNames(String workspaceId, List<String> names);
+
+    Optional<UUID> findProjectIdByName(String workspaceId, String projectName);
 
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
 
@@ -502,6 +505,17 @@ class ProjectServiceImpl implements ProjectService {
 
             return repository.findByNames(workspaceId, names);
         });
+    }
+
+    @Override
+    public Optional<UUID> findProjectIdByName(@NonNull String workspaceId, String projectName) {
+        if (StringUtils.isBlank(projectName)) {
+            return Optional.empty();
+        }
+
+        return findByNames(workspaceId, List.of(projectName)).stream()
+                .findFirst()
+                .map(Project::id);
     }
 
     @Override
