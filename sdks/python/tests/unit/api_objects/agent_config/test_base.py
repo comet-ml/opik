@@ -523,6 +523,27 @@ class TestGetAgentConfig:
         with pytest.raises(TypeError, match="AgentConfig subclass"):
             mock_opik_client.get_agent_config(fallback="not a config")
 
+    def test_multiple_selectors__raises_value_error(self, mock_opik_client):
+        class MyConfig(AgentConfig):
+            temp: float
+
+        fallback = MyConfig(temp=0.5)
+
+        with pytest.raises(ValueError, match="exactly one"):
+            mock_opik_client.get_agent_config(
+                fallback=fallback, latest=True, version="v1"
+            )
+
+        with pytest.raises(ValueError, match="exactly one"):
+            mock_opik_client.get_agent_config(
+                fallback=fallback, latest=True, env="prod"
+            )
+
+        with pytest.raises(ValueError, match="exactly one"):
+            mock_opik_client.get_agent_config(
+                fallback=fallback, version="v1", env="staging"
+            )
+
     def test_timeout_in_seconds__http_timeout__returns_fallback(
         self, mock_rest_client, mock_opik_client
     ):

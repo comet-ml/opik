@@ -2342,22 +2342,31 @@ class Opik:
         *,
         fallback: _AgentConfigT,
         project_name: Optional[str] = None,
-        env: Optional[str] = "prod",
+        env: Optional[str] = None,
         latest: bool = False,
         version: Optional[str] = None,
         timeout_in_seconds: Optional[int] = 5,
     ) -> _AgentConfigT:
         """Fetch an agent config from the backend.
 
+        Exactly one selector must be used to specify which version to fetch
+        (passing more than one raises ``ValueError``):
+
+        * ``env`` — fetch the version deployed to an environment (e.g. ``"prod"``).
+          This is the default when no selector is provided.
+        * ``latest=True`` — fetch the most recently published version.
+        * ``version`` — fetch a specific version by name, as returned by
+          ``create_agent_config_version``.
+
         Args:
             fallback: An instance of a user-defined ``AgentConfig`` subclass.
                 Used as the return value when the backend has no config, and
                 its type determines the return type.
             project_name: Opik project name. Defaults to the client's default.
-            env: Environment tag to fetch. Defaults to ``"prod"``.
-            latest: If ``True``, fetch the latest version regardless of env.
-            version: Fetch a specific version by its name (as returned by
-                ``create_agent_config_version``).
+            env: Environment tag to fetch. Defaults to ``"prod"`` when no other
+                selector is provided.
+            latest: If ``True``, fetch the latest version regardless of env tags.
+            version: Fetch a specific version by its name.
             timeout_in_seconds: Maximum seconds to wait for the backend
                 response. If the request takes longer, ``fallback`` is returned
                 and the cache continues refreshing in the background. Pass
@@ -2368,6 +2377,16 @@ class Opik:
                 "fallback must be an instance of an AgentConfig subclass, "
                 f"got {type(fallback).__name__}"
             )
+
+        selectors = sum([env is not None, latest, version is not None])
+        if selectors > 1:
+            raise ValueError(
+                "Specify exactly one of 'env' (fetch by environment tag), "
+                "'latest=True' (fetch the newest version), "
+                "or 'version' (fetch by version name)."
+            )
+        if selectors == 0:
+            env = "prod"
 
         resolved_project = project_name or self._project_name
         manager = AgentConfigManager(
