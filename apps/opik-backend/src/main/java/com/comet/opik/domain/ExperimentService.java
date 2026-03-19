@@ -295,6 +295,17 @@ public class ExperimentService {
                 });
     }
 
+    public Flux<Experiment> findByName(String name, UUID projectId) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
+        log.info("Finding experiments by name '{}' and projectId '{}'", name, projectId);
+
+        if (projectId == null) {
+            return experimentDAO.findByName(name);
+        }
+
+        return experimentDAO.findByName(name, projectId);
+    }
+
     @WithSpan
     public Mono<ExperimentGroupResponse> findGroups(@NonNull ExperimentGroupCriteria criteria) {
         log.info("Finding experiment groups by criteria '{}'", criteria);
@@ -404,12 +415,8 @@ public class ExperimentService {
                 });
     }
 
-    private Mono<Optional<UUID>> getProjectByName(String request) {
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return Mono.fromCallable(() -> projectService.findProjectIdByName(workspaceId, request))
-                    .subscribeOn(Schedulers.boundedElastic());
-        });
+    private Mono<Optional<UUID>> getProjectByName(String projectName) {
+        return projectService.resolveProjectId(projectName);
     }
 
     private Mono<Experiment> enrichExperiment(Mono<Experiment> experimentMono, String errorMsg) {
