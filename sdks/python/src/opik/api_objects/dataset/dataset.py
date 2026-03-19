@@ -341,7 +341,7 @@ class Dataset(DatasetExportOperations):
     def id(self) -> str:
         """The id of the dataset"""
         return self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._name
+            dataset_name=self._name, project_name=self._project_name
         ).id
 
     @property
@@ -368,7 +368,7 @@ class Dataset(DatasetExportOperations):
         """
         if self._dataset_items_count is None:
             dataset_info = self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=self._name
+                dataset_name=self._name, project_name=self._project_name
             )
             self._dataset_items_count = dataset_info.dataset_items_count
         return self._dataset_items_count
@@ -494,7 +494,7 @@ class Dataset(DatasetExportOperations):
             List of tag strings.
         """
         dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._name
+            dataset_name=self._name, project_name=self._project_name
         )
         return dataset_fern.tags or []
 

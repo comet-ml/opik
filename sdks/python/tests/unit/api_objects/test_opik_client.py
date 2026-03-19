@@ -1,3 +1,4 @@
+import json
 from typing import List
 
 import pytest
@@ -6,6 +7,8 @@ from unittest.mock import patch, MagicMock, Mock
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import Dataset
 from opik.api_objects.dataset.evaluation_suite import EvaluationSuite
+from opik.api_objects import prompt as prompt_module
+from opik.api_objects.prompt import client as prompt_client_module
 from opik.message_processing import messages
 from opik.types import BatchFeedbackScoreDict
 
@@ -873,3 +876,389 @@ class TestOpikClientCreateExperiment:
 
         call_kwargs = self.mock_create_experiment.call_args[1]
         assert call_kwargs["metadata"] == config
+
+
+def _make_text_prompt_version() -> Mock:
+    """Return a minimal mock PromptVersionDetail for a text prompt."""
+    v = Mock()
+    v.id = "version-id"
+    v.prompt_id = "prompt-id"
+    v.template = "Hello {{name}}"
+    v.type = "mustache"
+    v.commit = "abc123"
+    v.metadata = None
+    v.change_description = None
+    v.tags = None
+    v.template_structure = "text"
+    return v
+
+
+def _make_chat_prompt_version() -> Mock:
+    """Return a minimal mock PromptVersionDetail for a chat prompt."""
+    v = Mock()
+    v.id = "version-id"
+    v.prompt_id = "prompt-id"
+    v.template = json.dumps([{"role": "user", "content": "Hello"}])
+    v.type = "mustache"
+    v.commit = "abc123"
+    v.metadata = None
+    v.change_description = None
+    v.tags = None
+    v.template_structure = "chat"
+    return v
+
+
+class TestOpikClientCreatePrompt:
+    """Tests for Opik.create_prompt() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_version = _make_text_prompt_version()
+
+        with patch.object(
+            prompt_client_module.PromptClient,
+            "create_prompt",
+            return_value=self.mock_version,
+        ) as self.mock_create:
+            yield
+
+    def test_create_prompt__no_project_name__uses_default_project(self):
+        """Verify create_prompt resolves None project_name to the client's default."""
+        self.opik_client_.create_prompt(name="my-prompt", prompt="Hello {{name}}")
+
+        call_kwargs = self.mock_create.call_args[1]
+        assert call_kwargs["project_name"] == "default-project"
+
+    def test_create_prompt__explicit_project_name__forwards_to_prompt_client(self):
+        """Verify create_prompt forwards an explicit project_name to PromptClient."""
+        self.opik_client_.create_prompt(
+            name="my-prompt", prompt="Hello {{name}}", project_name="custom-project"
+        )
+
+        call_kwargs = self.mock_create.call_args[1]
+        assert call_kwargs["project_name"] == "custom-project"
+
+    def test_create_prompt__returns_prompt_with_resolved_project_name(self):
+        """Verify the returned Prompt carries the resolved project_name."""
+        result = self.opik_client_.create_prompt(
+            name="my-prompt", prompt="Hello {{name}}"
+        )
+
+        assert isinstance(result, prompt_module.Prompt)
+        assert result.project_name == "default-project"
+
+
+class TestOpikClientCreateChatPrompt:
+    """Tests for Opik.create_chat_prompt() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.messages = [{"role": "user", "content": "Hello"}]
+
+        with patch.object(prompt_module.ChatPrompt, "_sync_with_backend"):
+            yield
+
+    def test_create_chat_prompt__no_project_name__uses_default_project(self):
+        """Verify create_chat_prompt resolves None project_name to the client's default."""
+        result = self.opik_client_.create_chat_prompt(
+            name="my-chat-prompt", messages=self.messages
+        )
+
+        assert isinstance(result, prompt_module.ChatPrompt)
+        assert result.project_name == "default-project"
+
+    def test_create_chat_prompt__explicit_project_name__uses_given_project(self):
+        """Verify create_chat_prompt uses the provided project_name."""
+        result = self.opik_client_.create_chat_prompt(
+            name="my-chat-prompt",
+            messages=self.messages,
+            project_name="custom-project",
+        )
+
+        assert result.project_name == "custom-project"
+
+
+class TestOpikClientGetPrompt:
+    """Tests for Opik.get_prompt() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_version = _make_text_prompt_version()
+
+        with patch.object(
+            prompt_client_module.PromptClient,
+            "get_prompt",
+            return_value=self.mock_version,
+        ) as self.mock_get:
+            yield
+
+    def test_get_prompt__no_project_name__uses_default_project(self):
+        """Verify get_prompt resolves None project_name to the client's default."""
+        self.opik_client_.get_prompt(name="my-prompt")
+
+        call_kwargs = self.mock_get.call_args[1]
+        assert call_kwargs["project_name"] == "default-project"
+
+    def test_get_prompt__explicit_project_name__forwards_to_prompt_client(self):
+        """Verify get_prompt forwards an explicit project_name to PromptClient."""
+        self.opik_client_.get_prompt(name="my-prompt", project_name="custom-project")
+
+        call_kwargs = self.mock_get.call_args[1]
+        assert call_kwargs["project_name"] == "custom-project"
+
+    def test_get_prompt__returns_prompt_with_resolved_project_name(self):
+        """Verify the returned Prompt carries the resolved project_name."""
+        result = self.opik_client_.get_prompt(name="my-prompt")
+
+        assert isinstance(result, prompt_module.Prompt)
+        assert result.project_name == "default-project"
+
+    def test_get_prompt__not_found__returns_none(self):
+        """Verify get_prompt returns None when the prompt does not exist."""
+        with patch.object(
+            prompt_client_module.PromptClient, "get_prompt", return_value=None
+        ):
+            result = self.opik_client_.get_prompt(name="nonexistent")
+
+        assert result is None
+
+
+class TestOpikClientGetChatPrompt:
+    """Tests for Opik.get_chat_prompt() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_version = _make_chat_prompt_version()
+
+        with patch.object(
+            prompt_client_module.PromptClient,
+            "get_prompt",
+            return_value=self.mock_version,
+        ) as self.mock_get:
+            yield
+
+    def test_get_chat_prompt__no_project_name__uses_default_project(self):
+        """Verify get_chat_prompt resolves None project_name to the client's default."""
+        self.opik_client_.get_chat_prompt(name="my-chat-prompt")
+
+        call_kwargs = self.mock_get.call_args[1]
+        assert call_kwargs["project_name"] == "default-project"
+
+    def test_get_chat_prompt__explicit_project_name__forwards_to_prompt_client(self):
+        """Verify get_chat_prompt forwards an explicit project_name to PromptClient."""
+        self.opik_client_.get_chat_prompt(
+            name="my-chat-prompt", project_name="custom-project"
+        )
+
+        call_kwargs = self.mock_get.call_args[1]
+        assert call_kwargs["project_name"] == "custom-project"
+
+    def test_get_chat_prompt__returns_chat_prompt_with_resolved_project_name(self):
+        """Verify the returned ChatPrompt carries the resolved project_name."""
+        result = self.opik_client_.get_chat_prompt(name="my-chat-prompt")
+
+        assert isinstance(result, prompt_module.ChatPrompt)
+        assert result.project_name == "default-project"
+
+    def test_get_chat_prompt__not_found__returns_none(self):
+        """Verify get_chat_prompt returns None when the prompt does not exist."""
+        with patch.object(
+            prompt_client_module.PromptClient, "get_prompt", return_value=None
+        ):
+            result = self.opik_client_.get_chat_prompt(name="nonexistent")
+
+        assert result is None
+
+
+class TestOpikClientGetPromptHistory:
+    """Tests for Opik.get_prompt_history() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_version = _make_text_prompt_version()
+
+        with (
+            patch.object(
+                prompt_client_module.PromptClient,
+                "get_prompt",
+                return_value=self.mock_version,
+            ) as self.mock_get_prompt,
+            patch.object(
+                prompt_client_module.PromptClient,
+                "get_all_prompt_versions",
+                return_value=[self.mock_version],
+            ) as self.mock_get_all_versions,
+        ):
+            yield
+
+    def test_get_prompt_history__no_project_name__uses_default_project(self):
+        """Verify get_prompt_history resolves None project_name to the client's default."""
+        self.opik_client_.get_prompt_history(name="my-prompt")
+
+        assert self.mock_get_prompt.call_args[1]["project_name"] == "default-project"
+        assert (
+            self.mock_get_all_versions.call_args[1]["project_name"] == "default-project"
+        )
+
+    def test_get_prompt_history__explicit_project_name__forwards_to_prompt_client(
+        self,
+    ):
+        """Verify get_prompt_history forwards an explicit project_name to both PromptClient calls."""
+        self.opik_client_.get_prompt_history(
+            name="my-prompt", project_name="custom-project"
+        )
+
+        assert self.mock_get_prompt.call_args[1]["project_name"] == "custom-project"
+        assert (
+            self.mock_get_all_versions.call_args[1]["project_name"] == "custom-project"
+        )
+
+    def test_get_prompt_history__returns_prompts_with_resolved_project_name(self):
+        """Verify each returned Prompt carries the resolved project_name."""
+        results = self.opik_client_.get_prompt_history(name="my-prompt")
+
+        assert len(results) == 1
+        assert isinstance(results[0], prompt_module.Prompt)
+        assert results[0].project_name == "default-project"
+
+    def test_get_prompt_history__prompt_not_found__returns_empty_list(self):
+        """Verify get_prompt_history returns [] when the prompt does not exist."""
+        with patch.object(
+            prompt_client_module.PromptClient, "get_prompt", return_value=None
+        ):
+            results = self.opik_client_.get_prompt_history(name="nonexistent")
+
+        assert results == []
+
+
+class TestOpikClientGetChatPromptHistory:
+    """Tests for Opik.get_chat_prompt_history() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.mock_version = _make_chat_prompt_version()
+
+        with (
+            patch.object(
+                prompt_client_module.PromptClient,
+                "get_prompt",
+                return_value=self.mock_version,
+            ) as self.mock_get_prompt,
+            patch.object(
+                prompt_client_module.PromptClient,
+                "get_all_prompt_versions",
+                return_value=[self.mock_version],
+            ) as self.mock_get_all_versions,
+        ):
+            yield
+
+    def test_get_chat_prompt_history__no_project_name__uses_default_project(self):
+        """Verify get_chat_prompt_history resolves None project_name to the client's default."""
+        self.opik_client_.get_chat_prompt_history(name="my-chat-prompt")
+
+        assert self.mock_get_prompt.call_args[1]["project_name"] == "default-project"
+        assert (
+            self.mock_get_all_versions.call_args[1]["project_name"] == "default-project"
+        )
+
+    def test_get_chat_prompt_history__explicit_project_name__forwards_to_prompt_client(
+        self,
+    ):
+        """Verify get_chat_prompt_history forwards an explicit project_name to both PromptClient calls."""
+        self.opik_client_.get_chat_prompt_history(
+            name="my-chat-prompt", project_name="custom-project"
+        )
+
+        assert self.mock_get_prompt.call_args[1]["project_name"] == "custom-project"
+        assert (
+            self.mock_get_all_versions.call_args[1]["project_name"] == "custom-project"
+        )
+
+    def test_get_chat_prompt_history__returns_chat_prompts_with_resolved_project_name(
+        self,
+    ):
+        """Verify each returned ChatPrompt carries the resolved project_name."""
+        results = self.opik_client_.get_chat_prompt_history(name="my-chat-prompt")
+
+        assert len(results) == 1
+        assert isinstance(results[0], prompt_module.ChatPrompt)
+        assert results[0].project_name == "default-project"
+
+    def test_get_chat_prompt_history__prompt_not_found__returns_empty_list(self):
+        """Verify get_chat_prompt_history returns [] when the prompt does not exist."""
+        with patch.object(
+            prompt_client_module.PromptClient, "get_prompt", return_value=None
+        ):
+            results = self.opik_client_.get_chat_prompt_history(name="nonexistent")
+
+        assert results == []
+
+
+class TestOpikClientSearchPrompts:
+    """Tests for Opik.search_prompts() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.opik_client_ = opik_client.Opik(project_name="default-project")
+
+        with patch.object(
+            prompt_client_module.PromptClient,
+            "search_prompts",
+            return_value=[],
+        ) as self.mock_search:
+            yield
+
+    def test_search_prompts__no_project_name__uses_default_project(self):
+        """Verify search_prompts resolves None project_name to the client's default."""
+        self.opik_client_.search_prompts()
+
+        call_kwargs = self.mock_search.call_args[1]
+        assert call_kwargs["project_name"] == "default-project"
+
+    def test_search_prompts__explicit_project_name__forwards_to_prompt_client(self):
+        """Verify search_prompts forwards an explicit project_name to PromptClient."""
+        self.opik_client_.search_prompts(project_name="custom-project")
+
+        call_kwargs = self.mock_search.call_args[1]
+        assert call_kwargs["project_name"] == "custom-project"
+
+    def test_search_prompts__returns_text_and_chat_prompts_with_resolved_project_name(
+        self,
+    ):
+        """Verify returned prompts carry the resolved project_name."""
+        text_version = _make_text_prompt_version()
+        chat_version = _make_chat_prompt_version()
+
+        search_results = [
+            prompt_client_module.PromptSearchResult(
+                name="text-prompt",
+                template_structure="text",
+                prompt_version_detail=text_version,
+                project_name="default-project",
+            ),
+            prompt_client_module.PromptSearchResult(
+                name="chat-prompt",
+                template_structure="chat",
+                prompt_version_detail=chat_version,
+                project_name="default-project",
+            ),
+        ]
+
+        with patch.object(
+            prompt_client_module.PromptClient,
+            "search_prompts",
+            return_value=search_results,
+        ):
+            results = self.opik_client_.search_prompts()
+
+        assert len(results) == 2
+        assert isinstance(results[0], prompt_module.Prompt)
+        assert results[0].project_name == "default-project"
+        assert isinstance(results[1], prompt_module.ChatPrompt)
+        assert results[1].project_name == "default-project"

@@ -1754,6 +1754,7 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
         prompt_version = prompt_client_.create_prompt(
             name=name,
             prompt=prompt,
@@ -1763,8 +1764,11 @@ class Opik:
             description=description,
             change_description=change_description,
             tags=tags,
+            project_name=project_name,
         )
-        return prompt_module.Prompt.from_fern_prompt_version(name, prompt_version)
+        return prompt_module.Prompt.from_fern_prompt_version(
+            name, prompt_version, project_name=project_name
+        )
 
     def create_chat_prompt(
         self,
@@ -1776,6 +1780,7 @@ class Opik:
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
     ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
@@ -1790,6 +1795,7 @@ class Opik:
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
+            project_name: Optional project name for the prompt.
 
         Returns:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
@@ -1798,6 +1804,7 @@ class Opik:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
             ApiError: If there is an error during the creation of the prompt.
         """
+        project_name = self._resolve_project_name(project_name)
         return prompt_module.ChatPrompt(
             name=name,
             messages=messages,
@@ -1807,12 +1814,14 @@ class Opik:
             description=description,
             change_description=change_description,
             tags=tags,
+            project_name=project_name,
         )
 
     def get_prompt(
         self,
         name: str,
         commit: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> Optional[prompt_module.Prompt]:
         """
         Retrieve a text prompt by name and optional commit version.
@@ -1822,6 +1831,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            project_name: The name of the project to retrieve the prompt from. If not provided, the default project will be used.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
@@ -1830,19 +1840,26 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
         fern_prompt_version = prompt_client_.get_prompt(
-            name=name, commit=commit, raise_if_not_template_structure="text"
+            name=name,
+            commit=commit,
+            raise_if_not_template_structure="text",
+            project_name=project_name,
         )
 
         if fern_prompt_version is None:
             return None
 
-        return prompt_module.Prompt.from_fern_prompt_version(name, fern_prompt_version)
+        return prompt_module.Prompt.from_fern_prompt_version(
+            name, fern_prompt_version, project_name=project_name
+        )
 
     def get_chat_prompt(
         self,
         name: str,
         commit: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> Optional[prompt_module.ChatPrompt]:
         """
         Retrieve a chat prompt by name and optional commit version.
@@ -1852,6 +1869,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            project_name: The name of the project to retrieve the prompt from. If not provided, the default project will be used.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
@@ -1860,15 +1878,19 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
         fern_prompt_version = prompt_client_.get_prompt(
-            name=name, commit=commit, raise_if_not_template_structure="chat"
+            name=name,
+            commit=commit,
+            raise_if_not_template_structure="chat",
+            project_name=project_name,
         )
 
         if fern_prompt_version is None:
             return None
 
         return prompt_module.ChatPrompt.from_fern_prompt_version(
-            name, fern_prompt_version
+            name, fern_prompt_version, project_name=project_name
         )
 
     def get_prompt_history(
@@ -1876,6 +1898,7 @@ class Opik:
         name: str,
         search: Optional[str] = None,
         filter_string: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> List[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
@@ -1883,6 +1906,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -1909,33 +1933,37 @@ class Opik:
 
         Example:
             # Get all versions of a prompt
-            versions = client.get_prompt_history(name="my-prompt")
+            versions = client.get_prompt_history(name="my-prompt", project_name="my-project"))
 
             # Filter by tags (versions containing "production" tag)
             versions = client.get_prompt_history(
                 name="my-prompt",
+                project_name="my-project",
                 filter_string='tags contains "production"'
             )
 
             # Search for specific text in template or change description fields
             versions = client.get_prompt_history(
                 name="my-prompt",
+                project_name="my-project",
                 search="customer"
             )
 
             # Combine search and filtering
             versions = client.get_prompt_history(
                 name="my-prompt",
+                project_name="my-project",
                 search="customer",
                 filter_string='tags contains "production"'
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
 
         # First, validate that this is a text prompt by trying to get the latest version
         # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
         latest_version = prompt_client_.get_prompt(
-            name=name, raise_if_not_template_structure="text"
+            name=name, raise_if_not_template_structure="text", project_name=project_name
         )
 
         if latest_version is None:
@@ -1943,11 +1971,16 @@ class Opik:
 
         # Now get all versions (we know it's a text prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
-            name=name, search=search, filter_string=filter_string
+            name=name,
+            search=search,
+            filter_string=filter_string,
+            project_name=project_name,
         )
 
         result = [
-            prompt_module.Prompt.from_fern_prompt_version(name, version)
+            prompt_module.Prompt.from_fern_prompt_version(
+                name, version, project_name=project_name
+            )
             for version in fern_prompt_versions
         ]
         return result
@@ -1957,6 +1990,7 @@ class Opik:
         name: str,
         search: Optional[str] = None,
         filter_string: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
@@ -1964,6 +1998,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -1990,33 +2025,37 @@ class Opik:
 
         Example:
             # Get all versions of a chat prompt
-            versions = client.get_chat_prompt_history(name="my-chat-prompt")
+            versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")))
 
             # Filter by tags (versions containing "production" tag)
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
+                project_name="my-project",
                 filter_string='tags contains "production"'
             )
 
             # Search for specific text in template or change description fields
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
+                project_name="my-project",
                 search="helpful assistant"
             )
 
             # Combine search and filtering
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
+                project_name="my-project",
                 search="helpful assistant",
                 filter_string='tags contains "production"'
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
 
         # First, validate that this is a chat prompt by trying to get the latest version
         # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
         latest_version = prompt_client_.get_prompt(
-            name=name, raise_if_not_template_structure="chat"
+            name=name, raise_if_not_template_structure="chat", project_name=project_name
         )
 
         if latest_version is None:
@@ -2024,22 +2063,30 @@ class Opik:
 
         # Now get all versions (we know it's a chat prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
-            name=name, search=search, filter_string=filter_string
+            name=name,
+            search=search,
+            filter_string=filter_string,
+            project_name=project_name,
         )
 
         result = [
-            prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
+            prompt_module.ChatPrompt.from_fern_prompt_version(
+                name, version, project_name=project_name
+            )
             for version in fern_prompt_versions
         ]
         return result
 
-    def get_all_prompts(self, name: str) -> List[prompt_module.Prompt]:
+    def get_all_prompts(
+        self, name: str, project_name: Optional[str] = None
+    ) -> List[prompt_module.Prompt]:
         """
         DEPRECATED: Please use Opik.get_prompt_history() instead.
         Retrieve all the prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
 
         Returns:
             List[prompt_module.Prompt]: A list of Prompt instances for the given name.
@@ -2047,15 +2094,16 @@ class Opik:
         LOGGER.warning(
             "Opik.get_all_prompts() is deprecated. Please use Opik.get_prompt_history() instead."
         )
-        return self.get_prompt_history(name)
+        return self.get_prompt_history(name, project_name=project_name)
 
     def search_prompts(
-        self, filter_string: Optional[str] = None
+        self, filter_string: Optional[str] = None, project_name: Optional[str] = None
     ) -> List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]]:
         """
         Retrieve the latest prompt versions (both string and chat prompts) for the given search parameters.
 
         Parameters:
+            project_name: The name of the project to search in. If not provided, the default project will be used.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -2089,8 +2137,12 @@ class Opik:
         oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string or "")
         parsed_filters = oql.get_filter_expressions()
 
+        project_name = self._resolve_project_name(project_name)
+
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        search_results = prompt_client_.search_prompts(parsed_filters=parsed_filters)
+        search_results = prompt_client_.search_prompts(
+            parsed_filters=parsed_filters, project_name=project_name
+        )
 
         # Convert to Prompt or ChatPrompt objects based on template_structure
         prompts: List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]] = []
@@ -2098,13 +2150,17 @@ class Opik:
             if result.template_structure == "chat":
                 prompts.append(
                     prompt_module.ChatPrompt.from_fern_prompt_version(
-                        result.name, result.prompt_version_detail
+                        result.name,
+                        result.prompt_version_detail,
+                        project_name=project_name,
                     )
                 )
             else:
                 prompts.append(
                     prompt_module.Prompt.from_fern_prompt_version(
-                        result.name, result.prompt_version_detail
+                        result.name,
+                        result.prompt_version_detail,
+                        project_name=project_name,
                     )
                 )
 

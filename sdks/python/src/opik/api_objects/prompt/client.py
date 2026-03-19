@@ -146,7 +146,7 @@ class PromptClient:
             # After creating, retrieve the version that was created
             new_prompt_version_detail = (
                 self._rest_client.prompts.retrieve_prompt_version(
-                    name=name,
+                    name=name, project_name=project_name
                 )
             )
             # retrieve_prompt_version may not return tags, so we need to set them manually
@@ -174,11 +174,11 @@ class PromptClient:
                 metadata=metadata,
                 type=type,
             )
-            # TODO: provide project_name to the self._rest_client.prompts.create_prompt_version
             new_prompt_version_detail = self._rest_client.prompts.create_prompt_version(
                 name=name,
                 version=new_prompt_version_detail_data,
                 template_structure=template_structure,
+                project_name=project_name,
             )
         return new_prompt_version_detail
 
@@ -207,10 +207,10 @@ class PromptClient:
             Prompt: The details of the specified prompt.
         """
         try:
-            # TODO: provide project_name to the self._rest_client.prompts.retrieve_prompt_version when available
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
+                project_name=project_name,
             )
 
             should_skip_validation = (
@@ -433,9 +433,8 @@ class PromptClient:
             results: List[PromptSearchResult] = []
             for prompt_name, template_structure, tags in prompt_info:
                 try:
-                    # TODO: provide project_name to the self._rest_client.prompts.retrieve_prompt_version when available
                     latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                        name=prompt_name,
+                        name=prompt_name, project_name=project_name
                     )
                     # retrieve_prompt_version may not return tags, so we need to set them from get_prompts response
                     if tags is not None and latest_version.tags is None:
