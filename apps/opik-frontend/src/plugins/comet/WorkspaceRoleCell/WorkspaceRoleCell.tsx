@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { CellContext } from "@tanstack/react-table";
 import debounce from "lodash/debounce";
-import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
-import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Select, SelectTrigger, SelectValue } from "@/ui/select";
+import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
 import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
 import WorkspaceRolesSelectContent from "./WorkspaceRolesSelectContent";

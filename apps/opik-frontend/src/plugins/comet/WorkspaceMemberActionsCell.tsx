@@ -1,16 +1,16 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { MoreHorizontal, Trash } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+} from "@/ui/dropdown-menu";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { WorkspaceMember } from "@/plugins/comet/types";
 import { useRemoveFromTeamMutation } from "@/plugins/comet/api/useRemoveFromTeamMutation";
 import useWorkspace from "@/plugins/comet/useWorkspace";

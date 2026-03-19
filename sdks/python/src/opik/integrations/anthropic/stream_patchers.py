@@ -14,7 +14,6 @@ from opik.decorator import generator_wrappers, error_info_collector
 
 from anthropic.lib.streaming import _messages
 
-
 LOGGER = logging.getLogger(__name__)
 
 original_stream_iter_method = anthropic.Stream.__iter__
@@ -27,6 +26,35 @@ original_message_stream_manager_enter_method = anthropic.MessageStreamManager.__
 original_async_message_stream_manager_aenter_method = (
     anthropic.AsyncMessageStreamManager.__aenter__
 )
+
+try:
+    from anthropic.lib.streaming._beta_messages import (
+        BetaAsyncMessageStream,
+        BetaAsyncMessageStreamManager,
+        BetaMessageStream,
+        BetaMessageStreamManager,
+    )
+
+    original_beta_message_stream_iter_method = BetaMessageStream.__iter__
+    original_beta_async_message_stream_aiter_method = BetaAsyncMessageStream.__aiter__
+    original_beta_message_stream_manager_enter_method = (
+        BetaMessageStreamManager.__enter__
+    )
+    original_beta_async_message_stream_manager_aenter_method = (
+        BetaAsyncMessageStreamManager.__aenter__
+    )
+except ImportError:
+    LOGGER.debug(
+        "Anthropic beta streaming module not available; beta stream patching disabled."
+    )
+    BetaMessageStream = None  # type: ignore[assignment,misc]
+    BetaAsyncMessageStream = None  # type: ignore[assignment,misc]
+    BetaMessageStreamManager = None  # type: ignore[assignment,misc]
+    BetaAsyncMessageStreamManager = None  # type: ignore[assignment,misc]
+    original_beta_message_stream_iter_method = None
+    original_beta_async_message_stream_aiter_method = None
+    original_beta_message_stream_manager_enter_method = None
+    original_beta_async_message_stream_manager_aenter_method = None
 
 
 def patch_sync_stream(
@@ -338,6 +366,176 @@ def patch_async_message_stream_manager(
     )
     anthropic.AsyncMessageStream.__aiter__ = AsyncMessageStream__aiter__decorator(
         original_async_message_stream_aiter_method
+    )
+
+    async_message_stream_manager.opik_tracked_instance = True
+    async_message_stream_manager.span_to_end = span_to_end
+    async_message_stream_manager.trace_to_end = trace_to_end
+
+    return async_message_stream_manager
+
+
+def patch_sync_beta_message_stream_manager(
+    message_stream_manager: BetaMessageStreamManager,
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> BetaMessageStreamManager:
+    """
+    Patches `client.beta.messages.stream(...)` sync context manager.
+
+    ```
+    with client.beta.messages.stream(...) as stream:
+        for event in stream:
+            ...
+    ```
+    """
+
+    def BetaMessageStream__iter__decorator(dunder_iter_func: Callable) -> Callable:
+        @functools.wraps(dunder_iter_func)
+        def wrapper(
+            self: BetaMessageStream,
+        ) -> Iterator[Any]:
+            try:
+                error_info: Optional[ErrorInfoDict] = None
+                for item in dunder_iter_func(self):
+                    yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from anthropic.BetaMessageStream.",
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
+            finally:
+                if not hasattr(self, "opik_tracked_instance"):
+                    return
+
+                delattr(self, "opik_tracked_instance")
+
+                accumulated_output = (
+                    self.get_final_message() if error_info is None else None
+                )
+
+                finally_callback(
+                    output=accumulated_output,
+                    error_info=error_info,
+                    capture_output=True,
+                    generators_span_to_end=self.span_to_end,
+                    generators_trace_to_end=self.trace_to_end,
+                )
+
+        return wrapper
+
+    def BetaMessageStreamManager__enter__decorator(
+        dunder_enter_func: Callable,
+    ) -> Callable:
+        @functools.wraps(dunder_enter_func)
+        def wrapper(self: BetaMessageStreamManager) -> BetaMessageStream:
+            result: BetaMessageStream = dunder_enter_func(self)
+
+            if hasattr(self, "opik_tracked_instance"):
+                result.opik_tracked_instance = True
+                result.span_to_end = self.span_to_end
+                result.trace_to_end = self.trace_to_end
+
+            return result
+
+        return wrapper
+
+    BetaMessageStreamManager.__enter__ = BetaMessageStreamManager__enter__decorator(
+        original_beta_message_stream_manager_enter_method
+    )
+    BetaMessageStream.__iter__ = BetaMessageStream__iter__decorator(
+        original_beta_message_stream_iter_method
+    )
+
+    message_stream_manager.opik_tracked_instance = True
+    message_stream_manager.span_to_end = span_to_end
+    message_stream_manager.trace_to_end = trace_to_end
+
+    return message_stream_manager
+
+
+def patch_async_beta_message_stream_manager(
+    async_message_stream_manager: BetaAsyncMessageStreamManager,
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> BetaAsyncMessageStreamManager:
+    """
+    Patches `client.beta.messages.stream(...)` async context manager.
+
+    ```
+    async with client.beta.messages.stream(...) as stream:
+        async for event in stream:
+            ...
+    ```
+    """
+
+    def BetaAsyncMessageStream__aiter__decorator(
+        dunder_aiter_func: Callable,
+    ) -> Callable:
+        @functools.wraps(dunder_aiter_func)
+        async def wrapper(
+            self: BetaAsyncMessageStream,
+        ) -> AsyncIterator[Any]:
+            try:
+                error_info: Optional[ErrorInfoDict] = None
+                async for item in dunder_aiter_func(self):
+                    yield item
+            except Exception as exception:
+                LOGGER.debug(
+                    "Exception raised from anthropic.BetaAsyncMessageStream.",
+                    exc_info=True,
+                )
+                error_info = error_info_collector.collect(exception)
+                raise exception
+            finally:
+                if not hasattr(self, "opik_tracked_instance"):
+                    return
+
+                delattr(self, "opik_tracked_instance")
+
+                accumulated_output = (
+                    await self.get_final_message() if error_info is None else None
+                )
+
+                finally_callback(
+                    output=accumulated_output,
+                    error_info=error_info,
+                    capture_output=True,
+                    generators_span_to_end=self.span_to_end,
+                    generators_trace_to_end=self.trace_to_end,
+                )
+
+        return wrapper
+
+    def BetaAsyncMessageStreamManager__aenter__decorator(
+        dunder_aenter_func: Callable,
+    ) -> Callable:
+        @functools.wraps(dunder_aenter_func)
+        async def wrapper(
+            self: BetaAsyncMessageStreamManager,
+        ) -> BetaAsyncMessageStream:
+            result: BetaAsyncMessageStream = await dunder_aenter_func(self)
+
+            if hasattr(self, "opik_tracked_instance"):
+                result.opik_tracked_instance = True
+                result.span_to_end = self.span_to_end
+                result.trace_to_end = self.trace_to_end
+
+            return result
+
+        return wrapper
+
+    BetaAsyncMessageStreamManager.__aenter__ = (
+        BetaAsyncMessageStreamManager__aenter__decorator(
+            original_beta_async_message_stream_manager_aenter_method
+        )
+    )
+    BetaAsyncMessageStream.__aiter__ = BetaAsyncMessageStream__aiter__decorator(
+        original_beta_async_message_stream_aiter_method
     )
 
     async_message_stream_manager.opik_tracked_instance = True

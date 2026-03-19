@@ -220,6 +220,8 @@ class RawExperimentsClient:
         *,
         id: typing.Optional[str] = OMIT,
         dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -241,6 +243,12 @@ class RawExperimentsClient:
         id : typing.Optional[str]
 
         dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -278,6 +286,8 @@ class RawExperimentsClient:
             json={
                 "id": id,
                 "dataset_name": dataset_name,
+                "project_id": project_id,
+                "project_name": project_name,
                 "name": name,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
@@ -1266,6 +1276,8 @@ class AsyncRawExperimentsClient:
         *,
         id: typing.Optional[str] = OMIT,
         dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1287,6 +1299,12 @@ class AsyncRawExperimentsClient:
         id : typing.Optional[str]
 
         dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -1324,6 +1342,8 @@ class AsyncRawExperimentsClient:
             json={
                 "id": id,
                 "dataset_name": dataset_name,
+                "project_id": project_id,
+                "project_name": project_name,
                 "name": name,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
