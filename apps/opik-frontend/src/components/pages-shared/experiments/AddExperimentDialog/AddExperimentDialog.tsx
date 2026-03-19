@@ -9,6 +9,7 @@ import CodeSectionTitle from "@/components/shared/CodeSectionTitle/CodeSectionTi
 import InstallOpikSection from "@/components/shared/InstallOpikSection/InstallOpikSection";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
+import { DATASET_TYPE } from "@/types/datasets";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
@@ -19,6 +20,8 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useIsPhone } from "@/hooks/useIsPhone";
+import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -160,8 +163,6 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
   },
 ];
 
-import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
-
 const ALL_EVALUATOR_OPTIONS: MetricOption[] = [
   ...HEURISTICS_MODELS_OPTIONS.map((m) => ({
     ...m,
@@ -182,6 +183,10 @@ type AddExperimentDialogProps = {
 const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
 > = ({ open, setOpen, datasetName: initialDatasetName = "" }) => {
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
+
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
   const { isPhonePortrait } = useIsPhone();
@@ -192,17 +197,41 @@ const AddExperimentDialog: React.FunctionComponent<
     LLM_JUDGES_MODELS_OPTIONS[0].value,
   ]); // Set the first LLM judge model as checked
 
+  const { data, isLoading } = useDatasetsList(
+    {
+      workspaceName,
+      page: 1,
+      size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
+    },
+    {
+      placeholderData: keepPreviousData,
+    },
+  );
+
+  const total = data?.total ?? 0;
+
+  const selectedDataset = useMemo(
+    () => data?.content?.find((d) => d.name === datasetName),
+    [data?.content, datasetName],
+  );
+  const isEvaluationSuite =
+    selectedDataset?.type === DATASET_TYPE.EVALUATION_SUITE;
+
+  // When the selected dataset is an evaluation suite, evaluators are defined
+  // on the suite itself — skip metrics in the generated code.
+  const effectiveModels = isEvaluationSuite ? [] : models;
+
   const importString =
-    models.length > 0
-      ? `from opik.evaluation.metrics import (${models
+    effectiveModels.length > 0
+      ? `from opik.evaluation.metrics import (${effectiveModels
           .map((m) => EVALUATOR_MODEL_MAP[m].class)
           .join(", ")})
   `
       : ``;
 
   const metricsString =
-    models.length > 0
-      ? `\nmetrics = [${models
+    effectiveModels.length > 0
+      ? `\nmetrics = [${effectiveModels
           .map(
             (m) =>
               EVALUATOR_MODEL_MAP[m].class +
@@ -214,7 +243,7 @@ const AddExperimentDialog: React.FunctionComponent<
       : "";
 
   const metricsParam =
-    models.length > 0
+    effectiveModels.length > 0
       ? `,
   scoring_metrics=metrics`
       : "";
@@ -244,12 +273,14 @@ const AddExperimentDialog: React.FunctionComponent<
       : '"placeholder string"';
   };
 
-  const evaluation_task_output =
-    models.length > 0
+  const evaluationTaskOutput =
+    effectiveModels.length > 0
       ? `{
         ${[
           ...new Set(
-            models.flatMap((m) => EVALUATOR_MODEL_MAP[m].scoreParameters),
+            effectiveModels.flatMap(
+              (m) => EVALUATOR_MODEL_MAP[m].scoreParameters,
+            ),
           ),
         ]
           .map((p) => `"${p}": ${getParamValue(p)}`)
@@ -261,13 +292,31 @@ const AddExperimentDialog: React.FunctionComponent<
     # Replace with your LLM call
     llm_response = "your LLM response"
 
-    result = ${evaluation_task_output}
+    result = ${evaluationTaskOutput}
 
     return result`;
 
-  const experimentCode =
-    "" +
-    `import os
+  const suiteName = datasetName || "evaluation suite name placeholder";
+  const datasetDisplayName = datasetName || "dataset name placeholder";
+
+  const suiteExperimentCode = `import os
+import opik
+
+# os.environ["OPENAI_API_KEY"] = "OpenAI API key goes here"
+
+# INJECT_OPIK_CONFIGURATION
+
+client = opik.Opik()
+suite = client.get_evaluation_suite(name="${suiteName}")
+
+${evaluationTaskCode}
+
+result = suite.run(
+  task=evaluation_task,
+  experiment_name="my_evaluation"
+)`;
+
+  const datasetExperimentCode = `import os
 from opik import Opik
 from opik.evaluation import evaluate
 
@@ -277,9 +326,7 @@ from opik.evaluation import evaluate
 
 ${importString}
 client = Opik()
-dataset = client.get_dataset(name="${
-      datasetName || "dataset name placeholder"
-    }")
+dataset = client.get_dataset(name="${datasetDisplayName}")
 
 ${evaluationTaskCode}
 ${metricsString}
@@ -288,6 +335,10 @@ eval_results = evaluate(
   dataset=dataset,
   task=evaluation_task${metricsParam}
 )`;
+
+  const experimentCode = isEvaluationSuite
+    ? suiteExperimentCode
+    : datasetExperimentCode;
 
   const { code: codeWithConfig, lines: highlightedLines } = putConfigInCode({
     code: experimentCode,
@@ -302,19 +353,6 @@ eval_results = evaluate(
     apiKey,
     withHighlight: true,
   });
-
-  const { data, isLoading } = useDatasetsList(
-    {
-      workspaceName,
-      page: 1,
-      size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  const total = data?.total ?? 0;
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
@@ -464,24 +502,24 @@ eval_results = evaluate(
   );
 
   return (
-    <SideDialog open={open} setOpen={openChangeHandler}>
+    <SideDialog open={open && canCreateExperiments} setOpen={openChangeHandler}>
       <div className="pb-20">
         <div className="pb-8">
           <SheetTitle>Create a new experiment</SheetTitle>
           <div className="comet-body-s mx-auto mt-4 max-w-[468px] text-center text-muted-slate">
-            Select a dataset, assign the relevant evaluators, and follow the
-            instructions to track and compare your training runs
+            Select an evaluation suite, assign the relevant evaluators, and
+            follow the instructions to track and compare your training runs
           </div>
         </div>
         <div className="mx-auto flex w-full flex-col gap-6 md:max-w-[1250px] md:flex-row md:items-start">
-          {renderEvaluatorsSection()}
+          {!isEvaluationSuite && renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>
-              <CodeSectionTitle>1. Select dataset</CodeSectionTitle>
+              <CodeSectionTitle>1. Select evaluation suite</CodeSectionTitle>
               <LoadableSelectBox
                 options={options}
                 value={datasetName}
-                placeholder="Select a dataset"
+                placeholder="Select an evaluation suite"
                 onChange={setDatasetName}
                 onLoadMore={
                   total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore

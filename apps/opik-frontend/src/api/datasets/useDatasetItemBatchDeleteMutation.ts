@@ -57,10 +57,10 @@ const useDatasetItemBatchDeleteMutation = () => {
     onSuccess: (_, { ids, isAllItemsSelected }) => {
       const isSingle = !isAllItemsSelected && ids.length === 1;
       toast({
-        title: isSingle ? "Dataset item removed" : "Dataset items removed",
+        title: isSingle ? "Suite item removed" : "Suite items removed",
         description: isSingle
-          ? "The dataset item has been removed. Don't forget to save your changes to create a new version."
-          : "The dataset items have been removed. Don't forget to save your changes to create a new version.",
+          ? "The suite item has been removed. Don't forget to save your changes to create a new version."
+          : "The suite items have been removed. Don't forget to save your changes to create a new version.",
       });
     },
     onError: (error: AxiosError) => {

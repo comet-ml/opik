@@ -12,7 +12,6 @@ import {
 } from "@/lib/llm";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
-  PLAYGROUND_SELECTED_DATASET_KEY,
   PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
 } from "@/constants/llm";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
@@ -20,8 +19,6 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface NamedPromptContent {
@@ -40,7 +37,7 @@ interface LoadPlaygroundOptions {
   namedPrompts?: NamedPromptContent[];
 }
 
-const useLoadPlayground = () => {
+function useLoadPlayground() {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
@@ -57,17 +54,6 @@ const useLoadPlayground = () => {
     useProviderKeys({
       workspaceName,
     });
-
-  const isVersioningEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
-  );
-
-  const [, setDatasetId] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_KEY,
-    {
-      defaultValue: null,
-    },
-  );
 
   const [, setDatasetVersionKey] = useLocalStorageState<string | null>(
     PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
@@ -213,18 +199,13 @@ const useLoadPlayground = () => {
 
       setPromptMap(promptIds, promptMap);
 
-      if (datasetId) {
-        if (isVersioningEnabled && datasetVersionId) {
-          const versionKey = formatDatasetVersionKey(
-            datasetId,
-            datasetVersionId,
-          );
-          setDatasetVersionKey(versionKey);
-          setDatasetId(null);
-        } else {
-          setDatasetId(datasetId);
-          setDatasetVersionKey(null);
-        }
+      if (datasetId && datasetVersionId) {
+        const versionKey = formatDatasetVersionKey(datasetId, datasetVersionId);
+        setDatasetVersionKey(versionKey);
+      } else if (datasetId) {
+        console.warn(
+          "useLoadPlayground: datasetId provided without datasetVersionId — dataset context will not be set",
+        );
       }
 
       navigate({
@@ -238,9 +219,7 @@ const useLoadPlayground = () => {
       createPromptFromContent,
       navigate,
       setPromptMap,
-      setDatasetId,
       setDatasetVersionKey,
-      isVersioningEnabled,
       workspaceName,
     ],
   );
@@ -250,6 +229,6 @@ const useLoadPlayground = () => {
     isPlaygroundEmpty,
     isPendingProviderKeys,
   };
-};
+}
 
 export default useLoadPlayground;

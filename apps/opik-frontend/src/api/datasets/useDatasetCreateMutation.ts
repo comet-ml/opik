@@ -27,7 +27,9 @@ const useDatasetCreateMutation = () => {
       const extractedId = extractIdFromLocation(headers?.location);
 
       if (!extractedId) {
-        throw new Error("Failed to create dataset: No ID returned from server");
+        throw new Error(
+          "Failed to create evaluation suite: No ID returned from server",
+        );
       }
 
       return {

@@ -1,12 +1,17 @@
 import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
+import isNumber from "lodash/isNumber";
+import { CircleCheck } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { Experiment } from "@/types/datasets";
+import { Tag } from "@/components/ui/tag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import FeedbackScoresList from "@/components/pages-shared/FeedbackScoresList/FeedbackScoresList";
+import { formatPassRate } from "@/components/shared/DataTableCells/PassRateCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   FeedbackScoreDisplay,
@@ -15,6 +20,7 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
+import { isEvalSuiteExperiment } from "@/lib/experiments";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
 
 type CompareExperimentsDetailsProps = {
@@ -122,6 +128,34 @@ const CompareExperimentsDetails: React.FunctionComponent<
             tooltipContent="View all traces for this experiment"
           />
         )}
+        {!isCompare &&
+          isEvalSuiteExperiment(experiment) &&
+          isNumber(experiment.pass_rate) && (
+            <TooltipWrapper
+              content={formatPassRate(
+                experiment.pass_rate,
+                experiment.passed_count,
+                experiment.total_count,
+              )}
+            >
+              <Tag
+                size="md"
+                variant="transparent"
+                className="flex shrink-0 items-center gap-1"
+              >
+                <CircleCheck
+                  className={`size-3 shrink-0 ${
+                    experiment.pass_rate === 1
+                      ? "text-[var(--color-green)]"
+                      : "text-[var(--color-red)]"
+                  }`}
+                />
+                <div className="comet-body-s-accented truncate text-muted-slate">
+                  {Math.round(experiment.pass_rate * 100)}% pass rate
+                </div>
+              </Tag>
+            </TooltipWrapper>
+          )}
       </div>
       {!isCompare && experiment && (
         <ExperimentTagsList

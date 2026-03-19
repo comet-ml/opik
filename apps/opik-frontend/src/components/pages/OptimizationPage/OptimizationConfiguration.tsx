@@ -62,11 +62,11 @@ const OptimizationConfiguration: React.FC<OptimizationConfigurationProps> = ({
           </CardHeader>
           <CardContent className="flex shrink-0 flex-col gap-1">
             <ConfigItem
-              label="Dataset"
+              label="Evaluation suite"
               value={
                 <Link
-                  to="/$workspaceName/datasets/$datasetId"
-                  params={{ workspaceName, datasetId }}
+                  to="/$workspaceName/evaluation-suites/$suiteId"
+                  params={{ workspaceName, suiteId: datasetId }}
                   className="text-primary hover:underline"
                   target="_blank"
                   rel="noopener noreferrer"

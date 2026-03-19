@@ -8,7 +8,7 @@ import { DEFAULT_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
 const DEFAULT_TITLE = "Experiment metrics";
 
 const GROUP_FIELD_LABELS: Record<string, string> = {
-  [COLUMN_DATASET_ID]: "Dataset",
+  [COLUMN_DATASET_ID]: "Evaluation suite",
   [COLUMN_METADATA_ID]: "Configuration",
 };
 

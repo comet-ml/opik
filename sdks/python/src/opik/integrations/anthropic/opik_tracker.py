@@ -37,6 +37,8 @@ def track_anthropic(
     Supported methods (for all classes above) are:
         * `client.messages.create()`
         * `client.messages.stream()`
+        * `client.beta.messages.create()`
+        * `client.beta.messages.stream()`
 
     Can be used within other Opik-tracked functions.
 
@@ -81,12 +83,38 @@ def track_anthropic(
         LOGGER,
     )
 
+    beta_create_decorator = decorator_factory.track(
+        type="llm",
+        name="anthropic_beta_messages_create",
+        project_name=project_name,
+        metadata=metadata,
+    )
+    beta_stream_decorator = decorator_factory.track(
+        type="llm",
+        name="anthropic_beta_messages_stream",
+        project_name=project_name,
+        metadata=metadata,
+    )
+
     anthropic_client.messages.create = create_decorator(
         anthropic_client.messages.create
     )
     anthropic_client.messages.stream = stream_decorator(
         anthropic_client.messages.stream
     )
+    try:
+        anthropic_client.beta.messages.create = beta_create_decorator(
+            anthropic_client.beta.messages.create
+        )
+        anthropic_client.beta.messages.stream = beta_stream_decorator(
+            anthropic_client.beta.messages.stream
+        )
+    except AttributeError:
+        LOGGER.debug(
+            "Failed to patch `client.beta.messages.create/stream` methods. It is likely because they were not implemented in the provided anthropic client",
+            exc_info=True,
+        )
+
     try:
         anthropic_client.beta.messages.batches.create = batch_create_decorator(
             anthropic_client.beta.messages.batches.create

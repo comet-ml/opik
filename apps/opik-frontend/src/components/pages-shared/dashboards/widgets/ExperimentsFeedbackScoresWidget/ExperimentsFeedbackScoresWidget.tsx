@@ -1,6 +1,7 @@
 import React, { memo, useMemo, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import isEmpty from "lodash/isEmpty";
+import isNumber from "lodash/isNumber";
 import uniq from "lodash/uniq";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
@@ -33,6 +34,7 @@ import LineChart from "@/components/shared/Charts/LineChart/LineChart";
 import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
 import { MAX_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
+import { isEvalSuiteExperiment } from "@/lib/experiments";
 import {
   renderScoreTooltipValue,
   getScoreDisplayName,
@@ -40,6 +42,7 @@ import {
 import { SCORE_TYPE_FEEDBACK, SCORE_TYPE_EXPERIMENT } from "@/types/shared";
 
 const MAX_EXPERIMENTS_LIMIT = 100;
+const PASS_RATE_LABEL = "Pass rate";
 
 type DataRecord = {
   entityId: string;
@@ -144,6 +147,12 @@ function transformGroupedExperimentsToChartData(
           }
         });
 
+        // pass_rate is a top-level metric, not subject to feedbackScores filtering
+        if (isNumber(value.aggregations.pass_rate)) {
+          scores[PASS_RATE_LABEL] = value.aggregations.pass_rate;
+          allLines.push(PASS_RATE_LABEL);
+        }
+
         if (Object.keys(scores).length > 0) {
           data.push({
             entityId: groupName,
@@ -193,6 +202,12 @@ function transformUngroupedExperimentsToChartData(
         allLines.push(scoreName);
       }
     });
+
+    // pass_rate is a top-level metric, not subject to feedbackScores filtering
+    if (isEvalSuiteExperiment(experiment) && isNumber(experiment.pass_rate)) {
+      scores[PASS_RATE_LABEL] = experiment.pass_rate;
+      allLines.push(PASS_RATE_LABEL);
+    }
 
     return {
       entityId: experiment.id,

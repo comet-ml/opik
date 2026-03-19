@@ -9,10 +9,12 @@ export const DatasetIdentifier: core.serialization.Schema<
     OpikApi.DatasetIdentifier
 > = core.serialization.object({
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
 });
 
 export declare namespace DatasetIdentifier {
     export interface Raw {
         dataset_name: string;
+        project_name?: string | null;
     }
 }

@@ -10,6 +10,8 @@ import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.domain.WorkspaceMetricsService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -171,6 +173,7 @@ public class WorkspacesResource {
 
     @PUT
     @Path("/configurations")
+    @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     @Operation(operationId = "upsertWorkspaceConfiguration", summary = "Upsert workspace configuration", description = "Upsert workspace configuration", responses = {
             @ApiResponse(responseCode = "200", description = "Configuration Updated", content = @Content(schema = @Schema(implementation = WorkspaceConfiguration.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -194,6 +197,7 @@ public class WorkspacesResource {
 
     @DELETE
     @Path("/configurations")
+    @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     @Operation(operationId = "deleteWorkspaceConfiguration", summary = "Delete workspace configuration", description = "Delete workspace configuration", responses = {
             @ApiResponse(responseCode = "204", description = "Configuration Deleted"),
             @ApiResponse(responseCode = "404", description = "Configuration Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))

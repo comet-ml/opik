@@ -454,6 +454,19 @@ interface AgentConfigDAO {
             SET ended_at = CURRENT_TIMESTAMP(6)
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                AND env_name = :env_name
+                AND ended_at IS NULL
+            """)
+    int closeEnvByName(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @Bind("env_name") String envName);
+
+    @SqlUpdate("""
+            UPDATE agent_config_envs
+            SET ended_at = CURRENT_TIMESTAMP(6)
+            WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
                 AND id IN (<ids>)
                 AND ended_at IS NULL
             """)
