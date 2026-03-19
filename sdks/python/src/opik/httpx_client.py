@@ -140,10 +140,11 @@ class OpikHttpxClient(httpx.Client):
         deprecation_message = response.headers.get(DEPRECATION_HEADER)
         if deprecation_message:
             message = "Deprecation warning for %s %s: %s"
-            if request.url.path not in self.warnings:
-                self.warnings[request.url.path] = True
+            request_key = f"{request.method}:{request.url.path}"
+            if request_key not in self.warnings:
+                self.warnings[request_key] = True
                 LOGGER.warning(
-                    message, request.method, request.url.path, deprecation_message
+                    message, request.method, request.url, deprecation_message
                 )
 
         return response

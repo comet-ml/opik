@@ -129,6 +129,10 @@ class TestOpikHttpxClientDeprecationHeader:
             None, None, check_tls_certificate=False, compress_json_requests=False
         )
 
+        yield
+
+        self.client.close()
+
     @respx.mock
     def test_deprecation_header_present__logged_only_once_for_same_path(
         self, capture_log
@@ -144,7 +148,7 @@ class TestOpikHttpxClientDeprecationHeader:
         assert capture_log.records[0].levelname == "WARNING"
         assert (
             capture_log.records[0].message
-            == "Deprecation warning for GET /api/v1/deprecated: deprecated"
+            == f"Deprecation warning for GET {rx_url}: deprecated"
         )
 
     @respx.mock
@@ -174,7 +178,7 @@ class TestOpikHttpxClientDeprecationHeader:
         assert capture_log.records[0].levelname == "WARNING"
         assert (
             capture_log.records[0].message
-            == "Deprecation warning for GET /api/v2/deprecated: deprecated"
+            == f"Deprecation warning for GET {rx_url}: deprecated"
         )
 
         assert response.status_code == 200
