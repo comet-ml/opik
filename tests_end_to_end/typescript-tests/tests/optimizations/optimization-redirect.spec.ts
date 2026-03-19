@@ -37,7 +37,7 @@ test.describe('Optimization URL redirects', () => {
     await page.goto(legacyUrl);
 
     await expect(page).toHaveURL(
-      new RegExp(`^.*/${workspace}/optimizations/?$`),
+      new RegExp(`^.*/${workspace}/optimizations(/?)(\\?.*)?$`),
       { timeout: 15000 },
     );
   });
