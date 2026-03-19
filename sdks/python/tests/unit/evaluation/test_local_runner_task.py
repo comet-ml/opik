@@ -1,9 +1,21 @@
+import itertools
 from unittest import mock
 
 import httpx
 import pytest
 
 from opik.evaluation.local_runner_task import LocalRunnerTask
+
+
+def _monotonic_side_effect(*values):
+    """Return a side_effect iterator that yields *values* then repeats the last one forever.
+
+    Patching ``time.monotonic`` via a module reference replaces the function on the
+    shared ``time`` module, so background threads (e.g. QueueConsumerThread) may also
+    call it.  A plain list side_effect exhausts and raises ``StopIteration``; this
+    helper prevents that.
+    """
+    return itertools.chain(values, itertools.repeat(values[-1]))
 
 
 @pytest.fixture
@@ -133,7 +145,7 @@ class TestLocalRunnerTask:
         # monotonic: deadline=0+4=4, poll at 1.0 (<4 ok), poll at 5.0 (>=4 timeout)
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=[0.0, 1.0, 5.0],
+            side_effect=_monotonic_side_effect(0.0, 1.0, 5.0),
         ):
             with pytest.raises(TimeoutError, match="did not complete within 4s"):
                 task({"input": "test"})
@@ -307,7 +319,7 @@ class TestLocalRunnerTask:
         # monotonic: deadline=0+10=10, then check 1+2<10, 3+2<10, completes
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=[0.0, 1.0, 3.0],
+            side_effect=_monotonic_side_effect(0.0, 1.0, 3.0),
         ):
             output = task({"input": "test"})
 
@@ -359,7 +371,7 @@ class TestLocalRunnerTask:
         # monotonic: deadline=0+1=1, first poll at 0.5 (<1 sleep), second poll at 1.5 (>=1 timeout)
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=[0.0, 0.5, 1.5],
+            side_effect=_monotonic_side_effect(0.0, 0.5, 1.5),
         ):
             with pytest.raises(TimeoutError, match="did not complete within 1s"):
                 task({"input": "test"})
@@ -389,7 +401,7 @@ class TestLocalRunnerTask:
         # monotonic: deadline=0+10=10, error at 1.0 → 1+2<10 retry, completes
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=[0.0, 1.0],
+            side_effect=_monotonic_side_effect(0.0, 1.0),
         ):
             output = task({"input": "test"})
 
