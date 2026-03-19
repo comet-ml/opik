@@ -364,6 +364,23 @@ class ExperimentItemDAO {
                       ))) AS comments_array_agg
                   FROM comments_final
                   GROUP BY entity_id
+            ), assertion_results_per_trace AS (
+                  SELECT
+                      entity_id,
+                      toJSONString(
+                          groupArray(
+                              CAST(
+                                  (name, toString(passed), reason),
+                                  'Tuple(value String, passed String, reason String)'
+                              )
+                          )
+                      ) AS assertions_array
+                  FROM assertion_results
+                  WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_ids)
+                  GROUP BY entity_id
             )
               SELECT
                   *
@@ -388,7 +405,8 @@ class ExperimentItemDAO {
                       ei.created_by AS created_by,
                       ei.last_updated_by AS last_updated_by,
                       ei.visibility_mode AS trace_visibility_mode,
-                      ei.execution_policy
+                      ei.execution_policy,
+                      '' AS assertions_array
                   FROM experiment_item_aggregates_final AS ei
                   <endif>
 
@@ -414,7 +432,8 @@ class ExperimentItemDAO {
                       ei.created_by AS created_by,
                       ei.last_updated_by AS last_updated_by,
                       tfs.visibility_mode AS trace_visibility_mode,
-                      ei.execution_policy
+                      ei.execution_policy,
+                      arp.assertions_array AS assertions_array
                   FROM experiment_items_scope AS ei
                   LEFT JOIN (
                       SELECT
@@ -453,6 +472,7 @@ class ExperimentItemDAO {
                   ) AS tfs ON ei.trace_id = tfs.id
                   LEFT JOIN feedback_scores_per_trace AS fsp ON ei.trace_id = fsp.entity_id
                   LEFT JOIN comments_per_trace AS cp ON ei.trace_id = cp.entity_id
+                  LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
                   <endif>
               )  as final_result
               ORDER BY id DESC, last_updated_at DESC

@@ -8038,8 +8038,19 @@ class DatasetsResourceTest {
             assertThat(itemB.assertionResults().getFirst().passed()).isFalse();
             assertThat(itemB.status()).isEqualTo(RunStatus.FAILED);
 
-            // runSummariesByExperiment is null for single-run experiments (only populated when group.size() > 1)
-            assertThat(actualDatasetItem.runSummariesByExperiment()).isNull();
+            assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull();
+            assertThat(actualDatasetItem.runSummariesByExperiment()).containsKey(experimentIdA.toString());
+            assertThat(actualDatasetItem.runSummariesByExperiment()).containsKey(experimentIdB.toString());
+
+            var summaryA = actualDatasetItem.runSummariesByExperiment().get(experimentIdA.toString());
+            assertThat(summaryA.passedRuns()).isEqualTo(1);
+            assertThat(summaryA.totalRuns()).isEqualTo(1);
+            assertThat(summaryA.status()).isEqualTo(RunStatus.PASSED);
+
+            var summaryB = actualDatasetItem.runSummariesByExperiment().get(experimentIdB.toString());
+            assertThat(summaryB.passedRuns()).isEqualTo(0);
+            assertThat(summaryB.totalRuns()).isEqualTo(1);
+            assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
         }
     }
 
