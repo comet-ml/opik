@@ -6,7 +6,9 @@ export interface Experiment {
     id?: string;
     datasetName: string | null;
     datasetId?: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
     projectId?: string;
+    /** Project name. Creates project if it doesn't exist. Ignored when project_id is provided. */
     projectName?: string;
     name?: string;
     metadata?: OpikApi.JsonListString;

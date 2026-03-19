@@ -11158,6 +11158,8 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_name:
+          type: string
     DatasetItemsDelete:
       type: object
       properties:
@@ -11793,6 +11795,8 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_name:
+          type: string
     AvgValueStat_Public:
       type: object
       allOf:
@@ -12136,6 +12140,8 @@ components:
           format: int32
         dataset_version:
           type: string
+        project_name:
+          type: string
         filters:
           type: string
     DatasetUpdate:
@@ -12362,11 +12368,14 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
           format: uuid
-          readOnly: true
         project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          readOnly: true
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -12533,6 +12542,16 @@ components:
           minLength: 1
           type: string
           nullable: true
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -13293,11 +13312,14 @@ components:
           readOnly: true
         project_id:
           type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
           format: uuid
-          readOnly: true
         project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          readOnly: true
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
