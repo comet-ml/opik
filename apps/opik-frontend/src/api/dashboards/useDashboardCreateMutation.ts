@@ -3,7 +3,7 @@ import get from "lodash/get";
 import api, { DASHBOARDS_KEY, DASHBOARDS_REST_ENDPOINT } from "@/api/api";
 import { Dashboard } from "@/types/dashboard";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
 type UseDashboardCreateMutationParams = {

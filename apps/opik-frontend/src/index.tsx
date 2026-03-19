@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react";
 
 import "tailwindcss/tailwind.css";
 
-import App from "@/components/App";
+import App from "@/v1/App";
 import usePluginsStore from "@/store/PluginsStore";
 import { APP_VERSION } from "@/constants/app";
 import { runLocalStorageMigrations } from "@/lib/ls-migrations";

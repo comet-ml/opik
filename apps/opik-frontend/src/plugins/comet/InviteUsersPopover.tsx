@@ -8,9 +8,9 @@ import { useWorkspaceUserRolesMap } from "@/plugins/comet/hooks/useWorkspaceUser
 import {
   DropdownMenuContent,
   DropdownMenuSubContent,
-} from "@/components/ui/dropdown-menu";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { Tag } from "@/components/ui/tag";
+} from "@/ui/dropdown-menu";
+import SearchInput from "@/shared/SearchInput/SearchInput";
+import { Tag } from "@/ui/tag";
 import { cn } from "@/lib/utils";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

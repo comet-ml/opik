@@ -2,7 +2,7 @@ import isArray from "lodash/isArray";
 import get from "lodash/get";
 
 import { OptimizationStudioConfig } from "@/types/optimizations";
-import { ConfigurationType } from "@/components/pages-shared/experiments/ConfigurationDiffContent/ConfigurationDiffContent";
+import { ConfigurationType } from "@/v1/pages-shared/experiments/ConfigurationDiffContent/ConfigurationDiffContent";
 import { getOptimizerLabel } from "@/lib/optimizations";
 import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 
