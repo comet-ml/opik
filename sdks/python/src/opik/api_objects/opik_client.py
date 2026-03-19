@@ -1933,7 +1933,7 @@ class Opik:
 
         Example:
             # Get all versions of a prompt
-            versions = client.get_prompt_history(name="my-prompt", project_name="my-project"))
+            versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
 
             # Filter by tags (versions containing "production" tag)
             versions = client.get_prompt_history(
@@ -2025,7 +2025,7 @@ class Opik:
 
         Example:
             # Get all versions of a chat prompt
-            versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")))
+            versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
 
             # Filter by tags (versions containing "production" tag)
             versions = client.get_chat_prompt_history(

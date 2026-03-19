@@ -49,7 +49,7 @@ def test_dataset_items_count__no_cached_value__fetches_from_backend():
     # Should fetch from backend
     assert count == 10
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -82,7 +82,7 @@ def test_dataset_items_count__fetched_once__cached_for_subsequent_calls():
     assert count2 == 10
     assert count3 == 10
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -116,7 +116,7 @@ def test_delete__invalidates_cached_count():
 
     assert count == 3
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -155,7 +155,7 @@ def test_update__invalidates_cached_count():
 
     assert count == 5
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -199,7 +199,7 @@ def test_insert__invalidates_cached_count():
 
     assert count == 7
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -228,5 +228,5 @@ def test_backend_returns_none_count__property_returns_none():
     # Should return None
     assert count is None
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )

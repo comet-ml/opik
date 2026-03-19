@@ -653,8 +653,10 @@ def verify_prompt_version(
     version_id: Any = mock.ANY,  # type: ignore
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
+    project_name: Any = mock.ANY,
 ) -> None:
     testlib.assert_equal(name, prompt.name)
+    testlib.assert_equal(project_name, prompt.project_name)
     testlib.assert_equal(template, prompt.prompt)
     testlib.assert_equal(type, prompt.type)
     testlib.assert_equal(metadata, prompt.metadata)
@@ -677,6 +679,7 @@ def verify_chat_prompt_version(
     version_id: Any = mock.ANY,  # type: ignore
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
+    project_name: Any = mock.ANY,  # type: ignore
 ) -> None:
     """
     Verifies that a ChatPrompt has the expected properties.
@@ -689,6 +692,7 @@ def verify_chat_prompt_version(
     testlib.assert_equal(messages, chat_prompt.template)
     testlib.assert_equal(type, chat_prompt.type)
     testlib.assert_equal(metadata, chat_prompt.metadata)
+    testlib.assert_equal(project_name, chat_prompt.project_name)
     assert version_id == chat_prompt.__internal_api__version_id__, (
         f"{chat_prompt.__internal_api__version_id__} != {version_id}"
     )
