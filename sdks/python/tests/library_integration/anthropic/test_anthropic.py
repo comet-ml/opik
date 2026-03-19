@@ -1137,6 +1137,56 @@ def test_anthropic_beta_messages_create__happyflow(fake_backend):
 
 
 @retry_on_internal_server_errors
+def test_anthropic_beta_messages_parse__happyflow(fake_backend):
+    client = anthropic.Anthropic()
+    wrapped_client = track_anthropic(client)
+    messages = [{"role": "user", "content": "Tell a short fact about Paris"}]
+
+    response = wrapped_client.beta.messages.parse(
+        model=PARSE_MODEL,
+        messages=messages,
+        max_tokens=200,
+        output_format=_FactResponse,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_beta_messages_parse",
+        input={"messages": messages, "output_format": ANY_BUT_NONE},
+        output={"content": response.model_dump()["content"]},
+        tags=["anthropic"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_beta_messages_parse",
+                input={"messages": messages, "output_format": ANY_BUT_NONE},
+                output={"content": response.model_dump()["content"]},
+                tags=["anthropic"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(PARSE_MODEL_PREFIX),
+                provider="anthropic",
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@retry_on_internal_server_errors
 def test_anthropic_beta_messages_stream__generator_tracked_correctly(fake_backend):
     client = anthropic.Anthropic()
     wrapped_client = track_anthropic(client)
