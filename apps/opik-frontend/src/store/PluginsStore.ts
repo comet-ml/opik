@@ -1,8 +1,8 @@
 import React from "react";
 import { create } from "zustand";
 
-import WorkspacePreloader from "@/components/shared/WorkspacePreloader/WorkspacePreloader";
-import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
+import WorkspacePreloader from "@/shared/WorkspacePreloader/WorkspacePreloader";
+import { GoogleColabCardCoreProps } from "@/v1/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";

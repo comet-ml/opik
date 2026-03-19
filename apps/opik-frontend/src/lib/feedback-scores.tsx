@@ -26,7 +26,7 @@ import { UseCompareExperimentsListResponse } from "@/api/datasets/useCompareExpe
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 import { UseSpansListResponse } from "@/api/traces/useSpansList";
 import { formatNumericData } from "@/lib/utils";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 
 export const FEEDBACK_SCORE_SOURCE_MAP = {
   [FEEDBACK_SCORE_TYPE.online_scoring]: "Online evaluation",

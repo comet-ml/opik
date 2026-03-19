@@ -2,6 +2,43 @@
 
 If you would like to contribute to the Opik frontend, please refer to the [Contribution guide](../../CONTRIBUTING.md).
 
+## Project Structure
+
+```
+src/
+├── api/              # API client and endpoint definitions
+├── constants/        # Application-wide constants
+├── contexts/         # React context providers
+├── hooks/            # Shared custom hooks
+├── lib/              # Utility libraries
+├── plugins/          # Plugin integrations (e.g. Comet)
+├── store/            # Zustand stores
+├── types/            # Shared TypeScript types
+│
+├── ui/               # Base UI components (shadcn/ui + Radix)
+├── shared/           # Shared business components (no API calls)
+│
+├── v1/               # Opik 1 — feature-organized navigation
+│   ├── layout/       # App shell, sidebar, header
+│   ├── pages/        # Route-level page components
+│   └── pages-shared/ # Components shared across v1 pages
+│
+├── v2/               # Opik 2 — project-first navigation
+│   ├── layout/       # App shell, sidebar, header
+│   ├── pages/        # Route-level page components
+│   └── pages-shared/ # Components shared across v2 pages
+│
+├── router.tsx        # Route definitions
+└── index.tsx         # App entry point
+```
+
+### Import rules
+- `ui → shared` (one-way only)
+- `ui → shared → v1/pages-shared → v1/pages` (one-way only)
+- `ui → shared → v2/pages-shared → v2/pages` (one-way only)
+- v1/ CANNOT import from v2/; v2/ CANNOT import from v1/
+- Validate with: `npm run deps:validate`
+
 ## Environment Variables
 
 ### Frontend (Runtime)
