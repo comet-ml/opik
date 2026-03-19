@@ -110,7 +110,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             WITH optimization_final AS (
                 SELECT
                     *
-                FROM optimizations FINAL
+                FROM optimizations
                 WHERE workspace_id = :workspace_id
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
@@ -119,6 +119,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, dataset_id, id
             ), experiments_final AS (
                 SELECT
                     id,
@@ -150,10 +152,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
                        value,
                        last_updated_at,
                        last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = :entity_type
                   AND workspace_id = :workspace_id
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_type, entity_id, name
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -162,10 +166,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
                        value,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = :entity_type
                   AND workspace_id = :workspace_id
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_type, entity_id, author, name
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -257,15 +263,22 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 FROM experiment_items_final ei
                 LEFT JOIN (
                     SELECT id, duration
-                    FROM traces FINAL
+                    FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, id
                 ) AS t ON ei.trace_id = t.id
                 LEFT JOIN (
                     SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                    FROM (
+                        SELECT *
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                    )
                     GROUP BY trace_id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY ei.experiment_id
@@ -367,7 +380,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM (
                 SELECT
                     id
-                FROM optimizations FINAL
+                FROM optimizations
                 WHERE workspace_id = :workspace_id
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
@@ -376,6 +389,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, dataset_id, id
             )
             ;
             """;
