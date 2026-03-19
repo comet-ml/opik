@@ -19,6 +19,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -28,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -289,11 +291,29 @@ public class ExperimentItemService {
 
     public Flux<ExperimentItem> getExperimentItems(@NonNull ExperimentItemSearchCriteria criteria) {
         log.info("Getting experiment items by '{}'", criteria);
-        return experimentService.findByName(criteria.experimentName())
+        if (StringUtils.isBlank(criteria.projectName())) {
+            return findExperimentIdsAndGetItems(criteria.experimentName(), criteria);
+        }
+        return resolveProjectId(criteria.projectName())
+                .flatMapMany(projectIdOpt -> projectIdOpt
+                        .map(projectId -> findExperimentIdsAndGetItems(criteria.experimentName(), criteria))
+                        .orElseGet(Flux::empty));
+    }
+
+    private Mono<Optional<UUID>> resolveProjectId(String projectName) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> projectService.findProjectIdByName(workspaceId, projectName))
+                    .subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    private Flux<ExperimentItem> findExperimentIdsAndGetItems(
+            String experimentName, ExperimentItemSearchCriteria criteria) {
+        return experimentService.findByName(experimentName, criteria.projectName())
                 .subscribeOn(Schedulers.boundedElastic())
                 .collect(Collectors.mapping(Experiment::id, Collectors.toUnmodifiableSet()))
-                .flatMapMany(experimentIds -> experimentItemDAO.getItems(
-                        experimentIds, criteria));
+                .flatMapMany(experimentIds -> experimentItemDAO.getItems(experimentIds, criteria));
     }
 
     public Mono<Void> delete(@NonNull Set<UUID> ids) {

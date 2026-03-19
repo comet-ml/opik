@@ -278,10 +278,21 @@ public class ExperimentService {
                 .collect(Collectors.toSet());
     }
 
-    public Flux<Experiment> findByName(String name) {
+    public Flux<Experiment> findByName(String name, String projectName) {
         Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
-        log.info("Finding experiments by name '{}'", name);
-        return experimentDAO.findByName(name);
+        log.info("Finding experiments by name '{}' and projectName '{}'", name, projectName);
+
+        if (StringUtils.isBlank(projectName)) {
+            return experimentDAO.findByName(name);
+        }
+
+        return getProjectByName(projectName)
+                .flatMapMany(projectIdOpt -> {
+                    if (projectIdOpt.isEmpty()) {
+                        return Flux.empty();
+                    }
+                    return experimentDAO.findByName(name, projectIdOpt.get());
+                });
     }
 
     @WithSpan
@@ -375,10 +386,30 @@ public class ExperimentService {
     @WithSpan
     public Flux<Experiment> get(@NonNull ExperimentStreamRequest request) {
         log.info("Getting experiments by '{}'", request);
-        return experimentDAO.get(request)
-                .collectList()
-                .flatMap(this::enrichExperiments)
-                .flatMapMany(Flux::fromIterable);
+        if (StringUtils.isBlank(request.projectName())) {
+            return experimentDAO.get(request, null)
+                    .collectList()
+                    .flatMap(this::enrichExperiments)
+                    .flatMapMany(Flux::fromIterable);
+        }
+        return getProjectByName(request.projectName())
+                .flatMapMany(projectIdOpt -> {
+                    if (projectIdOpt.isEmpty()) {
+                        return Flux.empty();
+                    }
+                    return experimentDAO.get(request, projectIdOpt.get())
+                            .collectList()
+                            .flatMap(this::enrichExperiments)
+                            .flatMapMany(Flux::fromIterable);
+                });
+    }
+
+    private Mono<Optional<UUID>> getProjectByName(String request) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> projectService.findProjectIdByName(workspaceId, request))
+                    .subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     private Mono<Experiment> enrichExperiment(Mono<Experiment> experimentMono, String errorMsg) {
