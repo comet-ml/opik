@@ -44,4 +44,8 @@ public class StringRedisClient {
     public RBatch createBatch() {
         return syncClient.createBatch(BatchOptions.defaults());
     }
+
+    public long deleteKeys(String... keys) {
+        return syncClient.getKeys().delete(keys);
+    }
 }

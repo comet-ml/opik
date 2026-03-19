@@ -815,16 +815,15 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     private void purgeRunner(UUID runnerId, String workspaceId, String userName) {
         log.info("Purging dead runner {} from workspace {}", runnerId, workspaceId);
 
-        RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId));
-        Map<String, String> runnerFields = runnerMap.readAllMap();
-        String projectIdStr = runnerFields.get(FIELD_PROJECT_ID);
+        String projectIdStr = redisClient.<String, String>getMap(runnerKey(runnerId)).get(FIELD_PROJECT_ID);
 
-        runnerMap.delete();
-        redisClient.getMap(runnerAgentsKey(runnerId)).delete();
-        redisClient.getBucket(runnerHeartbeatKey(runnerId)).delete();
-        redisClient.getSet(runnerCancellationsKey(runnerId)).delete();
-        redisClient.getList(pendingJobsKey(runnerId)).delete();
-        redisClient.getList(activeJobsKey(runnerId)).delete();
+        redisClient.deleteKeys(
+                runnerKey(runnerId),
+                runnerAgentsKey(runnerId),
+                runnerHeartbeatKey(runnerId),
+                runnerCancellationsKey(runnerId),
+                pendingJobsKey(runnerId),
+                activeJobsKey(runnerId));
 
         if (userName != null) {
             removeRunnerFromWorkspace(workspaceId, userName, runnerId);
