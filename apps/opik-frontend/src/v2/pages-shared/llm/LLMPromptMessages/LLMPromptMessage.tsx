@@ -1,11 +1,21 @@
 import React, {
+  useEffect,
   useRef,
   useState,
   useImperativeHandle,
   forwardRef,
   useCallback,
 } from "react";
-import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
+import {
+  Braces,
+  ChevronDown,
+  CopyPlus,
+  GripVertical,
+  Image,
+  Music,
+  Trash,
+  Video,
+} from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { useSortable } from "@dnd-kit/sortable";
@@ -14,6 +24,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/ui/button";
 import { FormErrorSkeleton } from "@/ui/form";
 import { Card, CardContent } from "@/ui/card";
+import { Separator } from "@/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -23,15 +34,13 @@ import {
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/shared/Loader/Loader";
-import {
-  JsonTreePopover,
-  JsonObject,
-  JsonValue,
-} from "@/shared/JsonTreePopover";
+import { JsonObject, JsonValue } from "@/types/shared";
+import JsonTreePopover from "@/shared/JsonTreePopover/JsonTreePopover";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptMessageMediaSection from "@/v2/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
+import AddMediaPopover from "@/v2/pages-shared/llm/PromptMessageMediaTags/AddMediaPopover";
+import MediaTagsList from "@/v2/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 
 import { cn } from "@/lib/utils";
 import {
@@ -51,6 +60,7 @@ import { DropdownOption } from "@/types/shared";
 import {
   mustachePlugin,
   codeMirrorPromptTheme,
+  VariableHintExtension,
 } from "@/constants/codeMirrorPlugins";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 
@@ -94,7 +104,6 @@ interface LLMPromptMessageProps {
   disableMedia?: boolean;
   promptVariables?: string[];
   improvePromptConfig?: ImprovePromptConfig;
-  disabled?: boolean;
   jsonTreeData?: JsonObject | null;
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
 }
@@ -121,21 +130,25 @@ const LLMPromptMessage = forwardRef<
       disableMedia = true,
       promptVariables,
       improvePromptConfig,
-      disabled = false,
       jsonTreeData,
       onJsonPathSelect,
     },
     ref,
   ) => {
     const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
+    const [isMediaPopoverOpen, setIsMediaPopoverOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [focusedVariableKey, setFocusedVariableKey] = useState<string | null>(
+      null,
+    );
     const { id, role, content } = message;
 
-    const { active, attributes, listeners, setNodeRef, transform, transition } =
+    const { active, listeners, setNodeRef, transform, transition } =
       useSortable({ id });
 
     const editorViewRef = useRef<EditorView | null>(null);
     const popoverTriggerRef = useRef<HTMLSpanElement | null>(null);
+    const variableHintRef = useRef(new VariableHintExtension());
     const style = {
       transform: CSS.Translate.toString(transform),
       transition,
@@ -177,16 +190,33 @@ const LLMPromptMessage = forwardRef<
       isJsonPopoverOpen,
       jsonSearchQuery,
       popoverPosition,
+      braceStartPos,
       handleJsonPathSelect,
       handlePopoverOpenChange,
       handleEditorUpdate,
       braceKeyExtension,
+      triggerVariableSearch,
     } = useJsonPopover({
       editorViewRef,
       hasJsonData,
       insertTextAtCursor,
       onJsonPathSelect,
     });
+
+    const hintText =
+      isJsonPopoverOpen && !jsonSearchQuery
+        ? focusedVariableKey || "Find variable"
+        : null;
+
+    // Sync the inline variable hint (ghost text after "{{") with the CodeMirror editor
+    useEffect(() => {
+      const view = editorViewRef.current;
+      if (!view) return;
+      variableHintRef.current.update(view, {
+        text: hintText,
+        pos: braceStartPos,
+      });
+    }, [hintText, braceStartPos]);
 
     const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
       if (
@@ -202,6 +232,10 @@ const LLMPromptMessage = forwardRef<
       }
     };
 
+    const showMediaActions = !disableMedia && role === LLM_MESSAGE_ROLE.user;
+    const hasMediaTags =
+      images.length > 0 || videos.length > 0 || audios.length > 0;
+
     return (
       <>
         <Card
@@ -211,103 +245,102 @@ const LLMPromptMessage = forwardRef<
           onClick={() => {
             editorViewRef.current?.focus();
           }}
-          {...attributes}
-          className={cn("group py-2 px-3 [&:focus-within]:border-primary", {
-            "z-10": id === active?.id,
-            "border-destructive": Boolean(errorText),
-          })}
+          className={cn(
+            "group p-2 shadow-none [&:focus-within]:border-primary",
+            {
+              "pb-0": showMediaActions || hasJsonData,
+              "z-10 shadow-sm": id === active?.id,
+              "border-destructive": Boolean(errorText),
+            },
+          )}
         >
           <CardContent className="p-0">
             <div className="flex items-center justify-between gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="minimal"
-                    size="sm"
-                    className="min-w-4 p-0"
-                    disabled={disabled}
+              <div className="flex items-center">
+                <span
+                  className={cn(
+                    "-ml-[7px] py-2 flex cursor-move items-center text-light-slate invisible [&>svg]:size-3.5",
+                    !hideDragButton &&
+                      "group-hover:visible [.group:focus-within_&]:visible",
+                  )}
+                  {...listeners}
+                >
+                  <GripVertical />
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="minimal" size="sm" className="min-w-4 p-0">
+                      {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
+                      <ChevronDown className="ml-1 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
                   >
-                    {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
-                    <ChevronDown className="ml-1 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {possibleTypes.map(({ label, value }) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={value}
-                        onSelect={() => handleRoleChange(value)}
-                        checked={role === value}
-                      >
-                        {label}
-                      </DropdownMenuCheckboxItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    {possibleTypes.map(({ label, value }) => {
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={value}
+                          onSelect={() => handleRoleChange(value)}
+                          checked={role === value}
+                        >
+                          {label}
+                        </DropdownMenuCheckboxItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
               <div
                 className={cn(
-                  "gap-2 group-hover:flex",
-                  showAlwaysActionsPanel || isHoldActionsVisible
-                    ? "flex"
-                    : "hidden",
+                  "flex items-center invisible group-hover:visible [.group:focus-within_&]:visible",
+                  (showAlwaysActionsPanel || isHoldActionsVisible) && "visible",
                 )}
               >
                 {!hidePromptActions && (
-                  <LLMPromptMessageActions
-                    message={message}
-                    onChangeMessage={onChangeMessage}
-                    onReplaceWithChatPrompt={onReplaceWithChatPrompt}
-                    onClearOtherPromptLinks={onClearOtherPromptLinks}
-                    setIsLoading={setIsLoading}
-                    setIsHoldActionsVisible={setIsHoldActionsVisible}
-                    improvePromptConfig={improvePromptConfig}
-                    disabled={disabled}
-                  />
+                  <>
+                    <LLMPromptMessageActions
+                      message={message}
+                      onChangeMessage={onChangeMessage}
+                      onReplaceWithChatPrompt={onReplaceWithChatPrompt}
+                      onClearOtherPromptLinks={onClearOtherPromptLinks}
+                      setIsLoading={setIsLoading}
+                      setIsHoldActionsVisible={setIsHoldActionsVisible}
+                      improvePromptConfig={improvePromptConfig}
+                    />
+                    <Separator orientation="vertical" className="mx-0.5 h-4" />
+                  </>
                 )}
                 {!hideRemoveButton && (
-                  <TooltipWrapper content="Delete a message">
+                  <TooltipWrapper content="Remove message">
                     <Button
-                      variant="outline"
+                      variant="minimal"
                       size="icon-sm"
                       onClick={onRemoveMessage}
                       type="button"
-                      disabled={disabled}
                     >
                       <Trash />
                     </Button>
                   </TooltipWrapper>
                 )}
-                <TooltipWrapper content="Duplicate a message">
+                <TooltipWrapper content="Duplicate message">
                   <Button
-                    variant="outline"
+                    variant="minimal"
                     size="icon-sm"
                     onClick={onDuplicateMessage}
                     type="button"
-                    disabled={disabled}
                   >
                     <CopyPlus />
                   </Button>
                 </TooltipWrapper>
-                {!hideDragButton && (
-                  <Button
-                    variant="outline"
-                    className="cursor-move"
-                    size="icon-sm"
-                    type="button"
-                    disabled={disabled}
-                    {...listeners}
-                  >
-                    <GripHorizontal />
-                  </Button>
-                )}
               </div>
             </div>
 
             {isLoading ? (
               <Loader className="min-h-32" />
             ) : (
-              <>
+              <div className="flex flex-col gap-2 px-2">
                 <div className="relative">
                   <CodeMirror
                     onCreateEditor={(view) => {
@@ -319,7 +352,7 @@ const LLMPromptMessage = forwardRef<
                     value={localText}
                     onChange={handleContentChange}
                     placeholder="Type your message"
-                    editable={!disabled}
+                    editable
                     basicSetup={{
                       foldGutter: false,
                       allowMultipleSelections: false,
@@ -330,6 +363,9 @@ const LLMPromptMessage = forwardRef<
                       EditorView.lineWrapping,
                       mustachePlugin,
                       ...(braceKeyExtension ? [braceKeyExtension] : []),
+                      ...(hasJsonData
+                        ? variableHintRef.current.getExtension()
+                        : []),
                     ]}
                   />
                   {hasJsonData && (
@@ -339,6 +375,7 @@ const LLMPromptMessage = forwardRef<
                       open={isJsonPopoverOpen}
                       onOpenChange={handlePopoverOpenChange}
                       searchQuery={jsonSearchQuery}
+                      onFocusedPathChange={setFocusedVariableKey}
                       trigger={
                         <span
                           ref={popoverTriggerRef}
@@ -356,19 +393,102 @@ const LLMPromptMessage = forwardRef<
                     />
                   )}
                 </div>
-                {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                  <PromptMessageMediaSection
-                    images={images}
-                    videos={videos}
-                    audios={audios}
-                    setImages={setImages}
-                    setVideos={setVideos}
-                    setAudios={setAudios}
-                    promptVariables={promptVariables}
-                    disabled={disabled}
-                  />
+
+                {showMediaActions && hasMediaTags && (
+                  <div className="flex min-h-7 flex-wrap items-center gap-1.5">
+                    <MediaTagsList
+                      type="image"
+                      items={images}
+                      setItems={setImages}
+                    />
+                    <MediaTagsList
+                      type="video"
+                      items={videos}
+                      setItems={setVideos}
+                    />
+                    <MediaTagsList
+                      type="audio"
+                      items={audios}
+                      setItems={setAudios}
+                    />
+                  </div>
                 )}
-              </>
+              </div>
+            )}
+
+            {!isLoading && (showMediaActions || hasJsonData) && (
+              <div
+                className={cn(
+                  "flex min-h-8 items-center invisible group-hover:visible [.group:focus-within_&]:visible",
+                  (showAlwaysActionsPanel ||
+                    isHoldActionsVisible ||
+                    isMediaPopoverOpen) &&
+                    "visible",
+                )}
+              >
+                {showMediaActions && (
+                  <>
+                    <AddMediaPopover
+                      type="image"
+                      items={images}
+                      setItems={setImages}
+                      promptVariables={promptVariables}
+                      onOpenChange={setIsMediaPopoverOpen}
+                    >
+                      <TooltipWrapper content="Add image">
+                        <Button variant="minimal" size="icon-sm" type="button">
+                          <Image />
+                        </Button>
+                      </TooltipWrapper>
+                    </AddMediaPopover>
+                    <AddMediaPopover
+                      type="audio"
+                      items={audios}
+                      setItems={setAudios}
+                      promptVariables={promptVariables}
+                      onOpenChange={setIsMediaPopoverOpen}
+                    >
+                      <TooltipWrapper content="Add audio">
+                        <Button variant="minimal" size="icon-sm" type="button">
+                          <Music />
+                        </Button>
+                      </TooltipWrapper>
+                    </AddMediaPopover>
+                    <AddMediaPopover
+                      type="video"
+                      items={videos}
+                      setItems={setVideos}
+                      promptVariables={promptVariables}
+                      onOpenChange={setIsMediaPopoverOpen}
+                    >
+                      <TooltipWrapper content="Add video">
+                        <Button variant="minimal" size="icon-sm" type="button">
+                          <Video />
+                        </Button>
+                      </TooltipWrapper>
+                    </AddMediaPopover>
+                  </>
+                )}
+                {showMediaActions && hasJsonData && (
+                  <Separator orientation="vertical" className="mx-0.5 h-4" />
+                )}
+                {hasJsonData && (
+                  <TooltipWrapper content="Type {{ or click here to add variable">
+                    <Button
+                      variant="minimal"
+                      size="icon-sm"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerVariableSearch();
+                      }}
+                      type="button"
+                    >
+                      <Braces />
+                    </Button>
+                  </TooltipWrapper>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

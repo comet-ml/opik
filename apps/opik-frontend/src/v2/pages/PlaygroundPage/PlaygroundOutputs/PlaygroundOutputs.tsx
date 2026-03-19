@@ -5,9 +5,11 @@ import PlaygroundOutputTable from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/P
 import PlaygroundOutputActions from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
 import PlaygroundOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
 import StatusMessage from "@/shared/StatusMessage/StatusMessage";
+import { JsonObject } from "@/types/shared";
 import {
   usePromptIds,
   useSetDatasetVariables,
+  useSetDatasetSampleData,
   useDatasetFilters,
   useSetDatasetFilters,
   useDatasetPage,
@@ -70,6 +72,7 @@ const PlaygroundOutputs = ({
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
+  const setDatasetSampleData = useSetDatasetSampleData();
   const filters = useDatasetFilters();
   const setFilters = useSetDatasetFilters();
   const page = useDatasetPage();
@@ -138,10 +141,16 @@ const PlaygroundOutputs = ({
       resetDatasetFilters();
       if (!id) {
         setDatasetVariables([]);
+        setDatasetSampleData(null);
       }
       onChangeDatasetId(id);
     },
-    [onChangeDatasetId, resetDatasetFilters, setDatasetVariables],
+    [
+      onChangeDatasetId,
+      resetDatasetFilters,
+      setDatasetVariables,
+      setDatasetSampleData,
+    ],
   );
 
   const renderResult = () => {
@@ -191,7 +200,8 @@ const PlaygroundOutputs = ({
 
   useEffect(() => {
     setDatasetVariables(datasetColumns.map((c) => c.name));
-  }, [setDatasetVariables, datasetColumns]);
+    setDatasetSampleData((datasetItems[0]?.data as JsonObject) ?? null);
+  }, [setDatasetVariables, setDatasetSampleData, datasetColumns, datasetItems]);
 
   return (
     <div className="flex min-w-full flex-col border-r">

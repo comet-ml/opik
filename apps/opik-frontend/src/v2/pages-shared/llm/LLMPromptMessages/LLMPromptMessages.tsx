@@ -13,10 +13,7 @@ import {
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { SortableContext } from "@dnd-kit/sortable";
 
-import {
-  appendTextToMessageContent,
-  generateDefaultLLMPromptMessage,
-} from "@/lib/llm";
+import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import LLMPromptMessage, {
   LLMPromptMessageHandle,
 } from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessage";
@@ -24,8 +21,7 @@ import { Button } from "@/ui/button";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { DropdownOption } from "@/types/shared";
 import { ImprovePromptConfig } from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptVariablesList from "@/v2/pages-shared/llm/PromptVariablesList/PromptVariablesList";
-import { JsonObject } from "@/shared/JsonTreePopover";
+import { JsonObject } from "@/types/shared";
 
 interface MessageValidationError {
   content?: {
@@ -44,7 +40,6 @@ interface LLMPromptMessagesProps {
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
   hideAddButton?: boolean;
-  disabled?: boolean;
   jsonTreeData?: JsonObject | null;
 }
 
@@ -59,11 +54,11 @@ const LLMPromptMessages = ({
   disableMedia = false,
   improvePromptConfig,
   hideAddButton = false,
-  disabled = false,
   jsonTreeData,
 }: LLMPromptMessagesProps) => {
   const lastFocusedMessageIdRef = useRef<string | null>(null);
   const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
+  const listRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -81,6 +76,12 @@ const LLMPromptMessages = ({
       newMessages.splice(position, 0, newMessage);
 
       onChange(newMessages);
+      requestAnimationFrame(() => {
+        listRef.current?.children[position]?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      });
     },
     [onChange, messages],
   );
@@ -149,45 +150,6 @@ const LLMPromptMessages = ({
     lastFocusedMessageIdRef.current = messageId;
   }, []);
 
-  const handleVariableClick = useCallback(
-    (variable: string) => {
-      if (messages.length === 0) return;
-
-      const variableText = `{{${variable}}}`;
-      const lastMessageId = messages[messages.length - 1].id;
-
-      // use last focused message if it still exists, otherwise fall back to last message
-      const focusedMessageExists =
-        lastFocusedMessageIdRef.current &&
-        messages.some((m) => m.id === lastFocusedMessageIdRef.current);
-
-      const targetMessageId = focusedMessageExists
-        ? lastFocusedMessageIdRef.current!
-        : lastMessageId;
-
-      const messageRef = messageRefsMap.current.get(targetMessageId);
-      if (messageRef) {
-        messageRef.insertAtCursor(variableText);
-        return;
-      }
-
-      // fallback: append to message content while preserving structure
-      const targetMessage = messages.find((m) => m.id === targetMessageId);
-      if (targetMessage) {
-        const newContent = appendTextToMessageContent(
-          targetMessage.content,
-          variableText,
-        );
-        onChange(
-          messages.map((m) =>
-            m.id === targetMessageId ? { ...m, content: newContent } : m,
-          ),
-        );
-      }
-    },
-    [messages, onChange],
-  );
-
   return (
     <DndContext
       sensors={sensors}
@@ -196,7 +158,7 @@ const LLMPromptMessages = ({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={messages} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-2">
+        <div ref={listRef} className="flex flex-col gap-2">
           {messages.map((message, messageIdx) => (
             <LLMPromptMessage
               key={message.id}
@@ -210,7 +172,6 @@ const LLMPromptMessages = ({
               hideRemoveButton={messages?.length === 1}
               hideDragButton={messages?.length === 1}
               hidePromptActions={hidePromptActions}
-              showAlwaysActionsPanel={messageIdx === messages.length - 1}
               onRemoveMessage={() => handleRemoveMessage(message.id)}
               onDuplicateMessage={() =>
                 handleDuplicateMessage(message, messageIdx + 1)
@@ -225,31 +186,31 @@ const LLMPromptMessages = ({
               disableMedia={disableMedia}
               promptVariables={promptVariables}
               improvePromptConfig={improvePromptConfig}
-              disabled={disabled}
               jsonTreeData={jsonTreeData}
             />
           ))}
         </div>
       </SortableContext>
 
-      {promptVariables.length > 0 && (
-        <p className="comet-body-s mt-2 text-light-slate">
-          Use {"{{variable_name}}"} syntax to reference dataset variables in
-          your prompt:{" "}
-          <PromptVariablesList
-            variables={promptVariables}
-            onVariableClick={handleVariableClick}
-            tooltipContent="Click to insert into prompt"
-          />
-        </p>
-      )}
-
       {!hideAddButton && (
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="mt-2"
-          onClick={onAddMessage}
+          className="mt-2 self-start"
+          onClick={() => {
+            onAddMessage();
+            requestAnimationFrame(() => {
+              const scrollContainer = listRef.current?.closest(
+                "[data-scroll-container]",
+              );
+              if (scrollContainer) {
+                scrollContainer.scrollTo({
+                  top: scrollContainer.scrollHeight,
+                  behavior: "smooth",
+                });
+              }
+            });
+          }}
           type="button"
         >
           <Plus className="mr-2 size-4" />

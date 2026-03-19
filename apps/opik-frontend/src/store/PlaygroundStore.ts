@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
+import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
@@ -91,6 +92,7 @@ export type PlaygroundStore = {
   promptMap: Record<string, PlaygroundPromptType>;
   outputMap: PlaygroundOutputMap;
   datasetVariables: string[];
+  datasetSampleData: JsonObject | null;
   providerValidationTrigger: number;
   selectedRuleIds: string[] | null;
   createdExperiments: LogExperiment[];
@@ -123,6 +125,7 @@ export type PlaygroundStore = {
     traceId: string,
   ) => void;
   setDatasetVariables: (variables: string[]) => void;
+  setDatasetSampleData: (data: JsonObject | null) => void;
   triggerProviderValidation: () => void;
   setSelectedRuleIds: (ruleIds: string[] | null) => void;
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
@@ -143,6 +146,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       promptMap: {},
       outputMap: {},
       datasetVariables: [],
+      datasetSampleData: null,
       providerValidationTrigger: 0,
       selectedRuleIds: null,
       createdExperiments: [],
@@ -274,6 +278,14 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setDatasetSampleData: (data) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetSampleData: data,
+          };
+        });
+      },
       triggerProviderValidation: () => {
         set((state) => {
           return {
@@ -369,6 +381,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
     }),
     {
       name: "PLAYGROUND_STATE",
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      partialize: ({ datasetSampleData, ...rest }) => rest,
     },
   ),
 );
@@ -475,6 +489,12 @@ export const useDatasetVariables = () =>
 
 export const useSetDatasetVariables = () =>
   usePlaygroundStore((state) => state.setDatasetVariables);
+
+export const useDatasetSampleData = () =>
+  usePlaygroundStore((state) => state.datasetSampleData);
+
+export const useSetDatasetSampleData = () =>
+  usePlaygroundStore((state) => state.setDatasetSampleData);
 
 export const useProviderValidationTrigger = () =>
   usePlaygroundStore((state) => state.providerValidationTrigger);
