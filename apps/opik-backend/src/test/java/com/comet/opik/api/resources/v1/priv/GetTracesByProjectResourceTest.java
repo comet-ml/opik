@@ -4143,14 +4143,11 @@ class GetTracesByProjectResourceTest {
                             .build())
                     .toList();
 
-            var config = RecursiveComparisonConfiguration.builder()
-                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
-                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
-                    .build();
-
             assertThat(actualTraces)
-                    .usingRecursiveFieldByFieldElementComparator(config)
-                    .containsExactlyElementsOf(expectedTraces);
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                    .ignoringFields(IGNORED_FIELDS_TRACES)
+                    .isEqualTo(expectedTraces);
         }
 
         @ParameterizedTest
