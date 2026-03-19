@@ -171,6 +171,12 @@ class SearchTimeoutError(OpikException):
     pass
 
 
+class AgentConfigNotFound(OpikException):
+    """Exception raised when no agent config blueprint is found for the requested env/version/latest."""
+
+    pass
+
+
 class LLMJudgeParseError(OpikException):
     """Raised when LLMJudge output fails validation.
 
