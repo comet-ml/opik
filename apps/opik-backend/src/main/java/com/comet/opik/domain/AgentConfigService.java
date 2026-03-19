@@ -491,8 +491,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
             int closed = dao.closeEnvByName(workspaceId, projectId, envName);
             if (closed == 0) {
-                throw new NotFoundException(
-                        "Environment '%s' not found for project '%s'".formatted(envName, projectId));
+                log.info("Environment '{}' not found for project '{}' in workspace '{}', nothing to delete",
+                        envName, projectId, workspaceId);
             }
 
             return null;

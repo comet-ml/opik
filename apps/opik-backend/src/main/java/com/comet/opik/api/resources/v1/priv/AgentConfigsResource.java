@@ -11,7 +11,6 @@ import com.comet.opik.domain.AgentConfigService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -93,7 +92,7 @@ public class AgentConfigsResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getLatestBlueprint(
-            @Parameter(required = true) @PathParam("project_id") UUID projectId,
+            @NotNull @PathParam("project_id") UUID projectId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving latest blueprint for project '{}'", projectId);
@@ -112,7 +111,7 @@ public class AgentConfigsResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getBlueprintById(
-            @PathParam("blueprint_id") UUID blueprintId,
+            @NotNull @PathParam("blueprint_id") UUID blueprintId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving blueprint '{}'", blueprintId);
@@ -131,8 +130,8 @@ public class AgentConfigsResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getBlueprintByName(
-            @PathParam("name") String name,
-            @Parameter(required = true) @PathParam("project_id") UUID projectId,
+            @NotNull @PathParam("name") String name,
+            @NotNull @PathParam("project_id") UUID projectId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving blueprint by name '{}' for project '{}'", name, projectId);
@@ -151,8 +150,8 @@ public class AgentConfigsResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getBlueprintByEnv(
-            @PathParam("env_name") String envName,
-            @Parameter(required = true) @PathParam("project_id") UUID projectId,
+            @NotNull @PathParam("env_name") String envName,
+            @NotNull @PathParam("project_id") UUID projectId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving blueprint by environment '{}' for project '{}'", envName, projectId);
@@ -170,7 +169,7 @@ public class AgentConfigsResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    public Response getDeltaById(@PathParam("blueprint_id") UUID blueprintId) {
+    public Response getDeltaById(@NotNull @PathParam("blueprint_id") UUID blueprintId) {
 
         log.info("Retrieving delta for blueprint '{}'", blueprintId);
 
@@ -204,8 +203,8 @@ public class AgentConfigsResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response setEnvByBlueprintName(
-            @PathParam("env_name") String envName,
-            @Parameter(required = true) @PathParam("project_id") UUID projectId,
+            @NotNull @PathParam("env_name") String envName,
+            @NotNull @PathParam("project_id") UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigEnvSetByName.class))) @NotNull @Valid AgentConfigEnvSetByName request) {
 
         log.info("Setting environment '{}' to blueprint '{}' for project '{}'",
@@ -220,12 +219,11 @@ public class AgentConfigsResource {
     @Path("/blueprints/environments/{env_name}/projects/{project_id}")
     @Operation(operationId = "deleteEnv", summary = "Delete environment", description = "Soft-deletes an environment by setting its ended_at timestamp", responses = {
             @ApiResponse(responseCode = "204", description = "Environment deleted"),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response deleteEnv(
-            @PathParam("env_name") String envName,
-            @Parameter(required = true) @PathParam("project_id") UUID projectId) {
+            @NotNull @PathParam("env_name") String envName,
+            @NotNull @PathParam("project_id") UUID projectId) {
 
         log.info("Deleting environment '{}' for project '{}'", envName, projectId);
 
@@ -243,7 +241,7 @@ public class AgentConfigsResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getBlueprintHistory(
-            @Parameter(required = true) @PathParam("project_id") UUID projectId,
+            @NotNull @PathParam("project_id") UUID projectId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 

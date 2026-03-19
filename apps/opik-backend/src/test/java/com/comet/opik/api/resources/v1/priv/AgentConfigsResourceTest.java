@@ -1606,8 +1606,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("when environment does not exist, then return 404")
-        void deleteEnv__whenEnvDoesNotExist__thenReturn404() {
+        @DisplayName("Success: deleting non-existent environment returns 204 (idempotent)")
+        void deleteEnv__whenEnvDoesNotExist__thenReturn204() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1623,7 +1623,7 @@ class AgentConfigsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             agentConfigsResourceClient.deleteEnv("nonexistent", projectId, API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
         }
 
         @Test
@@ -1663,8 +1663,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("Success: deleting already deleted env returns 404")
-        void deleteEnv__whenAlreadyDeleted__thenReturn404() {
+        @DisplayName("Success: deleting already deleted env returns 204 (idempotent)")
+        void deleteEnv__whenAlreadyDeleted__thenReturn204() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1693,7 +1693,7 @@ class AgentConfigsResourceTest {
                     TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             agentConfigsResourceClient.deleteEnv("staging", projectId, API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+                    TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
         }
     }
 }
