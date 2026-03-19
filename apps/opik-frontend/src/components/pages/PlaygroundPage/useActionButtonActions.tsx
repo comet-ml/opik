@@ -5,18 +5,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PROJECTS_KEY } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
-import {
+import usePlaygroundStore, {
   usePromptIds,
   usePromptMap,
   useResetOutputMap,
   useSelectedRuleIds,
-  useCreatedExperiments,
   useSetCreatedExperiments,
   useClearCreatedExperiments,
   useIsRunning,
-  useSetIsRunning,
+  useSetAllRunning,
+  useClearRunningMap,
+  useSetPromptRunning,
   useSetProgress,
   useResetProgress,
+  useUpdateOutputTraceId,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -24,9 +26,7 @@ import createLogPlaygroundProcessor, {
   LogProcessorArgs,
   TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
-import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
-import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
-import { useUpdateOutputTraceId } from "@/store/PlaygroundStore";
+import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/usePromptDatasetItemCombination";
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 
@@ -39,7 +39,6 @@ interface UseActionButtonActionsArguments {
   datasetItems: DatasetItem[];
   workspaceName: string;
   datasetName: string | null;
-  datasetId?: string;
   datasetVersionId?: string;
 }
 
@@ -47,18 +46,17 @@ const useActionButtonActions = ({
   datasetItems,
   workspaceName,
   datasetName,
-  datasetId,
   datasetVersionId,
 }: UseActionButtonActionsArguments) => {
   const queryClient = useQueryClient();
-  const { navigate } = useNavigateToExperiment();
 
   const { toast } = useToast();
 
   const isRunning = useIsRunning();
-  const setIsRunning = useSetIsRunning();
+  const setAllRunning = useSetAllRunning();
+  const clearRunningMap = useClearRunningMap();
+  const setPromptRunning = useSetPromptRunning();
   const isToStopRef = useRef(false);
-  const createdExperiments = useCreatedExperiments();
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
@@ -104,14 +102,13 @@ const useActionButtonActions = ({
   const resetState = useCallback(() => {
     resetOutputMap();
     abortControllersRef.current.clear();
-    setIsRunning(false);
+    clearRunningMap();
     clearCreatedExperiments();
     resetProgress();
-  }, [resetOutputMap, clearCreatedExperiments, setIsRunning, resetProgress]);
+  }, [resetOutputMap, clearCreatedExperiments, clearRunningMap, resetProgress]);
 
   const stopAll = useCallback(() => {
-    setIsRunning(false);
-    // nothing to stop
+    clearRunningMap();
     if (abortControllersRef.current.size === 0) {
       return;
     }
@@ -119,7 +116,19 @@ const useActionButtonActions = ({
     isToStopRef.current = true;
     abortControllersRef.current.forEach((controller) => controller.abort());
     abortControllersRef.current.clear();
-  }, [setIsRunning]);
+  }, [clearRunningMap]);
+
+  const stopSingle = useCallback(
+    (promptId: string) => {
+      setPromptRunning(promptId, false);
+      const controller = abortControllersRef.current.get(promptId);
+      if (controller) {
+        controller.abort();
+        abortControllersRef.current.delete(promptId);
+      }
+    },
+    [setPromptRunning],
+  );
 
   const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
@@ -202,7 +211,7 @@ const useActionButtonActions = ({
 
   const runAll = useCallback(async () => {
     resetState();
-    setIsRunning(true);
+    setAllRunning(true);
     clearCreatedExperiments();
 
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
@@ -229,14 +238,15 @@ const useActionButtonActions = ({
         // Signal that all logs have been sent
         logProcessor.finishLogging();
 
-        setIsRunning(false);
+        clearRunningMap();
         isToStopRef.current = false;
         abortControllersRef.current.clear();
       },
     );
   }, [
     resetState,
-    setIsRunning,
+    setAllRunning,
+    clearRunningMap,
     clearCreatedExperiments,
     createCombinations,
     processCombination,
@@ -245,21 +255,30 @@ const useActionButtonActions = ({
     setProgress,
   ]);
 
-  const navigateToExperiments = useCallback(() => {
-    if (createdExperiments.length > 0) {
-      navigate({
-        experimentIds: createdExperiments.map((e) => e.id),
-        datasetId: datasetId,
-      });
-    }
-  }, [createdExperiments, datasetId, navigate]);
+  const runSingle = useCallback(
+    async (promptId: string) => {
+      const prompt = usePlaygroundStore.getState().promptMap[promptId];
+      if (!prompt) return;
+
+      setPromptRunning(promptId, true);
+      const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
+
+      try {
+        await processCombination({ prompt }, logProcessor);
+      } finally {
+        logProcessor.finishLogging();
+        setPromptRunning(promptId, false);
+      }
+    },
+    [setPromptRunning, logProcessorHandlers, processCombination],
+  );
 
   return {
     isRunning,
     runAll,
+    runSingle,
     stopAll,
-    createdExperiments,
-    navigateToExperiments,
+    stopSingle,
   };
 };
 

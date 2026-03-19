@@ -1,0 +1,97 @@
+import React from "react";
+import { ExternalLink } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
+import {
+  useCreatedExperiments,
+  useExperimentNamePrefix,
+  useIsRunning,
+} from "@/store/PlaygroundStore";
+import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
+
+interface PlaygroundExperimentOutputActionsProps {
+  datasetId: string | null;
+  page: number;
+  onChangePage: (page: number) => void;
+  size: number;
+  onChangeSize: (size: number) => void;
+  total: number;
+  isLoadingTotal?: boolean;
+  maxWidth?: string;
+}
+
+const PlaygroundExperimentOutputActions = ({
+  datasetId,
+  page,
+  onChangePage,
+  size,
+  onChangeSize,
+  total,
+  isLoadingTotal,
+  maxWidth,
+}: PlaygroundExperimentOutputActionsProps) => {
+  const isRunning = useIsRunning();
+  const createdExperiments = useCreatedExperiments();
+  const { navigate } = useNavigateToExperiment();
+
+  const parsedDatasetId = parseDatasetVersionKey(datasetId);
+  const plainDatasetId = parsedDatasetId?.datasetId || datasetId;
+
+  const experimentNamePrefix = useExperimentNamePrefix();
+
+  const isExperimentMode = !!datasetId;
+  const hasExperiments = createdExperiments.length > 0;
+
+  const handleNavigateToExperiments = () => {
+    if (createdExperiments.length > 0 && plainDatasetId) {
+      navigate({
+        experimentIds: createdExperiments.map((e) => e.id),
+        datasetId: plainDatasetId,
+      });
+    }
+  };
+
+  if (!isExperimentMode) return null;
+
+  return (
+    <div style={maxWidth ? { maxWidth } : undefined}>
+      {isRunning ? (
+        <div className="border-r border-t px-4 pb-3 pt-2">
+          <PlaygroundProgressIndicator />
+        </div>
+      ) : hasExperiments ? (
+        <div className="flex items-center justify-between border-r border-t bg-gray-100 px-4 py-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-slate"
+            onClick={handleNavigateToExperiments}
+          >
+            <span>Experiment results</span>
+            <span className="mx-1">·</span>
+            <span className="max-w-[250px] truncate">
+              {experimentNamePrefix}
+            </span>
+            <ExternalLink className="ml-1 size-3.5 shrink-0" />
+          </Button>
+          <DataTablePagination
+            page={page}
+            pageChange={onChangePage}
+            size={size}
+            sizeChange={onChangeSize}
+            total={total}
+            variant="minimal"
+            itemsPerPage={[10, 50, 100, 200, 500, 1000]}
+            disabled={isRunning}
+            isLoadingTotal={isLoadingTotal}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+export default PlaygroundExperimentOutputActions;

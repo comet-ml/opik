@@ -15,6 +15,12 @@ interface PlaygroundOutput {
   stale: boolean;
   traceId?: string;
   selectedRuleIds?: string[] | null;
+  usage?: {
+    duration?: number;
+    totalTokens?: number;
+    model?: string;
+    provider?: string;
+  };
 }
 
 interface PlaygroundOutputWithDatasetItem {
@@ -96,12 +102,13 @@ export type PlaygroundStore = {
   providerValidationTrigger: number;
   selectedRuleIds: string[] | null;
   createdExperiments: LogExperiment[];
-  isRunning: boolean;
+  isRunningMap: Record<string, boolean>;
   datasetFilters: Filters;
   datasetPage: number;
   datasetSize: number;
   progressTotal: number;
   progressCompleted: number;
+  experimentNamePrefix: string | null;
 
   setPromptMap: (
     promptIds: string[],
@@ -130,7 +137,10 @@ export type PlaygroundStore = {
   setSelectedRuleIds: (ruleIds: string[] | null) => void;
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
   clearCreatedExperiments: () => void;
-  setIsRunning: (isRunning: boolean) => void;
+  setPromptRunning: (promptId: string, running: boolean) => void;
+  setAllRunning: (running: boolean) => void;
+  clearRunningMap: () => void;
+  setExperimentNamePrefix: (prefix: string | null) => void;
   setDatasetFilters: (filters: Filters) => void;
   setDatasetPage: (page: number) => void;
   setDatasetSize: (size: number) => void;
@@ -150,12 +160,13 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       providerValidationTrigger: 0,
       selectedRuleIds: null,
       createdExperiments: [],
-      isRunning: false,
+      isRunningMap: {},
       datasetFilters: [],
       datasetPage: 1,
       datasetSize: 100,
       progressTotal: 0,
       progressCompleted: 0,
+      experimentNamePrefix: null,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -318,13 +329,26 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
-      setIsRunning: (isRunning) => {
+      setPromptRunning: (promptId, running) => {
+        set((state) => ({
+          ...state,
+          isRunningMap: { ...state.isRunningMap, [promptId]: running },
+        }));
+      },
+      setAllRunning: (running) => {
         set((state) => {
-          return {
-            ...state,
-            isRunning,
-          };
+          const map: Record<string, boolean> = {};
+          state.promptIds.forEach((id) => {
+            map[id] = running;
+          });
+          return { ...state, isRunningMap: map };
         });
+      },
+      clearRunningMap: () => {
+        set((state) => ({ ...state, isRunningMap: {} }));
+      },
+      setExperimentNamePrefix: (prefix) => {
+        set((state) => ({ ...state, experimentNamePrefix: prefix }));
       },
       setDatasetFilters: (filters) => {
         set((state) => {
@@ -518,10 +542,27 @@ export const useClearCreatedExperiments = () =>
   usePlaygroundStore((state) => state.clearCreatedExperiments);
 
 export const useIsRunning = () =>
-  usePlaygroundStore((state) => state.isRunning);
+  usePlaygroundStore((state) =>
+    Object.values(state.isRunningMap).some(Boolean),
+  );
 
-export const useSetIsRunning = () =>
-  usePlaygroundStore((state) => state.setIsRunning);
+export const useIsPromptRunning = (promptId: string) =>
+  usePlaygroundStore((state) => !!state.isRunningMap[promptId]);
+
+export const useSetPromptRunning = () =>
+  usePlaygroundStore((state) => state.setPromptRunning);
+
+export const useSetAllRunning = () =>
+  usePlaygroundStore((state) => state.setAllRunning);
+
+export const useClearRunningMap = () =>
+  usePlaygroundStore((state) => state.clearRunningMap);
+
+export const useExperimentNamePrefix = () =>
+  usePlaygroundStore((state) => state.experimentNamePrefix);
+
+export const useSetExperimentNamePrefix = () =>
+  usePlaygroundStore((state) => state.setExperimentNamePrefix);
 
 export const useDatasetFilters = () =>
   usePlaygroundStore((state) => state.datasetFilters);

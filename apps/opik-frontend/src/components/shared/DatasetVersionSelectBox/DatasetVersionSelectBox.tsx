@@ -299,7 +299,7 @@ function DatasetVersionSelectBox({
           <TooltipWrapper content={displayValue ?? "Select a dataset"}>
             <SelectTrigger
               className={cn(
-                "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0",
+                "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0 [&>span]:min-w-0 [&>span]:flex-1",
                 {
                   "rounded-r-none": !!value && showClearButton,
                 },
@@ -309,22 +309,23 @@ function DatasetVersionSelectBox({
               <SelectValue
                 placeholder={
                   <div className="flex w-full items-center text-light-slate">
-                    <Database className="mr-2 size-4" />
+                    <Database className="mr-2 size-4 text-[#b8e54a]" />
                     <span className="truncate font-normal">
                       Select a dataset
                     </span>
                   </div>
                 }
               >
-                <div className="flex w-full items-center gap-2 text-foreground">
-                  <Database className="size-4 shrink-0" />
-
-                  <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
+                <div className="flex w-full items-center justify-between gap-2 text-foreground">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Database className="size-4 shrink-0 text-[#b8e54a]" />
                     <span className="min-w-0 truncate">
                       {selectedDataset?.name}
                     </span>
-                    <GitCommitVertical className="size-3.5 shrink-0 text-muted-slate" />
-                    <span className="shrink-0">{versionName ?? ""}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center text-muted-slate">
+                    <GitCommitVertical className="size-4" />
+                    <span>{versionName ?? ""}</span>
                   </div>
                 </div>
               </SelectValue>

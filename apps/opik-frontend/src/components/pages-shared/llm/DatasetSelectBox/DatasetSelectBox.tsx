@@ -113,7 +113,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
           value={value || ""}
           placeholder={
             <div className="flex w-full items-center text-light-slate">
-              <Database className="mr-2 size-4" />
+              <Database className="mr-2 size-4 text-[#b8e54a]" />
               <span className="truncate font-normal">Select a dataset</span>
             </div>
           }
@@ -134,7 +134,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
           renderTitle={(option) => {
             return (
               <div className="flex w-full items-center text-foreground">
-                <Database className="mr-2 size-4" />
+                <Database className="mr-2 size-4 text-[#b8e54a]" />
                 <span className="max-w-[90%] truncate">{option.label}</span>
               </div>
             );

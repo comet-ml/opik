@@ -15,6 +15,7 @@ const hotkeyDisplayVariants = cva(
       },
       size: {
         default: "h-8 min-w-8 px-2",
+        xs: "h-5 min-w-5 rounded px-1 text-xs",
         sm: "h-6 min-w-6 rounded-md px-1.5",
         lg: "h-10 min-w-10 rounded-md px-3",
       },

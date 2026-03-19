@@ -1,7 +1,11 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter } from "@/types/filters";
-import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import {
+  COLUMN_DATA_ID,
+  COLUMN_TYPE,
+  DYNAMIC_COLUMN_TYPE,
+} from "@/types/shared";
 import { TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
   makeEndOfMinute,
@@ -251,4 +255,20 @@ export const mapDynamicColumnTypesToColumnType = (
   }
 
   return COLUMN_TYPE.string;
+};
+
+/**
+ * Transform data column filters from "data.columnName" format to backend format.
+ * Converts field="data.columnName" to field="data" with key="columnName".
+ * Used for dataset item filtering in the playground.
+ */
+export const transformDataColumnFilters = (filters: Filter[]): Filter[] => {
+  const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
+  return filters.map((filter) => {
+    if (filter.field.startsWith(dataFieldPrefix)) {
+      const columnKey = filter.field.slice(dataFieldPrefix.length);
+      return { ...filter, field: COLUMN_DATA_ID, key: columnKey };
+    }
+    return filter;
+  });
 };
