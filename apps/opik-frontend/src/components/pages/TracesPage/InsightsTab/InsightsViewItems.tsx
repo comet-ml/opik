@@ -18,7 +18,7 @@ export interface BuiltInViewItemProps {
   option: InsightsViewOption;
   isSelected: boolean;
   onSelect: (id: string) => void;
-  onDuplicate?: () => void;
+  onDuplicate: () => void;
 }
 
 export const BuiltInViewItem: React.FC<BuiltInViewItemProps> = ({
@@ -48,23 +48,21 @@ export const BuiltInViewItem: React.FC<BuiltInViewItemProps> = ({
               Built-in
             </Tag>
           </div>
-          {onDuplicate && (
-            <div className="shrink-0 opacity-0 group-hover:opacity-100">
-              <TooltipWrapper content="Duplicate">
-                <Button
-                  variant="minimal"
-                  size="icon-xs"
-                  className="text-muted-slate hover:text-foreground"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDuplicate();
-                  }}
-                >
-                  <CopyPlus className="size-3.5" />
-                </Button>
-              </TooltipWrapper>
-            </div>
-          )}
+          <div className="shrink-0 opacity-0 group-hover:opacity-100">
+            <TooltipWrapper content="Duplicate">
+              <Button
+                variant="minimal"
+                size="icon-xs"
+                className="text-muted-slate hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicate();
+                }}
+              >
+                <CopyPlus className="size-3.5" />
+              </Button>
+            </TooltipWrapper>
+          </div>
         </div>
         <div className="comet-body-s text-light-slate">
           {option.description}
@@ -79,7 +77,7 @@ export interface CustomViewItemProps {
   isSelected: boolean;
   onSelect: (id: string) => void;
   onEdit: () => void;
-  onDuplicate?: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }
 
@@ -123,21 +121,19 @@ export const CustomViewItem: React.FC<CustomViewItemProps> = ({
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipWrapper>
-            {onDuplicate && (
-              <TooltipWrapper content="Duplicate">
-                <Button
-                  variant="minimal"
-                  size="icon-xs"
-                  className="text-muted-slate hover:text-foreground"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDuplicate();
-                  }}
-                >
-                  <CopyPlus className="size-3.5" />
-                </Button>
-              </TooltipWrapper>
-            )}
+            <TooltipWrapper content="Duplicate">
+              <Button
+                variant="minimal"
+                size="icon-xs"
+                className="text-muted-slate hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicate();
+                }}
+              >
+                <CopyPlus className="size-3.5" />
+              </Button>
+            </TooltipWrapper>
             <Separator orientation="vertical" className="h-2.5" />
             <TooltipWrapper content="Delete">
               <Button
