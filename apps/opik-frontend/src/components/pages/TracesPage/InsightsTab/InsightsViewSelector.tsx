@@ -33,7 +33,6 @@ import {
   generateDashboardTypeFilter,
 } from "@/lib/filters";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { usePermissions } from "@/contexts/PermissionsContext";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 
@@ -115,10 +114,6 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
   const [deleteState, setDeleteState] = useState<DeleteState>({
     isOpen: false,
   });
-
-  const {
-    permissions: { canCreateDashboards },
-  } = usePermissions();
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { mutate: deleteMutate } = useDashboardBatchDeleteMutation();
@@ -307,16 +302,12 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
                     option={option}
                     isSelected={value === option.value}
                     onSelect={handleSelect}
-                    onDuplicate={
-                      canCreateDashboards
-                        ? () => {
-                            const template = PROJECT_TEMPLATE_LIST.find(
-                              (t) => t.id === option.value,
-                            );
-                            if (template) handleDuplicateTemplate(template);
-                          }
-                        : undefined
-                    }
+                    onDuplicate={() => {
+                      const template = PROJECT_TEMPLATE_LIST.find(
+                        (t) => t.id === option.value,
+                      );
+                      if (template) handleDuplicateTemplate(template);
+                    }}
                   />
                 ))}
 
@@ -333,11 +324,7 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
                       isSelected={value === option.value}
                       onSelect={handleSelect}
                       onEdit={() => handleEditDashboard(dashboard)}
-                      onDuplicate={
-                        canCreateDashboards
-                          ? () => handleDuplicateDashboard(dashboard)
-                          : undefined
-                      }
+                      onDuplicate={() => handleDuplicateDashboard(dashboard)}
                       onDelete={() => handleDeleteDashboard(dashboard)}
                     />
                   );
@@ -345,16 +332,11 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
               </>
             )}
           </div>
-
-          {canCreateDashboards && (
-            <>
-              <Separator className="my-1" />
-              <ListAction onClick={handleCreateNew}>
-                <Plus className="size-4 shrink-0" />
-                Add new
-              </ListAction>
-            </>
-          )}
+          <Separator className="my-1" />
+          <ListAction onClick={handleCreateNew}>
+            <Plus className="size-4 shrink-0" />
+            Add new
+          </ListAction>
         </PopoverContent>
       </Popover>
 
