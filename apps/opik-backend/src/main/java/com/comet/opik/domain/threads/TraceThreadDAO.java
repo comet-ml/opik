@@ -165,7 +165,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 ORDER BY workspace_id DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id
             ) wc ON tt.workspace_id = wc.workspace_id
-            WHERE tt.last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
+            WHERE tt.last_updated_at \< parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive \> 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
             ORDER BY tt.last_updated_at
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
