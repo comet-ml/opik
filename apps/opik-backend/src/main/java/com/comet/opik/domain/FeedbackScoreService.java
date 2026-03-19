@@ -24,6 +24,7 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -38,6 +39,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.domain.FeedbackScoreDAOImpl.SUITE_ASSERTION_CATEGORY;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
 
@@ -78,6 +80,7 @@ public interface FeedbackScoreService {
 class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     private final @NonNull FeedbackScoreDAO dao;
+    private final @NonNull AssertionResultService assertionResultService;
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
@@ -185,7 +188,24 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             EntityType entityType, List<ProjectDto<T>> projects) {
         return getAuthor()
                 .flatMap(author -> Flux.fromIterable(projects)
-                        .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores(), author.orElse(null)))
+                        .flatMap(projectDto -> {
+                            var partitioned = projectDto.scores().stream()
+                                    .collect(Collectors.partitioningBy(
+                                            s -> SUITE_ASSERTION_CATEGORY.equals(s.categoryName())));
+
+                            var assertionScores = partitioned.get(true);
+                            var regularScores = partitioned.get(false);
+
+                            Mono<Long> insertRegular = CollectionUtils.isEmpty(regularScores)
+                                    ? Mono.just(0L)
+                                    : dao.scoreBatchOf(entityType, regularScores, author.orElse(null));
+
+                            Mono<Long> insertAssertions = CollectionUtils.isEmpty(assertionScores)
+                                    ? Mono.just(0L)
+                                    : assertionResultService.insertBatch(entityType, assertionScores);
+
+                            return Mono.zip(insertRegular, insertAssertions, Long::sum);
+                        })
                         .reduce(0L, Long::sum));
     }
 

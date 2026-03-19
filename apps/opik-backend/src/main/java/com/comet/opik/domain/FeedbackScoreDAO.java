@@ -284,7 +284,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull AssertionResultDAO assertionResultDAO;
 
     @Override
     @WithSpan
@@ -313,22 +312,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
-        var partitioned = scores.stream()
-                .collect(Collectors.partitioningBy(
-                        s -> SUITE_ASSERTION_CATEGORY.equals(s.categoryName())));
-
-        var assertionScores = partitioned.get(true);
-        var regularScores = partitioned.get(false);
-
-        Mono<Long> insertRegular = CollectionUtils.isEmpty(regularScores)
-                ? Mono.just(0L)
-                : insertFeedbackScores(entityType, regularScores, author);
-
-        Mono<Long> insertAssertions = CollectionUtils.isEmpty(assertionScores)
-                ? Mono.just(0L)
-                : assertionResultDAO.insertBatch(entityType, assertionScores);
-
-        return Mono.zip(insertRegular, insertAssertions, Long::sum);
+        return insertFeedbackScores(entityType, scores, author);
     }
 
     private Mono<Long> insertFeedbackScores(@NonNull EntityType entityType,
