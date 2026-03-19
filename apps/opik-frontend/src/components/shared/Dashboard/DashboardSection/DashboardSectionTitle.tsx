@@ -49,7 +49,7 @@ const DashboardSectionTitle: React.FunctionComponent<
     const trimmedValue = editValue.trim();
     if (trimmedValue) {
       if (trimmedValue !== title) {
-        onChange?.(trimmedValue);
+        onChange(trimmedValue);
       }
     } else {
       setEditValue(title);
