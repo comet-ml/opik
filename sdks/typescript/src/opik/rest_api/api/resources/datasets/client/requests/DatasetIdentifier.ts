@@ -8,4 +8,5 @@
  */
 export interface DatasetIdentifier {
     datasetName: string;
+    projectName?: string;
 }
