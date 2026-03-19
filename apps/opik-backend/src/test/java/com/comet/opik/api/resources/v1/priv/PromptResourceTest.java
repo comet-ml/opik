@@ -2836,12 +2836,12 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when project_name does not exist, then return not found")
+        @DisplayName("when project_name does not exist, fall back to workspace-wide, prompt not found, then return not found")
         void whenProjectNameDoesNotExist__thenReturnNotFound() {
             var nonExistentProjectName = "project-" + UUID.randomUUID();
 
             var retrieveRequest = PromptVersionRetrieve.builder()
-                    .name("any-prompt-name")
+                    .name("any-prompt-name-" + UUID.randomUUID())
                     .projectName(nonExistentProjectName)
                     .build();
 
