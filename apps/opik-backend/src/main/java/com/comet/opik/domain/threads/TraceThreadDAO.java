@@ -53,7 +53,7 @@ public interface TraceThreadDAO {
     Mono<List<TraceThreadModel>> findThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
     Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(Instant now,
-            Duration defaultTimeoutToMarkThreadAsInactive, int limit);
+            Duration defaultTimeoutToMarkThreadAsInactive, Instant cachedMaxInactivePeriod, int limit);
 
     Mono<Long> openThread(UUID projectId, String threadId);
 
@@ -153,21 +153,17 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.workspace_id,
                 tt.project_id
             FROM (
-                SELECT workspace_id, project_id, last_updated_at
-                FROM trace_threads
-                WHERE status = 'active'
-                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                SELECT workspace_id, project_id, status, last_updated_at
+                FROM trace_threads FINAL
+                WHERE last_updated_at > parseDateTime64BestEffort(:cached_max_inactive_period, 6)
             ) tt
-            LEFT JOIN (
-                SELECT workspace_id, timeout_mark_thread_as_inactive
-                FROM workspace_configurations
-                ORDER BY workspace_id DESC, last_updated_at DESC
-                LIMIT 1 BY workspace_id
-            ) wc ON tt.workspace_id = wc.workspace_id
-            WHERE tt.last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
+            LEFT JOIN workspace_configurations wc FINAL
+                ON tt.workspace_id = wc.workspace_id
+            WHERE tt.status = 'active'
+            AND tt.last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
             ORDER BY tt.last_updated_at
             LIMIT :limit
+            SETTINGS use_skip_indexes_if_final=1
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
@@ -384,11 +380,14 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(
-            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive,
+            @NonNull Instant cachedMaxInactivePeriod, int limit) {
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
                     .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("default_timeout_seconds", defaultTimeoutToMarkThreadAsInactive.toSeconds())
+                    .bind("cached_max_inactive_period",
+                            cachedMaxInactivePeriod.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("limit", limit);
 
             return Flux.from(statement.execute())

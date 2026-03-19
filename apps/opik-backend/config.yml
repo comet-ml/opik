@@ -641,6 +641,7 @@ cacheManager:
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
     experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
+    max_timeout_mark_thread_as_inactive: ${CACHE_MANAGER_MAX_TIMEOUT_MARK_THREAD_AS_INACTIVE_DURATION:-PT30M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:

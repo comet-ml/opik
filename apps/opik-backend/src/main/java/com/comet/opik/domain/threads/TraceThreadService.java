@@ -54,6 +54,8 @@ public interface TraceThreadService {
             Duration defaultTimeoutToMarkThreadAsInactive,
             int limit);
 
+    Mono<Duration> getMaxTimeoutMarkThreadAsInactive(Duration defaultTimeout);
+
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant now,
             Duration defaultTimeoutToMarkThreadAsInactive);
 
@@ -292,7 +294,26 @@ class TraceThreadServiceImpl implements TraceThreadService {
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
-        return traceThreadDAO.findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive, limit);
+        return getMaxTimeoutMarkThreadAsInactive(defaultTimeoutToMarkThreadAsInactive)
+                .map(maxTimeout -> {
+                    var lookbackPeriod = maxTimeout.plus(Duration.ofHours(1));
+                    return now.minus(lookbackPeriod);
+                })
+                .flatMapMany(cachedMaxInactivePeriod -> traceThreadDAO
+                        .findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive,
+                                cachedMaxInactivePeriod, limit));
+    }
+
+    @Override
+    public Mono<Duration> getMaxTimeoutMarkThreadAsInactive(@NonNull Duration defaultTimeout) {
+        return workspaceConfigurationService.getMaxTimeoutMarkThreadAsInactive()
+                .map(maxTimeoutSeconds -> {
+                    if (maxTimeoutSeconds > 0) {
+                        return Duration.ofSeconds(maxTimeoutSeconds);
+                    }
+                    return defaultTimeout;
+                })
+                .defaultIfEmpty(defaultTimeout);
     }
 
     @Override
