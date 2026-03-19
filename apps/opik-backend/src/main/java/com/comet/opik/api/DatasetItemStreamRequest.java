@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -18,6 +19,8 @@ public record DatasetItemStreamRequest(
         UUID lastRetrievedId,
         @Min(1) @Max(2000) Integer steamLimit,
         String datasetVersion,
+        String projectName,
+        @JsonIgnore UUID projectId,
         String filters) {
 
     private static final int DEFAULT_STREAM_LIMIT = 2000;

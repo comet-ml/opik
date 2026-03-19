@@ -14,6 +14,7 @@ export interface DatasetItemCompare {
     evaluators?: OpikApi.EvaluatorItemCompare[];
     executionPolicy?: OpikApi.ExecutionPolicyCompare;
     experimentItems?: OpikApi.ExperimentItemCompare[];
+    runSummariesByExperiment?: Record<string, OpikApi.ExperimentRunSummaryCompare>;
     datasetId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;

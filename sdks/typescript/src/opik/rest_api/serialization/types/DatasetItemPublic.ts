@@ -7,6 +7,7 @@ import { DatasetItemPublicSource } from "./DatasetItemPublicSource.js";
 import { EvaluatorItemPublic } from "./EvaluatorItemPublic.js";
 import { ExecutionPolicyPublic } from "./ExecutionPolicyPublic.js";
 import { ExperimentItemPublic } from "./ExperimentItemPublic.js";
+import { ExperimentRunSummaryPublic } from "./ExperimentRunSummaryPublic.js";
 import { JsonNode } from "./JsonNode.js";
 
 export const DatasetItemPublic: core.serialization.ObjectSchema<
@@ -26,6 +27,10 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
     experimentItems: core.serialization.property(
         "experiment_items",
         core.serialization.list(ExperimentItemPublic).optional(),
+    ),
+    runSummariesByExperiment: core.serialization.property(
+        "run_summaries_by_experiment",
+        core.serialization.record(core.serialization.string(), ExperimentRunSummaryPublic).optional(),
     ),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -47,6 +52,7 @@ export declare namespace DatasetItemPublic {
         evaluators?: EvaluatorItemPublic.Raw[] | null;
         execution_policy?: ExecutionPolicyPublic.Raw | null;
         experiment_items?: ExperimentItemPublic.Raw[] | null;
+        run_summaries_by_experiment?: Record<string, ExperimentRunSummaryPublic.Raw> | null;
         dataset_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;

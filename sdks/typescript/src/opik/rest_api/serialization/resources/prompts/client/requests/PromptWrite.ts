@@ -11,6 +11,8 @@ export const PromptWrite: core.serialization.Schema<serializers.PromptWrite.Raw,
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         description: core.serialization.string().optional(),
         template: core.serialization.string().optional(),
         metadata: JsonNodeWrite.optional(),
@@ -24,6 +26,8 @@ export declare namespace PromptWrite {
     export interface Raw {
         id?: string | null;
         name: string;
+        project_id?: string | null;
+        project_name?: string | null;
         description?: string | null;
         template?: string | null;
         metadata?: JsonNodeWrite.Raw | null;

@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const ExperimentType: core.serialization.Schema<serializers.ExperimentType.Raw, OpikApi.ExperimentType> =
-    core.serialization.enum_(["regular", "trial", "mini-batch"]);
+    core.serialization.enum_(["regular", "trial", "mini-batch", "mutation"]);
 
 export declare namespace ExperimentType {
-    export type Raw = "regular" | "trial" | "mini-batch";
+    export type Raw = "regular" | "trial" | "mini-batch" | "mutation";
 }

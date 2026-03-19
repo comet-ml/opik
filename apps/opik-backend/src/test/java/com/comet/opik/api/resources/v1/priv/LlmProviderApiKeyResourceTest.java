@@ -18,6 +18,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.EncryptionUtils;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -28,6 +29,7 @@ import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,6 +60,10 @@ import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -116,6 +122,129 @@ class LlmProviderApiKeyResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Store LLM provider API key passes required permissions to auth endpoint")
+        void storeLlmProviderApiKeyPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var providerApiKey = createProviderApiKey();
+
+            wireMock.server().resetRequests();
+            llmProviderApiKeyResourceClient.callCreateProviderApiKey(providerApiKey, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.AI_PROVIDER_UPDATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update LLM provider API key passes required permissions to auth endpoint")
+        void updateLlmProviderApiKeyPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var providerApiKey = createProviderApiKey();
+            var created = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey, workspaceName,
+                    201);
+
+            var update = ProviderApiKeyUpdate.builder()
+                    .apiKey(UUID.randomUUID().toString())
+                    .build();
+
+            wireMock.server().resetRequests();
+            llmProviderApiKeyResourceClient.callUpdateProviderApiKey(created.id(), update, apiKey, workspaceName)
+                    .close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.AI_PROVIDER_UPDATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Delete LLM provider API keys passes required permissions to auth endpoint")
+        void deleteLlmProviderApiKeysPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var providerApiKey = createProviderApiKey();
+            var created = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey, workspaceName,
+                    201);
+
+            wireMock.server().resetRequests();
+            llmProviderApiKeyResourceClient.callDeleteProviderApiKeys(Set.of(created.id()), apiKey, workspaceName)
+                    .close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.AI_PROVIDER_UPDATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Store LLM provider API key returns 403 when permission is denied")
+        void storeLlmProviderApiKeyReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.AI_PROVIDER_UPDATE.getValue());
+
+            var providerApiKey = createProviderApiKey();
+
+            try (var response = llmProviderApiKeyResourceClient.callCreateProviderApiKey(providerApiKey, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update LLM provider API key returns 403 when permission is denied")
+        void updateLlmProviderApiKeyReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.AI_PROVIDER_UPDATE.getValue());
+
+            var update = ProviderApiKeyUpdate.builder()
+                    .apiKey(UUID.randomUUID().toString())
+                    .build();
+
+            try (var response = llmProviderApiKeyResourceClient.callUpdateProviderApiKey(UUID.randomUUID(), update,
+                    apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Delete LLM provider API keys returns 403 when permission is denied")
+        void deleteLlmProviderApiKeysReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.AI_PROVIDER_UPDATE.getValue());
+
+            try (var response = llmProviderApiKeyResourceClient.callDeleteProviderApiKeys(
+                    Set.of(UUID.randomUUID()), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Test

@@ -10,6 +10,8 @@ export const DatasetWrite: core.serialization.Schema<serializers.DatasetWrite.Ra
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         type: DatasetWriteType.optional(),
         visibility: DatasetWriteVisibility.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
@@ -20,6 +22,8 @@ export declare namespace DatasetWrite {
     export interface Raw {
         id?: string | null;
         name: string;
+        project_id?: string | null;
+        project_name?: string | null;
         type?: DatasetWriteType.Raw | null;
         visibility?: DatasetWriteVisibility.Raw | null;
         tags?: string[] | null;

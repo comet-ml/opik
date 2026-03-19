@@ -21,5 +21,6 @@ export interface ExperimentItemCompare {
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemCompareTraceVisibilityMode;
     description?: string;
-    executionPolicy?: OpikApi.ExecutionPolicyCompare;
+    assertionResults?: OpikApi.AssertionResultCompare[];
+    status?: OpikApi.ExperimentItemCompareStatus;
 }

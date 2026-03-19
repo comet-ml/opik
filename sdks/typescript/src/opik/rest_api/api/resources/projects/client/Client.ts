@@ -483,9 +483,10 @@ export class ProjectsClient {
         request: OpikApi.FindFeedbackScoreNamesByProjectIdsRequest = {},
         requestOptions?: ProjectsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNames>> {
-        const { projectIds } = request;
+        const { projectIds, excludeCategoryNames } = request;
         const _queryParams: Record<string, unknown> = {
             project_ids: projectIds,
+            exclude_category_names: excludeCategoryNames,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,

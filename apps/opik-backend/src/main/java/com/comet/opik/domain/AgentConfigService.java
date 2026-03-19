@@ -47,6 +47,8 @@ public interface AgentConfigService {
 
     void setEnvByBlueprintName(UUID projectId, String envName, String blueprintName);
 
+    void deleteEnv(UUID projectId, String envName);
+
     AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size);
 
     List<UUID> updateBlueprintsForNewPromptVersion(
@@ -476,6 +478,25 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     envsToInsert.stream().map(AgentConfigEnv::envName).toList());
             dao.batchInsertEnvs(workspaceId, projectId, config.id(), userName, envsToInsert);
         }
+    }
+
+    @Override
+    public void deleteEnv(@NonNull UUID projectId, @NonNull String envName) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting environment '{}' for project '{}' in workspace '{}'", envName, projectId, workspaceId);
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
+
+            int closed = dao.closeEnvByName(workspaceId, projectId, envName);
+            if (closed == 0) {
+                log.info("Environment '{}' not found for project '{}' in workspace '{}', nothing to delete",
+                        envName, projectId, workspaceId);
+            }
+
+            return null;
+        });
     }
 
     @Override

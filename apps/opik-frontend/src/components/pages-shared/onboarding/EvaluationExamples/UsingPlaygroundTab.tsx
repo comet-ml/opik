@@ -13,8 +13,8 @@ const UsingPlaygroundTab = () => {
       <div className="comet-body-s">
         <div className="pt-1">
           You can run prompt evaluations from the Opik platform using the
-          Playground. This allows you to test different prompts on any datasets
-          available in the platform.
+          Playground. This allows you to test different prompts on any
+          evaluation suites available in the platform.
         </div>
 
         <img className="my-5 block" src={evaluationGifUrl} />
@@ -54,7 +54,7 @@ const UsingPlaygroundTab = () => {
           </SheetClose>{" "}
           From there, you can add prompts with variables in the format{" "}
           <span className="text-emerald-500">{`{{ variable_name }}`}</span> and
-          evaluate them against your Opik datasets.
+          evaluate them against your Opik evaluation suites.
         </div>
       </div>
     </div>

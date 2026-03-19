@@ -11,6 +11,7 @@ export const AgentBlueprintPublic: core.serialization.ObjectSchema<
     OpikApi.AgentBlueprintPublic
 > = core.serialization.object({
     id: core.serialization.string().optional(),
+    name: core.serialization.string().optional(),
     type: AgentBlueprintPublicType,
     description: core.serialization.string().optional(),
     envs: core.serialization.list(core.serialization.string()).optional(),
@@ -24,6 +25,7 @@ export const AgentBlueprintPublic: core.serialization.ObjectSchema<
 export declare namespace AgentBlueprintPublic {
     export interface Raw {
         id?: string | null;
+        name?: string | null;
         type: AgentBlueprintPublicType.Raw;
         description?: string | null;
         envs?: string[] | null;

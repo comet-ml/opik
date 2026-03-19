@@ -38,6 +38,8 @@ def track_anthropic(
         * `client.messages.create()`
         * `client.messages.parse()`
         * `client.messages.stream()`
+        * `client.beta.messages.create()`
+        * `client.beta.messages.stream()`
 
     Can be used within other Opik-tracked functions.
 
@@ -88,6 +90,18 @@ def track_anthropic(
         project_name=project_name,
         metadata=metadata,
     )
+    beta_create_decorator = decorator_factory.track(
+        type="llm",
+        name="anthropic_beta_messages_create",
+        project_name=project_name,
+        metadata=metadata,
+    )
+    beta_stream_decorator = decorator_factory.track(
+        type="llm",
+        name="anthropic_beta_messages_stream",
+        project_name=project_name,
+        metadata=metadata,
+    )
 
     anthropic_client.messages.create = create_decorator(
         anthropic_client.messages.create
@@ -103,6 +117,18 @@ def track_anthropic(
         LOGGER.debug(
             "Failed to patch `client.messages.parse` method. "
             "It is likely because the anthropic SDK version does not support it",
+            exc_info=True,
+        )
+    try:
+        anthropic_client.beta.messages.create = beta_create_decorator(
+            anthropic_client.beta.messages.create
+        )
+        anthropic_client.beta.messages.stream = beta_stream_decorator(
+            anthropic_client.beta.messages.stream
+        )
+    except AttributeError:
+        LOGGER.debug(
+            "Failed to patch `client.beta.messages.create/stream` methods. It is likely because they were not implemented in the provided anthropic client",
             exc_info=True,
         )
     try:

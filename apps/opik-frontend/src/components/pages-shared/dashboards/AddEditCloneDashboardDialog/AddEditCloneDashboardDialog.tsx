@@ -1,15 +1,15 @@
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useMemo } from "react";
 import { flushSync } from "react-dom";
 import { AxiosError, HttpStatusCode } from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import get from "lodash/get";
-import isEmpty from "lodash/isEmpty";
-import { Loader2, ChevronLeft } from "lucide-react";
+import { ChartLine, FlaskConical, LayoutGridIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -17,79 +17,77 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Form } from "@/components/ui/form";
-import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
 import {
-  Dashboard,
-  TEMPLATE_TYPE,
-  EXPERIMENT_DATA_SOURCE,
-} from "@/types/dashboard";
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { cn } from "@/lib/utils";
+import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
+import { Dashboard, DASHBOARD_SCOPE, DASHBOARD_TYPE } from "@/types/dashboard";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
-import { Filters } from "@/types/filters";
-import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/schema";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import {
   generateEmptyDashboard,
   regenerateAllIds,
-  MIN_MAX_EXPERIMENTS,
-  MAX_MAX_EXPERIMENTS,
-  DEFAULT_MAX_EXPERIMENTS,
-  isValidIntegerInRange,
 } from "@/lib/dashboard/utils";
 import { useToast } from "@/components/ui/use-toast";
-import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
-import { DialogAutoScrollBody } from "@/components/ui/dialog";
-import useProjectsList from "@/api/projects/useProjectsList";
-import DashboardDialogSelectStep from "./DashboardDialogSelectStep";
-import DashboardDialogDetailsStep from "./DashboardDialogDetailsStep";
+import { ToastAction } from "@/components/ui/toast";
+import { useDashboardStore } from "@/store/DashboardStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { DISABLED_EXPERIMENTS_TOOLTIP } from "@/constants/permissions";
+import CardSelector, {
+  CardOption,
+} from "@/components/shared/CardSelector/CardSelector";
 
-enum DialogStep {
-  SELECT = "select",
-  DETAILS = "details",
-}
+const DASHBOARD_TYPE_OPTIONS: CardOption[] = [
+  {
+    value: DASHBOARD_TYPE.MULTI_PROJECT,
+    label: "Multi-project dashboard",
+    description:
+      "Monitor performance, cost, and usage across multiple projects in your workspace.",
+    icon: <LayoutGridIcon className="size-4" />,
+    iconColor: "text-chart-red",
+  },
+  {
+    value: DASHBOARD_TYPE.EXPERIMENTS,
+    label: "Experiments dashboard",
+    description:
+      "Track experiment results and quality metrics across your workspace.",
+    icon: <FlaskConical className="size-4" />,
+    iconColor: "text-chart-green",
+  },
+];
 
-const DashboardFormSchema = z
-  .object({
-    name: z
-      .string()
-      .min(1, "Name is required")
-      .max(100, "Name must be less than 100 characters")
-      .trim(),
-    description: z
-      .string()
-      .max(255, "Description must be less than 255 characters")
-      .optional()
-      .or(z.literal("")),
-    projectId: z.string().optional(),
-    experimentIds: z.array(z.string()).optional(),
-    templateType: z.string().optional(),
-    experimentDataSource: z.nativeEnum(EXPERIMENT_DATA_SOURCE).optional(),
-    experimentFilters: FiltersArraySchema.optional(),
-    maxExperimentsCount: z.string().optional(),
-  })
-  .refine(
-    (data) => {
-      if (
-        data.experimentDataSource === EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
-      ) {
-        return isValidIntegerInRange(
-          data.maxExperimentsCount || "",
-          MIN_MAX_EXPERIMENTS,
-          MAX_MAX_EXPERIMENTS,
-        );
-      }
-      return true;
-    },
-    {
-      message: `Max experiments to load is required and must be between ${MIN_MAX_EXPERIMENTS} and ${MAX_MAX_EXPERIMENTS}`,
-      path: ["maxExperimentsCount"],
-    },
-  );
+const DashboardFormSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(100, "Name must be less than 100 characters")
+    .trim(),
+  description: z
+    .string()
+    .max(255, "Description must be less than 255 characters")
+    .optional()
+    .or(z.literal("")),
+  dashboardType: z.nativeEnum(DASHBOARD_TYPE),
+});
 
 type DashboardFormData = z.infer<typeof DashboardFormSchema>;
 
-export type DashboardDialogMode = "create" | "edit" | "clone" | "save_as";
+export type DashboardDialogMode = "create" | "edit" | "clone";
 
 type AddEditCloneDashboardDialogProps = {
   mode: DashboardDialogMode;
@@ -99,9 +97,8 @@ type AddEditCloneDashboardDialogProps = {
   onCreateSuccess?: (dashboardId: string) => void;
   onEditSuccess?: () => void;
   navigateOnCreate?: boolean;
-  defaultProjectId?: string;
-  defaultExperimentIds?: string[];
-  defaultExperimentDataSource?: EXPERIMENT_DATA_SOURCE;
+  dashboardType?: DASHBOARD_TYPE;
+  dashboardScope?: DASHBOARD_SCOPE;
 };
 
 const AddEditCloneDashboardDialog: React.FC<
@@ -114,18 +111,17 @@ const AddEditCloneDashboardDialog: React.FC<
   onCreateSuccess,
   onEditSuccess,
   navigateOnCreate = true,
-  defaultProjectId,
-  defaultExperimentIds,
-  defaultExperimentDataSource,
+  dashboardType,
+  dashboardScope,
 }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   const isCreateMode = mode === "create";
-  const [currentStep, setCurrentStep] = useState<DialogStep>(
-    isCreateMode ? DialogStep.SELECT : DialogStep.DETAILS,
-  );
 
   const { mutate: createMutate, isPending: isCreating } =
     useDashboardCreateMutation({
@@ -139,7 +135,7 @@ const AddEditCloneDashboardDialog: React.FC<
   const isPending = isCreating || isUpdating;
 
   const getInitialName = () => {
-    if (mode === "clone" || mode === "save_as") {
+    if (mode === "clone") {
       return `${dashboard!.name} (Copy)`;
     }
 
@@ -152,67 +148,16 @@ const AddEditCloneDashboardDialog: React.FC<
     defaultValues: {
       name: getInitialName(),
       description: dashboard?.description || "",
-      projectId: defaultProjectId,
-      experimentIds: defaultExperimentIds || [],
-      templateType: undefined,
-      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
-      experimentFilters: [],
-      maxExperimentsCount: String(DEFAULT_MAX_EXPERIMENTS),
+      dashboardType:
+        dashboardType ?? dashboard?.type ?? DASHBOARD_TYPE.MULTI_PROJECT,
     },
   });
-
-  const shouldFetchLastModifiedProject =
-    !defaultProjectId && open && isCreateMode;
-
-  const { data: projectsData } = useProjectsList(
-    {
-      workspaceName,
-      sorting: [
-        {
-          desc: true,
-          id: "last_updated_trace_at",
-        },
-      ],
-      page: 1,
-      size: 1,
-    },
-    {
-      enabled: shouldFetchLastModifiedProject,
-    },
-  );
-
-  const lastModifiedProject = projectsData?.content?.[0];
-
-  useEffect(() => {
-    if (
-      shouldFetchLastModifiedProject &&
-      lastModifiedProject?.id &&
-      isEmpty(form.getValues("projectId"))
-    ) {
-      form.setValue("projectId", lastModifiedProject.id);
-    }
-  }, [shouldFetchLastModifiedProject, lastModifiedProject?.id, form]);
-
-  const handleSelectOption = (templateType: string) => {
-    setCurrentStep(DialogStep.DETAILS);
-    form.setValue("templateType", templateType, {
-      shouldValidate: true,
-      shouldDirty: true,
-      shouldTouch: true,
-    });
-
-    form.clearErrors();
-  };
-
-  const handleBack = () => {
-    setCurrentStep(DialogStep.SELECT);
-  };
 
   const config = {
     create: {
       title: "Create dashboard",
       description:
-        "Use a template with common metrics and adjust it to your needs, or start with an empty dashboard.",
+        "Build a dashboard to monitor project performance or experiment quality across your workspace.",
       buttonText: "Create dashboard",
       showDescription: true,
     },
@@ -228,19 +173,12 @@ const AddEditCloneDashboardDialog: React.FC<
       buttonText: "Clone dashboard",
       showDescription: false,
     },
-    save_as: {
-      title: "Save dashboard as",
-      description: null,
-      buttonText: "Save as new dashboard",
-      showDescription: false,
-    },
   }[mode];
 
   const onDashboardCreated = useCallback(
     (dashboardData?: { id?: string }) => {
       const dashboardId = dashboardData?.id;
       if (dashboardId) {
-        // Force synchronous state update before navigation
         flushSync(() => {
           onCreateSuccess?.(dashboardId);
         });
@@ -258,6 +196,32 @@ const AddEditCloneDashboardDialog: React.FC<
     },
     [navigate, workspaceName, onCreateSuccess, navigateOnCreate],
   );
+
+  const showCreatedToast = useCallback(() => {
+    toast({
+      title: "Dashboard created",
+      description: "Start customizing it by adding widgets.",
+      actions: [
+        <ToastAction
+          variant="link"
+          size="sm"
+          className="px-0"
+          altText="Add your first widget"
+          key="add-widget"
+          onClick={() => {
+            const { onAddEditWidgetCallback, sections } =
+              useDashboardStore.getState();
+            if (onAddEditWidgetCallback && sections.length > 0) {
+              onAddEditWidgetCallback({ sectionId: sections[0].id });
+            }
+          }}
+        >
+          <ChartLine className="mr-1.5 size-3.5" />
+          Add your first widget
+        </ToastAction>,
+      ],
+    });
+  }, [toast]);
 
   const handleMutationError = useCallback(
     (error: AxiosError, action: string) => {
@@ -308,43 +272,9 @@ const AddEditCloneDashboardDialog: React.FC<
         let dashboardConfig;
 
         if (mode === "create") {
-          if (values.templateType) {
-            const template =
-              DASHBOARD_TEMPLATES[values.templateType as TEMPLATE_TYPE];
-            dashboardConfig = regenerateAllIds(template.config);
-          } else {
-            dashboardConfig = generateEmptyDashboard();
-          }
-
-          dashboardConfig.config.projectIds = values.projectId
-            ? [values.projectId]
-            : [];
-          dashboardConfig.config.experimentIds = values.experimentIds || [];
-          dashboardConfig.config.experimentDataSource =
-            values.experimentDataSource ||
-            EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
-          dashboardConfig.config.experimentFilters =
-            (values.experimentFilters as Filters) || [];
-          dashboardConfig.config.maxExperimentsCount =
-            values.maxExperimentsCount
-              ? parseInt(values.maxExperimentsCount, 10)
-              : DEFAULT_MAX_EXPERIMENTS;
-        } else if (mode === "save_as" || mode === "clone") {
+          dashboardConfig = generateEmptyDashboard();
+        } else if (mode === "clone") {
           dashboardConfig = regenerateAllIds(dashboard!.config);
-          dashboardConfig.config.projectIds = values.projectId
-            ? [values.projectId]
-            : defaultProjectId
-              ? [defaultProjectId]
-              : [];
-          dashboardConfig.config.experimentIds =
-            values.experimentIds ||
-            (defaultExperimentIds && defaultExperimentIds.length > 0
-              ? defaultExperimentIds
-              : []);
-          if (defaultExperimentDataSource) {
-            dashboardConfig.config.experimentDataSource =
-              defaultExperimentDataSource;
-          }
         }
 
         createMutate(
@@ -353,12 +283,20 @@ const AddEditCloneDashboardDialog: React.FC<
               name: values.name,
               description: values.description || "",
               config: dashboardConfig,
+              type: mode === "create" ? values.dashboardType : dashboard?.type,
+              scope:
+                mode === "create"
+                  ? dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE
+                  : dashboard?.scope,
             },
           },
           {
             onSuccess: (data) => {
               onDashboardCreated(data);
               setOpen(false);
+              if (mode === "create") {
+                showCreatedToast();
+              }
             },
             onError: (error: AxiosError) => handleMutationError(error, mode),
           },
@@ -373,16 +311,29 @@ const AddEditCloneDashboardDialog: React.FC<
       setOpen,
       handleMutationError,
       createMutate,
-      defaultProjectId,
-      defaultExperimentIds,
-      defaultExperimentDataSource,
       onDashboardCreated,
+      showCreatedToast,
+      dashboardScope,
     ],
+  );
+
+  const dashboardTypeOptions = useMemo<CardOption[]>(
+    () =>
+      DASHBOARD_TYPE_OPTIONS.map((option) =>
+        option.value === DASHBOARD_TYPE.EXPERIMENTS && !canViewExperiments
+          ? {
+              ...option,
+              disabled: true,
+              disabledTooltip: DISABLED_EXPERIMENTS_TOOLTIP,
+            }
+          : option,
+      ),
+    [canViewExperiments],
   );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[720px]">
+      <DialogContent className="max-w-lg sm:max-w-screen-sm">
         <DialogHeader>
           <DialogTitle>{config.title}</DialogTitle>
           {config.showDescription && (
@@ -391,57 +342,94 @@ const AddEditCloneDashboardDialog: React.FC<
         </DialogHeader>
 
         <DialogAutoScrollBody>
-          {isCreateMode && currentStep === DialogStep.SELECT && (
-            <DashboardDialogSelectStep onSelect={handleSelectOption} />
-          )}
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              id="dashboard-form"
+              className="flex flex-col gap-4"
+            >
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field, formState }) => {
+                  const validationErrors = get(formState.errors, ["name"]);
 
-          {currentStep === DialogStep.DETAILS && (
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                id="dashboard-form"
-                className="flex flex-col gap-4"
-              >
-                <DashboardDialogDetailsStep
+                  return (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Dashboard name"
+                          className={cn({
+                            "border-destructive": Boolean(
+                              validationErrors?.message,
+                            ),
+                          })}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              form.handleSubmit(onSubmit)();
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
+              {isCreateMode && !dashboardType && (
+                <FormField
                   control={form.control}
-                  templateType={
-                    isCreateMode ? form.watch("templateType") : undefined
-                  }
-                  showDataSourceSection={isCreateMode}
-                  descriptionExpanded={!isCreateMode}
-                  onSubmit={form.handleSubmit(onSubmit)}
+                  name="dashboardType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Type</FormLabel>
+                      <CardSelector
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={dashboardTypeOptions}
+                      />
+                    </FormItem>
+                  )}
                 />
-              </form>
-            </Form>
-          )}
+              )}
+
+              <Accordion
+                type="multiple"
+                defaultValue={!isCreateMode ? ["description"] : []}
+                className="border-t"
+              >
+                <AccordionItem value="description">
+                  <AccordionTrigger className="h-11 py-1.5">
+                    Description
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3">
+                    <Textarea
+                      {...form.register("description")}
+                      placeholder="Dashboard description"
+                      maxLength={255}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </form>
+          </Form>
         </DialogAutoScrollBody>
 
-        <DialogFooter className="flex flex-row justify-between gap-2 sm:flex-row sm:justify-between">
-          <div>
-            {isCreateMode && currentStep === DialogStep.DETAILS && (
-              <Button variant="outline" onClick={handleBack}>
-                <ChevronLeft className="mr-2 size-4" />
-                Back
-              </Button>
-            )}
-          </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" disabled={isPending}>
+              Cancel
+            </Button>
+          </DialogClose>
 
-          <div className="flex gap-2">
-            {currentStep === DialogStep.DETAILS && (
-              <DialogClose asChild>
-                <Button variant="outline" disabled={isPending}>
-                  Cancel
-                </Button>
-              </DialogClose>
-            )}
-
-            {currentStep === DialogStep.DETAILS && (
-              <Button type="submit" form="dashboard-form" disabled={isPending}>
-                {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                {config.buttonText}
-              </Button>
-            )}
-          </div>
+          <Button type="submit" form="dashboard-form" disabled={isPending}>
+            {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+            {config.buttonText}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

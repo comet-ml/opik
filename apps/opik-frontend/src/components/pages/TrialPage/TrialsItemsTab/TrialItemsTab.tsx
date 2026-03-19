@@ -110,7 +110,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [];
 const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
   {
     id: COLUMN_ID_ID,
-    label: "Dataset item ID",
+    label: "Evaluation suite item ID",
     type: COLUMN_TYPE.string,
     accessorFn: (row) => row.dataset_item_id,
     cell: IdCell as never,
@@ -479,7 +479,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         columnHelper.group({
           id: "dataset",
           meta: {
-            header: "Dataset",
+            header: "Evaluation suite",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
@@ -548,7 +548,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       ...sortBy(dynamicDatasetColumns, "label").map(
         ({ id, label, columnType }) => ({
           id,
-          label: `${label} (Dataset)`,
+          label: `${label} (Evaluation suite)`,
           type: columnType,
         }),
       ),

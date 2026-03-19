@@ -38,6 +38,7 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -110,6 +111,7 @@ public class DatasetsResource {
     private final @NonNull DatasetItemService itemService;
     private final @NonNull DatasetExpansionService expansionService;
     private final @NonNull DatasetVersionService versionService;
+    private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
@@ -277,11 +279,17 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         Visibility visibility = requestContext.get().getVisibility();
-        String name = identifier.datasetName();
+        UUID projectId = resolveProjectIdByName(identifier.projectName(), workspaceId);
+        var criteria = DatasetCriteria.builder()
+                .name(identifier.datasetName())
+                .projectId(projectId)
+                .build();
 
-        log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
-        Dataset dataset = service.findByName(workspaceId, name, visibility);
-        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
+        log.info("Finding dataset by name '{}', projectId '{}' on workspace_id '{}'", criteria.name(), projectId,
+                workspaceId);
+        Dataset dataset = service.findByName(workspaceId, criteria, visibility);
+        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", criteria.name(), dataset.id(),
+                workspaceId);
 
         return Response.ok(dataset).build();
     }
@@ -426,18 +434,26 @@ public class DatasetsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
         var visibility = requestContext.get().getVisibility();
+        UUID resolvedProjectId = request.projectId() != null
+                ? request.projectId()
+                : resolveProjectIdByName(request.projectName(), workspaceId);
+        var resolvedRequest = resolvedProjectId != null
+                ? request.toBuilder().projectId(resolvedProjectId).build()
+                : request;
 
         // Suppress unchecked cast warning since we already pass DatasetItemFilter reference to newFilters
         @SuppressWarnings("unchecked")
         List<DatasetItemFilter> queryFilters = Optional.ofNullable((List<DatasetItemFilter>) filtersFactory.newFilters(
                 request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE)).orElse(List.of());
 
-        log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        var items = itemService.getItems(workspaceId, request, queryFilters, visibility)
+        log.info("Streaming dataset items for dataset '{}', projectId '{}' on workspaceId '{}'",
+                resolvedRequest.datasetName(), resolvedRequest.projectId(), workspaceId);
+        var items = itemService.getItems(workspaceId, resolvedRequest, queryFilters, visibility)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var outputStream = streamer.getOutputStream(items);
-        log.info("Streamed dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+        log.info("Streamed dataset items for dataset '{}', projectId '{}' on workspaceId '{}'",
+                resolvedRequest.datasetName(), resolvedRequest.projectId(), workspaceId);
         return outputStream;
     }
 
@@ -773,6 +789,10 @@ public class DatasetsResource {
                 datasetId, experimentIds, workspaceId);
 
         return Response.ok(columns).build();
+    }
+
+    private UUID resolveProjectIdByName(String projectName, String workspaceId) {
+        return projectService.findProjectIdByName(workspaceId, projectName).orElse(null);
     }
 
     /**

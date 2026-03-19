@@ -78,12 +78,19 @@
     /* Chart colors */
     --chart-tick-stroke: #94a3b8;
     --chart-grid-stroke: #f1f5f8;
+    --chart-blue: #5899da;
+    --chart-yellow: #f4b400;
+    --chart-green: #19a979;
+    --chart-red: #ef6868;
+    --chart-burgundy: #bf399e;
+    --chart-purple: #945fcf;
+    --chart-pink: #ed4a7b;
+    --chart-orange: #fb9341;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;
     --template-icon-scratch: #945fcf;
-    --template-icon-experiments: #10b981;
 
     /* Trace thread colors */
     --thread-active: #ebf2f5;
@@ -178,7 +185,7 @@
     --tag-burgundy-text: #72275f;
     --tag-pink-bg: #fde2ea;
     --tag-pink-text: #822c45;
-    --tag-red-bg: #fdc9c9;
+    --tag-red-bg: #ffd2d2;
     --tag-red-text: #4e1d1d;
     --tag-orange-bg: #fee3d7;
     --tag-orange-text: #73422b;
@@ -193,6 +200,9 @@
     --tag-turquoise-text: #15545b;
     --tag-blue-bg: #e2effd;
     --tag-blue-text: #19426b;
+
+    /* Separator light color */
+    --separator-light: #f1f5f9;
 
     /* Info box colors (blue variant for informational content) */
     --info-box-bg: 214 100% 92%;
@@ -323,12 +333,19 @@
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
     --chart-grid-stroke: #303030;
+    --chart-blue: #5899da;
+    --chart-yellow: #f4b400;
+    --chart-green: #19a979;
+    --chart-red: #ef6868;
+    --chart-burgundy: #bf399e;
+    --chart-purple: #945fcf;
+    --chart-pink: #ed4a7b;
+    --chart-orange: #fb9341;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;
     --template-icon-scratch: #945fcf;
-    --template-icon-experiments: #10b981;
 
     /* Diff colors - Dark Mode */
     --diff-removed-bg: #7f1d1d;
@@ -376,6 +393,9 @@
     --tag-turquoise-text: #0fbfd2;
     --tag-blue-bg: #292e32;
     --tag-blue-text: #6eabe7;
+
+    /* Separator light color - Dark Mode */
+    --separator-light: #2a2a2a;
 
     /* Info box colors - Dark Mode */
     --info-box-bg: 224 76% 33%;

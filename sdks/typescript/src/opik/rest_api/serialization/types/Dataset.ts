@@ -12,6 +12,8 @@ export const Dataset: core.serialization.ObjectSchema<serializers.Dataset.Raw, O
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         type: DatasetType.optional(),
         visibility: DatasetVisibility.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
@@ -47,6 +49,8 @@ export declare namespace Dataset {
     export interface Raw {
         id?: string | null;
         name: string;
+        project_id?: string | null;
+        project_name?: string | null;
         type?: DatasetType.Raw | null;
         visibility?: DatasetVisibility.Raw | null;
         tags?: string[] | null;

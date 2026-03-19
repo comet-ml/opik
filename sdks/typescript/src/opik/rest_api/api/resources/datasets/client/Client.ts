@@ -236,13 +236,15 @@ export class DatasetsClient {
         request: OpikApi.FindDatasetsRequest = {},
         requestOptions?: DatasetsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetPagePublic>> {
-        const { page, size, withExperimentsOnly, withOptimizationsOnly, promptId, name, sorting, filters } = request;
+        const { page, size, withExperimentsOnly, withOptimizationsOnly, promptId, projectId, name, sorting, filters } =
+            request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             with_experiments_only: withExperimentsOnly,
             with_optimizations_only: withOptimizationsOnly,
             prompt_id: promptId,
+            project_id: projectId,
             name,
             sorting,
             filters,

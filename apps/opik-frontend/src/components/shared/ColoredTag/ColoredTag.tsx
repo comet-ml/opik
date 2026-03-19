@@ -7,6 +7,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 export interface ColoredTagProps {
   label: string;
   size?: TagProps["size"];
+  variant?: TagProps["variant"];
   testId?: string;
   className?: string;
   IconComponent?: React.ComponentType<{ className?: string }>;
@@ -15,11 +16,13 @@ export interface ColoredTagProps {
 const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
   label,
   size = "md",
+  variant: variantOverride,
   testId,
   className,
   IconComponent,
 }) => {
-  const variant = useMemo(() => generateTagVariant(label), [label]);
+  const hashedVariant = useMemo(() => generateTagVariant(label), [label]);
+  const variant = variantOverride ?? hashedVariant;
 
   return (
     <Tag

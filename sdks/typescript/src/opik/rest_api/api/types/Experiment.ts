@@ -4,9 +4,11 @@ import type * as OpikApi from "../index.js";
 
 export interface Experiment {
     id?: string;
-    datasetName: string;
+    datasetName: string | null;
     datasetId?: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
     projectId?: string;
+    /** Project name. Creates project if it doesn't exist. Ignored when project_id is provided. */
     projectName?: string;
     name?: string;
     metadata?: OpikApi.JsonListString;
@@ -17,6 +19,7 @@ export interface Experiment {
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
     comments?: OpikApi.Comment[];
     traceCount?: number;
+    datasetItemCount?: number;
     createdAt?: Date;
     duration?: OpikApi.PercentageValues;
     totalEstimatedCost?: number;

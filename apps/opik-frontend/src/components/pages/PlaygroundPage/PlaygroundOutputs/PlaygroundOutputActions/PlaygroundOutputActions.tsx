@@ -40,9 +40,6 @@ import { Filters } from "@/types/filters";
 import { COLUMN_DATA_ID, COLUMN_TYPE } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
-import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const EMPTY_DATASETS: Dataset[] = [];
@@ -89,10 +86,6 @@ const PlaygroundOutputActions = ({
   const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
     string | undefined
   >(undefined);
-  const isVersioningEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
-  );
-
   const promptMap = usePromptMap();
   const promptCount = usePromptCount();
   const resetOutputMap = useResetOutputMap();
@@ -332,11 +325,11 @@ const PlaygroundOutputActions = ({
       }
 
       if (isDatasetRemoved) {
-        return "Your dataset has been removed. Select another one";
+        return "Your evaluation suite has been removed. Select another one";
       }
 
       if (isDatasetEmpty) {
-        return "Selected dataset is empty";
+        return "Selected evaluation suite is empty";
       }
 
       if (!allPromptsHaveModels) {
@@ -480,21 +473,12 @@ const PlaygroundOutputActions = ({
           {canViewDatasets && (
             <>
               <div className="mt-2.5">
-                {isVersioningEnabled ? (
-                  <DatasetVersionSelectBox
-                    value={datasetId}
-                    versionName={versionName}
-                    onChange={handleDatasetVersionChange}
-                    workspaceName={workspaceName}
-                  />
-                ) : (
-                  <DatasetSelectBox
-                    value={datasetId ?? ""}
-                    onChange={onChangeDatasetId}
-                    workspaceName={workspaceName}
-                    onDatasetChangeExtra={handleDatasetChangeExtra}
-                  />
-                )}
+                <DatasetVersionSelectBox
+                  value={datasetId}
+                  versionName={versionName}
+                  onChange={handleDatasetVersionChange}
+                  workspaceName={workspaceName}
+                />
               </div>
               {datasetId && (
                 <div className="mt-2.5 flex">
@@ -537,7 +521,7 @@ const PlaygroundOutputActions = ({
               <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
                 <ExplainerIcon
                   {...EXPLAINERS_MAP[
-                    EXPLAINER_ID.what_does_the_dataset_do_here
+                    EXPLAINER_ID.what_does_the_evaluation_suite_do_here
                   ]}
                 />
                 <Separator orientation="vertical" className="mx-2 h-4" />

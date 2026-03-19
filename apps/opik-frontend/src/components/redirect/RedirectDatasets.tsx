@@ -25,9 +25,9 @@ const RedirectDatasets = () => {
   useEffect(() => {
     if (datasetByName?.id) {
       navigate({
-        to: "/$workspaceName/datasets/$datasetId/items",
+        to: "/$workspaceName/evaluation-suites/$suiteId/items",
         params: {
-          datasetId: datasetByName.id,
+          suiteId: datasetByName.id,
           workspaceName,
         },
       });
@@ -35,15 +35,17 @@ const RedirectDatasets = () => {
   }, [datasetByName?.id, workspaceName, navigate]);
 
   if (query.id) {
-    return <Navigate to={`/${workspaceName}/datasets/${query.id}/items`} />;
+    return (
+      <Navigate to={`/${workspaceName}/evaluation-suites/${query.id}/items`} />
+    );
   }
 
   if (!isPendingDatasetByName && !datasetByName) {
     return (
       <NoData
         icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
-        title="This dataset could not be found"
-        message="The dataset you’re looking for doesn’t exist or has been deleted."
+        title="This evaluation suite could not be found"
+        message="The evaluation suite you're looking for doesn't exist or has been deleted."
       >
         <div className="pt-5">
           <Link to="/$workspaceName/home" params={{ workspaceName }}>
@@ -55,7 +57,7 @@ const RedirectDatasets = () => {
   }
 
   if (!query.id && !query.name) {
-    return <NoData message="No dataset params set" />;
+    return <NoData message="No evaluation suite params set" />;
   }
 
   return <Loader />;

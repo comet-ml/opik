@@ -80,6 +80,7 @@ public class ExperimentResourceClient {
                 .optimizationId(null)
                 .usage(null)
                 .projectId(null)
+                .projectName(null)
                 .datasetVersionId(null)
                 .datasetVersionSummary(null)
                 .passRate(null)

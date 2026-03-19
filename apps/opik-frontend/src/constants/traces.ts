@@ -15,7 +15,7 @@ export enum LOGS_TYPE {
 
 export enum PROJECT_TAB {
   logs = "logs",
-  metrics = "metrics",
+  insights = "insights",
   evaluators = "rules",
   annotationQueues = "annotation-queues",
   configuration = "configuration",

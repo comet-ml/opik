@@ -402,6 +402,50 @@ describe("useChartTickDefaultConfig", () => {
     });
   });
 
+  describe("non-finite value handling", () => {
+    it("should filter NaN values and produce valid ticks", () => {
+      const { result } = renderHook(() =>
+        useChartTickDefaultConfig([NaN, 1, 2]),
+      );
+
+      expect(result.current.ticks.length).toBeGreaterThan(0);
+      expect(result.current.ticks.every((tick) => Number.isFinite(tick))).toBe(
+        true,
+      );
+    });
+
+    it("should handle undefined cast as number", () => {
+      const { result } = renderHook(() =>
+        useChartTickDefaultConfig([undefined as unknown as number, 1]),
+      );
+
+      expect(result.current.ticks.length).toBeGreaterThan(0);
+      expect(result.current.ticks.every((tick) => Number.isFinite(tick))).toBe(
+        true,
+      );
+    });
+
+    it("should handle Infinity values", () => {
+      const { result } = renderHook(() =>
+        useChartTickDefaultConfig([Infinity, 1, 2]),
+      );
+
+      expect(result.current.ticks.length).toBeGreaterThan(0);
+      expect(result.current.ticks.every((tick) => Number.isFinite(tick))).toBe(
+        true,
+      );
+    });
+
+    it("should return [0] when all values are non-finite", () => {
+      const { result } = renderHook(() =>
+        useChartTickDefaultConfig([NaN, undefined as unknown as number]),
+      );
+
+      expect(result.current.ticks).toEqual([]);
+      expect(result.current.domain).toEqual([0, "max"]);
+    });
+  });
+
   describe("precision consistency tests", () => {
     it("should handle data with high precision but generate nice ticks", () => {
       const { result } = renderHook(() =>

@@ -34,6 +34,7 @@ class RawDashboardsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -48,6 +49,8 @@ class RawDashboardsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -68,6 +71,7 @@ class RawDashboardsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "project_id": project_id,
                 "sorting": sorting,
                 "filters": filters,
             },
@@ -93,6 +97,8 @@ class RawDashboardsClient:
         *,
         name: str,
         config: JsonNodeWrite,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         type: typing.Optional[DashboardWriteType] = OMIT,
         scope: typing.Optional[DashboardWriteScope] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -106,6 +112,12 @@ class RawDashboardsClient:
         name : str
 
         config : JsonNodeWrite
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dashboard is created at workspace level.
 
         type : typing.Optional[DashboardWriteType]
 
@@ -125,6 +137,8 @@ class RawDashboardsClient:
             "v1/private/dashboards",
             method="POST",
             json={
+                "project_id": project_id,
+                "project_name": project_name,
                 "name": name,
                 "type": type,
                 "scope": scope,
@@ -368,6 +382,7 @@ class AsyncRawDashboardsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -382,6 +397,8 @@ class AsyncRawDashboardsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -402,6 +419,7 @@ class AsyncRawDashboardsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "project_id": project_id,
                 "sorting": sorting,
                 "filters": filters,
             },
@@ -427,6 +445,8 @@ class AsyncRawDashboardsClient:
         *,
         name: str,
         config: JsonNodeWrite,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         type: typing.Optional[DashboardWriteType] = OMIT,
         scope: typing.Optional[DashboardWriteScope] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -440,6 +460,12 @@ class AsyncRawDashboardsClient:
         name : str
 
         config : JsonNodeWrite
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dashboard is created at workspace level.
 
         type : typing.Optional[DashboardWriteType]
 
@@ -459,6 +485,8 @@ class AsyncRawDashboardsClient:
             "v1/private/dashboards",
             method="POST",
             json={
+                "project_id": project_id,
+                "project_name": project_name,
                 "name": name,
                 "type": type,
                 "scope": scope,

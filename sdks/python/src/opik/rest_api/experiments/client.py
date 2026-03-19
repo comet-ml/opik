@@ -174,8 +174,10 @@ class ExperimentsClient:
     def create_experiment(
         self,
         *,
-        dataset_name: str,
         id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -194,9 +196,15 @@ class ExperimentsClient:
 
         Parameters
         ----------
-        dataset_name : str
-
         id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -232,11 +240,13 @@ class ExperimentsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.experiments.create_experiment(dataset_name='dataset_name', )
+        client.experiments.create_experiment()
         """
         _response = self._raw_client.create_experiment(
-            dataset_name=dataset_name,
             id=id,
+            dataset_name=dataset_name,
+            project_id=project_id,
+            project_name=project_name,
             name=name,
             metadata=metadata,
             tags=tags,
@@ -895,8 +905,10 @@ class AsyncExperimentsClient:
     async def create_experiment(
         self,
         *,
-        dataset_name: str,
         id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -915,9 +927,15 @@ class AsyncExperimentsClient:
 
         Parameters
         ----------
-        dataset_name : str
-
         id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -955,12 +973,14 @@ class AsyncExperimentsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.experiments.create_experiment(dataset_name='dataset_name', )
+            await client.experiments.create_experiment()
         asyncio.run(main())
         """
         _response = await self._raw_client.create_experiment(
-            dataset_name=dataset_name,
             id=id,
+            dataset_name=dataset_name,
+            project_id=project_id,
+            project_name=project_name,
             name=name,
             metadata=metadata,
             tags=tags,

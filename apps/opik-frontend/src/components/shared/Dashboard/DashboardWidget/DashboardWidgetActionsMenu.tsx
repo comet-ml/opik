@@ -172,7 +172,7 @@ const DashboardWidgetActionsMenu: React.FunctionComponent<
         setOpen={handleDeleteDialogOpenChange}
         onConfirm={handleConfirmDelete}
         title="Delete widget?"
-        description={`This widget will be removed from this dashboard. You can still undo this change before saving the dashboard.`}
+        description="Are you sure you want to delete this widget? This action cannot be undone."
         confirmText={`Delete ${widgetTitle}`}
         confirmButtonVariant="destructive"
       />

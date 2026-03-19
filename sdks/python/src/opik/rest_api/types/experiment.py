@@ -19,10 +19,18 @@ from .prompt_version_link import PromptVersionLink
 
 class Experiment(UniversalBaseModel):
     id: typing.Optional[str] = None
-    dataset_name: str
+    dataset_name: typing.Optional[str] = None
     dataset_id: typing.Optional[str] = None
-    project_id: typing.Optional[str] = None
-    project_name: typing.Optional[str] = None
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project ID. Takes precedence over project_name when both are provided.
+    """
+
+    project_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
+    """
+
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonListString] = None
     tags: typing.Optional[typing.List[str]] = None
@@ -32,6 +40,7 @@ class Experiment(UniversalBaseModel):
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     trace_count: typing.Optional[int] = None
+    dataset_item_count: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
     duration: typing.Optional[PercentageValues] = None
     total_estimated_cost: typing.Optional[float] = None

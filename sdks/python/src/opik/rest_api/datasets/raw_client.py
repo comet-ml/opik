@@ -225,6 +225,7 @@ class RawDatasetsClient:
         with_experiments_only: typing.Optional[bool] = None,
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
@@ -244,6 +245,8 @@ class RawDatasetsClient:
         with_optimizations_only : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -268,6 +271,7 @@ class RawDatasetsClient:
                 "with_experiments_only": with_experiments_only,
                 "with_optimizations_only": with_optimizations_only,
                 "prompt_id": prompt_id,
+                "project_id": project_id,
                 "name": name,
                 "sorting": sorting,
                 "filters": filters,
@@ -294,6 +298,8 @@ class RawDatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -308,6 +314,12 @@ class RawDatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created at workspace level.
 
         type : typing.Optional[DatasetWriteType]
 
@@ -330,6 +342,8 @@ class RawDatasetsClient:
             json={
                 "id": id,
                 "name": name,
+                "project_id": project_id,
+                "project_name": project_name,
                 "type": type,
                 "visibility": visibility,
                 "tags": tags,
@@ -695,7 +709,11 @@ class RawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete dataset by name
@@ -703,6 +721,8 @@ class RawDatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -716,6 +736,7 @@ class RawDatasetsClient:
             method="POST",
             json={
                 "dataset_name": dataset_name,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",
@@ -1049,7 +1070,11 @@ class RawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetPublic]:
         """
         Get dataset by name
@@ -1057,6 +1082,8 @@ class RawDatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1071,6 +1098,7 @@ class RawDatasetsClient:
             method="POST",
             json={
                 "dataset_name": dataset_name,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",
@@ -1554,6 +1582,7 @@ class RawDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
@@ -1569,6 +1598,8 @@ class RawDatasetsClient:
         steam_limit : typing.Optional[int]
 
         dataset_version : typing.Optional[str]
+
+        project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1588,6 +1619,7 @@ class RawDatasetsClient:
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
                 "dataset_version": dataset_version,
+                "project_name": project_name,
                 "filters": filters,
             },
             headers={
@@ -2237,6 +2269,7 @@ class AsyncRawDatasetsClient:
         with_experiments_only: typing.Optional[bool] = None,
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
@@ -2256,6 +2289,8 @@ class AsyncRawDatasetsClient:
         with_optimizations_only : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -2280,6 +2315,7 @@ class AsyncRawDatasetsClient:
                 "with_experiments_only": with_experiments_only,
                 "with_optimizations_only": with_optimizations_only,
                 "prompt_id": prompt_id,
+                "project_id": project_id,
                 "name": name,
                 "sorting": sorting,
                 "filters": filters,
@@ -2306,6 +2342,8 @@ class AsyncRawDatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -2320,6 +2358,12 @@ class AsyncRawDatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the dataset is created at workspace level.
 
         type : typing.Optional[DatasetWriteType]
 
@@ -2342,6 +2386,8 @@ class AsyncRawDatasetsClient:
             json={
                 "id": id,
                 "name": name,
+                "project_id": project_id,
+                "project_name": project_name,
                 "type": type,
                 "visibility": visibility,
                 "tags": tags,
@@ -2709,7 +2755,11 @@ class AsyncRawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete dataset by name
@@ -2717,6 +2767,8 @@ class AsyncRawDatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2730,6 +2782,7 @@ class AsyncRawDatasetsClient:
             method="POST",
             json={
                 "dataset_name": dataset_name,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",
@@ -3064,7 +3117,11 @@ class AsyncRawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetPublic]:
         """
         Get dataset by name
@@ -3072,6 +3129,8 @@ class AsyncRawDatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3086,6 +3145,7 @@ class AsyncRawDatasetsClient:
             method="POST",
             json={
                 "dataset_name": dataset_name,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",
@@ -3569,6 +3629,7 @@ class AsyncRawDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
@@ -3584,6 +3645,8 @@ class AsyncRawDatasetsClient:
         steam_limit : typing.Optional[int]
 
         dataset_version : typing.Optional[str]
+
+        project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -3603,6 +3666,7 @@ class AsyncRawDatasetsClient:
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
                 "dataset_version": dataset_version,
+                "project_name": project_name,
                 "filters": filters,
             },
             headers={

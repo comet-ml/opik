@@ -4,11 +4,15 @@ import OptimizationCompareRedirect from "./OptimizationCompareRedirect";
 
 const mockNavigate = vi.fn();
 
+let mockSearchStr = "";
+
 vi.mock("@tanstack/react-router", () => ({
   Navigate: (props: Record<string, unknown>) => {
     mockNavigate(props);
     return null;
   },
+  useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
+    select({ location: { searchStr: mockSearchStr } }),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -17,21 +21,16 @@ vi.mock("@/store/AppStore", () => ({
   ),
 }));
 
-let mockOptimizationsIds: string[] | undefined;
-
-vi.mock("use-query-params", () => ({
-  JsonParam: {},
-  useQueryParam: () => [mockOptimizationsIds],
-}));
-
 describe("OptimizationCompareRedirect", () => {
   beforeEach(() => {
     mockNavigate.mockClear();
-    mockOptimizationsIds = undefined;
+    mockSearchStr = "";
   });
 
   it("redirects legacy compare URL to new optimization detail URL", () => {
-    mockOptimizationsIds = ["opt-123-abc"];
+    mockSearchStr = `optimizations=${encodeURIComponent(
+      JSON.stringify(["opt-123-abc"]),
+    )}`;
 
     render(<OptimizationCompareRedirect />);
 
@@ -43,7 +42,9 @@ describe("OptimizationCompareRedirect", () => {
   });
 
   it("uses the first optimization ID when multiple are provided", () => {
-    mockOptimizationsIds = ["opt-first", "opt-second"];
+    mockSearchStr = `optimizations=${encodeURIComponent(
+      JSON.stringify(["opt-first", "opt-second"]),
+    )}`;
 
     render(<OptimizationCompareRedirect />);
 
@@ -55,7 +56,7 @@ describe("OptimizationCompareRedirect", () => {
   });
 
   it("redirects to optimizations list when no optimization ID is provided", () => {
-    mockOptimizationsIds = undefined;
+    mockSearchStr = "";
 
     render(<OptimizationCompareRedirect />);
 
@@ -67,7 +68,7 @@ describe("OptimizationCompareRedirect", () => {
   });
 
   it("redirects to optimizations list when optimization IDs array is empty", () => {
-    mockOptimizationsIds = [];
+    mockSearchStr = `optimizations=${encodeURIComponent(JSON.stringify([]))}`;
 
     render(<OptimizationCompareRedirect />);
 
