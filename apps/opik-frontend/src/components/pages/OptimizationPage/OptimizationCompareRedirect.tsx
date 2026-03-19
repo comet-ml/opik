@@ -1,5 +1,4 @@
-import { Navigate } from "@tanstack/react-router";
-import { JsonParam, useQueryParam } from "use-query-params";
+import { Navigate, useRouterState } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 
 /**
@@ -8,11 +7,20 @@ import useAppStore from "@/store/AppStore";
  */
 const OptimizationCompareRedirect = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const [optimizationsIds = []] = useQueryParam("optimizations", JsonParam, {
-    updateType: "replaceIn",
-  });
+  const searchStr = useRouterState({ select: (s) => s.location.searchStr });
 
-  const optimizationId = optimizationsIds?.[0];
+  const searchParams = new URLSearchParams(searchStr);
+  const optimizationsParam = searchParams.get("optimizations");
+
+  let optimizationId: string | undefined;
+  try {
+    const ids: string[] = optimizationsParam
+      ? JSON.parse(optimizationsParam)
+      : [];
+    optimizationId = ids?.[0];
+  } catch {
+    // invalid JSON, treat as no optimization ID
+  }
 
   if (!optimizationId) {
     return (
