@@ -1,4 +1,4 @@
-import NewQuickstart from "@/components/pages/GetStartedPage/NewQuickstart";
+import NewQuickstart from "@/v1/pages/GetStartedPage/NewQuickstart";
 import useUser from "./useUser";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";

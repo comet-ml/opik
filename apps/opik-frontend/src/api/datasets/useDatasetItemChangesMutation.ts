@@ -4,7 +4,7 @@ import { AxiosError } from "axios";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem, Evaluator } from "@/types/datasets";
 import { ExecutionPolicy } from "@/types/evaluation-suites";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { extractErrorMessage } from "@/lib/tags";
 
 interface DatasetItemChangesPayload {

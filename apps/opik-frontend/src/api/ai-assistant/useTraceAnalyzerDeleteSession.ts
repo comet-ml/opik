@@ -6,7 +6,7 @@ import api, {
   TRACE_AI_ASSISTANT_KEY,
   TRACE_ANALYZER_REST_ENDPOINT,
 } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseTraceAnalyzerDeleteSessionParams = {
   traceId: string;

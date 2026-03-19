@@ -1,7 +1,7 @@
 import { useCallback } from "react";
-import { useServerSync } from "@/components/server-sync-provider";
+import { useServerSync } from "@/v1/server-sync-provider";
 import useWorkspaceConfigMutation from "@/api/workspaces/useWorkspaceConfigMutation";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { resolveColor, resolveHexColor } from "@/lib/colorVariants";
 
 export const COLOR_MAP_MAX_ENTRIES = 10000;

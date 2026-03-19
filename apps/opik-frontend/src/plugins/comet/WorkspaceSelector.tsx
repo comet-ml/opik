@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, Settings2 } from "lucide-react";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -15,12 +15,12 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ListAction } from "@/components/ui/list-action";
-import { Separator } from "@/components/ui/separator";
-import { useToast } from "@/components/ui/use-toast";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+} from "@/ui/dropdown-menu";
+import { ListAction } from "@/ui/list-action";
+import { Separator } from "@/ui/separator";
+import { useToast } from "@/ui/use-toast";
+import SearchInput from "@/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { calculateWorkspaceName, cn } from "@/lib/utils";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useOrganizations from "@/plugins/comet/useOrganizations";

@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
@@ -809,7 +810,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 request.datasetVersion(), workspaceId);
 
         return Mono
-                .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), request.projectId(),
+                .fromCallable(() -> datasetService.findByName(workspaceId,
+                        DatasetIdentifier.builder()
+                                .datasetName(request.datasetName())
+                                .projectName(request.projectName())
+                                .build(),
                         visibility))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(dataset -> Mono.deferContextual(ctx -> {
