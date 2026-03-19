@@ -401,9 +401,7 @@ const AddEditEvaluationSuiteDialog = ({
               <ToggleGroup
                 type="single"
                 value={type}
-                onValueChange={(val) =>
-                  val && setType(val as DATASET_TYPE)
-                }
+                onValueChange={(val) => val && setType(val as DATASET_TYPE)}
                 variant="secondary"
                 className="w-fit"
               >

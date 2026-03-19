@@ -260,7 +260,9 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
         setOpen={setDiscardDialogOpen}
         onConfirm={handleDiscardChanges}
         title="Discard changes"
-        description={`Discarding will remove all unsaved edits to this ${isEvaluationSuite ? "evaluation suite" : "dataset"}. This action can't be undone. Are you sure you want to continue?`}
+        description={`Discarding will remove all unsaved edits to this ${
+          isEvaluationSuite ? "evaluation suite" : "dataset"
+        }. This action can't be undone. Are you sure you want to continue?`}
         confirmText="Discard changes"
         confirmButtonVariant="destructive"
       />
@@ -283,7 +285,8 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               </Tag>
             )}
             <h1 className="comet-title-l truncate break-words">
-              {suite?.name ?? (isEvaluationSuite ? "Evaluation suite" : "Dataset")}
+              {suite?.name ??
+                (isEvaluationSuite ? "Evaluation suite" : "Dataset")}
             </h1>
           </div>
           <div className="flex items-center gap-2">
