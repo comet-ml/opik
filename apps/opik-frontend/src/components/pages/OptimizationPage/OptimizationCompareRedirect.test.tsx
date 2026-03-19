@@ -28,7 +28,9 @@ describe("OptimizationCompareRedirect", () => {
   });
 
   it("redirects legacy compare URL to new optimization detail URL", () => {
-    mockSearchStr = `optimizations=${encodeURIComponent(JSON.stringify(["opt-123-abc"]))}`;
+    mockSearchStr = `optimizations=${encodeURIComponent(
+      JSON.stringify(["opt-123-abc"]),
+    )}`;
 
     render(<OptimizationCompareRedirect />);
 
@@ -40,7 +42,9 @@ describe("OptimizationCompareRedirect", () => {
   });
 
   it("uses the first optimization ID when multiple are provided", () => {
-    mockSearchStr = `optimizations=${encodeURIComponent(JSON.stringify(["opt-first", "opt-second"]))}`;
+    mockSearchStr = `optimizations=${encodeURIComponent(
+      JSON.stringify(["opt-first", "opt-second"]),
+    )}`;
 
     render(<OptimizationCompareRedirect />);
 
