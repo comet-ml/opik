@@ -17,12 +17,12 @@ class ModelCapabilitiesTest {
         // This ensures vision capability detection works consistently with cost calculation
 
         // Claude models with dots should match their hyphenated equivalents
-        assertThat(ModelCapabilities.supportsVision("claude-3.5-sonnet-20241022")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("claude-3-5-sonnet-20241022")).isTrue(); // Both should work
+        assertThat(ModelCapabilities.supportsVision("claude-3.7-sonnet-20250219")).isTrue();
+        assertThat(ModelCapabilities.supportsVision("claude-3-7-sonnet-20250219")).isTrue(); // Both should work
 
         // Gemini models with dots
-        assertThat(ModelCapabilities.supportsVision("gemini-1.5-pro")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("gemini-1-5-pro")).isTrue(); // Both should work
+        assertThat(ModelCapabilities.supportsVision("gemini-2.5-pro")).isTrue();
+        assertThat(ModelCapabilities.supportsVision("gemini-2-5-pro")).isTrue(); // Both should work
 
         // Qwen models with dots (also matches vision pattern)
         assertThat(ModelCapabilities.supportsVision("qwen2.5-vl-32b-instruct")).isTrue();
@@ -44,10 +44,10 @@ class ModelCapabilitiesTest {
     private static Stream<Arguments> provideModelNamesForVisionSupport() {
         return Stream.of(
                 // Known vision models
-                Arguments.of("gpt-4-vision-preview", true, "GPT-4 Vision Preview supports vision"),
+                Arguments.of("gpt-4-turbo", true, "GPT-4 Turbo supports vision"),
                 Arguments.of("gpt-4o", true, "GPT-4o supports vision"),
-                Arguments.of("claude-3-5-sonnet-20241022", true, "Claude 3.5 Sonnet supports vision"),
-                Arguments.of("gemini-1.5-pro", true, "Gemini 1.5 Pro supports vision"),
+                Arguments.of("claude-3-7-sonnet-20250219", true, "Claude 3.7 Sonnet supports vision"),
+                Arguments.of("gemini-2.5-pro", true, "Gemini 2.5 Pro supports vision"),
 
                 // Non-vision models
                 Arguments.of("gpt-3.5-turbo", false, "GPT-3.5 Turbo does not support vision"),
@@ -68,9 +68,9 @@ class ModelCapabilitiesTest {
                         "Qwen Coder does not support vision"),
 
                 // Case insensitivity
-                Arguments.of("GPT-4-VISION-PREVIEW", true, "Uppercase vision model should work"),
+                Arguments.of("GPT-4-TURBO", true, "Uppercase vision model should work"),
                 Arguments.of("Gpt-4o", true, "Mixed case vision model should work"),
-                Arguments.of("CLAUDE-3-5-SONNET-20241022", true, "Uppercase Claude should work"),
+                Arguments.of("CLAUDE-3-7-SONNET-20250219", true, "Uppercase Claude should work"),
 
                 // Provider prefix handling
                 Arguments.of("openai/gpt-4o", true, "Model with provider prefix should work"),
@@ -89,8 +89,8 @@ class ModelCapabilitiesTest {
                 Arguments.of("GPT-3.5-TURBO", false, "Uppercase non-vision should not work"),
 
                 // Dot notation (issue #4114)
-                Arguments.of("claude-3.5-sonnet-20241022", true, "Claude with dots should work"),
-                Arguments.of("gemini-1-5-pro", true, "Gemini without dots should work"),
+                Arguments.of("claude-3.7-sonnet-20250219", true, "Claude with dots should work"),
+                Arguments.of("gemini-2-5-pro", true, "Gemini without dots should work"),
                 Arguments.of("qwen2.5-vl-32b-instruct", true, "Qwen VL with dots should work"),
                 Arguments.of("qwen2-5-vl-32b-instruct", true, "Qwen VL without dots should work"));
     }

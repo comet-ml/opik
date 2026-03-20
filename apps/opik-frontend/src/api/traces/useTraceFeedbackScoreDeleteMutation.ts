@@ -9,7 +9,7 @@ import api, {
   TRACES_REST_ENDPOINT,
 } from "@/api/api";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { useLoggedInUserName } from "@/store/AppStore";
 import {
   generateDeleteMutation,

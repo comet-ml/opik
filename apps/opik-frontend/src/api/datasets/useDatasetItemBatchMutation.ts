@@ -3,7 +3,7 @@ import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseDatasetItemBatchMutationParams = {
   datasetId: string;

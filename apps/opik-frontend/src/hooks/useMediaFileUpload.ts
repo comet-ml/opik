@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import {
   convertFileToBase64,
   validateFileCount,

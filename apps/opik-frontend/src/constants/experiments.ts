@@ -1,5 +1,5 @@
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
-import { TagProps } from "@/components/ui/tag";
+import { TagProps } from "@/ui/tag";
 
 export const EXPERIMENT_ITEM_OUTPUT_PREFIX = "output";
 export const EXPERIMENT_ITEM_DATASET_PREFIX = "data";

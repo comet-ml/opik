@@ -78,7 +78,11 @@ def python_type_to_backend_type(py_type: typing.Any) -> str:
     raise TypeError(f"Unsupported type: {py_type}")
 
 
-def python_value_to_backend_value(value: typing.Any, py_type: typing.Any) -> str:
+def python_value_to_backend_value(
+    value: typing.Any, py_type: typing.Any
+) -> typing.Optional[str]:
+    if value is None:
+        return None
     if py_type is bool:
         return "true" if value else "false"
     if py_type in (int, float):

@@ -77,4 +77,10 @@ public class ExperimentAggregatesModel {
             long passedCount,
             long totalCount) {
     }
+
+    @Builder
+    public record AssertionScoreAggregations(
+            UUID experimentId,
+            Map<String, Double> assertionScoresAvg) {
+    }
 }

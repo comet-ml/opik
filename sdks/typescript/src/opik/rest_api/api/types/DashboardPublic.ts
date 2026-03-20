@@ -5,6 +5,8 @@ import type * as OpikApi from "../index.js";
 export interface DashboardPublic {
     id?: string;
     workspaceId?: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
+    projectId?: string;
     name: string;
     slug?: string;
     type?: OpikApi.DashboardPublicType;

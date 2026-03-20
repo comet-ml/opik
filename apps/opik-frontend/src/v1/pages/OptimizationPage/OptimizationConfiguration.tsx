@@ -1,0 +1,141 @@
+import React from "react";
+import { Link } from "@tanstack/react-router";
+import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card";
+import { OptimizationStudioConfig } from "@/types/optimizations";
+import { Experiment } from "@/types/datasets";
+import { MessagesList } from "@/v1/pages-shared/prompts/PromptMessageDisplay";
+import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
+import { getOptimizerLabel } from "@/lib/optimizations";
+import { extractDisplayMessages } from "@/lib/llm";
+import useAppStore from "@/store/AppStore";
+import ResizableSection from "@/shared/ResizableSection/ResizableSection";
+
+interface OptimizationConfigurationProps {
+  studioConfig: OptimizationStudioConfig;
+  datasetId: string;
+  optimizationId: string;
+  bestExperiment?: Experiment;
+}
+
+const getMetricLabel = (type: string): string => {
+  return (
+    OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label || type
+  );
+};
+
+const formatParamName = (key: string): string => {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const ConfigItem: React.FC<{ label: string; value: React.ReactNode }> = ({
+  label,
+  value,
+}) => (
+  <div className="flex items-baseline gap-2">
+    <span className="comet-body-xs text-muted-slate">{label}:</span>
+    <span className="comet-body-xs">{value}</span>
+  </div>
+);
+
+const OptimizationConfiguration: React.FC<OptimizationConfigurationProps> = ({
+  studioConfig,
+  datasetId,
+  optimizationId,
+  bestExperiment,
+}) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { prompt, optimizer, evaluation, dataset_name, llm_model } =
+    studioConfig;
+  const metric = evaluation?.metrics?.[0];
+
+  const messages = extractDisplayMessages(prompt?.messages);
+
+  return (
+    <Card className="flex size-full flex-col overflow-hidden">
+      <ResizableSection
+        storageKey={`optimization-configuration-height-${optimizationId}`}
+        className="border-b"
+      >
+        <div className="flex h-full flex-col overflow-auto">
+          <CardHeader className="shrink-0 pb-2">
+            <CardTitle className="text-sm">Configuration</CardTitle>
+          </CardHeader>
+          <CardContent className="flex shrink-0 flex-col gap-1">
+            <ConfigItem
+              label="Evaluation suite"
+              value={
+                <Link
+                  to="/$workspaceName/evaluation-suites/$suiteId"
+                  params={{ workspaceName, suiteId: datasetId }}
+                  className="text-primary hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {dataset_name}
+                </Link>
+              }
+            />
+            <ConfigItem label="Model" value={llm_model?.model || "-"} />
+            <ConfigItem
+              label="Algorithm"
+              value={optimizer?.type ? getOptimizerLabel(optimizer.type) : "-"}
+            />
+            <ConfigItem
+              label="Metric"
+              value={metric?.type ? getMetricLabel(metric.type) : "-"}
+            />
+            {metric?.parameters &&
+              Object.keys(metric.parameters).length > 0 && (
+                <div className="ml-4 flex flex-col gap-1">
+                  {Object.entries(metric.parameters).map(([key, value]) => (
+                    <ConfigItem
+                      key={key}
+                      label={formatParamName(key)}
+                      value={String(value)}
+                    />
+                  ))}
+                </div>
+              )}
+            {bestExperiment && (
+              <ConfigItem
+                label="Best trial configuration"
+                value={
+                  <Link
+                    to="/$workspaceName/optimizations/$optimizationId/trials"
+                    params={{
+                      workspaceName,
+                      optimizationId,
+                    }}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    search={{ trials: [bestExperiment.id], tab: "config" }}
+                    className="text-primary hover:underline"
+                  >
+                    {bestExperiment.name}
+                  </Link>
+                }
+              />
+            )}
+          </CardContent>
+        </div>
+      </ResizableSection>
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+        <CardHeader className="shrink-0 px-6 py-1.5">
+          <CardTitle className="text-sm">Initial prompt</CardTitle>
+        </CardHeader>
+        <CardContent className="min-h-0 flex-1">
+          {messages && messages.length > 0 ? (
+            <MessagesList messages={messages} />
+          ) : (
+            <span className="comet-body-s text-muted-slate">
+              No prompt messages
+            </span>
+          )}
+        </CardContent>
+      </div>
+    </Card>
+  );
+};
+
+export default OptimizationConfiguration;

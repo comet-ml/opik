@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AssertionScoreAveragePublic } from "./AssertionScoreAveragePublic.js";
 import { CommentPublic } from "./CommentPublic.js";
 import { DatasetVersionSummaryPublic } from "./DatasetVersionSummaryPublic.js";
 import { ExperimentPublicEvaluationMethod } from "./ExperimentPublicEvaluationMethod.js";
@@ -19,7 +20,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     OpikApi.ExperimentPublic
 > = core.serialization.object({
     id: core.serialization.string().optional(),
-    datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+    datasetName: core.serialization.property("dataset_name", core.serialization.string().nullable()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
@@ -35,6 +36,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     ),
     comments: core.serialization.list(CommentPublic).optional(),
     traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
+    datasetItemCount: core.serialization.property("dataset_item_count", core.serialization.number().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     duration: PercentageValuesPublic.optional(),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
@@ -64,12 +66,16 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     passRate: core.serialization.property("pass_rate", core.serialization.number().optional()),
     passedCount: core.serialization.property("passed_count", core.serialization.number().optional()),
     totalCount: core.serialization.property("total_count", core.serialization.number().optional()),
+    assertionScores: core.serialization.property(
+        "assertion_scores",
+        core.serialization.list(AssertionScoreAveragePublic).optional(),
+    ),
 });
 
 export declare namespace ExperimentPublic {
     export interface Raw {
         id?: string | null;
-        dataset_name: string;
+        dataset_name?: string | null;
         dataset_id?: string | null;
         project_id?: string | null;
         project_name?: string | null;
@@ -82,6 +88,7 @@ export declare namespace ExperimentPublic {
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;
         trace_count?: number | null;
+        dataset_item_count?: number | null;
         created_at?: string | null;
         duration?: PercentageValuesPublic.Raw | null;
         total_estimated_cost?: number | null;
@@ -99,5 +106,6 @@ export declare namespace ExperimentPublic {
         pass_rate?: number | null;
         passed_count?: number | null;
         total_count?: number | null;
+        assertion_scores?: AssertionScoreAveragePublic.Raw[] | null;
     }
 }

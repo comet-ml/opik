@@ -8,6 +8,7 @@ export interface FindDashboardsRequest {
     page?: number;
     size?: number;
     name?: string;
+    projectId?: string;
     sorting?: string;
     filters?: string;
 }

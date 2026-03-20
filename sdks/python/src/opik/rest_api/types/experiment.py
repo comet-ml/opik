@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .assertion_score_average import AssertionScoreAverage
 from .comment import Comment
 from .dataset_version_summary import DatasetVersionSummary
 from .experiment_evaluation_method import ExperimentEvaluationMethod
@@ -19,10 +20,18 @@ from .prompt_version_link import PromptVersionLink
 
 class Experiment(UniversalBaseModel):
     id: typing.Optional[str] = None
-    dataset_name: str
+    dataset_name: typing.Optional[str] = None
     dataset_id: typing.Optional[str] = None
-    project_id: typing.Optional[str] = None
-    project_name: typing.Optional[str] = None
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project ID. Takes precedence over project_name when both are provided.
+    """
+
+    project_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
+    """
+
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonListString] = None
     tags: typing.Optional[typing.List[str]] = None
@@ -32,6 +41,7 @@ class Experiment(UniversalBaseModel):
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     trace_count: typing.Optional[int] = None
+    dataset_item_count: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
     duration: typing.Optional[PercentageValues] = None
     total_estimated_cost: typing.Optional[float] = None
@@ -63,6 +73,11 @@ class Experiment(UniversalBaseModel):
     total_count: typing.Optional[int] = pydantic.Field(default=None)
     """
     Total number of items for evaluation suite experiments. Null for regular experiments.
+    """
+
+    assertion_scores: typing.Optional[typing.List[AssertionScoreAverage]] = pydantic.Field(default=None)
+    """
+    Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments.
     """
 
     if IS_PYDANTIC_V2:

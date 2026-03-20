@@ -64,6 +64,7 @@ class OptimizationsClient:
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        dataset_name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -80,6 +81,8 @@ class OptimizationsClient:
         dataset_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
 
         dataset_deleted : typing.Optional[bool]
 
@@ -104,6 +107,7 @@ class OptimizationsClient:
             size=size,
             dataset_id=dataset_id,
             name=name,
+            dataset_name=dataset_name,
             dataset_deleted=dataset_deleted,
             filters=filters,
             request_options=request_options,
@@ -399,6 +403,7 @@ class AsyncOptimizationsClient:
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        dataset_name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -415,6 +420,8 @@ class AsyncOptimizationsClient:
         dataset_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
 
         dataset_deleted : typing.Optional[bool]
 
@@ -442,6 +449,7 @@ class AsyncOptimizationsClient:
             size=size,
             dataset_id=dataset_id,
             name=name,
+            dataset_name=dataset_name,
             dataset_deleted=dataset_deleted,
             filters=filters,
             request_options=request_options,

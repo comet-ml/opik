@@ -1,0 +1,217 @@
+<mxfile host="app.diagrams.net" version="26.0.7">
+  <diagram name="Page-1" id="opik-architecture">
+    <mxGraphModel dx="1400" dy="2100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ EXTERNAL ACTORS ============ -->
+
+        <!-- Edge: User → Ingress LB -->
+        <mxCell id="e-user-ingress" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="user" target="ingress-lb" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="-596" />
+              <mxPoint x="220" y="-511" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- User -->
+        <mxCell id="user" value="User" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.user;" parent="1" vertex="1">
+          <mxGeometry x="135" y="-623" width="53" height="53" as="geometry" />
+        </mxCell>
+
+        <!-- Edge: Python SDK → Ingress LB -->
+        <mxCell id="e-pysdk-ingress" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="python-sdk" target="ingress-lb" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="-468" />
+              <mxPoint x="220" y="-511" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Python SDK -->
+        <mxCell id="python-sdk" value="Python SDK" style="pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;fillColor=#4495D1;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;shape=mxgraph.veeam.laptop;" parent="1" vertex="1">
+          <mxGeometry x="135" y="-490" width="58" height="44" as="geometry" />
+        </mxCell>
+
+        <!-- Edge: TypeScript SDK → Ingress LB -->
+        <mxCell id="e-tssdk-ingress" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="ts-sdk" target="ingress-lb" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="-338" />
+              <mxPoint x="220" y="-511" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TypeScript SDK -->
+        <mxCell id="ts-sdk" value="TypeScript SDK" style="pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;fillColor=#D6713B;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;shape=mxgraph.veeam.laptop;" parent="1" vertex="1">
+          <mxGeometry x="135" y="-360" width="58" height="44" as="geometry" />
+        </mxCell>
+
+        <!-- ============ INGRESS ============ -->
+
+        <!-- Edge: Ingress LB → Frontend swimlane -->
+        <mxCell id="e-ingress-frontend" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" parent="1" source="ingress-lb" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="410" y="-511" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Ingress / Load Balancer -->
+        <mxCell id="ingress-lb" value="Ingress&lt;div&gt;&amp;nbsp;application&amp;nbsp;&lt;/div&gt;&lt;div&gt;l&lt;span style=&quot;background-color: initial;&quot;&gt;oad balancer&lt;/span&gt;&lt;/div&gt;" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.gateway_load_balancer;" parent="1" vertex="1">
+          <mxGeometry x="244" y="-550" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- ============ KUBERNETES CLUSTER ============ -->
+
+        <!-- Cluster boundary -->
+        <mxCell id="k8s-cluster" value="&lt;font color=&quot;#000000&quot;&gt;Kubernetes cluster&lt;/font&gt;" style="sketch=0;outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#B6BABF;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#B6BABF;dashed=0;" parent="1" vertex="1">
+          <mxGeometry x="340" y="-850" width="890" height="720" as="geometry" />
+        </mxCell>
+
+        <!-- ============ APPLICATION TIER ============ -->
+
+        <!-- Edge: Frontend swimlane → Internal LB -->
+        <mxCell id="e-frontend-lb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" parent="1" source="frontend-swim" target="internal-lb" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Frontend Nginx swimlane -->
+        <mxCell id="frontend-swim" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Frontend Nginx - N replicas&lt;/span&gt;" style="swimlane;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="410" y="-610" width="200" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- NGINX (child of frontend swimlane) -->
+        <mxCell id="nginx" value="NGINX" style="sketch=0;pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;fillColor=#505050;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;outlineConnect=0;align=center;shape=mxgraph.office.servers.reverse_proxy;" parent="frontend-swim" vertex="1">
+          <mxGeometry x="35" y="70" width="41" height="53" as="geometry" />
+        </mxCell>
+
+        <!-- Frontend SPA (child of frontend swimlane) -->
+        <mxCell id="frontend-spa" value="Frontend&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="image;aspect=fixed;perimeter=ellipsePerimeter;html=1;align=center;shadow=0;dashed=0;spacingTop=3;image=img/lib/active_directory/web_server.svg;" parent="frontend-swim" vertex="1">
+          <mxGeometry x="125" y="72" width="40" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Edge: NGINX ↔ Frontend SPA (inside swimlane) -->
+        <mxCell id="e-nginx-spa" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" parent="frontend-swim" source="nginx" target="frontend-spa" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Edge: Internal LB ↔ Java Backend -->
+        <mxCell id="e-lb-backend" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" parent="1" source="internal-lb" target="java-backend" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Internal Load Balancer -->
+        <mxCell id="internal-lb" value="Auto scaling&lt;div&gt;group&amp;nbsp;&lt;/div&gt;&lt;div&gt;load&amp;nbsp;&lt;span style=&quot;background-color: initial;&quot;&gt;balancer&lt;/span&gt;&lt;/div&gt;" style="outlineConnect=0;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;shape=mxgraph.aws3.classic_load_balancer;fillColor=#F58534;gradientColor=none;" parent="1" vertex="1">
+          <mxGeometry x="670" y="-546" width="69" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- Java Backend -->
+        <mxCell id="java-backend" value="Java Backend&lt;div&gt;N replicas&lt;/div&gt;" style="image;points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;image=img/lib/allied_telesis/computer_and_terminals/Server_Desktop.svg;" parent="1" vertex="1">
+          <mxGeometry x="810" y="-537" width="42.6" height="54" as="geometry" />
+        </mxCell>
+
+        <!-- Edge: Java Backend → Python Backend -->
+        <mxCell id="e-backend-pybackend" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" parent="1" source="java-backend" target="python-backend" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Python Backend -->
+        <mxCell id="python-backend" value="Python Backend&lt;div&gt;N replicas&lt;/div&gt;" style="image;points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;image=img/lib/allied_telesis/computer_and_terminals/Server_Desktop.svg;" parent="1" vertex="1">
+          <mxGeometry x="810" y="-380" width="42.6" height="54" as="geometry" />
+        </mxCell>
+
+        <!-- ============ DATA TIER ============ -->
+
+        <!-- Edge: ClickHouse ↔ Zookeeper -->
+        <mxCell id="e-ch-zk" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" parent="1" source="clickhouse" target="zookeeper" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ClickHouse -->
+        <mxCell id="clickhouse" value="ClickHouse cluster&lt;div&gt;N replicas - N shards&lt;/div&gt;" style="image;aspect=fixed;perimeter=ellipsePerimeter;html=1;align=center;shadow=0;dashed=0;spacingTop=3;image=img/lib/active_directory/database_server.svg;" parent="1" vertex="1">
+          <mxGeometry x="1040" y="-720" width="41" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Zookeeper -->
+        <mxCell id="zookeeper" value="Zookeeper" style="sketch=0;aspect=fixed;pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;fillColor=#00188D;shape=mxgraph.mscae.enterprise.database_server" parent="1" vertex="1">
+          <mxGeometry x="1042" y="-810" width="38" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Edge: ClickHouse Operator → ClickHouse -->
+        <mxCell id="e-chop-ch" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;endArrow=none;endFill=0;" parent="1" source="ch-operator" target="clickhouse" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ClickHouse Operator -->
+        <mxCell id="ch-operator" value="ClickHouse operator" style="sketch=0;aspect=fixed;pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;fillColor=#00188D;shape=mxgraph.mscae.enterprise.server_generic" parent="1" vertex="1">
+          <mxGeometry x="1048" y="-615" width="24" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Redis -->
+        <mxCell id="redis" value="Redis" style="image;sketch=0;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/mscae/Cache_Redis_Product.svg;" parent="1" vertex="1">
+          <mxGeometry x="1035" y="-500" width="50" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- MySQL -->
+        <mxCell id="mysql" value="MySQL" style="outlineConnect=0;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;shape=mxgraph.aws3.mysql_db_instance;fillColor=#2E73B8;gradientColor=none;" parent="1" vertex="1">
+          <mxGeometry x="1030" y="-375" width="60" height="64.5" as="geometry" />
+        </mxCell>
+
+        <!-- MinIO -->
+        <mxCell id="minio" value="MinIO (S3)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#3F8624;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.bucket;" parent="1" vertex="1">
+          <mxGeometry x="1040" y="-240" width="40" height="41.6" as="geometry" />
+        </mxCell>
+
+        <!-- ============ DATA TIER EDGES ============ -->
+
+        <!-- Java Backend ↔ ClickHouse -->
+        <mxCell id="e-be-ch" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=0.929;exitY=0.15;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="java-backend" target="clickhouse" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Java Backend ↔ Redis -->
+        <mxCell id="e-be-redis" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=0.929;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="java-backend" target="redis" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Java Backend ↔ MySQL -->
+        <mxCell id="e-be-mysql" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=0.929;exitY=0.85;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" parent="1" source="java-backend" target="mysql" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Java Backend ↔ MinIO -->
+        <mxCell id="e-be-minio" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="java-backend" target="minio" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Python Backend ↔ Redis (job queue) -->
+        <mxCell id="e-pybe-redis" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;dashed=1;exitX=0.929;exitY=0.2;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.9;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="python-backend" target="redis" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ClickHouse self-loop (replication) -->
+        <mxCell id="e-ch-self" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" parent="1" source="clickhouse" target="clickhouse" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ============ OBSERVABILITY ============ -->
+
+        <!-- Edge: Cluster → Observability -->
+        <mxCell id="e-cluster-obs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="k8s-cluster" target="observability" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Observability platform -->
+        <mxCell id="observability" value="Observability platform" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/other/Grafana.svg;" parent="1" vertex="1">
+          <mxGeometry x="673" y="-60" width="68" height="52.8" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

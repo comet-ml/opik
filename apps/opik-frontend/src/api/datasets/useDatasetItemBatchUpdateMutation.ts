@@ -3,7 +3,7 @@ import { AxiosError } from "axios";
 
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { Filters } from "@/types/filters";
 import {
   generateSearchByFieldFilters,

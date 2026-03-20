@@ -122,12 +122,13 @@ export class OptimizationsClient {
         request: OpikApi.FindOptimizationsRequest = {},
         requestOptions?: OptimizationsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.OptimizationPagePublic>> {
-        const { page, size, datasetId, name, datasetDeleted, filters } = request;
+        const { page, size, datasetId, name, datasetName, datasetDeleted, filters } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             dataset_id: datasetId,
             name,
+            dataset_name: datasetName,
             dataset_deleted: datasetDeleted,
             filters,
         };

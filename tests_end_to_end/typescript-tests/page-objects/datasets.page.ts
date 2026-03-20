@@ -3,13 +3,13 @@ import { BasePage } from './base.page';
 
 export class DatasetsPage extends BasePage {
   constructor(page: Page) {
-    super(page, 'datasets');
+    super(page, 'evaluation-suites');
   }
 
   async createDatasetByName(datasetName: string): Promise<void> {
-    await this.page.getByRole('button', { name: 'Create new dataset' }).first().click();
-    await this.page.getByPlaceholder('Dataset name').fill(datasetName);
-    await this.page.getByRole('button', { name: 'Create dataset' }).click();
+    await this.page.getByRole('button', { name: 'Create new' }).first().click();
+    await this.page.getByRole('dialog').getByPlaceholder('Name').fill(datasetName);
+    await this.page.getByRole('dialog').getByRole('button', { name: 'Create new' }).click();
   }
 
   async selectDatasetByName(name: string): Promise<void> {

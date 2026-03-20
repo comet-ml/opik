@@ -174,8 +174,10 @@ class ExperimentsClient:
     def create_experiment(
         self,
         *,
-        dataset_name: str,
         id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -194,9 +196,15 @@ class ExperimentsClient:
 
         Parameters
         ----------
-        dataset_name : str
-
         id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -232,11 +240,13 @@ class ExperimentsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.experiments.create_experiment(dataset_name='dataset_name', )
+        client.experiments.create_experiment()
         """
         _response = self._raw_client.create_experiment(
-            dataset_name=dataset_name,
             id=id,
+            dataset_name=dataset_name,
+            project_id=project_id,
+            project_name=project_name,
             name=name,
             metadata=metadata,
             tags=tags,
@@ -383,11 +393,7 @@ class ExperimentsClient:
         return _response.data
 
     def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -395,8 +401,6 @@ class ExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -413,9 +417,7 @@ class ExperimentsClient:
         client.experiments.find_feedback_score_names()
         """
         _response = self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids,
-            exclude_category_names=exclude_category_names,
-            request_options=request_options,
+            experiment_ids=experiment_ids, request_options=request_options
         )
         return _response.data
 
@@ -895,8 +897,10 @@ class AsyncExperimentsClient:
     async def create_experiment(
         self,
         *,
-        dataset_name: str,
         id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -915,9 +919,15 @@ class AsyncExperimentsClient:
 
         Parameters
         ----------
-        dataset_name : str
-
         id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -955,12 +965,14 @@ class AsyncExperimentsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.experiments.create_experiment(dataset_name='dataset_name', )
+            await client.experiments.create_experiment()
         asyncio.run(main())
         """
         _response = await self._raw_client.create_experiment(
-            dataset_name=dataset_name,
             id=id,
+            dataset_name=dataset_name,
+            project_id=project_id,
+            project_name=project_name,
             name=name,
             metadata=metadata,
             tags=tags,
@@ -1119,11 +1131,7 @@ class AsyncExperimentsClient:
         return _response.data
 
     async def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -1131,8 +1139,6 @@ class AsyncExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1152,9 +1158,7 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids,
-            exclude_category_names=exclude_category_names,
-            request_options=request_options,
+            experiment_ids=experiment_ids, request_options=request_options
         )
         return _response.data
 

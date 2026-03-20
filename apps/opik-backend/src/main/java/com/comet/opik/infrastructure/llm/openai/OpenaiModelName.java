@@ -56,6 +56,8 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_5_3_CHAT_LATEST("gpt-5.3-chat-latest", true),
     GPT_5_3_CODEX("gpt-5.3-codex", true),
     GPT_5_4("gpt-5.4", true),
+    GPT_5_4_MINI("gpt-5.4-mini", false),
+    GPT_5_4_NANO("gpt-5.4-nano", false),
     GPT_5_4_PRO("gpt-5.4-pro", false),
     GPT_IMAGE_1("gpt-image-1", false),
     GPT_IMAGE_1_MINI("gpt-image-1-mini", false),

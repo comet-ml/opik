@@ -8,45 +8,45 @@ import {
   ScrollRestoration,
 } from "@tanstack/react-router";
 
-import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
-import ExperimentsPageGuard from "@/components/layout/ExperimentsPageGuard";
-import DatasetsPageGuard from "@/components/layout/DatasetsPageGuard";
-import DashboardsPageGuard from "@/components/layout/DashboardsPageGuard";
-import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
-import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
-import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
-import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
-import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage";
-import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
-import HomePage from "@/components/pages/HomePage/HomePage";
-import OldHomePage from "@/components/pages/HomePage/OldHomePage";
-import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
-import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout";
-import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
-import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
-import TracesPage from "@/components/pages/TracesPage/TracesPage";
-import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
-import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/components/pages/PromptPage/PromptPage";
-import RedirectProjects from "@/components/redirect/RedirectProjects";
-import RedirectDatasets from "@/components/redirect/RedirectDatasets";
-import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
+import WorkspaceGuard from "@/v1/layout/WorkspaceGuard/WorkspaceGuard";
+import ExperimentsPageGuard from "@/v1/layout/ExperimentsPageGuard";
+import DatasetsPageGuard from "@/v1/layout/DatasetsPageGuard";
+import DashboardsPageGuard from "@/v1/layout/DashboardsPageGuard";
+import SMEPageLayout from "@/v1/layout/SMEPageLayout/SMEPageLayout";
+import ExperimentsPage from "@/v1/pages/ExperimentsPage/ExperimentsPage";
+import CompareExperimentsPage from "@/v1/pages/CompareExperimentsPage/CompareExperimentsPage";
+import HomePage from "@/v1/pages/HomePage/HomePage";
+import OldHomePage from "@/v1/pages/HomePage/OldHomePage";
+import PartialPageLayout from "@/v1/layout/PartialPageLayout/PartialPageLayout";
+import EmptyPageLayout from "@/v1/layout/EmptyPageLayout/EmptyPageLayout";
+import ProjectPage from "@/v1/pages/ProjectPage/ProjectPage";
+import ProjectsPage from "@/v1/pages/ProjectsPage/ProjectsPage";
+import TracesPage from "@/v1/pages/TracesPage/TracesPage";
+import WorkspacePage from "@/v1/pages/WorkspacePage/WorkspacePage";
+import PromptsPage from "@/v1/pages/PromptsPage/PromptsPage";
+import PromptPage from "@/v1/pages/PromptPage/PromptPage";
+import RedirectProjects from "@/v1/redirect/RedirectProjects";
+import RedirectDatasets from "@/v1/redirect/RedirectDatasets";
+import PlaygroundPage from "@/v1/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
-import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
-import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
-import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
-import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
-import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
-import AnnotationQueuePage from "@/components/pages/AnnotationQueuePage/AnnotationQueuePage";
-import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
-import OptimizationsNewPage from "@/components/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
-import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
-import OptimizationCompareRedirect from "@/components/pages/OptimizationPage/OptimizationCompareRedirect";
-import TrialPage from "@/components/pages/TrialPage/TrialPage";
-import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
-import AlertEditPageGuard from "@/components/layout/AlertEditPageGuard/AlertEditPageGuard";
-import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
-import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
+import ConfigurationPage from "@/v1/pages/ConfigurationPage/ConfigurationPage";
+import GetStartedPage from "@/v1/pages/GetStartedPage/GetStartedPage";
+import AutomationLogsPage from "@/v1/pages/AutomationLogsPage/AutomationLogsPage";
+import OnlineEvaluationPage from "@/v1/pages/OnlineEvaluationPage/OnlineEvaluationPage";
+import AnnotationQueuesPage from "@/v1/pages/AnnotationQueuesPage/AnnotationQueuesPage";
+import AnnotationQueuePage from "@/v1/pages/AnnotationQueuePage/AnnotationQueuePage";
+import OptimizationsPage from "@/v1/pages/OptimizationsPage/OptimizationsPage";
+import OptimizationsNewPage from "@/v1/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
+import OptimizationPage from "@/v1/pages/OptimizationPage/OptimizationPage";
+import OptimizationCompareRedirect from "@/v1/pages/OptimizationPage/OptimizationCompareRedirect";
+import TrialPage from "@/v1/pages/TrialPage/TrialPage";
+import AlertsRouteWrapper from "@/v1/pages/AlertsPage/AlertsRouteWrapper";
+import AlertEditPageGuard from "@/v1/layout/AlertEditPageGuard/AlertEditPageGuard";
+import DashboardPage from "@/v1/pages/DashboardPage/DashboardPage";
+import DashboardsPage from "@/v1/pages/DashboardsPage/DashboardsPage";
+import EvaluationSuitesPage from "@/v1/pages/EvaluationSuitesPage/EvaluationSuitesPage";
+import EvaluationSuitePage from "@/v1/pages/EvaluationSuitePage/EvaluationSuitePage";
+import EvaluationSuiteItemsPage from "@/v1/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -297,37 +297,90 @@ const trialRoute = createRoute({
   },
 });
 
-// ----------- datasets
-const datasetsRoute = createRoute({
-  path: "/datasets",
-  component: DatasetsPageGuard,
+// ----------- evaluation suites
+const evaluationSuitesRoute = createRoute({
+  path: "/evaluation-suites",
   getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Datasets",
   },
 });
 
+const evaluationSuitesListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => evaluationSuitesRoute,
+  component: EvaluationSuitesPage,
+});
+
+const evaluationSuiteRoute = createRoute({
+  path: "/$suiteId",
+  getParentRoute: () => evaluationSuitesRoute,
+  component: EvaluationSuitePage,
+  staticData: {
+    param: "suiteId",
+  },
+});
+
+const evaluationSuiteItemsRoute = createRoute({
+  path: "/items",
+  getParentRoute: () => evaluationSuiteRoute,
+  component: EvaluationSuiteItemsPage,
+});
+
+// ----------- datasets (legacy redirects)
+const datasetsRoute = createRoute({
+  path: "/datasets",
+  component: DatasetsPageGuard,
+  getParentRoute: () => workspaceRoute,
+});
+
 const datasetsListRoute = createRoute({
   path: "/",
   getParentRoute: () => datasetsRoute,
-  component: DatasetsPage,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/evaluation-suites"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 const datasetRoute = createRoute({
   path: "/$datasetId",
   getParentRoute: () => datasetsRoute,
-  component: DatasetPage,
-  staticData: {
-    param: "datasetId",
+});
+
+const datasetRedirectRoute = createRoute({
+  path: "/",
+  getParentRoute: () => datasetRoute,
+  component: () => {
+    const { datasetId } = datasetRoute.useParams();
+    return (
+      <Navigate
+        to="/$workspaceName/evaluation-suites/$suiteId"
+        params={{
+          workspaceName: useAppStore.getState().activeWorkspaceName,
+          suiteId: datasetId,
+        }}
+      />
+    );
   },
 });
 
 const datasetItemsRoute = createRoute({
   path: "/items",
   getParentRoute: () => datasetRoute,
-  component: DatasetItemsPage,
-  staticData: {
-    title: "Items",
+  component: () => {
+    const { datasetId } = datasetRoute.useParams();
+    return (
+      <Navigate
+        to="/$workspaceName/evaluation-suites/$suiteId/items"
+        params={{
+          workspaceName: useAppStore.getState().activeWorkspaceName,
+          suiteId: datasetId,
+        }}
+      />
+    );
   },
 });
 
@@ -383,7 +436,7 @@ const redirectDatasetsRoute = createRoute({
 const homeSMERoute = createRoute({
   path: "/$workspaceName/sme",
   getParentRoute: () => workspaceGuardSMELayoutRoute,
-  component: lazy(() => import("@/components/pages/SMEFlowPage/SMEFlowPage")),
+  component: lazy(() => import("@/v1/pages/SMEFlowPage/SMEFlowPage")),
 });
 
 // --------- playground
@@ -498,6 +551,10 @@ const routeTree = rootRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
       ]),
+      evaluationSuitesRoute.addChildren([
+        evaluationSuitesListRoute,
+        evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
+      ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
         optimizationsNewRoute,
@@ -506,7 +563,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,
-        datasetRoute.addChildren([datasetItemsRoute]),
+        datasetRoute.addChildren([datasetRedirectRoute, datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
       redirectRoute.addChildren([

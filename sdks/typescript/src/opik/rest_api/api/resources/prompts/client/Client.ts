@@ -46,11 +46,12 @@ export class PromptsClient {
         request: OpikApi.GetPromptsRequest = {},
         requestOptions?: PromptsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.PromptPagePublic>> {
-        const { page, size, name, sorting, filters } = request;
+        const { page, size, name, projectId, sorting, filters } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             name,
+            project_id: projectId,
             sorting,
             filters,
         };

@@ -62,6 +62,7 @@ export enum ManagementPermissionsNames {
   PROJECT_VISIBILITY = "project_visibility",
   INVITE_USERS = "invite_users_to_workspace",
   EXPERIMENT_VIEW = "experiment_view",
+  EXPERIMENT_CREATE = "experiment_create",
   DASHBOARD_VIEW = "dashboard_view",
   DATASET_VIEW = "dataset_view",
   PROJECT_DELETE = "project_delete",
@@ -71,7 +72,6 @@ export enum ManagementPermissionsNames {
   PROMPT_DELETE = "prompt_delete",
   DATASET_DELETE = "dataset_delete",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
-  USER_ROLE_UPDATE = "user_role_update",
   WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
   AI_PROVIDER_UPDATE = "ai_provider_update",
   PROJECT_CREATE = "project_create",
@@ -79,6 +79,7 @@ export enum ManagementPermissionsNames {
   ONLINE_EVALUATION_RULE_UPDATE = "online_evaluation_rule_update",
   ALERT_UPDATE = "alert_update",
   TRACE_SPAN_THREAD_ANNOTATE = "trace_span_thread_annotate",
+  DASHBOARD_CREATE = "dashboard_create",
   TRACE_TAG = "trace_tag",
 }
 

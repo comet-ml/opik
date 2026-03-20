@@ -220,9 +220,7 @@ export class ExperimentsClient {
      * @param {ExperimentsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.experiments.createExperiment({
-     *         datasetName: "dataset_name"
-     *     })
+     *     await client.experiments.createExperiment({})
      */
     public createExperiment(
         request: OpikApi.ExperimentWrite,
@@ -609,10 +607,9 @@ export class ExperimentsClient {
         request: OpikApi.FindFeedbackScoreNamesRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
-        const { experimentIds, excludeCategoryNames } = request;
+        const { experimentIds } = request;
         const _queryParams: Record<string, unknown> = {
             experiment_ids: experimentIds,
-            exclude_category_names: excludeCategoryNames,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,

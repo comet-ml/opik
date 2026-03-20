@@ -20,6 +20,24 @@ This guide will help you get started with contributing to the Opik frontend.
 
 The Opik frontend is a React application located in the `apps/opik-frontend` directory of the `comet-ml/opik` repository. It provides the user interface for interacting with the Opik platform.
 
+### Directory Layout
+
+```
+apps/opik-frontend/src/
+├── api/          # API client and endpoint definitions
+├── constants/    # Application-wide constants
+├── hooks/        # Shared custom hooks
+├── lib/          # Utility libraries
+├── store/        # Zustand stores
+├── types/        # Shared TypeScript types
+├── ui/           # Base UI components (shadcn/ui + Radix)
+├── shared/       # Shared business components
+├── v1/           # Opik 1 UI (layout, pages, pages-shared)
+└── v2/           # Opik 2 UI (layout, pages, pages-shared)
+```
+
+**Import rules:** `ui → shared → v{N}/pages-shared → v{N}/pages` (one-way only). v1 and v2 cannot import from each other. Validate with `npm run deps:validate`.
+
 ## Setting Up Your Development Environment
 
 We provide multiple ways to develop the frontend. Choose the approach that best fits your workflow:

@@ -46,11 +46,12 @@ export class DashboardsClient {
         request: OpikApi.FindDashboardsRequest = {},
         requestOptions?: DashboardsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DashboardPagePublic>> {
-        const { page, size, name, sorting, filters } = request;
+        const { page, size, name, projectId, sorting, filters } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             name,
+            project_id: projectId,
             sorting,
             filters,
         };

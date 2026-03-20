@@ -41,6 +41,7 @@ class PromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -55,6 +56,8 @@ class PromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -75,7 +78,13 @@ class PromptsClient:
         client.prompts.get_prompts()
         """
         _response = self._raw_client.get_prompts(
-            page=page, size=size, name=name, sorting=sorting, filters=filters, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            project_id=project_id,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
@@ -84,6 +93,8 @@ class PromptsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
         template: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
@@ -101,6 +112,12 @@ class PromptsClient:
         name : str
 
         id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the prompt is created at workspace level.
 
         description : typing.Optional[str]
 
@@ -133,6 +150,8 @@ class PromptsClient:
         _response = self._raw_client.create_prompt(
             name=name,
             id=id,
+            project_id=project_id,
+            project_name=project_name,
             description=description,
             template=template,
             metadata=metadata,
@@ -151,6 +170,8 @@ class PromptsClient:
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
         exclude_blueprint_update_for_projects: typing.Optional[typing.Sequence[str]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
@@ -167,6 +188,12 @@ class PromptsClient:
 
         exclude_blueprint_update_for_projects : typing.Optional[typing.Sequence[str]]
             Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed.
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            If provided, scopes the prompt to the specified project. Ignored when project_id is provided.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -188,6 +215,8 @@ class PromptsClient:
             version=version,
             template_structure=template_structure,
             exclude_blueprint_update_for_projects=exclude_blueprint_update_for_projects,
+            project_id=project_id,
+            project_name=project_name,
             request_options=request_options,
         )
         return _response.data
@@ -517,7 +546,12 @@ class PromptsClient:
         return _response.data
 
     def retrieve_prompt_version(
-        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        commit: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Retrieve prompt version
@@ -527,6 +561,9 @@ class PromptsClient:
         name : str
 
         commit : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            If provided, scopes the search to the specified project
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -542,7 +579,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.retrieve_prompt_version(name='name', )
         """
-        _response = self._raw_client.retrieve_prompt_version(name=name, commit=commit, request_options=request_options)
+        _response = self._raw_client.retrieve_prompt_version(
+            name=name, commit=commit, project_name=project_name, request_options=request_options
+        )
         return _response.data
 
 
@@ -567,6 +606,7 @@ class AsyncPromptsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -581,6 +621,8 @@ class AsyncPromptsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -604,7 +646,13 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_prompts(
-            page=page, size=size, name=name, sorting=sorting, filters=filters, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            project_id=project_id,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
@@ -613,6 +661,8 @@ class AsyncPromptsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
         template: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
@@ -630,6 +680,12 @@ class AsyncPromptsClient:
         name : str
 
         id : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            For project scope, specify either project_id or project_name. If project_name is provided and the project does not exist, it will be created. Ignored when project_id is provided. If neither is provided, the prompt is created at workspace level.
 
         description : typing.Optional[str]
 
@@ -665,6 +721,8 @@ class AsyncPromptsClient:
         _response = await self._raw_client.create_prompt(
             name=name,
             id=id,
+            project_id=project_id,
+            project_name=project_name,
             description=description,
             template=template,
             metadata=metadata,
@@ -683,6 +741,8 @@ class AsyncPromptsClient:
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
         exclude_blueprint_update_for_projects: typing.Optional[typing.Sequence[str]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
@@ -699,6 +759,12 @@ class AsyncPromptsClient:
 
         exclude_blueprint_update_for_projects : typing.Optional[typing.Sequence[str]]
             Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed.
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            If provided, scopes the prompt to the specified project. Ignored when project_id is provided.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -723,6 +789,8 @@ class AsyncPromptsClient:
             version=version,
             template_structure=template_structure,
             exclude_blueprint_update_for_projects=exclude_blueprint_update_for_projects,
+            project_id=project_id,
+            project_name=project_name,
             request_options=request_options,
         )
         return _response.data
@@ -1086,7 +1154,12 @@ class AsyncPromptsClient:
         return _response.data
 
     async def retrieve_prompt_version(
-        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        commit: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Retrieve prompt version
@@ -1096,6 +1169,9 @@ class AsyncPromptsClient:
         name : str
 
         commit : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            If provided, scopes the search to the specified project
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1115,6 +1191,6 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.retrieve_prompt_version(
-            name=name, commit=commit, request_options=request_options
+            name=name, commit=commit, project_name=project_name, request_options=request_options
         )
         return _response.data

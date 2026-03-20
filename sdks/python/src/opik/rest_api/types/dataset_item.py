@@ -9,6 +9,7 @@ from .dataset_item_source import DatasetItemSource
 from .evaluator_item import EvaluatorItem
 from .execution_policy import ExecutionPolicy
 from .experiment_item import ExperimentItem
+from .experiment_run_summary import ExperimentRunSummary
 from .json_node import JsonNode
 
 
@@ -24,6 +25,7 @@ class DatasetItem(UniversalBaseModel):
     evaluators: typing.Optional[typing.List[EvaluatorItem]] = None
     execution_policy: typing.Optional[ExecutionPolicy] = None
     experiment_items: typing.Optional[typing.List[ExperimentItem]] = None
+    run_summaries_by_experiment: typing.Optional[typing.Dict[str, ExperimentRunSummary]] = None
     dataset_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

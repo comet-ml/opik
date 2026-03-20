@@ -8,7 +8,7 @@ import api, {
   DASHBOARDS_REST_ENDPOINT,
 } from "@/api/api";
 import { Dashboard } from "@/types/dashboard";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseDashboardUpdateMutationParams = {
   dashboard: Partial<Dashboard>;
@@ -16,6 +16,8 @@ type UseDashboardUpdateMutationParams = {
 
 type UseDashboardUpdateMutationOptions = {
   skipDefaultError?: boolean;
+  retry?: number;
+  retryDelay?: number;
 };
 
 const useDashboardUpdateMutation = (
@@ -25,6 +27,8 @@ const useDashboardUpdateMutation = (
   const { toast } = useToast();
 
   return useMutation({
+    retry: options?.retry ?? 0,
+    retryDelay: options?.retryDelay,
     mutationFn: async ({ dashboard }: UseDashboardUpdateMutationParams) => {
       const { data } = await api.patch(
         DASHBOARDS_REST_ENDPOINT + dashboard.id,

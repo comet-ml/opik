@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, { AUTOMATIONS_KEY } from "@/api/api";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 const MANUAL_EVALUATION_REST_ENDPOINT = "/v1/private/manual-evaluation/";
 

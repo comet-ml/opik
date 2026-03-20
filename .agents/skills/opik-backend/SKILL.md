@@ -196,3 +196,4 @@ log.info("Created user: {}", userId);
 - [mysql.md](mysql.md) - TransactionTemplate patterns
 - [testing.md](testing.md) - PODAM, naming, assertion patterns
 - [migrations.md](migrations.md) - Liquibase format for MySQL/ClickHouse
+- [permissions.md](permissions.md) - `@RequiredPermissions` annotation guidance for endpoints

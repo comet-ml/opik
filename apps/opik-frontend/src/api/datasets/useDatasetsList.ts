@@ -1,6 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { Dataset } from "@/types/datasets";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 import { Filters } from "@/types/filters";
@@ -11,6 +11,7 @@ type UseDatasetsListParams = {
   withExperimentsOnly?: boolean;
   withOptimizationsOnly?: boolean;
   promptId?: string;
+  type?: DATASET_TYPE;
   filters?: Filters;
   sorting?: Sorting;
   search?: string;
@@ -31,6 +32,7 @@ const getDatasetsList = async (
     withExperimentsOnly,
     withOptimizationsOnly,
     promptId,
+    type,
     filters,
     sorting,
     search,
@@ -52,6 +54,7 @@ const getDatasetsList = async (
       ...processSorting(sorting),
       ...(search && { name: search }),
       ...(promptId && { prompt_id: promptId }),
+      ...(type && { type }),
       size,
       page,
     },

@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 import api, { ALERTS_REST_ENDPOINT } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { Alert, WebhookTestResult } from "@/types/alerts";
 
 const testWebhook = async (

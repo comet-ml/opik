@@ -98,6 +98,7 @@ jobs:
           if: always()
           with:
             action_fail: true
+            comment_mode: failures
             check_name: Python SDK E2E Tests Results (Python ${{matrix.python_version}})
             files: ${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 

@@ -69,6 +69,8 @@ tags:
 - name: Ollama
   description: Ollama provider configuration endpoints with OpenAI-compatible API
     support.
+- name: Ollie State
+  description: Ollie pod state persistence
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -281,6 +283,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+    put:
+      tags:
+      - Agent Configs
+      summary: Set environment by blueprint name
+      description: Sets an environment to point to a blueprint identified by name
+      operationId: setEnvByBlueprintName
+      parameters:
+      - name: env_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigEnvSetByName"
+      responses:
+        "204":
+          description: Environment updated
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Agent Configs
+      summary: Delete environment
+      description: Soft-deletes an environment by setting its ended_at timestamp
+      operationId: deleteEnv
+      parameters:
+      - name: env_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Environment deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/agent-configs/blueprints/{blueprint_id}:
     get:
       tags:
@@ -290,6 +357,49 @@ paths:
       operationId: getBlueprintById
       parameters:
       - name: blueprint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Blueprint retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/blueprints/projects/{project_id}/names/{name}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve blueprint by name
+      description: Retrieves a specific blueprint by its name within a project
+      operationId: getBlueprintByName
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: project_id
         in: path
         required: true
         schema:
@@ -1439,6 +1549,11 @@ paths:
         schema:
           type: string
           description: "Filter dashboards by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: sorting
         in: query
         schema:
@@ -1672,6 +1787,11 @@ paths:
         schema:
           type: boolean
       - name: prompt_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_id
         in: query
         schema:
           type: string
@@ -2806,14 +2926,6 @@ paths:
         in: query
         schema:
           type: string
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -4003,6 +4115,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ollie/state:
+    get:
+      tags:
+      - Ollie State
+      summary: Download ollie state
+      description: Download stored ollie state file
+      operationId: downloadOllieState
+      responses:
+        "200":
+          description: Ollie state file
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Unauthorized
+          content:
+            application/gzip:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/gzip:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    put:
+      tags:
+      - Ollie State
+      summary: Replace ollie state
+      description: "Upload gzip-compressed SQLite DB file, replacing any existing\
+        \ state"
+      operationId: replaceOllieState
+      parameters:
+      - name: Content-Length
+        in: header
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/gzip:
+            schema:
+              type: object
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Ollie State
+      summary: Delete ollie state
+      description: Clear stored ollie state
+      operationId: deleteOllieState
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/otel/v1/traces:
     post:
       tags:
@@ -4067,6 +4260,11 @@ paths:
         schema:
           type: string
           description: "Filter optimizations by name (partial match, case insensitive)"
+      - name: dataset_name
+        in: query
+        schema:
+          type: string
+          description: Filter optimizations by dataset name (partial match)
       - name: dataset_deleted
         in: query
         schema:
@@ -4562,6 +4760,11 @@ paths:
         schema:
           type: string
           description: "Filter prompts by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: sorting
         in: query
         schema:
@@ -5356,14 +5559,6 @@ paths:
           - tool
           - llm
           - guardrail
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -5970,14 +6165,6 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -7039,6 +7226,9 @@ components:
         id:
           type: string
           format: uuid
+        name:
+          type: string
+          readOnly: true
         type:
           type: string
           enum:
@@ -7132,6 +7322,9 @@ components:
         id:
           type: string
           format: uuid
+        name:
+          type: string
+          readOnly: true
         type:
           type: string
           enum:
@@ -7229,6 +7422,13 @@ components:
           type: array
           items:
             type: string
+    AgentConfigEnvSetByName:
+      required:
+      - blueprint_name
+      type: object
+      properties:
+        blueprint_name:
+          type: string
     Alert:
       required:
       - webhook
@@ -9996,6 +10196,11 @@ components:
         workspace_id:
           type: string
           readOnly: true
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
         name:
           maxLength: 120
           minLength: 1
@@ -10039,6 +10244,18 @@ components:
       - name
       type: object
       properties:
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "For project scope, specify either project_id or project_name.\
+            \ If project_name is provided and the project does not exist, it will\
+            \ be created. Ignored when project_id is provided. If neither is provided,\
+            \ the dashboard is created at workspace level."
         name:
           maxLength: 120
           minLength: 1
@@ -10215,8 +10432,7 @@ components:
           minimum: 1
           type: integer
           format: int32
-      description: Execution policy captured from dataset item version at creation
-        time.
+      description: Default execution policy for items in this version
       readOnly: true
     DatasetItemChanges_Public:
       type: object
@@ -10374,9 +10590,6 @@ components:
           minimum: 1
           type: integer
           format: int32
-      description: Execution policy captured from dataset item version at creation
-        time.
-      readOnly: true
     Dataset:
       required:
       - name
@@ -10388,6 +10601,18 @@ components:
         name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "For project scope, specify either project_id or project_name.\
+            \ If project_name is provided and the project does not exist, it will\
+            \ be created. Ignored when project_id is provided. If neither is provided,\
+            \ the dataset is created at workspace level."
         type:
           type: string
           enum:
@@ -10496,6 +10721,18 @@ components:
         name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "For project scope, specify either project_id or project_name.\
+            \ If project_name is provided and the project does not exist, it will\
+            \ be created. Ignored when project_id is provided. If neither is provided,\
+            \ the dataset is created at workspace level."
         type:
           type: string
           enum:
@@ -10516,6 +10753,16 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    AssertionResult:
+      type: object
+      properties:
+        value:
+          type: string
+        passed:
+          type: boolean
+        reason:
+          type: string
+      readOnly: true
     Comment:
       required:
       - text
@@ -10589,6 +10836,11 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/ExperimentItem"
+        run_summaries_by_experiment:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ExperimentRunSummary"
+          readOnly: true
         dataset_id:
           type: string
           format: uuid
@@ -10709,8 +10961,32 @@ components:
         description:
           type: string
           readOnly: true
-        execution_policy:
-          $ref: "#/components/schemas/ExecutionPolicy"
+        assertion_results:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AssertionResult"
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - passed
+          - failed
+    ExperimentRunSummary:
+      type: object
+      properties:
+        passed_runs:
+          type: integer
+          format: int32
+        total_runs:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - passed
+          - failed
+      readOnly: true
     FeedbackScore:
       required:
       - name
@@ -10952,6 +11228,8 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_name:
+          type: string
     DatasetItemsDelete:
       type: object
       properties:
@@ -11080,6 +11358,16 @@ components:
           type: string
           description: Custom prompt to use for generation instead of auto-generated
             one
+    AssertionResult_Compare:
+      type: object
+      properties:
+        value:
+          type: string
+        passed:
+          type: boolean
+        reason:
+          type: string
+      readOnly: true
     Column_Compare:
       type: object
       properties:
@@ -11202,6 +11490,11 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/ExperimentItem_Compare"
+        run_summaries_by_experiment:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ExperimentRunSummary_Compare"
+          readOnly: true
         dataset_id:
           type: string
           format: uuid
@@ -11250,9 +11543,6 @@ components:
           minimum: 1
           type: integer
           format: int32
-      description: Execution policy captured from dataset item version at creation
-        time.
-      readOnly: true
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -11327,8 +11617,32 @@ components:
         description:
           type: string
           readOnly: true
-        execution_policy:
-          $ref: "#/components/schemas/ExecutionPolicy_Compare"
+        assertion_results:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AssertionResult_Compare"
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - passed
+          - failed
+      readOnly: true
+    ExperimentRunSummary_Compare:
+      type: object
+      properties:
+        passed_runs:
+          type: integer
+          format: int32
+        total_runs:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - passed
+          - failed
       readOnly: true
     FeedbackScore_Compare:
       required:
@@ -11466,6 +11780,11 @@ components:
         name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
         type:
           type: string
           enum:
@@ -11545,6 +11864,8 @@ components:
       properties:
         dataset_name:
           minLength: 1
+          type: string
+        project_name:
           type: string
     AvgValueStat_Public:
       type: object
@@ -11702,6 +12023,11 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/ExperimentItem_Public"
+        run_summaries_by_experiment:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ExperimentRunSummary_Public"
+          readOnly: true
         dataset_id:
           type: string
           format: uuid
@@ -11763,8 +12089,21 @@ components:
           enum:
           - default
           - hidden
-        execution_policy:
-          $ref: "#/components/schemas/ExecutionPolicy_Public"
+    ExperimentRunSummary_Public:
+      type: object
+      properties:
+        passed_runs:
+          type: integer
+          format: int32
+        total_runs:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - passed
+          - failed
+      readOnly: true
     Column_Public:
       type: object
       properties:
@@ -11870,6 +12209,8 @@ components:
           type: integer
           format: int32
         dataset_version:
+          type: string
+        project_name:
           type: string
         filters:
           type: string
@@ -12067,6 +12408,7 @@ components:
           - regular
           - trial
           - mini-batch
+          - mutation
         status:
           type: string
           description: The status of the experiment
@@ -12078,6 +12420,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentScore"
+    AssertionScoreAverage:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
+      description: Per-assertion average pass rates for evaluation suite experiments.
+        Null for regular experiments.
+      readOnly: true
     Experiment:
       required:
       - dataset_name
@@ -12089,17 +12445,21 @@ components:
         dataset_name:
           minLength: 1
           type: string
+          nullable: true
         dataset_id:
           type: string
           format: uuid
           readOnly: true
         project_id:
           type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
           format: uuid
-          readOnly: true
         project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          readOnly: true
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -12119,6 +12479,7 @@ components:
           - regular
           - trial
           - mini-batch
+          - mutation
         evaluation_method:
           type: string
           enum:
@@ -12138,6 +12499,10 @@ components:
           items:
             $ref: "#/components/schemas/Comment"
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        dataset_item_count:
           type: integer
           format: int64
           readOnly: true
@@ -12211,6 +12576,13 @@ components:
             for regular experiments.
           format: int64
           readOnly: true
+        assertion_scores:
+          type: array
+          description: Per-assertion average pass rates for evaluation suite experiments.
+            Null for regular experiments.
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AssertionScoreAverage"
     PercentageValues:
       type: object
       properties:
@@ -12260,6 +12632,17 @@ components:
         dataset_name:
           minLength: 1
           type: string
+          nullable: true
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -12279,6 +12662,7 @@ components:
           - regular
           - trial
           - mini-batch
+          - mutation
         evaluation_method:
           type: string
           enum:
@@ -12943,6 +13327,20 @@ components:
         span_id:
           type: string
       readOnly: true
+    AssertionScoreAverage_Public:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
+      description: Per-assertion average pass rates for evaluation suite experiments.
+        Null for regular experiments.
+      readOnly: true
     Comment_Public:
       required:
       - text
@@ -13012,17 +13410,21 @@ components:
         dataset_name:
           minLength: 1
           type: string
+          nullable: true
         dataset_id:
           type: string
           format: uuid
           readOnly: true
         project_id:
           type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
           format: uuid
-          readOnly: true
         project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          readOnly: true
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
         name:
           type: string
         metadata:
@@ -13042,6 +13444,7 @@ components:
           - regular
           - trial
           - mini-batch
+          - mutation
         evaluation_method:
           type: string
           enum:
@@ -13061,6 +13464,10 @@ components:
           items:
             $ref: "#/components/schemas/Comment_Public"
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        dataset_item_count:
           type: integer
           format: int64
           readOnly: true
@@ -13134,6 +13541,13 @@ components:
             for regular experiments.
           format: int64
           readOnly: true
+        assertion_scores:
+          type: array
+          description: Per-assertion average pass rates for evaluation suite experiments.
+            Null for regular experiments.
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AssertionScoreAverage_Public"
     JsonListString_Public:
       type: object
       anyOf:
@@ -14616,6 +15030,11 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
+        experiment_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
         created_at:
           type: string
           format: date-time
@@ -14628,6 +15047,27 @@ components:
           format: date-time
         last_updated_by:
           type: string
+          readOnly: true
+        baseline_objective_score:
+          type: number
+          readOnly: true
+        best_objective_score:
+          type: number
+          readOnly: true
+        baseline_duration:
+          type: number
+          readOnly: true
+        best_duration:
+          type: number
+          readOnly: true
+        baseline_cost:
+          type: number
+          readOnly: true
+        best_cost:
+          type: number
+          readOnly: true
+        total_optimization_cost:
+          type: number
           readOnly: true
     OptimizationStudioConfig:
       required:
@@ -14909,6 +15349,11 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage_Public"
+        experiment_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage_Public"
         created_at:
           type: string
           format: date-time
@@ -14921,6 +15366,27 @@ components:
           format: date-time
         last_updated_by:
           type: string
+          readOnly: true
+        baseline_objective_score:
+          type: number
+          readOnly: true
+        best_objective_score:
+          type: number
+          readOnly: true
+        baseline_duration:
+          type: number
+          readOnly: true
+        best_duration:
+          type: number
+          readOnly: true
+        baseline_cost:
+          type: number
+          readOnly: true
+        best_cost:
+          type: number
+          readOnly: true
+        total_optimization_cost:
+          type: number
           readOnly: true
     StudioEvaluation_Public:
       required:
@@ -15501,6 +15967,18 @@ components:
         name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "For project scope, specify either project_id or project_name.\
+            \ If project_name is provided and the project does not exist, it will\
+            \ be created. Ignored when project_id is provided. If neither is provided,\
+            \ the prompt is created at workspace level."
         description:
           maxLength: 255
           minLength: 0
@@ -15621,6 +16099,18 @@ components:
         name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "For project scope, specify either project_id or project_name.\
+            \ If project_name is provided and the project does not exist, it will\
+            \ be created. Ignored when project_id is provided. If neither is provided,\
+            \ the prompt is created at workspace level."
         description:
           maxLength: 255
           minLength: 0
@@ -15751,6 +16241,16 @@ components:
             description: Optional set of project IDs to exclude from automatic blueprint
               creation when this prompt version is committed.
             format: uuid
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If provided, scopes the prompt to the specified project. Ignored\
+            \ when project_id is provided."
     Prompt_Detail:
       required:
       - name
@@ -15762,6 +16262,11 @@ components:
         name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
         description:
           maxLength: 255
           minLength: 0
@@ -15902,6 +16407,11 @@ components:
         name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
         description:
           maxLength: 255
           minLength: 0
@@ -15960,6 +16470,10 @@ components:
           type: string
         commit:
           type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If provided, scopes the search to the specified project"
     Prompt_Updatable:
       required:
       - name

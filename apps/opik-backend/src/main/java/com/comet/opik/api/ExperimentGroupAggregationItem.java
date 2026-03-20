@@ -17,5 +17,6 @@ public record ExperimentGroupAggregationItem(
         List<FeedbackScoreAverage> experimentScores, // name -> average value from DB
         BigDecimal passRateAvg,
         Long passedCountSum,
-        Long totalCountSum) {
+        Long totalCountSum,
+        List<AssertionScoreAverage> assertionScores) {
 }

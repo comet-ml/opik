@@ -8,7 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 class ExecutionPolicyPublic(UniversalBaseModel):
     """
-    Execution policy captured from dataset item version at creation time.
+    Default execution policy for items in this version
     """
 
     runs_per_item: typing.Optional[int] = None

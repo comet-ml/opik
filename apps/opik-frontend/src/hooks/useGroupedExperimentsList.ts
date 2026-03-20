@@ -12,6 +12,7 @@ import md5 from "md5";
 
 import {
   Experiment,
+  EXPERIMENT_TYPE,
   ExperimentsGroupNode,
   ExperimentsAggregations,
   ExperimentsGroupNodeWithAggregations,
@@ -79,6 +80,7 @@ type UseGroupedExperimentsListParams = {
   sorting?: Sorting;
   groups?: Groups;
   promptId?: string;
+  types?: EXPERIMENT_TYPE[];
   search?: string;
   page: number;
   size: number;
@@ -378,6 +380,7 @@ export default function useGroupedExperimentsList(
       search: params.search,
       promptId: params.promptId,
       projectId,
+      types: params.types,
     },
     {
       placeholderData: keepPreviousData,
@@ -395,6 +398,7 @@ export default function useGroupedExperimentsList(
         search: params.search,
         promptId: params.promptId,
         projectId,
+        types: params.types,
       },
       {
         placeholderData: keepPreviousData,
@@ -448,6 +452,7 @@ export default function useGroupedExperimentsList(
         sorting: params.sorting,
         search: params.search,
         promptId: params.promptId,
+        types: params.types,
         projectId,
         projectDeleted,
         page: params.page,
@@ -536,6 +541,7 @@ export default function useGroupedExperimentsList(
         sorting: params.sorting,
         search: params.search,
         promptId: params.promptId,
+        types: params.types,
         // Don't send projectId if it's an orphan project, use projectDeleted flag instead
         projectId: isOrphanProject ? undefined : projectIdValue,
         projectDeleted: isOrphanProject || undefined,
