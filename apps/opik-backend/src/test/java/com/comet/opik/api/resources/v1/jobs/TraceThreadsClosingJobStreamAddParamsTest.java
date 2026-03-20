@@ -73,7 +73,7 @@ class TraceThreadsClosingJobStreamAddParamsTest {
         var message = podamFactory.manufacturePojo(ProjectWithPendingClosureTraceThreads.class);
         when(redisClient.getStream(anyString(), any())).thenReturn(stream);
         when(stream.add(any())).thenReturn(Mono.just(new StreamMessageId(System.currentTimeMillis(), 0)));
-        when(traceThreadService.getProjectsWithPendingClosureThreads(any(), any(), anyInt()))
+        when(traceThreadService.getProjectsWithPendingClosureThreads(any(), any(), any(), anyInt()))
                 .thenReturn(Flux.just(message));
         when(traceThreadService.addToPendingQueue(any())).thenReturn(Mono.just(true));
         when(lockService.bestEffortLock(any(), any(), any(), any(), any()))

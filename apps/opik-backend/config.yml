@@ -811,9 +811,9 @@ traceThreadConfig:
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
-  # Default: 3s
+  # Default: 15s
   # Description: The interval at which the close trace thread job will run to inactive threads
-  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-3s}
+  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-15s}
   # Default: 4s
   # Description: The time to wait for the close trace threads job to finish before releasing the lock
   closeTraceThreadJobLockTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_TIME:-4s}

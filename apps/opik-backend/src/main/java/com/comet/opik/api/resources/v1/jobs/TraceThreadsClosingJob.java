@@ -34,6 +34,11 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
     private static final int MAX_BACKOFF_EXPONENT = 5; // max backoff = base_interval * 2^5 = ~96s at 3s interval
 
+    // On first run after startup (or after an outage), look back further to catch any threads that
+    // became stale during downtime. This is deliberately conservative — the minmax skip index keeps
+    // the cost proportional to matching granules, so 7 days is still very cheap.
+    private static final Duration COLD_START_LOOKBACK = Duration.ofDays(7);
+
     private final TraceThreadService traceThreadService;
     private final LockService lockService;
     private final TraceThreadConfig traceThreadConfig;
@@ -41,6 +46,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
     private final JobTimeoutConfig jobTimeoutConfig;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
+    private final AtomicBoolean completedFirstRun = new AtomicBoolean(false);
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
     private final AtomicLong backoffUntilMillis = new AtomicLong(0);
 
@@ -83,6 +89,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                 .subscribe(
                         __ -> {
                             if (!interrupted.get()) {
+                                completedFirstRun.set(true);
                                 consecutiveFailures.set(0);
                                 backoffUntilMillis.set(0);
                                 log.info("Successfully started closing trace threads process");
@@ -119,11 +126,13 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                     }
 
                     var now = Instant.now();
+                    var minLookback = completedFirstRun.get() ? null : COLD_START_LOOKBACK;
                     return enqueueInRedis(
                             traceThreadService
                                     .getProjectsWithPendingClosureThreads(
                                             now,
                                             defaultTimeoutToMarkThreadAsInactive,
+                                            minLookback,
                                             limit));
                 }),
                 Mono.fromCallable(() -> {
