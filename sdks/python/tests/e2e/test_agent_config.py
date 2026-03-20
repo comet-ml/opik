@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
 import pytest
 import opik
@@ -96,17 +96,18 @@ def test_publish_version_and_retrieve__happyflow(
     class MyConfig(opik.AgentConfig):
         temperature: Annotated[float, "Sampling temperature"]
         model: str
+        hint: Optional[str]
 
-    # Publish v1 and verify the version name comes back.
+    # Publish v1 with hint=None and verify the version name comes back.
     v1_name = opik_client.create_agent_config_version(
-        MyConfig(temperature=0.5, model="gpt-3.5"), project_name=project_name
+        MyConfig(temperature=0.5, model="gpt-3.5", hint=None), project_name=project_name
     )
     assert isinstance(v1_name, str) and v1_name != ""
 
     # Publishing the same values again must be a no-op (1 entry in history).
     get_global_registry().clear()
     opik_client.create_agent_config_version(
-        MyConfig(temperature=0.5, model="gpt-3.5"), project_name=project_name
+        MyConfig(temperature=0.5, model="gpt-3.5", hint=None), project_name=project_name
     )
     project_id = opik_client.rest_client.projects.retrieve_project(name=project_name).id
     assert (
@@ -118,36 +119,39 @@ def test_publish_version_and_retrieve__happyflow(
         == 1
     )
 
-    # Publishing different values creates a new version.
+    # Publishing different values (hint filled in) creates a new version.
     get_global_registry().clear()
     v2_name = opik_client.create_agent_config_version(
-        MyConfig(temperature=0.8, model="gpt-4"), project_name=project_name
+        MyConfig(temperature=0.8, model="gpt-4", hint="use chain-of-thought"),
+        project_name=project_name,
     )
     assert v2_name != v1_name
 
-    # latest=True returns v2.
+    # latest=True returns v2; hint is now a real value.
     get_global_registry().clear()
     latest = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback"),
+        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
         project_name=project_name,
         latest=True,
     )
     assert latest.temperature == pytest.approx(0.8)
     assert latest.model == "gpt-4"
+    assert latest.hint == "use chain-of-thought"
 
-    # version= by name returns v1.
+    # version= by name returns v1; hint must be None as originally published.
     get_global_registry().clear()
     by_name = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback"),
+        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
         project_name=project_name,
         version=v1_name,
     )
     assert by_name.temperature == pytest.approx(0.5)
+    assert by_name.hint is None
 
     # Deploy v1 to prod; env= fetch returns v1 despite v2 being latest.
     get_global_registry().clear()
     v1_cfg = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback"),
+        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
         project_name=project_name,
         version=v1_name,
     )
@@ -155,11 +159,12 @@ def test_publish_version_and_retrieve__happyflow(
 
     get_global_registry().clear()
     by_env = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback"),
+        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
         project_name=project_name,
         env="prod",
     )
     assert by_env.temperature == pytest.approx(0.5)
+    assert by_env.hint is None
 
 
 def test_prompt_field_and_trace_metadata__happyflow(
