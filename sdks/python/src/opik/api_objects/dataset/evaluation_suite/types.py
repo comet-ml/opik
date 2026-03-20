@@ -60,11 +60,15 @@ class EvaluationSuiteResult:
         items_total: int,
         item_results: Dict[str, ItemResult],
         evaluation_result_: evaluation_result.EvaluationResult,
+        suite_name: Optional[str] = None,
+        total_time: Optional[float] = None,
     ) -> None:
         self._items_passed = items_passed
         self._items_total = items_total
         self._item_results = item_results
         self._evaluation_result = evaluation_result_
+        self._suite_name = suite_name
+        self._total_time = total_time
 
     @property
     def all_items_passed(self) -> bool:
@@ -92,6 +96,16 @@ class EvaluationSuiteResult:
         if self._items_total == 0:
             return None
         return self._items_passed / self._items_total
+
+    @property
+    def suite_name(self) -> Optional[str]:
+        """The name of the evaluation suite."""
+        return self._suite_name
+
+    @property
+    def total_time(self) -> Optional[float]:
+        """Total evaluation time in seconds."""
+        return self._total_time
 
     @property
     def experiment_id(self) -> str:
@@ -126,4 +140,4 @@ class EvaluationSuiteResult:
         """
         from . import result_file
 
-        return result_file.save_report(self, output_path=output_path)
+        return result_file.save_report(self, output_path)

@@ -55,6 +55,8 @@ def _make_test_result(
 
 def _make_suite_result(
     test_results_list: list[test_result.TestResult],
+    suite_name: str | None = None,
+    total_time: float | None = None,
 ) -> suite_types.EvaluationSuiteResult:
     eval_result = evaluation_result.EvaluationResult(
         experiment_id="exp-123",
@@ -64,7 +66,10 @@ def _make_suite_result(
         experiment_url="http://example.com/experiment/exp-123",
         trial_count=1,
     )
-    return suite_result_constructor.build_suite_result(eval_result)
+    result = suite_result_constructor.build_suite_result(eval_result)
+    result._suite_name = suite_name
+    result._total_time = total_time
+    return result
 
 
 class TestSuiteResultToDict:
@@ -81,9 +86,9 @@ class TestSuiteResultToDict:
                 scoring_time=0.567,
             )
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(trs, suite_name="My Suite")
 
-        result = result_file.suite_result_to_dict(suite_result, suite_name="My Suite")
+        result = result_file.suite_result_to_dict(suite_result)
 
         assert result["suite_passed"] is False
         assert result["items_passed"] == 0
@@ -150,11 +155,9 @@ class TestSuiteResultToDict:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(trs, total_time=12.3456)
 
-        result = result_file.suite_result_to_dict(
-            suite_result, total_time=12.3456
-        )
+        result = result_file.suite_result_to_dict(suite_result)
 
         assert result["total_time_seconds"] == 12.346
 
@@ -205,15 +208,12 @@ class TestSaveReport:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(
+            trs, suite_name="Test Suite", total_time=5.0
+        )
         output_path = str(tmp_path / "report.json")
 
-        result_path = result_file.save_report(
-            suite_result,
-            suite_name="Test Suite",
-            total_time=5.0,
-            output_path=output_path,
-        )
+        result_path = result_file.save_report(suite_result, output_path)
 
         assert result_path == output_path
         assert os.path.exists(output_path)

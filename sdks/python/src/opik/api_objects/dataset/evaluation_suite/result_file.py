@@ -18,8 +18,6 @@ DEFAULT_REPORT_DIR = "opik_evaluation_suite_reports"
 
 def suite_result_to_dict(
     suite_result: suite_types.EvaluationSuiteResult,
-    suite_name: Optional[str] = None,
-    total_time: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Convert an EvaluationSuiteResult to a structured dictionary."""
     items: List[Dict[str, Any]] = []
@@ -88,8 +86,8 @@ def suite_result_to_dict(
         "experiment_id": suite_result.experiment_id,
     }
 
-    if suite_name is not None:
-        report["suite_name"] = suite_name
+    if suite_result.suite_name is not None:
+        report["suite_name"] = suite_result.suite_name
 
     if suite_result.experiment_name is not None:
         report["experiment_name"] = suite_result.experiment_name
@@ -97,8 +95,8 @@ def suite_result_to_dict(
     if suite_result.experiment_url is not None:
         report["experiment_url"] = suite_result.experiment_url
 
-    if total_time is not None:
-        report["total_time_seconds"] = round(total_time, 3)
+    if suite_result.total_time is not None:
+        report["total_time_seconds"] = round(suite_result.total_time, 3)
 
     report["generated_at"] = datetime.now(timezone.utc).isoformat()
     report["items"] = items
@@ -108,23 +106,19 @@ def suite_result_to_dict(
 
 def save_report(
     suite_result: suite_types.EvaluationSuiteResult,
-    suite_name: Optional[str] = None,
-    total_time: Optional[float] = None,
     output_path: Optional[str] = None,
 ) -> str:
     """Save an EvaluationSuiteResult as a structured JSON report.
 
     Args:
         suite_result: The evaluation suite result to serialize.
-        suite_name: Optional suite name to include in the report.
-        total_time: Optional total evaluation time in seconds.
         output_path: Optional file path. If not provided, a default path
-            is generated under the ``opik_reports/`` directory.
+            is generated under the ``opik_evaluation_suite_reports/`` directory.
 
     Returns:
         The absolute path to the written report file.
     """
-    report = suite_result_to_dict(suite_result, suite_name, total_time)
+    report = suite_result_to_dict(suite_result)
 
     if output_path is None:
         os.makedirs(DEFAULT_REPORT_DIR, exist_ok=True)

@@ -391,6 +391,8 @@ def evaluate_suite(
     )
 
     suite_result = suite_result_constructor.build_suite_result(eval_result)
+    suite_result._suite_name = dataset.name
+    suite_result._total_time = total_time
 
     report_path: Optional[str] = None
     if generate_report:
@@ -399,8 +401,6 @@ def evaluate_suite(
         try:
             report_path = result_file.save_report(
                 suite_result,
-                suite_name=dataset.name,
-                total_time=total_time,
                 output_path=report_output_path,
             )
         except Exception:
