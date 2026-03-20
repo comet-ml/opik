@@ -423,7 +423,7 @@ class EvaluationSuite:
             generate_report: Whether to generate a structured JSON report file
                 after the evaluation completes. Defaults to True.
             report_output_path: Optional file path for the report. If not
-                provided, a default path is generated under ``opik_reports/``.
+                provided, a default path is generated under ``opik_evaluation_suite_reports/``.
 
         Returns:
             EvaluationSuiteResult with pass/fail status based on execution policy.

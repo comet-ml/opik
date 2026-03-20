@@ -72,8 +72,8 @@ def _make_suite_result(
 
 
 class TestToReportDict:
-    def test_basic_structure(self):
-        trs = [
+    def test_to_report_dict__single_item_with_mixed_scores__returns_correct_structure(self):
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -85,7 +85,7 @@ class TestToReportDict:
                 scoring_time=0.567,
             )
         ]
-        suite_result = _make_suite_result(trs, suite_name="My Suite")
+        suite_result = _make_suite_result(test_results_list, suite_name="My Suite")
 
         result = suite_result.to_report_dict()
 
@@ -122,8 +122,8 @@ class TestToReportDict:
         assert run["assertions"][1]["name"] == "Is helpful"
         assert run["assertions"][1]["passed"] is False
 
-    def test_all_items_pass(self):
-        trs = [
+    def test_to_report_dict__all_items_pass__suite_passed_true(self):
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -137,7 +137,7 @@ class TestToReportDict:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(test_results_list)
 
         result = suite_result.to_report_dict()
 
@@ -145,8 +145,8 @@ class TestToReportDict:
         assert result["items_passed"] == 2
         assert result["pass_rate"] == 1.0
 
-    def test_total_time_included(self):
-        trs = [
+    def test_to_report_dict__with_total_time__includes_rounded_value(self):
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -154,14 +154,14 @@ class TestToReportDict:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs, total_time=12.3456)
+        suite_result = _make_suite_result(test_results_list, total_time=12.3456)
 
         result = suite_result.to_report_dict()
 
         assert result["total_time_seconds"] == 12.346
 
-    def test_scoring_failed_assertion(self):
-        trs = [
+    def test_to_report_dict__scoring_failed__marks_assertion_failed_with_reason(self):
+        test_results_list = [
             test_result.TestResult(
                 test_case=test_case.TestCase(
                     trace_id="trace-1",
@@ -187,7 +187,7 @@ class TestToReportDict:
                 trial_id=0,
             )
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(test_results_list)
 
         result = suite_result.to_report_dict()
 
@@ -198,8 +198,8 @@ class TestToReportDict:
 
 
 class TestSaveReport:
-    def test_saves_valid_json(self, tmp_path):
-        trs = [
+    def test_save_report__valid_input__writes_json_file(self, tmp_path):
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -207,7 +207,7 @@ class TestSaveReport:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs, suite_name="Test Suite", total_time=5.0)
+        suite_result = _make_suite_result(test_results_list, suite_name="Test Suite", total_time=5.0)
         output_path = str(tmp_path / "report.json")
 
         result_path = file_writer.save_report(suite_result, output_path)
@@ -222,10 +222,10 @@ class TestSaveReport:
         assert data["suite_passed"] is True
         assert len(data["items"]) == 1
 
-    def test_default_path_uses_experiment_name(self, tmp_path, monkeypatch):
+    def test_save_report__no_path__uses_experiment_name(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
 
-        trs = [
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -233,7 +233,7 @@ class TestSaveReport:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(test_results_list)
 
         result_path = file_writer.save_report(suite_result)
 
@@ -241,10 +241,10 @@ class TestSaveReport:
         assert result_path.endswith(".json")
         assert os.path.exists(result_path)
 
-    def test_creates_parent_directories(self, tmp_path):
+    def test_save_report__nested_path__creates_parent_directories(self, tmp_path):
         output_path = str(tmp_path / "nested" / "dir" / "report.json")
 
-        trs = [
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -252,7 +252,7 @@ class TestSaveReport:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(test_results_list)
 
         result_path = file_writer.save_report(suite_result, output_path)
 
@@ -260,22 +260,22 @@ class TestSaveReport:
 
 
 class TestBuildDefaultReportPath:
-    def test_replaces_unsafe_characters(self):
+    def test_build_default_report_path__unsafe_characters__replaces_with_underscore(self):
         path = file_writer.build_default_report_path("my/suite:name")
         assert os.path.basename(path) == "my_suite_name.json"
 
-    def test_keeps_safe_characters(self):
+    def test_build_default_report_path__safe_characters__keeps_unchanged(self):
         path = file_writer.build_default_report_path("my-suite_v1.0")
         assert os.path.basename(path) == "my-suite_v1.0.json"
 
-    def test_replaces_spaces(self):
+    def test_build_default_report_path__spaces__replaces_with_underscore(self):
         path = file_writer.build_default_report_path("my suite")
         assert os.path.basename(path) == "my_suite.json"
 
 
 class TestEvaluationSuiteResultMethods:
-    def test_to_dict(self):
-        trs = [
+    def test_to_dict__passing_suite__returns_dict_with_suite_passed_true(self):
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -283,7 +283,7 @@ class TestEvaluationSuiteResultMethods:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(test_results_list)
 
         result = suite_result.to_dict()
 
@@ -291,8 +291,8 @@ class TestEvaluationSuiteResultMethods:
         assert result["suite_passed"] is True
         assert "items" in result
 
-    def test_to_report_dict_and_save(self, tmp_path):
-        trs = [
+    def test_to_report_dict__save_to_file__produces_valid_json(self, tmp_path):
+        test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
                 trial_id=0,
@@ -300,7 +300,7 @@ class TestEvaluationSuiteResultMethods:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(trs)
+        suite_result = _make_suite_result(test_results_list)
         output_path = str(tmp_path / "result.json")
 
         path = file_writer.save_report(suite_result, output_path)

@@ -12,6 +12,7 @@ from opik.api_objects.dataset import dataset_item
 from opik.evaluation import evaluation_result, test_result
 
 from . import types as suite_types
+from .evaluation_suite_result import is_score_passed
 
 
 def build_suite_result(
@@ -51,18 +52,18 @@ def build_suite_result(
     for item_id, item_test_results in results_by_item.items():
         item = items_cache.get(item_id)
         pass_threshold = 1
+        configured_runs_per_item = 1
         if item is not None and item.execution_policy is not None:
             if item.execution_policy.pass_threshold is not None:
                 pass_threshold = item.execution_policy.pass_threshold
+            if item.execution_policy.runs_per_item is not None:
+                configured_runs_per_item = item.execution_policy.runs_per_item
 
         runs_passed = sum(
             1
             for r in item_test_results
             if not r.score_results
-            or all(
-                bool(s.value) if isinstance(s.value, bool) else s.value == 1
-                for s in r.score_results
-            )
+            or all(is_score_passed(s) for s in r.score_results)
         )
 
         passed = runs_passed >= pass_threshold
@@ -75,6 +76,7 @@ def build_suite_result(
             passed=passed,
             runs_passed=runs_passed,
             runs_total=len(item_test_results),
+            configured_runs_per_item=configured_runs_per_item,
             pass_threshold=pass_threshold,
             test_results=sorted(item_test_results, key=lambda r: r.trial_id),
         )

@@ -7,6 +7,8 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from rich import align, console, panel, table, text
 
+from ..evaluation_suite_result import is_score_passed
+
 if TYPE_CHECKING:
     from .. import evaluation_suite_result as _result_mod
 
@@ -19,8 +21,8 @@ def _format_time(seconds: float) -> str:
 
 def display_suite_results(
     suite_result: _result_mod.EvaluationSuiteResult,
-    verbose: int = 2,
-    report_path: Optional[str] = None,
+    verbose: int,
+    report_path: Optional[str],
 ) -> None:
     suite_name = suite_result.suite_name or "Evaluation Suite"
     total_time = suite_result.total_time or 0.0
@@ -42,10 +44,7 @@ def display_suite_results(
     for test_result_ in test_results:
         for score in test_result_.score_results:
             assertion_total_count[score.name] += 1
-            score_passed = not score.scoring_failed and (
-                (isinstance(score.value, bool) and score.value) or score.value == 1
-            )
-            if score_passed:
+            if is_score_passed(score):
                 assertion_passed_count[score.name] += 1
 
     time_text = text.Text(f"Total time:        {_format_time(total_time)}")

@@ -7,6 +7,14 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from opik.evaluation import evaluation_result, test_result
+    from opik.evaluation.metrics.score_result import ScoreResult
+
+
+def is_score_passed(score: ScoreResult) -> bool:
+    """Determine whether a score result represents a passing assertion."""
+    if score.scoring_failed:
+        return False
+    return (isinstance(score.value, bool) and score.value) or score.value == 1
 
 
 @dataclasses.dataclass
@@ -23,7 +31,10 @@ class ItemResult:
     """Number of runs that passed for this item."""
 
     runs_total: int
-    """Total number of runs for this item."""
+    """Total number of runs completed for this item."""
+
+    configured_runs_per_item: int
+    """Configured runs_per_item from the execution policy."""
 
     pass_threshold: int
     """Minimum passing runs required (from execution policy)."""
@@ -122,13 +133,7 @@ class EvaluationSuiteResult:
                 for score in test_result_.score_results:
                     assertion: Dict[str, Any] = {
                         "name": score.name,
-                        "passed": (
-                            not score.scoring_failed
-                            and (
-                                (isinstance(score.value, bool) and score.value)
-                                or score.value == 1
-                            )
-                        ),
+                        "passed": is_score_passed(score),
                         "value": score.value,
                         "scoring_failed": score.scoring_failed,
                     }
@@ -165,7 +170,7 @@ class EvaluationSuiteResult:
                     "passed": item_result.passed,
                     "runs_passed": item_result.runs_passed,
                     "execution_policy": {
-                        "runs_per_item": item_result.runs_total,
+                        "runs_per_item": item_result.configured_runs_per_item,
                         "pass_threshold": item_result.pass_threshold,
                     },
                     "runs": runs,
