@@ -9,8 +9,6 @@ import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.auth.RequiredPermissions;
-import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
