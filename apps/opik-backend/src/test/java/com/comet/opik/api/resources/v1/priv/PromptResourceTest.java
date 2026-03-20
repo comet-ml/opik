@@ -2836,6 +2836,91 @@ class PromptResourceTest {
         }
 
         @Test
+        @DisplayName("when project_name does not match, fall back to workspace-wide, then return X-Opik-Deprecation header")
+        void whenProjectNameDoesNotMatch__thenReturnDeprecationHeader() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var otherProjectName = "project-" + UUID.randomUUID();
+            var otherProjectId = projectResourceClient.createProject(otherProjectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .projectId(otherProjectId)
+                    .build();
+
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
+                                prompt.name()));
+            }
+        }
+
+        @Test
+        @DisplayName("when project_name matches prompt's project, then no X-Opik-Deprecation header")
+        void whenProjectNameMatchesPromptProject__thenNoDeprecationHeader() {
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .projectId(projectId)
+                    .build();
+
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+        }
+
+        @Test
         @DisplayName("when project_name does not exist, fall back to workspace-wide, prompt not found, then return not found")
         void whenProjectNameDoesNotExist__thenReturnNotFound() {
             var nonExistentProjectName = "project-" + UUID.randomUUID();
