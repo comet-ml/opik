@@ -158,7 +158,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 WHERE last_updated_at > parseDateTime64BestEffort(:cached_max_inactive_period, 6)
                 GROUP BY workspace_id, project_id, status
             ) tt
-            LEFT JOIN workspace_configurations wc FINAL
+            LEFT ANY JOIN workspace_configurations wc FINAL
                 ON tt.workspace_id = wc.workspace_id
             WHERE tt.status = 'active'
             AND tt.min_last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND

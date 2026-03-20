@@ -32,7 +32,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @DisallowConcurrentExecution
 public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
-    private static final int MAX_BACKOFF_EXPONENT = 5; // max backoff = base_interval * 2^5 = ~480s at 15s interval
+    private static final int MAX_BACKOFF_EXPONENT = 5; // backoff doubles each failure: x2, x4, x8, x16, x32 of base interval
 
     // On first run after startup (or after an outage), look back further to catch any threads that
     // became stale during downtime. This is deliberately conservative — the minmax skip index keeps
