@@ -22,8 +22,8 @@ public record RetentionRule(
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String workspaceId,
         @JsonView({View.Public.class, View.Write.class}) UUID projectId,
-        @JsonView({View.Public.class,
-                View.Write.class}) @Nullable @Schema(description = "Set to true to create an organization-level rule") Boolean organizationLevel,
+        @JsonView({
+                View.Write.class}) @Nullable @Schema(accessMode = Schema.AccessMode.WRITE_ONLY, description = "Set to true to create an organization-level rule") Boolean organizationLevel,
         @JsonView({
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Computed from projectId and organizationLevel") RetentionLevel level,
         @JsonView({View.Public.class, View.Write.class}) @NotNull RetentionPeriod retention,

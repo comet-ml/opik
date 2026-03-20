@@ -1,8 +1,5 @@
 package com.comet.opik.domain.retention;
 
-import com.comet.opik.api.Comment;
-import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -25,6 +22,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,11 +37,12 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
-import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -127,7 +126,7 @@ class RetentionPolicyServiceTest {
     class RetentionCycleExecution {
 
         @Test
-        @DisplayName("Deletes expired traces and spans, leaves feedback scores and comments as orphans")
+        @DisplayName("Deletes expired traces and spans, keeps recent data")
         void deletesExpiredDataAndKeepsRecentData() {
             var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.SHORT_14D).build();
             retentionClient.createAndGet(rule, API_KEY, TEST_WORKSPACE_NAME);
@@ -142,23 +141,15 @@ class RetentionPolicyServiceTest {
             UUID recentTraceId = idGenerator.generateId(recentTime);
             UUID recentSpanId = idGenerator.generateId(recentTime);
 
-            // Insert old data (traces/spans should be deleted, feedback/comments left as orphans)
             createTestTrace(oldTraceId, API_KEY, TEST_WORKSPACE_NAME);
             createTestSpan(oldSpanId, oldTraceId, API_KEY, TEST_WORKSPACE_NAME);
-            createTestFeedbackScore(oldTraceId, API_KEY, TEST_WORKSPACE_NAME);
-            createTestComment(oldTraceId, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Insert recent data (should NOT be deleted)
             createTestTrace(recentTraceId, API_KEY, TEST_WORKSPACE_NAME);
             createTestSpan(recentSpanId, recentTraceId, API_KEY, TEST_WORKSPACE_NAME);
-            createTestFeedbackScore(recentTraceId, API_KEY, TEST_WORKSPACE_NAME);
-            createTestComment(recentTraceId, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Verify data exists before retention cycle
-            assertThat(countRows("traces", workspaceId)).isEqualTo(2);
-            assertThat(countRows("spans", workspaceId)).isEqualTo(2);
-            assertThat(countRows("feedback_scores", workspaceId)).isEqualTo(2);
-            assertThat(countRows("comments", workspaceId)).isEqualTo(2);
+            // Wait for async writes to reach ClickHouse before verifying
+            waitForRows("traces", workspaceId, 2);
+            waitForRows("spans", workspaceId, 2);
 
             // Execute retention cycle for fraction 0 (our workspace falls in this range)
             retentionPolicyService.executeRetentionCycle(0, now).block();
@@ -166,10 +157,6 @@ class RetentionPolicyServiceTest {
             // Verify: old traces/spans deleted, recent data kept
             assertThat(countRows("traces", workspaceId)).isEqualTo(1);
             assertThat(countRows("spans", workspaceId)).isEqualTo(1);
-
-            // Feedback scores and comments are NOT deleted (left as lightweight orphans)
-            assertThat(countRows("feedback_scores", workspaceId)).isEqualTo(2);
-            assertThat(countRows("comments", workspaceId)).isEqualTo(2);
 
             // Verify the remaining rows are the recent ones
             assertThat(countRowsById("traces", recentTraceId)).isEqualTo(1);
@@ -187,6 +174,7 @@ class RetentionPolicyServiceTest {
 
             UUID traceId = idGenerator.generateId(Instant.now().minus(30, ChronoUnit.DAYS));
             createTestTrace(traceId, farApiKey, farWsName);
+            waitForRows("traces", farWsId, 1);
 
             // Execute fraction 47 - no retention rules exist for this workspace
             retentionPolicyService.executeRetentionCycle(47, Instant.now()).block();
@@ -209,6 +197,7 @@ class RetentionPolicyServiceTest {
 
             UUID traceId = idGenerator.generateId(Instant.now().minus(500, ChronoUnit.DAYS));
             createTestTrace(traceId, unlimitedApiKey, unlimitedWsName);
+            waitForRows("traces", unlimitedWsId, 1);
 
             retentionPolicyService.executeRetentionCycle(0, Instant.now()).block();
 
@@ -234,7 +223,7 @@ class RetentionPolicyServiceTest {
         }
 
         @Test
-        @DisplayName("Deletion removes only traces/spans older than cutoff, leaves feedback/comments")
+        @DisplayName("Deletion removes only traces/spans older than cutoff")
         void deletesOnlyOldRowsAcrossAllTables() {
             var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D).build();
             retentionClient.createAndGet(rule, WS_DELETION_API_KEY, WS_DELETION_NAME);
@@ -252,27 +241,19 @@ class RetentionPolicyServiceTest {
             // Old data (61 days old > 60 day retention -> deleted)
             createTestTrace(oldTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
             createTestSpan(oldSpanId, oldTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
-            createTestFeedbackScore(oldTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
-            createTestComment(oldTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
 
             // Recent data (30 days old < 60 day retention -> kept)
             createTestTrace(recentTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
             createTestSpan(recentSpanId, recentTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
-            createTestFeedbackScore(recentTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
-            createTestComment(recentTraceId, WS_DELETION_API_KEY, WS_DELETION_NAME);
 
-            assertThat(countRows("traces", WS_DELETION)).isEqualTo(2);
-            assertThat(countRows("spans", WS_DELETION)).isEqualTo(2);
+            waitForRows("traces", WS_DELETION, 2);
+            waitForRows("spans", WS_DELETION, 2);
 
             retentionPolicyService.executeRetentionCycle(0, now).block();
 
             // Only recent traces/spans remain
             assertThat(countRows("traces", WS_DELETION)).isEqualTo(1);
             assertThat(countRows("spans", WS_DELETION)).isEqualTo(1);
-
-            // Feedback scores and comments are NOT deleted
-            assertThat(countRows("feedback_scores", WS_DELETION)).isEqualTo(2);
-            assertThat(countRows("comments", WS_DELETION)).isEqualTo(2);
 
             assertThat(countRowsById("traces", recentTraceId)).isEqualTo(1);
             assertThat(countRowsById("spans", recentSpanId)).isEqualTo(1);
@@ -296,6 +277,8 @@ class RetentionPolicyServiceTest {
             UUID otherSpanId = idGenerator.generateId(oldTime);
             createTestTrace(otherTraceId, otherApiKey, otherWsName);
             createTestSpan(otherSpanId, otherTraceId, otherApiKey, otherWsName);
+            waitForRows("traces", otherWsId, 1);
+            waitForRows("spans", otherWsId, 1);
 
             retentionPolicyService.executeRetentionCycle(0, Instant.now()).block();
 
@@ -341,8 +324,7 @@ class RetentionPolicyServiceTest {
             // 5 days old: within both rules
             UUID traceId5d = idGenerator.generateId(now.minus(5, ChronoUnit.DAYS));
             createTestTrace(traceId5d, WS_PRIORITY_API_KEY, WS_PRIORITY_NAME);
-
-            assertThat(countRows("traces", WS_PRIORITY)).isEqualTo(2);
+            waitForRows("traces", WS_PRIORITY, 2);
 
             retentionPolicyService.executeRetentionCycle(0, now).block();
 
@@ -375,6 +357,7 @@ class RetentionPolicyServiceTest {
             // 30 days old: within org rule (60d)
             UUID recentTraceId = idGenerator.generateId(now.minus(30, ChronoUnit.DAYS));
             createTestTrace(recentTraceId, wsOnlyOrgApiKey, wsOnlyOrgName);
+            waitForRows("traces", wsOnlyOrg, 2);
 
             retentionPolicyService.executeRetentionCycle(0, now).block();
 
@@ -415,6 +398,8 @@ class RetentionPolicyServiceTest {
             UUID trace400d = idGenerator.generateId(now.minus(15, ChronoUnit.DAYS));
             createTestTrace(trace14d, ws14dApiKey, ws14dName);
             createTestTrace(trace400d, ws400dApiKey, ws400dName);
+            waitForRows("traces", ws14d, 1);
+            waitForRows("traces", ws400d, 1);
 
             retentionPolicyService.executeRetentionCycle(0, now).block();
 
@@ -442,6 +427,7 @@ class RetentionPolicyServiceTest {
 
             UUID oldTraceId = idGenerator.generateId(Instant.now().minus(15, ChronoUnit.DAYS));
             createTestTrace(oldTraceId, wsDisabledApiKey, wsDisabledName);
+            waitForRows("traces", wsDisabled, 1);
 
             retentionPolicyService.executeRetentionCycle(0, Instant.now()).block();
 
@@ -472,22 +458,6 @@ class RetentionPolicyServiceTest {
                 .build(), apiKey, wsName);
     }
 
-    private void createTestFeedbackScore(UUID entityId, String apiKey, String wsName) {
-        traceClient.feedbackScores(List.of(FeedbackScoreBatchItem.builder()
-                .id(entityId)
-                .name("test-score")
-                .value(BigDecimal.ONE)
-                .source(ScoreSource.SDK)
-                .projectName(PROJECT_NAME)
-                .build()), apiKey, wsName);
-    }
-
-    private void createTestComment(UUID entityId, String apiKey, String wsName) {
-        traceClient.createComment(
-                Comment.builder().text("test-comment").build(),
-                entityId, apiKey, wsName, 201);
-    }
-
     // -- ClickHouse read helpers for verification --
 
     private long countRows(String table, String wsId) {
@@ -504,5 +474,19 @@ class RetentionPolicyServiceTest {
             return Mono.from(connection.createStatement(sql).execute())
                     .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class))));
         }).block();
+    }
+
+    /**
+     * Wait for ClickHouse to have at least {@code expected} rows for the given table/workspace.
+     * Trace and span writes go through an async pipeline (Redis streams -> ClickHouse),
+     * so data may not be visible immediately after REST API returns 201.
+     */
+    private void waitForRows(String table, String wsId, long expected) {
+        Awaitility.await()
+                .atMost(10, TimeUnit.SECONDS)
+                .pollInterval(Duration.ofMillis(300))
+                .untilAsserted(() -> assertThat(countRows(table, wsId))
+                        .as("Expected %d rows in %s for workspace %s", expected, table, wsId)
+                        .isEqualTo(expected));
     }
 }

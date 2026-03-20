@@ -3761,7 +3761,7 @@ class TraceDAOImpl implements TraceDAO {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(workspaceIds), "Argument 'workspaceIds' must not be empty");
 
-        log.info("Retention delete traces: workspaces={}, cutoffId={}, lowerBound={}",
+        log.info("Retention delete traces: workspaces='{}', cutoffId='{}', lowerBound='{}'",
                 workspaceIds.size(), cutoffId, lowerBound);
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null,
@@ -3784,7 +3784,7 @@ class TraceDAOImpl implements TraceDAO {
             @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
         Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
 
-        log.info("Retention delete traces (bounded): workspaces={}, cutoffId={}", workspaceMinIds.size(), cutoffId);
+        log.info("Retention delete traces (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
         var logComment = getLogComment("retention_delete_traces_bounded", null, workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());

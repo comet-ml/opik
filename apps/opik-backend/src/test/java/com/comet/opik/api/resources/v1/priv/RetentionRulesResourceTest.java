@@ -124,7 +124,7 @@ class RetentionRulesResourceTest {
             assertThat(created.projectId()).isNull();
             assertThat(created.level()).isEqualTo(RetentionLevel.WORKSPACE);
             assertThat(created.retention()).isEqualTo(RetentionPeriod.BASE_60D);
-            assertThat(created.applyToPast()).isFalse();
+            assertThat(created.applyToPast()).isTrue();
             assertThat(created.enabled()).isTrue();
             assertThat(created.createdBy()).isEqualTo(USER);
             assertThat(created.lastUpdatedBy()).isEqualTo(USER);

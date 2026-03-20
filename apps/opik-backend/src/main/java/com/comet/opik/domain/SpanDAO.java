@@ -2671,7 +2671,7 @@ public class SpanDAO {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(workspaceIds), "Argument 'workspaceIds' must not be empty");
 
-        log.info("Retention delete spans: workspaces={}, cutoffId={}, lowerBound={}",
+        log.info("Retention delete spans: workspaces='{}', cutoffId='{}', lowerBound='{}'",
                 workspaceIds.size(), cutoffId, lowerBound);
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null,
@@ -2697,7 +2697,7 @@ public class SpanDAO {
             @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
         Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
 
-        log.info("Retention delete spans (bounded): workspaces={}, cutoffId={}", workspaceMinIds.size(), cutoffId);
+        log.info("Retention delete spans (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
         var logComment = getLogComment("retention_delete_spans_bounded", null, workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());

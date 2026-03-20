@@ -67,7 +67,7 @@ public class RetentionPolicyService {
      */
     public Mono<Void> executeRetentionCycle(int fraction, Instant now) {
         var range = RetentionUtils.computeWorkspaceRange(fraction, config.getTotalFractions());
-        log.info("Retention cycle starting: fraction={}, range=[{}, {})", fraction, range[0], range[1]);
+        log.info("Retention cycle starting: fraction='{}', range=['{}', '{}')", fraction, range[0], range[1]);
 
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(RetentionRuleDAO.class);
@@ -80,11 +80,11 @@ public class RetentionPolicyService {
                         return Mono.empty();
                     }
 
-                    log.info("Retention cycle: {} rules found", rules.size());
+                    log.info("Retention cycle: '{}' rules found", rules.size());
                     return executeDeletes(rules, now);
                 })
-                .doOnSuccess(__ -> log.info("Retention cycle completed: fraction={}", fraction))
-                .doOnError(error -> log.error("Retention cycle failed: fraction={}", fraction, error));
+                .doOnSuccess(__ -> log.info("Retention cycle completed: fraction='{}'", fraction))
+                .doOnError(error -> log.error("Retention cycle failed: fraction='{}'", fraction, error));
     }
 
     private Mono<Void> executeDeletes(List<RetentionRule> rules, Instant now) {
@@ -95,7 +95,7 @@ public class RetentionPolicyService {
         Map<RetentionPeriod, List<RetentionRule>> grouped = resolved.stream()
                 .collect(Collectors.groupingBy(RetentionRule::retention));
 
-        log.info("Retention cycle: {} workspaces across {} retention levels",
+        log.info("Retention cycle: '{}' workspaces across '{}' retention levels",
                 resolved.size(), grouped.size());
 
         return Flux.fromIterable(grouped.entrySet())
@@ -170,7 +170,7 @@ public class RetentionPolicyService {
     }
 
     private Mono<Long> logAndSkip(String table, int batchSize, Throwable error) {
-        log.error("Retention delete failed: table={}, batchSize={}", table, batchSize, error);
+        log.error("Retention delete failed: table='{}', batchSize='{}'", table, batchSize, error);
         return Mono.just(0L);
     }
 
