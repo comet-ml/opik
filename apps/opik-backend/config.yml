@@ -825,6 +825,12 @@ traceThreadConfig:
   # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+  # Default: 7d
+  # Description: On first run after startup, look back this far to catch threads that became stale during downtime
+  coldStartLookback: ${OPIK_CLOSE_TRACE_THREAD_COLD_START_LOOKBACK:-7d}
+  # Default: 5
+  # Description: Max exponent for exponential backoff on consecutive failures (backoff = interval * 2^exponent)
+  maxBackoffExponent: ${OPIK_CLOSE_TRACE_THREAD_MAX_BACKOFF_EXPONENT:-5}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${OPIK_REDIS_TRACE_THREAD_CLAIM_INTERVAL_RATIO:-10}

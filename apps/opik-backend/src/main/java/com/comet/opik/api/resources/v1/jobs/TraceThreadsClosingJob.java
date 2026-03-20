@@ -32,12 +32,9 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @DisallowConcurrentExecution
 public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
-    private static final int MAX_BACKOFF_EXPONENT = 5; // backoff doubles each failure: x2, x4, x8, x16, x32 of base interval
-
     // On first run after startup (or after an outage), look back further to catch any threads that
     // became stale during downtime. This is deliberately conservative — the minmax skip index keeps
-    // the cost proportional to matching granules, so 7 days is still very cheap.
-    private static final Duration COLD_START_LOOKBACK = Duration.ofDays(7);
+    // the cost proportional to matching granules, so the wider window is still very cheap.
 
     private final TraceThreadService traceThreadService;
     private final LockService lockService;
@@ -104,7 +101,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                                 completedFirstRun.set(true);
                                 consecutiveFailures.set(0);
                                 backoffUntilMillis.set(0);
-                                log.info("Successfully started closing trace threads process");
+                                log.info("Successfully completed closing trace threads process");
                             } else {
                                 log.info(
                                         "Closing trace threads process completed but was interrupted during execution");
@@ -129,7 +126,9 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                     }
 
                     var now = Instant.now();
-                    var minLookback = completedFirstRun.get() ? null : COLD_START_LOOKBACK;
+                    var minLookback = completedFirstRun.get()
+                            ? null
+                            : traceThreadConfig.getColdStartLookback().toJavaDuration();
                     return enqueueInRedis(
                             traceThreadService
                                     .getProjectsWithPendingClosureThreads(
@@ -182,7 +181,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
 
     private void applyBackoff() {
         int failures = consecutiveFailures.incrementAndGet();
-        int exponent = Math.min(failures, MAX_BACKOFF_EXPONENT);
+        int exponent = Math.min(failures, traceThreadConfig.getMaxBackoffExponent());
         long intervalMs = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration().toMillis();
         long backoffMs = intervalMs * (1L << exponent);
         backoffUntilMillis.set(System.currentTimeMillis() + backoffMs);
