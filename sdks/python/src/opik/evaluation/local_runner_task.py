@@ -2,11 +2,8 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-from ..types import DistributedTraceHeadersDict
-
 import httpx
 
-from .. import exceptions, opik_context
 from ..api_objects import opik_client, rest_helpers
 from ..rest_api import client as rest_api_client
 
@@ -30,10 +27,6 @@ class LocalRunnerTask:
     4. Returns ``{"input": <original item>, "output": <job result>}``.
 
     Failures raise ``RuntimeError``; timeouts raise ``TimeoutError``.
-
-    If an Opik trace/span context is active (e.g. during ``evaluate()``),
-    distributed trace headers are automatically forwarded to the runner so the
-    remote agent's spans attach to the evaluation trace.
 
     Args:
         project_name: The project to submit jobs under.
@@ -71,15 +64,6 @@ class LocalRunnerTask:
             )
         return self._project_id
 
-    def _get_distributed_trace_headers(
-        self,
-    ) -> Optional[DistributedTraceHeadersDict]:
-        """Return distributed trace headers if a span context is active, else None."""
-        try:
-            return opik_context.get_distributed_trace_headers()
-        except exceptions.OpikException:
-            return None
-
     def _submit_job(self, inputs: Dict[str, Any]) -> str:
         rest_client = self._get_rest_client()
         project_id = self._resolve_project_id()
@@ -91,10 +75,6 @@ class LocalRunnerTask:
         }
         if self._mask_id is not None:
             kwargs["mask_id"] = self._mask_id
-
-        headers = self._get_distributed_trace_headers()
-        if headers is not None:
-            kwargs["metadata"] = headers
 
         try:
             # create_job raises for non-2xx responses internally
