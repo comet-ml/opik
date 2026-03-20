@@ -826,10 +826,23 @@ traceThreadConfig:
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
   # Default: 7d
-  # Description: On first run after startup, look back this far to catch threads that became stale during downtime
+  # Type: Duration (e.g. 1d, 12h, 7d)
+  # Scope: Global — applies to the trace-thread closing job on every instance
+  # Description: On first run after startup (or after an outage), look back this far to catch threads
+  #   that became stale during downtime. The minmax skip index keeps cost proportional to matching
+  #   granules, so wider windows are cheap. Subsequent runs use the normal computed lookback.
+  # Impact: Larger values scan more granules on first run but reduce risk of missing stale threads
+  #   after prolonged outages. Smaller values reduce first-run cost but may miss old threads.
+  # Safe range: 1d–30d
   coldStartLookback: ${OPIK_CLOSE_TRACE_THREAD_COLD_START_LOOKBACK:-7d}
   # Default: 5
-  # Description: Max exponent for exponential backoff on consecutive failures (backoff = interval * 2^exponent)
+  # Type: Integer (exponent, not the backoff duration itself)
+  # Scope: Global — applies to the trace-thread closing job on every instance
+  # Description: Max exponent for exponential backoff on consecutive failures.
+  #   Backoff duration = closeTraceThreadJobInterval * 2^exponent (e.g. 15s * 2^5 = 480s = 8min).
+  # Impact: Higher values allow longer backoff on persistent failures, reducing load on ClickHouse.
+  #   Lower values resume faster after transient errors but risk hammering a struggling server.
+  # Safe range: 1–10
   maxBackoffExponent: ${OPIK_CLOSE_TRACE_THREAD_MAX_BACKOFF_EXPONENT:-5}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
