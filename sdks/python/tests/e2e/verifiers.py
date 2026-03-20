@@ -559,11 +559,10 @@ def verify_thread(
     project_name: Optional[str] = None,
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
 ) -> None:
-    threads_client = opik_client.get_threads_client()
     if not synchronization.until(
         lambda: (
             len(
-                threads_client.search_threads(
+                opik_client.search_threads(
                     project_name=project_name, filter_string=f'id = "{thread_id}"'
                 )
             )
@@ -571,7 +570,7 @@ def verify_thread(
         ),
     ):
         raise AssertionError(f"Failed to get thread with id '{thread_id}'.")
-    threads = threads_client.search_threads(
+    threads = opik_client.search_threads(
         project_name=project_name,
         filter_string=f'id = "{thread_id}"',
     )
@@ -581,7 +580,7 @@ def verify_thread(
     assert thread.id == thread_id
 
     def _get_feedback_scores() -> Optional[List[Union[FeedbackScore]]]:
-        return threads_client.search_threads(
+        return opik_client.search_threads(
             project_name=project_name,
             filter_string=f'id = "{thread_id}"',
         )[0].feedback_scores

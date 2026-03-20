@@ -82,6 +82,7 @@ jobs:
         if: always()
         with:
           action_fail: true
+          comment_mode: failures
           check_name: "TS SDK E2E Tests - Node ${{matrix.node_version}}"
           files: ${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
 

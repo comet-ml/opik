@@ -39,7 +39,6 @@ type UseConfigurationSaveParams = {
   originalValues: React.RefObject<Record<string, string>>;
   description: string;
   projectId: string;
-  isLatestVersion: boolean;
   onSaved: () => void;
 };
 
@@ -49,7 +48,6 @@ export const useConfigurationSave = ({
   originalValues,
   description,
   projectId,
-  isLatestVersion,
   onSaved,
 }: UseConfigurationSaveParams) => {
   const { toast } = useToast();
@@ -124,17 +122,11 @@ export const useConfigurationSave = ({
       }
     }
 
-    // Step 3: Build the payload
-    // When editing from a non-latest version, send all non-prompt values
-    // (prompts are excluded since they may have diverged in newer versions).
-    // When editing from the latest version, send only changed values.
+    // Step 3: Build the payload — send only changed values
     const values: BlueprintValue[] = agentConfig.values
       .filter((v) => {
         if (v.type === BlueprintValueType.PROMPT) {
           return newCommits.has(v.key);
-        }
-        if (!isLatestVersion) {
-          return true;
         }
         return (
           originalValues.current !== null &&
@@ -146,7 +138,7 @@ export const useConfigurationSave = ({
         type: v.type,
         value:
           v.type === BlueprintValueType.PROMPT
-            ? newCommits.get(v.key)!
+            ? newCommits.get(v.key) ?? v.value
             : draftValues[v.key],
         ...(v.description ? { description: v.description } : {}),
       }));
@@ -171,7 +163,6 @@ export const useConfigurationSave = ({
     originalValues,
     description,
     projectId,
-    isLatestVersion,
     onSaved,
     createConfig,
     toast,

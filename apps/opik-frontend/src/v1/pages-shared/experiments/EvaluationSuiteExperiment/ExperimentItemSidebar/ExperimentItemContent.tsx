@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import sortBy from "lodash/sortBy";
 import groupBy from "lodash/groupBy";
+import isFunction from "lodash/isFunction";
 import { Database, ListTree } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -116,13 +117,13 @@ const SingleExperimentSection: React.FC<SingleExperimentSectionProps> = ({
             className="flex shrink-0 cursor-pointer items-center gap-1.5"
             onClick={(e) => {
               e.stopPropagation();
-              if (activeItem.trace_id) {
+              if (isFunction(openTrace) && activeItem.trace_id) {
                 openTrace(activeItem.trace_id);
               }
             }}
           >
             <ListTree className="size-3" />
-            Go to traces
+            Trace
           </Tag>
         )}
       </div>

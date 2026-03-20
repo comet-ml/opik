@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Info, Pencil, Split } from "lucide-react";
+import { Pencil, Split } from "lucide-react";
 
 import { BlueprintValueType, ConfigHistoryItem } from "@/types/agent-configs";
 import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
@@ -12,15 +12,12 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "@/v1/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
 import BlueprintValuePrompt from "@/v1/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
 import { Separator } from "@/ui/separator";
-import { Alert, AlertDescription } from "@/ui/alert";
 import { useConfigurationSave } from "./useConfigurationSave";
 import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
 
 type ConfigurationEditViewProps = {
   item: ConfigHistoryItem;
   projectId: string;
-  version: number;
-  latestVersion: number;
   onCancel: () => void;
   onSaved: () => void;
 };
@@ -28,8 +25,6 @@ type ConfigurationEditViewProps = {
 const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
   item,
   projectId,
-  version,
-  latestVersion,
   onCancel,
   onSaved,
 }) => {
@@ -44,7 +39,6 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
   >({});
   const originalValues = useRef<Record<string, string>>({});
   const initialized = useRef(false);
-  const isLatestVersion = version === latestVersion;
 
   const { handleSave, isSaving, errors, clearError, promptRefs } =
     useConfigurationSave({
@@ -53,7 +47,6 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
       originalValues,
       description,
       projectId,
-      isLatestVersion,
       onSaved,
     });
 
@@ -121,7 +114,7 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
           <h2 className="comet-title-s">Create new version</h2>
           <div className="comet-body-xs flex items-center gap-1 rounded bg-[var(--edit-badge-bg)] px-2 py-0.5 text-[var(--edit-badge-text)]">
             <Pencil className="size-2.5" />
-            From v{version}
+            From {item.name}
           </div>
           <Button
             variant="outline"
@@ -160,16 +153,6 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
         </div>
       </div>
 
-      {version !== latestVersion && (
-        <Alert variant="callout" size="sm" className="mb-4">
-          <Info />
-          <AlertDescription size="sm">
-            You&apos;re creating a version from v{version}. More recent versions
-            contain prompt updates that won&apos;t be included.
-          </AlertDescription>
-        </Alert>
-      )}
-
       <div className="mb-4">
         <label className="comet-body-xs-accented mb-1.5 block text-foreground">
           Description
@@ -198,11 +181,6 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
                 <span className="comet-body-s-accented text-foreground">
                   {v.key}
                 </span>
-                {v.type === BlueprintValueType.PROMPT && isChanged && (
-                  <TooltipWrapper content="Saving will create a new prompt version visible everywhere in the platform">
-                    <Info className="size-3.5 text-muted-slate" />
-                  </TooltipWrapper>
-                )}
                 {isChanged && (
                   <span className="size-1.5 rounded-full bg-amber-400" />
                 )}
@@ -220,7 +198,7 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
                     key={v.value}
                     value={v}
                     projectId={projectId}
-                    isEditing={isLatestVersion}
+                    isEditing
                     ref={(el) => {
                       promptRefs.current[v.key] = el;
                     }}
@@ -276,7 +254,7 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
         open={diffOpen}
         setOpen={setDiffOpen}
         base={{
-          label: `v${version} (original)`,
+          label: `${item.name} (original)`,
           blueprintId: item.id,
         }}
         diff={{
