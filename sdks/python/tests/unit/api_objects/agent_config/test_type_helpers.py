@@ -265,6 +265,10 @@ class TestPythonValueToBackendValue:
             == "pv123456"
         )
 
+    def test_none_value__returns_none(self):
+        assert type_helpers.python_value_to_backend_value(None, str) is None
+        assert type_helpers.python_value_to_backend_value(None, float) is None
+
 
 class TestBackendValueToPythonValue:
     @pytest.mark.parametrize(
