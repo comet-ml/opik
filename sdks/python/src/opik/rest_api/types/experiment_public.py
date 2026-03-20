@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .assertion_score_average_public import AssertionScoreAveragePublic
 from .comment_public import CommentPublic
 from .dataset_version_summary_public import DatasetVersionSummaryPublic
 from .experiment_public_evaluation_method import ExperimentPublicEvaluationMethod
@@ -72,6 +73,11 @@ class ExperimentPublic(UniversalBaseModel):
     total_count: typing.Optional[int] = pydantic.Field(default=None)
     """
     Total number of items for evaluation suite experiments. Null for regular experiments.
+    """
+
+    assertion_scores: typing.Optional[typing.List[AssertionScoreAveragePublic]] = pydantic.Field(default=None)
+    """
+    Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments.
     """
 
     if IS_PYDANTIC_V2:

@@ -41,4 +41,6 @@ export interface ExperimentPublic {
     passedCount?: number;
     /** Total number of items for evaluation suite experiments. Null for regular experiments. */
     totalCount?: number;
+    /** Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments. */
+    assertionScores?: OpikApi.AssertionScoreAveragePublic[];
 }

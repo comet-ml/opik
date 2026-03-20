@@ -4,6 +4,4 @@
  * @example
  *     {}
  */
-export interface FindTraceThreadsFeedbackScoreNamesRequest {
-    projectId?: string;
-}
+export type DeleteEnvRequest = {};
