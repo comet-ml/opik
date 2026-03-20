@@ -88,15 +88,7 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                 .timeout(Duration.ofSeconds(jobTimeoutConfig.getTraceThreadsClosingJobTimeout())) // Add timeout to prevent hanging
                 .subscribe(
                         __ -> {
-                            if (!interrupted.get()) {
-                                completedFirstRun.set(true);
-                                consecutiveFailures.set(0);
-                                backoffUntilMillis.set(0);
-                                log.info("Successfully started closing trace threads process");
-                            } else {
-                                log.info(
-                                        "Closing trace threads process completed but was interrupted during execution");
-                            }
+                            // Note: Mono<Void> never emits onNext, success is handled in onComplete below
                         },
                         error -> {
                             if (interrupted.get()) {
@@ -105,6 +97,17 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                                 applyBackoff();
                                 log.error("Error processing closing of trace threads (consecutive failures: '{}')",
                                         consecutiveFailures.get(), error);
+                            }
+                        },
+                        () -> {
+                            if (!interrupted.get()) {
+                                completedFirstRun.set(true);
+                                consecutiveFailures.set(0);
+                                backoffUntilMillis.set(0);
+                                log.info("Successfully started closing trace threads process");
+                            } else {
+                                log.info(
+                                        "Closing trace threads process completed but was interrupted during execution");
                             }
                         });
     }
