@@ -10,7 +10,7 @@ from ..rest_api import client as rest_api_client
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 120
-DEFAULT_POLL_INTERVAL_SECONDS = 1
+DEFAULT_POLL_INTERVAL_SECONDS = 0.5
 
 
 class LocalRunnerTask:
@@ -37,7 +37,7 @@ class LocalRunnerTask:
         agent_name: The agent to execute the job.
         mask_id: Optional agent config override mask.
         timeout_seconds: Max time to wait for job completion (default 120).
-        poll_interval_seconds: Interval between status polls (default 1).
+        poll_interval_seconds: Interval between status polls (default 0.5).
     """
 
     def __init__(
@@ -45,8 +45,8 @@ class LocalRunnerTask:
         project_name: str,
         agent_name: str,
         mask_id: Optional[str] = None,
-        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
-        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     ) -> None:
         if poll_interval_seconds <= 0:
             raise ValueError("poll_interval_seconds must be positive")
