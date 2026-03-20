@@ -335,8 +335,7 @@ class DatasetServiceImpl implements DatasetService {
                             return Optional.empty();
                         }
                         return dao.findByName(workspaceId, name, null).map(d -> {
-                            requestContext.get().setWorkspaceFallbackMessage(
-                                    RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset", name));
+                            requestContext.get().setWorkspaceFallbackFor("Dataset", name);
                             return d;
                         });
                     })
@@ -365,9 +364,7 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = findByName(workspaceId, identifier.datasetName(), projectId, visibility);
         // Project name was given but couldn't be resolved to a known project — dataset found workspace-wide
         if (projectNameProvided && projectId == null) {
-            requestContext.get().setWorkspaceFallbackMessage(
-                    RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
-                            identifier.datasetName()));
+            requestContext.get().setWorkspaceFallbackFor("Dataset", identifier.datasetName());
         }
         return dataset;
     }

@@ -41,4 +41,8 @@ public class RequestContext {
     private List<Quota> quotas;
     private Visibility visibility;
     private String workspaceFallbackMessage;
+
+    public void setWorkspaceFallbackFor(String entityType, String entityName) {
+        this.workspaceFallbackMessage = WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted(entityType, entityName);
+    }
 }
