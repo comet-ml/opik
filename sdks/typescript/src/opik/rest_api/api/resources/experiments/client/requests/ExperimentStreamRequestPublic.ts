@@ -4,4 +4,5 @@ export interface ExperimentStreamRequestPublic {
     name: string;
     limit?: number;
     lastRetrievedId?: string;
+    projectName?: string;
 }
