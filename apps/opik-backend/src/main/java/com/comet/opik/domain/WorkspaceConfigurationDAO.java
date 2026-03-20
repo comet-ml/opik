@@ -29,6 +29,8 @@ public interface WorkspaceConfigurationDAO {
     Mono<WorkspaceConfiguration> getConfiguration(String workspaceId);
 
     Mono<Long> deleteConfiguration(String workspaceId);
+
+    Mono<Long> getMaxTimeoutMarkThreadAsInactive();
 }
 
 @Singleton
@@ -82,6 +84,11 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
     private static final String DELETE_CONFIGURATION_SQL = """
             DELETE FROM workspace_configurations
             WHERE workspace_id = :workspace_id
+            """;
+
+    private static final String GET_MAX_TIMEOUT_SQL = """
+            SELECT max(timeout_mark_thread_as_inactive) AS max_timeout
+            FROM workspace_configurations FINAL
             """;
 
     private static final TypeReference<Map<String, String>> COLOR_MAP_TYPE_REF = new TypeReference<>() {
@@ -161,6 +168,19 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    public Mono<Long> getMaxTimeoutMarkThreadAsInactive() {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(GET_MAX_TIMEOUT_SQL);
+
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> {
+                        Long maxTimeout = row.get("max_timeout", Long.class);
+                        return maxTimeout != null ? maxTimeout : 0L;
+                    })));
         });
     }
 }

@@ -52,7 +52,10 @@ public interface TraceThreadService {
 
     Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant now,
             Duration defaultTimeoutToMarkThreadAsInactive,
+            Duration minLookback,
             int limit);
+
+    Mono<Duration> getMaxTimeoutMarkThreadAsInactive(Duration defaultTimeout);
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant now,
             Duration defaultTimeoutToMarkThreadAsInactive);
@@ -291,8 +294,39 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
-            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
-        return traceThreadDAO.findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive, limit);
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive,
+            Duration minLookback, int limit) {
+        return getMaxTimeoutMarkThreadAsInactive(defaultTimeoutToMarkThreadAsInactive)
+                .map(maxTimeout -> {
+                    // max(coalesce(maxTimeout, defaultTimeout) + 1h, 1 day)
+                    // Floor at 1 day: cheap enough (minmax index keeps it fast) and covers
+                    // edge cases like very short configured timeouts.
+                    // The +1h failsafe covers cache staleness (cached for 30min).
+                    var withFailsafe = maxTimeout.plus(Duration.ofHours(1));
+                    var lookbackPeriod = withFailsafe.compareTo(Duration.ofDays(1)) > 0
+                            ? withFailsafe
+                            : Duration.ofDays(1);
+                    if (minLookback != null && minLookback.compareTo(lookbackPeriod) > 0) {
+                        lookbackPeriod = minLookback;
+                    }
+                    return now.minus(lookbackPeriod);
+                })
+                .flatMapMany(cachedMaxInactivePeriod -> traceThreadDAO
+                        .findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive,
+                                cachedMaxInactivePeriod, limit));
+    }
+
+    @Override
+    public Mono<Duration> getMaxTimeoutMarkThreadAsInactive(@NonNull Duration defaultTimeout) {
+        return workspaceConfigurationService.getMaxTimeoutMarkThreadAsInactive()
+                .map(maxTimeoutSeconds -> {
+                    if (maxTimeoutSeconds > 0) {
+                        var maxFromDb = Duration.ofSeconds(maxTimeoutSeconds);
+                        return maxFromDb.compareTo(defaultTimeout) > 0 ? maxFromDb : defaultTimeout;
+                    }
+                    return defaultTimeout;
+                })
+                .defaultIfEmpty(defaultTimeout);
     }
 
     @Override

@@ -579,6 +579,8 @@ traceThreadConfig:
   # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: 2000
+  coldStartLookback: 7d
+  maxBackoffExponent: 5
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: 10
