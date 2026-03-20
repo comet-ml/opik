@@ -8,8 +8,6 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.OptimizationSearchCriteria;
 import com.comet.opik.domain.OptimizationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.auth.RequiredPermissions;
-import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,13 +54,13 @@ public class ProjectOptimizationsResource {
             @ApiResponse(responseCode = "200", description = "Optimizations page", content = @Content(schema = @Schema(implementation = Optimization.OptimizationPage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     @JsonView(Optimization.View.Public.class)
     public Response find(
             @PathParam("projectId") UUID projectId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("dataset_id") UUID datasetId,
+            @QueryParam("dataset_name") String datasetName,
             @QueryParam("name") @Schema(description = "Filter optimizations by name (partial match, case insensitive)") String name,
             @QueryParam("dataset_deleted") Boolean datasetDeleted,
             @QueryParam("filters") String filters) {
@@ -72,6 +70,7 @@ public class ProjectOptimizationsResource {
 
         var searchCriteria = OptimizationSearchCriteria.builder()
                 .datasetId(datasetId)
+                .datasetName(datasetName)
                 .name(name)
                 .datasetDeleted(datasetDeleted)
                 .projectId(projectId)

@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiaghora:000073_add_project_id_to_optimizations
+--changeset thiaghora:000074_add_project_id_to_optimizations
 --comment: Add project_id column to optimizations table for project-scoped operations
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}'
