@@ -32,13 +32,13 @@ def get_experiments_data_by_name(
     project_name: Optional[str],
     max_results: Optional[int] = None,
 ) -> List[experiment_public.ExperimentPublic]:
-    # TODO: project_name should be passed to the rest_client.experiments.stream_experiments() method
     experiments = rest_stream_parser.read_and_parse_full_stream(
         read_source=lambda current_batch_size,
         last_retrieved_id: rest_client.experiments.stream_experiments(
             name=name,
             limit=current_batch_size,
             last_retrieved_id=last_retrieved_id,
+            project_name=project_name,
         ),
         max_results=max_results,
         parsed_item_class=experiment_public.ExperimentPublic,
