@@ -218,24 +218,19 @@ public class LocalRunnersResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         runnerService.nextJob(runnerId, workspaceId, userName)
-                .thenAccept(job -> {
-                    if (job == null) {
-                        asyncResponse.resume(Response.noContent().build());
-                    } else {
-                        asyncResponse.resume(Response.ok(job).build());
-                    }
-                })
-                .exceptionally(e -> {
-                    Throwable cause = e instanceof java.util.concurrent.CompletionException ? e.getCause() : e;
-                    if (cause instanceof WebApplicationException wae) {
-                        asyncResponse.resume(wae);
-                    } else {
-                        log.error("Error polling next job for runner='{}' workspace='{}'", runnerId, workspaceId,
-                                cause);
-                        asyncResponse.resume(Response.serverError().build());
-                    }
-                    return null;
-                });
+                .map(job -> Response.ok(job).build())
+                .defaultIfEmpty(Response.noContent().build())
+                .subscribe(
+                        asyncResponse::resume,
+                        error -> {
+                            if (error instanceof WebApplicationException wae) {
+                                asyncResponse.resume(wae);
+                            } else {
+                                log.error("Error polling next job for runner='{}' workspace='{}'", runnerId,
+                                        workspaceId, error);
+                                asyncResponse.resume(Response.serverError().build());
+                            }
+                        });
     }
 
     @GET

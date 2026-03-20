@@ -88,8 +88,7 @@ const CollaboratorsTab = () => {
   const workspaceId = workspace?.workspaceId;
 
   const currentOrganization = useCurrentOrganization();
-  const { isWorkspaceOwner, canInviteMembers, canUpdateUserRole } =
-    useUserPermission();
+  const { isWorkspaceOwner } = useUserPermission();
 
   const isPermissionsManagementEnabled =
     currentOrganization?.workspaceRolesEnabled ?? false;
@@ -143,22 +142,16 @@ const CollaboratorsTab = () => {
       ? DEFAULT_COLUMNS
       : DEFAULT_COLUMNS.filter((col) => col.id !== WARNING_COLUMN_ID);
 
-    const baseColumns = convertColumnDataToColumn<
-      WorkspaceMember,
-      WorkspaceMember
-    >(columnsToUse, {});
-
-    if (isWorkspaceOwner) {
-      return [
-        ...baseColumns,
-        generateActionsColumDef({
-          cell: WorkspaceMemberActionsCell,
-        }),
-      ];
-    }
-
-    return baseColumns;
-  }, [isPermissionsManagementEnabled, isWorkspaceOwner]);
+    return [
+      ...convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
+        columnsToUse,
+        {},
+      ),
+      generateActionsColumDef({
+        cell: WorkspaceMemberActionsCell,
+      }),
+    ];
+  }, [isPermissionsManagementEnabled]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -258,7 +251,7 @@ const CollaboratorsTab = () => {
     );
   };
 
-  if (!canUpdateUserRole) {
+  if (!isWorkspaceOwner) {
     return null;
   }
 
@@ -276,29 +269,27 @@ const CollaboratorsTab = () => {
           className="w-[320px]"
           dimension="sm"
         />
-        {canInviteMembers && (
-          <DropdownMenu
-            open={isInvitePopoverOpen}
-            onOpenChange={(open) => {
-              setIsInvitePopoverOpen(open);
-              if (!open) {
-                setInviteSearchQuery("");
-              }
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="default" size="sm">
-                <UserPlus className="mr-1.5 size-3.5" />
-                Add users
-              </Button>
-            </DropdownMenuTrigger>
-            <InviteUsersPopover
-              searchQuery={inviteSearchQuery}
-              setSearchQuery={setInviteSearchQuery}
-              onClose={() => setIsInvitePopoverOpen(false)}
-            />
-          </DropdownMenu>
-        )}
+        <DropdownMenu
+          open={isInvitePopoverOpen}
+          onOpenChange={(open) => {
+            setIsInvitePopoverOpen(open);
+            if (!open) {
+              setInviteSearchQuery("");
+            }
+          }}
+        >
+          <DropdownMenuTrigger asChild>
+            <Button variant="default" size="sm">
+              <UserPlus className="mr-1.5 size-3.5" />
+              Add users
+            </Button>
+          </DropdownMenuTrigger>
+          <InviteUsersPopover
+            searchQuery={inviteSearchQuery}
+            setSearchQuery={setInviteSearchQuery}
+            onClose={() => setIsInvitePopoverOpen(false)}
+          />
+        </DropdownMenu>
       </div>
       {renderTable()}
     </>

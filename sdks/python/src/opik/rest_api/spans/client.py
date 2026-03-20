@@ -679,7 +679,6 @@ class SpansClient:
         *,
         project_id: typing.Optional[str] = None,
         type: typing.Optional[FindFeedbackScoreNames1RequestType] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
@@ -690,8 +689,6 @@ class SpansClient:
         project_id : typing.Optional[str]
 
         type : typing.Optional[FindFeedbackScoreNames1RequestType]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -708,10 +705,7 @@ class SpansClient:
         client.spans.find_feedback_score_names1()
         """
         _response = self._raw_client.find_feedback_score_names1(
-            project_id=project_id,
-            type=type,
-            exclude_category_names=exclude_category_names,
-            request_options=request_options,
+            project_id=project_id, type=type, request_options=request_options
         )
         return _response.data
 
@@ -1645,7 +1639,6 @@ class AsyncSpansClient:
         *,
         project_id: typing.Optional[str] = None,
         type: typing.Optional[FindFeedbackScoreNames1RequestType] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
@@ -1656,8 +1649,6 @@ class AsyncSpansClient:
         project_id : typing.Optional[str]
 
         type : typing.Optional[FindFeedbackScoreNames1RequestType]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1677,10 +1668,7 @@ class AsyncSpansClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_feedback_score_names1(
-            project_id=project_id,
-            type=type,
-            exclude_category_names=exclude_category_names,
-            request_options=request_options,
+            project_id=project_id, type=type, request_options=request_options
         )
         return _response.data
 

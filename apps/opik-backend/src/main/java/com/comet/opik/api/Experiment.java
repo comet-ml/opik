@@ -83,7 +83,9 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items that passed for evaluation suite experiments. Null for regular experiments.") Long passedCount,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items for evaluation suite experiments. Null for regular experiments.") Long totalCount){
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items for evaluation suite experiments. Null for regular experiments.") Long totalCount,
+        @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments.") List<AssertionScoreAverage> assertionScores){
 
     @Builder(toBuilder = true)
     public record ExperimentPage(

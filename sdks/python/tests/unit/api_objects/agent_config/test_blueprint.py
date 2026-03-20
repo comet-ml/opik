@@ -38,25 +38,19 @@ def _make_raw_blueprint(
 
 
 class TestBlueprintProperties:
-    def test_property_id__blueprint_has_id__returns_value(self):
-        bp = Blueprint(_make_raw_blueprint(blueprint_id="bp-42"))
-        assert bp.id == "bp-42"
-
-    def test_property_description__blueprint_has_description__returns_value(self):
-        bp = Blueprint(_make_raw_blueprint(description="test desc"))
-        assert bp.description == "test desc"
-
-    def test_property_type__blueprint_has_type__returns_value(self):
-        bp = Blueprint(_make_raw_blueprint(bp_type="mask"))
-        assert bp.type == "mask"
-
-    def test_property_envs__blueprint_has_envs__returns_value(self):
-        bp = Blueprint(_make_raw_blueprint(envs=["prod", "staging"]))
-        assert bp.envs == ["prod", "staging"]
-
-    def test_property_created_by__blueprint_has_creator__returns_value(self):
-        bp = Blueprint(_make_raw_blueprint(created_by="user-1"))
-        assert bp.created_by == "user-1"
+    @pytest.mark.parametrize(
+        "kwargs,attr,expected",
+        [
+            ({"blueprint_id": "bp-42"}, "id", "bp-42"),
+            ({"description": "test desc"}, "description", "test desc"),
+            ({"bp_type": "mask"}, "type", "mask"),
+            ({"envs": ["prod", "staging"]}, "envs", ["prod", "staging"]),
+            ({"created_by": "user-1"}, "created_by", "user-1"),
+        ],
+    )
+    def test_property__returns_value(self, kwargs, attr, expected):
+        bp = Blueprint(_make_raw_blueprint(**kwargs))
+        assert getattr(bp, attr) == expected
 
 
 class TestBlueprintValueResolution:
@@ -75,21 +69,23 @@ class TestBlueprintValueResolution:
         assert bp["temperature"] == 0.6
         assert bp["name"] == "agent"
 
-    def test_with_field_types__bool_deserialization(self):
-        raw = _make_raw_blueprint(
-            values=[AgentConfigValuePublic(key="flag", type="string", value="true")]
-        )
-        bp = Blueprint(raw, field_types={"flag": bool})
-        assert bp["flag"] is True
-
-    def test_with_field_types__int_deserialization(self):
+    @pytest.mark.parametrize(
+        "backend_type,value_str,py_type,expected",
+        [
+            ("string", "true", bool, True),
+            ("integer", "42", int, 42),
+        ],
+    )
+    def test_with_field_types__type_deserialization(
+        self, backend_type, value_str, py_type, expected
+    ):
         raw = _make_raw_blueprint(
             values=[
-                AgentConfigValuePublic(key="count", type="integer", value="42"),
+                AgentConfigValuePublic(key="val", type=backend_type, value=value_str)
             ]
         )
-        bp = Blueprint(raw, field_types={"count": int})
-        assert bp["count"] == 42
+        bp = Blueprint(raw, field_types={"val": py_type})
+        assert bp["val"] == expected
 
 
 class TestBlueprintDictLikeAccess:

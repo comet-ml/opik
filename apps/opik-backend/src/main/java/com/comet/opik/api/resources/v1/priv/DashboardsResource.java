@@ -131,6 +131,7 @@ public class DashboardsResource {
         DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters);
 
         log.info("Found '{}' dashboards in workspace '{}'", dashboardPage.total(), workspaceId);
+
         return Response.ok(dashboardPage).build();
     }
 

@@ -15,14 +15,19 @@ def echo(message: str) -> str:
     return f"echo: {message}"
 
 
-@opik.agent_config()
-class EchoConfig:
-    greeting: str = "default-greeting"
+class EchoConfig(opik.AgentConfig):
+    greeting: str
 
 
 @opik.track(entrypoint=True)
 def echo_config(message: str) -> str:
-    cfg = EchoConfig()
+    client = opik.Opik()
+    version = client.create_agent_config_version(
+        EchoConfig(greeting="default-greeting")
+    )
+    cfg = client.get_agent_config(
+        fallback=EchoConfig(greeting="fallback-greeting"), version=version
+    )
     return f"{cfg.greeting}: {message}"
 
 

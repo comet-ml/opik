@@ -98,7 +98,6 @@ import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import useConfigVersionMap from "@/api/agent-configs/useConfigVersionMap";
 import { isAgentConfigurationMetadata } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import GuardrailsCell from "@/shared/DataTableCells/GuardrailsCell";
@@ -330,6 +329,7 @@ const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
   COLUMN_COMMENTS_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
+  COLUMN_CONFIGURATION_VERSION_ID,
 ];
 
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
@@ -436,9 +436,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
   );
 
-  const versionMap = useConfigVersionMap(projectId, {
-    enabled: isAgentConfigurationEnabled,
-  });
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
@@ -951,26 +948,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 }),
               },
             },
-            ...(isAgentConfigurationEnabled
-              ? [
-                  {
-                    id: COLUMN_CONFIGURATION_VERSION_ID,
-                    label: "Configuration",
-                    type: COLUMN_TYPE.string,
-                    sortable: false,
-                    cell: ConfigurationVersionCell as never,
-                    accessorFn: (row: BaseTraceData) => {
-                      const agentConfig = (
-                        row.metadata as Record<string, unknown>
-                      )?.[AGENT_CONFIGURATION_METADATA_KEY];
-                      if (!isAgentConfigurationMetadata(agentConfig))
-                        return "-";
-                      const version = versionMap[agentConfig.blueprint_id];
-                      return version !== undefined ? `v${version}` : "-";
-                    },
-                  },
-                ]
-              : []),
           ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
@@ -1009,6 +986,31 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
+      ...(isAgentConfigurationEnabled
+        ? [
+            {
+              id: COLUMN_CONFIGURATION_VERSION_ID,
+              label: "Configuration",
+              type: COLUMN_TYPE.string,
+              sortable: false,
+              cell: ConfigurationVersionCell as never,
+              accessorFn: (row: BaseTraceData) => {
+                const agentConfig = (row.metadata as Record<string, unknown>)?.[
+                  AGENT_CONFIGURATION_METADATA_KEY
+                ];
+
+                if (!isAgentConfigurationMetadata(agentConfig))
+                  return undefined;
+                const version = agentConfig.blueprint_version;
+                if (!version) return undefined;
+                return {
+                  version,
+                  maskId: agentConfig._mask_id,
+                };
+              },
+            },
+          ]
+        : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
   }, [
@@ -1016,7 +1018,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     handleThreadIdClick,
     isGuardrailsEnabled,
     isAgentConfigurationEnabled,
-    versionMap,
   ]);
 
   const filtersColumnData = useMemo(() => {

@@ -11,6 +11,7 @@ export const ExperimentStreamRequestPublic: core.serialization.Schema<
     name: core.serialization.string(),
     limit: core.serialization.number().optional(),
     lastRetrievedId: core.serialization.property("last_retrieved_id", core.serialization.string().optional()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
 });
 
 export declare namespace ExperimentStreamRequestPublic {
@@ -18,5 +19,6 @@ export declare namespace ExperimentStreamRequestPublic {
         name: string;
         limit?: number | null;
         last_retrieved_id?: string | null;
+        project_name?: string | null;
     }
 }

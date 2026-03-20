@@ -529,11 +529,7 @@ class RawExperimentsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
@@ -541,8 +537,6 @@ class RawExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -557,7 +551,6 @@ class RawExperimentsClient:
             method="GET",
             params={
                 "experiment_ids": experiment_ids,
-                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
@@ -979,6 +972,7 @@ class RawExperimentsClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -994,6 +988,8 @@ class RawExperimentsClient:
 
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1011,6 +1007,7 @@ class RawExperimentsClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",
@@ -1043,6 +1040,7 @@ class RawExperimentsClient:
         name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1055,6 +1053,8 @@ class RawExperimentsClient:
         limit : typing.Optional[int]
 
         last_retrieved_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1071,6 +1071,7 @@ class RawExperimentsClient:
                 "name": name,
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",
@@ -1585,11 +1586,7 @@ class AsyncRawExperimentsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
@@ -1597,8 +1594,6 @@ class AsyncRawExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1613,7 +1608,6 @@ class AsyncRawExperimentsClient:
             method="GET",
             params={
                 "experiment_ids": experiment_ids,
-                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
@@ -2035,6 +2029,7 @@ class AsyncRawExperimentsClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -2050,6 +2045,8 @@ class AsyncRawExperimentsClient:
 
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -2067,6 +2064,7 @@ class AsyncRawExperimentsClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",
@@ -2100,6 +2098,7 @@ class AsyncRawExperimentsClient:
         name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -2112,6 +2111,8 @@ class AsyncRawExperimentsClient:
         limit : typing.Optional[int]
 
         last_retrieved_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -2128,6 +2129,7 @@ class AsyncRawExperimentsClient:
                 "name": name,
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
+                "project_name": project_name,
             },
             headers={
                 "content-type": "application/json",

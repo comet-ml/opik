@@ -6,5 +6,4 @@
  */
 export interface FindTraceThreadsFeedbackScoreNamesRequest {
     projectId?: string;
-    excludeCategoryNames?: string | string[];
 }

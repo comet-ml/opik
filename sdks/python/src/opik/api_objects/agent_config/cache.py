@@ -29,6 +29,7 @@ class SharedConfigCache:
     def __init__(self, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> None:
         self._lock = threading.RLock()
         self.blueprint_id: typing.Optional[str] = None
+        self.blueprint_version: typing.Optional[str] = None
         self.values: typing.Dict[str, typing.Any] = {}
         self._registered_field_types: typing.Dict[str, typing.Any] = {}
         self._ttl_seconds = ttl_seconds
@@ -59,6 +60,7 @@ class SharedConfigCache:
         new_values = dict(blueprint._values)
         with self._lock:
             self.blueprint_id = blueprint.id
+            self.blueprint_version = blueprint.name
             self.values = new_values
             self._last_fetch = time.monotonic()
 
@@ -166,3 +168,47 @@ class SharedCacheRegistry:
 
 
 _registry = SharedCacheRegistry()
+
+
+def get_global_registry() -> SharedCacheRegistry:
+    return _registry
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers (used by base.py and opik_client.py)
+# ---------------------------------------------------------------------------
+
+
+def get_cached_config(
+    project_name: str,
+    env: typing.Optional[str],
+    mask_id: typing.Optional[str],
+) -> SharedConfigCache:
+    return _registry.get(project_name, env, mask_id)
+
+
+def init_cache_entry(
+    project_name: str,
+    env: typing.Optional[str],
+    mask_id: typing.Optional[str],
+    prefixed_field_types: typing.Dict[str, typing.Any],
+    agent_config_manager: typing.Any,
+    blueprint: typing.Optional[Blueprint] = None,
+) -> None:
+    shared_cache = _registry.get(project_name, env, mask_id)
+    shared_cache.register_fields(prefixed_field_types)
+
+    if blueprint is not None:
+        shared_cache.update(blueprint)
+
+    if agent_config_manager is not None and mask_id is None:
+
+        def _refresh() -> typing.Optional[Blueprint]:
+            return agent_config_manager.get_blueprint(
+                env=env,
+                mask_id=mask_id,
+                field_types=shared_cache.all_field_types,
+            )
+
+        shared_cache.set_refresh_callback(_refresh)
+        _registry.ensure_refresh_thread_started()

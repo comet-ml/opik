@@ -17,8 +17,10 @@ import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.filter.DatasetFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
@@ -33,6 +35,8 @@ import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RequiredArgsConstructor
 public class DatasetResourceClient {
     private static final String RESOURCE_PATH = "%s/v1/private/datasets";
+    private static final String PROJECT_DATASETS_PATH = "%s/v1/private/projects/%s/datasets";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -138,6 +143,63 @@ public class DatasetResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
             return actualResponse.readEntity(DatasetPage.class);
         }
+    }
+
+    public DatasetPage getProjectDatasets(UUID projectId, int page, int size, String workspaceName, String apiKey) {
+        return getProjectDatasets(projectId, page, size, null, null, null, workspaceName, apiKey);
+    }
+
+    public DatasetPage getProjectDatasets(UUID projectId, int page, int size, String name, String sorting,
+            List<DatasetFilter> filters, String workspaceName, String apiKey) {
+        try (var actualResponse = buildProjectDatasetsTarget(projectId, page, size, name, sorting, filters)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetPage.class);
+        }
+    }
+
+    public Response callGetProjectDatasets(UUID projectId, int page, int size, String name, String sorting,
+            List<DatasetFilter> filters, String workspaceName, String apiKey) {
+        return buildProjectDatasetsTarget(projectId, page, size, name, sorting, filters)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    private WebTarget buildProjectDatasetsTarget(UUID projectId, int page, int size, String name, String sorting,
+            List<DatasetFilter> filters) {
+        WebTarget target = client.target(PROJECT_DATASETS_PATH.formatted(baseURI, projectId))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (StringUtils.isNotBlank(name)) {
+            target = target.queryParam("name", name);
+        }
+
+        if (StringUtils.isNotBlank(sorting)) {
+            target = target.queryParam("sorting", sorting);
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            target = target.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        return target;
+    }
+
+    public DatasetPage getProjectDatasetsWithSortingField(UUID projectId, int size, List<SortingField> sortingFields,
+            List<DatasetFilter> filters, String workspaceName, String apiKey) {
+        String sorting = CollectionUtils.isNotEmpty(sortingFields)
+                ? URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8)
+                : null;
+        return getProjectDatasets(projectId, 1, size, null, sorting, filters, workspaceName, apiKey);
     }
 
     public void createDatasetItems(DatasetItemBatch batch, String workspaceName, String apiKey) {

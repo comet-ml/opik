@@ -1045,6 +1045,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
+            , assertion_results_per_trace AS (
+                SELECT
+                    entity_id,
+                    toJSONString(
+                        groupArray(
+                            CAST(
+                                (name, toString(passed), reason),
+                                'Tuple(value String, passed String, reason String)'
+                            )
+                        )
+                    ) AS assertions_array
+                FROM assertion_results FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                GROUP BY entity_id
+            )
             , dataset_items_aggr_resolved AS (
                 SELECT
                     div_dedup.id AS id,
@@ -1130,7 +1148,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         ei.visibility_mode,
                         ei.metadata,
                         di.description,
-                        ei.execution_policy
+                        ei.execution_policy,
+                        arp.assertions_array
                     )) AS experiment_items_array
                 FROM (
                     SELECT
@@ -1168,6 +1187,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     <endif>
                 ) ei
                 LEFT JOIN dataset_items_aggr_resolved AS di ON di.id = ei.dataset_item_id
+                LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
                 GROUP BY
                     ei.dataset_item_id,
                     :datasetId,
@@ -1244,7 +1264,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         tfs.visibility_mode,
                         tfs.metadata,
                         di.description,
-                        ei.execution_policy
+                        ei.execution_policy,
+                        arp.assertions_array
                     )) AS experiment_items_array
                 FROM experiment_items_final AS ei
                 LEFT JOIN dataset_items_resolved AS di ON di.id = ei.dataset_item_id
@@ -1381,6 +1402,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         s.total_estimated_cost,
                         s.usage
                 ) AS tfs ON ei.id = tfs.item_id
+                LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
                 GROUP BY
                     ei.dataset_item_id,
                     :datasetId,
@@ -1769,11 +1791,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String SELECT_EXECUTION_POLICIES_BY_DATASET_ITEM_IDS = """
             SELECT DISTINCT
-                dataset_item_id,
+                id,
                 dataset_version_id,
                 execution_policy
             FROM dataset_item_versions
-            WHERE dataset_item_id IN :datasetItemIds
+            WHERE id IN :datasetItemIds
             AND dataset_version_id IN :datasetVersionIds
             AND workspace_id = :workspace_id
             """;
@@ -3596,7 +3618,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, rowMetadata) -> {
-                        var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
+                        var datasetItemId = UUID.fromString(row.get("id", String.class));
                         var versionId = UUID.fromString(row.get("dataset_version_id", String.class));
                         var policy = ExecutionPolicyMapper.fromJson(row.get("execution_policy", String.class));
                         return new DatasetItemPolicyEntry(versionId, datasetItemId, policy);
