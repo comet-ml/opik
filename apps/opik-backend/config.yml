@@ -641,6 +641,8 @@ cacheManager:
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
     experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
+    # Default: PT30M
+    # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
     max_timeout_mark_thread_as_inactive: ${CACHE_MANAGER_MAX_TIMEOUT_MARK_THREAD_AS_INACTIVE_DURATION:-PT30M}
 
 # Configuration for clickhouse log appender
@@ -814,9 +816,9 @@ traceThreadConfig:
   # Default: 15s
   # Description: The interval at which the close trace thread job will run to inactive threads
   closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-15s}
-  # Default: 4s
+  # Default: 14s
   # Description: The time to wait for the close trace threads job to finish before releasing the lock
-  closeTraceThreadJobLockTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_TIME:-4s}
+  closeTraceThreadJobLockTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_TIME:-14s}
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_WAIT_TIME:-300ms}
