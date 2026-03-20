@@ -178,6 +178,7 @@ public class ExperimentsResource {
                 .block();
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",
                 experimentSearchCriteria, experiments.size(), page, size);
+
         return Response.ok().entity(experiments).build();
     }
 
