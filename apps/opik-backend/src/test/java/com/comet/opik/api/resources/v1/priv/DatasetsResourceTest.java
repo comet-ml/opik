@@ -1705,6 +1705,70 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("when retrieving dataset by name with non-existing project_name, then return X-Opik-Deprecation header")
+        void getDatasetByIdentifier__whenNonExistingProjectName__thenReturnDeprecationHeader() {
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .build();
+
+            createAndAssert(dataset);
+
+            var identifier = DatasetIdentifier.builder()
+                    .datasetName(dataset.name())
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(identifier))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(
+                                "Dataset '%s' was found via workspace-wide search. In a future version, you will need to specify the project explicitly."
+                                        .formatted(dataset.name()));
+            }
+        }
+
+        @Test
+        @DisplayName("when retrieving dataset by name with matching project_name, then no X-Opik-Deprecation header")
+        void getDatasetByIdentifier__whenMatchingProjectName__thenNoDeprecationHeader() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .projectId(projectId)
+                    .build();
+
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var identifier = DatasetIdentifier.builder()
+                    .datasetName(dataset.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(identifier))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+        }
+
+        @Test
         @DisplayName("when dataset has optimizations linked to it, then return dataset with optimizations summary")
         void getDatasetById__whenDatasetHasOptimizationsLinkedToIt__thenReturnDatasetWithOptimizationSummary() {
             var dataset = buildDataset();
