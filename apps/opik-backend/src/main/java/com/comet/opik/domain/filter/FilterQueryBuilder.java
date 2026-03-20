@@ -184,8 +184,8 @@ public class FilterQueryBuilder {
                             FieldType.DICTIONARY_STATE_DB,
                             "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d)")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
-                            Map.entry(FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)"),
-                            Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.STRING, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.STRING_STATE_DB, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s = :filter%2$d"),
@@ -203,8 +203,8 @@ public class FilterQueryBuilder {
                                     "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) = lower(:filter%2$d)"),
                             Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"))))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
-                            Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
-                            Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.STRING, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.STRING_STATE_DB, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s != :filter%2$d"),
