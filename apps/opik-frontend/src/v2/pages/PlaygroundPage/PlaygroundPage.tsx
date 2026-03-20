@@ -187,7 +187,7 @@ const PlaygroundPage = () => {
   return (
     <div
       ref={ref}
-      className="-mx-6 h-full overflow-auto"
+      className="-mx-6 h-full overflow-y-auto overflow-x-hidden"
       style={
         {
           "--min-prompt-width": "380px",
@@ -196,7 +196,7 @@ const PlaygroundPage = () => {
         } as React.CSSProperties
       }
     >
-      <div className="flex min-h-full w-fit min-w-full flex-col">
+      <div className="flex min-h-full min-w-full flex-col">
         <div className="bg-gray-100">
           <PlaygroundHeader
             workspaceName={workspaceName}
@@ -216,9 +216,9 @@ const PlaygroundPage = () => {
 
         {isExperimentMode ? (
           <>
-            <div className="flex h-[50vh] shrink-0">
+            <div className="flex h-[50vh] shrink-0 overflow-x-auto">
               <div
-                className="flex min-w-0 flex-1"
+                className="flex flex-1 shrink-0"
                 style={{
                   maxWidth: `calc(${promptCount} * var(--max-prompt-width))`,
                 }}
@@ -245,9 +245,9 @@ const PlaygroundPage = () => {
             />
           </>
         ) : (
-          <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 flex-1 overflow-x-auto">
             <div
-              className="flex min-w-0 flex-1 flex-col"
+              className="flex flex-1 shrink-0 flex-col"
               style={{
                 maxWidth: `calc(${promptCount} * var(--max-prompt-width))`,
               }}

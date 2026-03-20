@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { AlignLeft, Clock, Coins, Pause, Play } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -16,10 +16,7 @@ import {
 import { Button } from "@/ui/button";
 import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
-import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { PROVIDERS } from "@/constants/providers";
-import { parseComposedProviderType } from "@/lib/provider";
-import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
 
 interface PlaygroundPromptOutputProps {
   promptId: string;
@@ -41,26 +38,12 @@ const PlaygroundPromptOutput = ({
   const prompt = usePromptById(promptId);
   const output = useOutputByPromptDatasetItemId(promptId);
 
-  const { getProviderModels } = useLLMProviderModelsData();
-
   const usage = output?.usage;
-  const outputModel = usage?.model;
-  const outputProvider = usage?.provider;
 
-  const ProviderIcon = useMemo(() => {
-    if (!outputProvider) return null;
-    const providerType = parseComposedProviderType(
-      outputProvider as COMPOSED_PROVIDER_TYPE,
-    );
-    return PROVIDERS[providerType]?.icon ?? null;
-  }, [outputProvider]);
-
-  const modelLabel = useMemo(() => {
-    if (!outputModel || !outputProvider) return outputModel ?? null;
-    const models =
-      getProviderModels()[outputProvider as COMPOSED_PROVIDER_TYPE];
-    return models?.find((m) => m.value === outputModel)?.label ?? outputModel;
-  }, [outputModel, outputProvider, getProviderModels]);
+  const { ProviderIcon, modelLabel } = usePromptModelDisplay(
+    usage?.provider,
+    usage?.model,
+  );
 
   const hasOutput = value !== null || isLoading;
 

@@ -433,6 +433,17 @@ export const useOutputByPromptDatasetItemId = (
     return null;
   });
 
+export const useFirstOutputUsageByPromptId = (promptId: string) =>
+  usePlaygroundStore((state) => {
+    const outputMapEntry = state.outputMap?.[promptId];
+    if (!outputMapEntry || !isPlaygroundOutputWithDatasetItem(outputMapEntry))
+      return undefined;
+    const firstKey = Object.keys(outputMapEntry.datasetItemMap)[0];
+    return firstKey
+      ? outputMapEntry.datasetItemMap[firstKey]?.usage
+      : undefined;
+  });
+
 export const useOutputValueByPromptDatasetItemId = (
   promptId: string,
   datasetItemId?: string,

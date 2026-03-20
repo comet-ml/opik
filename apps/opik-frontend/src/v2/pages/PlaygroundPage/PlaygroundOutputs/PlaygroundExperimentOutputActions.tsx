@@ -57,13 +57,16 @@ const PlaygroundExperimentOutputActions = ({
   if (!isExperimentMode) return null;
 
   return (
-    <div style={maxWidth ? { maxWidth } : undefined}>
+    <div
+      className="border-y border-r"
+      style={maxWidth ? { maxWidth } : undefined}
+    >
       {isRunning ? (
-        <div className="border-r border-t px-4 pb-3 pt-2">
+        <div className="px-4 pb-3 pt-2">
           <PlaygroundProgressIndicator />
         </div>
       ) : hasExperiments ? (
-        <div className="flex items-center justify-between border-r border-t bg-gray-100 px-4 py-3">
+        <div className="flex items-center justify-between bg-gray-100 px-4 py-3">
           <Button
             variant="ghost"
             size="sm"
