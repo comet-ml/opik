@@ -462,4 +462,3 @@ class TestLocalRunnerTask:
         )
         with pytest.raises(RuntimeError, match="network error"):
             task({"input": "test"})
-
