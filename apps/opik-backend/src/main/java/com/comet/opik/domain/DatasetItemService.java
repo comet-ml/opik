@@ -288,26 +288,28 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     private Mono<UUID> getDatasetId(DatasetItemBatch batch) {
-
         return resolveProjectId(batch)
-                .flatMap(projectId -> {
-                    if (batch.datasetId() == null) {
-                        return datasetService.getOrCreateDataset(batch.datasetName(), projectId);
-                    }
+                .flatMap(projectId -> getDatasetIdForProject(batch, projectId))
+                .switchIfEmpty(Mono.defer(() -> getDatasetIdForProject(batch, null)));
+    }
 
-                    return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
+    private Mono<UUID> getDatasetIdForProject(DatasetItemBatch batch, UUID projectId) {
+        if (batch.datasetId() == null) {
+            return datasetService.getOrCreateDataset(batch.datasetName(), projectId);
+        }
 
-                        Dataset dataset = datasetService.findById(batch.datasetId(),
-                                ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.VISIBILITY));
+        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
 
-                        if (dataset == null) {
-                            throw newConflict(
-                                    "workspace_name from dataset item batch and dataset_id from item does not match");
-                        }
+            Dataset dataset = datasetService.findById(batch.datasetId(),
+                    ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.VISIBILITY));
 
-                        return dataset.id();
-                    })).subscribeOn(Schedulers.boundedElastic());
-                });
+            if (dataset == null) {
+                throw newConflict(
+                        "workspace_name from dataset item batch and dataset_id from item does not match");
+            }
+
+            return dataset.id();
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Throwable failWithError(String error) {
