@@ -1,7 +1,7 @@
 import { HeaderContext } from "@tanstack/react-table";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
-import { usePromptById } from "@/store/PlaygroundStore";
+import { useFirstOutputUsageByPromptId } from "@/store/PlaygroundStore";
 import usePromptModelDisplay from "@/components/pages/PlaygroundPage/usePromptModelDisplay";
 
 const PlaygroundOutputColumnHeader = <TData,>(
@@ -18,10 +18,10 @@ const PlaygroundOutputColumnHeader = <TData,>(
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[colorIndex % PLAYGROUND_PROMPT_COLORS.length];
 
-  const prompt = usePromptById(promptId ?? "");
+  const usage = useFirstOutputUsageByPromptId(promptId ?? "");
   const { ProviderIcon, modelLabel } = usePromptModelDisplay(
-    prompt?.provider,
-    prompt?.model,
+    usage?.provider,
+    usage?.model,
   );
 
   return (
