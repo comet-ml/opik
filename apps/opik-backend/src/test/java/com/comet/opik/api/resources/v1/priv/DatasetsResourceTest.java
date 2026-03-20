@@ -2316,7 +2316,7 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest#datasetSortingFields")
         @DisplayName("when fetching all datasets, then return datasets sorted by valid fields")
-        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields(
+        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByValidFields(
                 Comparator<Dataset> comparator,
                 SortingField sorting) {
             String workspaceName = UUID.randomUUID().toString();
@@ -10526,7 +10526,7 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest#datasetSortingFields")
         @DisplayName("when fetching all datasets, then return datasets sorted by valid fields")
-        void getProjectDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields(
+        void getProjectDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByValidFields(
                 Comparator<Dataset> comparator,
                 SortingField sorting) {
             String workspaceName = UUID.randomUUID().toString();

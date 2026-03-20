@@ -9,6 +9,8 @@ import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -52,6 +54,7 @@ public class ProjectPromptsResource {
     @Operation(operationId = "getPromptsByProject", summary = "Get prompts by project", description = "Get prompts scoped to a project", responses = {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptPage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     @JsonView(Prompt.View.Public.class)
     public Response getPrompts(
             @PathParam("projectId") UUID projectId,
