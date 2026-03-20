@@ -46,4 +46,4 @@ def test_local_runner_task__evaluate__happyflow(
 
     assert len(result.test_results) == 1
     test_result = result.test_results[0]
-    assert "echo:" in str(test_result.task_output.get("output", ""))
+    assert "echo:" in str(test_result.test_case.task_output.get("output", ""))
