@@ -8633,10 +8633,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8646,6 +8642,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9165,10 +9165,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9178,6 +9174,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9515,10 +9515,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9528,6 +9524,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9961,10 +9961,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9974,6 +9970,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10055,10 +10055,6 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -10068,6 +10064,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -16314,10 +16314,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16446,10 +16446,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16541,10 +16541,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         exclude_blueprint_update_for_projects:
           uniqueItems: true
           type: array
@@ -16590,10 +16590,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
