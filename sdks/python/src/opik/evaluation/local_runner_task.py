@@ -72,8 +72,7 @@ class LocalRunnerTask:
     def _get_distributed_trace_headers(self) -> Optional[Dict[str, str]]:
         """Return distributed trace headers if a span context is active, else None."""
         try:
-            headers = opik_context.get_distributed_trace_headers()
-            return {k: v for k, v in headers.items()}
+            return opik_context.get_distributed_trace_headers()
         except Exception:
             return None
 
