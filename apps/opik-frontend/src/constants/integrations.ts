@@ -53,6 +53,7 @@ import crewaiCode from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integ
 import adkCode from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/ADK.py?raw";
 import openrouterCode from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/OpenRouter.py?raw";
 import autogenCode from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/AutoGen.py?raw";
+import ag2Code from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/AG2.py?raw";
 import agnoCode from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Agno.py?raw";
 import deepseekCode from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/DeepSeek.py?raw";
 // import difyCode from "@/v1/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Dify.py?raw";
@@ -295,6 +296,16 @@ export const INTEGRATIONS: Integration[] = [
     code: openrouterCode,
     installCommand: "pip install -U opik openai",
     docsLink: buildDocsUrl("/integrations/openrouter"),
+  },
+  {
+    id: "ag2",
+    title: "AG2",
+    description: "Frameworks & tools",
+    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+    icon: autogenLogoUrl,
+    code: ag2Code,
+    installCommand: 'pip install -U opik "ag2[openai]"',
+    docsLink: buildDocsUrl("/integrations/ag2"),
   },
   {
     id: "autogen",
