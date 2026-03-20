@@ -330,6 +330,8 @@ def evaluate_suite(
     evaluator_model: Optional[str] = None,
     optimization_id: Optional[str] = None,
     experiment_type: Optional[str] = None,
+    generate_report: bool = True,
+    report_output_path: Optional[str] = None,
 ) -> "suite_types.EvaluationSuiteResult":
     """
     Run evaluation on a dataset configured as an evaluation suite.
@@ -390,6 +392,22 @@ def evaluate_suite(
 
     suite_result = suite_result_constructor.build_suite_result(eval_result)
 
+    report_path: Optional[str] = None
+    if generate_report:
+        from opik.api_objects.dataset.evaluation_suite import result_file
+
+        try:
+            report_path = result_file.save_report(
+                suite_result,
+                suite_name=dataset.name,
+                total_time=total_time,
+                output_path=report_output_path,
+            )
+        except Exception:
+            LOGGER.warning(
+                "Failed to save evaluation suite report file.", exc_info=True
+            )
+
     if verbose >= 1:
         report.display_suite_results(
             dataset.name,
@@ -397,6 +415,7 @@ def evaluate_suite(
             suite_result,
             verbose=verbose,
             experiment_url=suite_result.experiment_url,
+            report_path=report_path,
         )
 
     return suite_result

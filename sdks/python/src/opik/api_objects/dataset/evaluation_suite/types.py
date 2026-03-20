@@ -11,6 +11,7 @@ from ..execution_policy import ExecutionPolicy
 
 if TYPE_CHECKING:
     from opik.evaluation import evaluation_result, test_result
+    from . import result_file as _result_file_mod
 
 
 class EvaluationSuiteItem(TypedDict, total=False):
@@ -106,3 +107,23 @@ class EvaluationSuiteResult:
     def experiment_url(self) -> Optional[str]:
         """URL to view the experiment."""
         return self._evaluation_result.experiment_url
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the result to a structured dictionary suitable for serialization."""
+        from . import result_file
+
+        return result_file.suite_result_to_dict(self)
+
+    def save_report(self, output_path: Optional[str] = None) -> str:
+        """Save a structured JSON report of the evaluation suite result.
+
+        Args:
+            output_path: Optional file path. If not provided, a default path
+                is generated under the ``opik_reports/`` directory.
+
+        Returns:
+            The absolute path to the written report file.
+        """
+        from . import result_file
+
+        return result_file.save_report(self, output_path=output_path)

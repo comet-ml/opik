@@ -395,6 +395,8 @@ class EvaluationSuite:
         verbose: int = 2,
         worker_threads: int = 16,
         model: Optional[str] = None,
+        generate_report: bool = True,
+        report_output_path: Optional[str] = None,
     ) -> suite_types.EvaluationSuiteResult:
         """
         Run the evaluation suite against a task function.
@@ -417,6 +419,10 @@ class EvaluationSuite:
             worker_threads: Number of threads for parallel task execution.
             model: Optional model name to use for checking assertions.
                 If not provided, uses the default model (gpt-5-nano).
+            generate_report: Whether to generate a structured JSON report file
+                after the evaluation completes. Defaults to True.
+            report_output_path: Optional file path for the report. If not
+                provided, a default path is generated under ``opik_reports/``.
 
         Returns:
             EvaluationSuiteResult with pass/fail status based on execution policy.
@@ -441,6 +447,8 @@ class EvaluationSuite:
             verbose=verbose,
             worker_threads=worker_threads,
             model=model,
+            generate_report=generate_report,
+            report_output_path=report_output_path,
         )
 
     def __internal_api__run_optimization_suite__(
@@ -461,6 +469,8 @@ class EvaluationSuite:
         dataset_item_ids: Optional[List[str]] = None,
         dataset_filter_string: Optional[str] = None,
         client: Optional[Any] = None,
+        generate_report: bool = True,
+        report_output_path: Optional[str] = None,
     ) -> suite_types.EvaluationSuiteResult:
         """
         Run the evaluation suite with optimization-specific parameters.
@@ -514,4 +524,6 @@ class EvaluationSuite:
             evaluator_model=model,
             optimization_id=optimization_id,
             experiment_type=experiment_type,
+            generate_report=generate_report,
+            report_output_path=report_output_path,
         )

@@ -124,6 +124,7 @@ def display_suite_results(
     suite_result: suite_types.EvaluationSuiteResult,
     verbose: int = 2,
     experiment_url: Optional[str] = None,
+    report_path: Optional[str] = None,
 ) -> None:
     test_results = [
         tr
@@ -198,6 +199,14 @@ def display_suite_results(
             f"[bold cyan][link={experiment_url}]View results in Opik dashboard[/link][/bold cyan]"
         )
         content.add_row(align.Align.left(link_text))
+
+    if report_path is not None:
+        report_text = text.Text.from_markup(
+            f"[bold green][link=file://{report_path}]View local detailed report file[/link][/bold green]"
+        )
+        content.add_row(align.Align.left(report_text))
+
+    if experiment_url is not None or report_path is not None:
         content.add_row(text.Text(""))
 
     content.add_row(time_text)
