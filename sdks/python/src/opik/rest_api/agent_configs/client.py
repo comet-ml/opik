@@ -188,6 +188,34 @@ class AgentConfigsClient:
         )
         return _response.data
 
+    def delete_env(
+        self, env_name: str, project_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Soft-deletes an environment by setting its ended_at timestamp
+
+        Parameters
+        ----------
+        env_name : str
+
+        project_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.delete_env(env_name='env_name', project_id='project_id', )
+        """
+        _response = self._raw_client.delete_env(env_name, project_id, request_options=request_options)
+        return _response.data
+
     def get_blueprint_by_id(
         self,
         blueprint_id: str,
@@ -542,6 +570,37 @@ class AsyncAgentConfigsClient:
         _response = await self._raw_client.set_env_by_blueprint_name(
             env_name, project_id, blueprint_name=blueprint_name, request_options=request_options
         )
+        return _response.data
+
+    async def delete_env(
+        self, env_name: str, project_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Soft-deletes an environment by setting its ended_at timestamp
+
+        Parameters
+        ----------
+        env_name : str
+
+        project_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.delete_env(env_name='env_name', project_id='project_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.delete_env(env_name, project_id, request_options=request_options)
         return _response.data
 
     async def get_blueprint_by_id(

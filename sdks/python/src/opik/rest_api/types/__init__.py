@@ -49,6 +49,8 @@ from .annotation_queue_write import AnnotationQueueWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
 from .assertion_result import AssertionResult
 from .assertion_result_compare import AssertionResultCompare
+from .assertion_score_average import AssertionScoreAverage
+from .assertion_score_average_public import AssertionScoreAveragePublic
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .attachment import Attachment
@@ -679,6 +681,8 @@ __all__ = [
     "AnnotationQueueWriteScope",
     "AssertionResult",
     "AssertionResultCompare",
+    "AssertionScoreAverage",
+    "AssertionScoreAveragePublic",
     "AssistantMessage",
     "AssistantMessageRole",
     "Attachment",
