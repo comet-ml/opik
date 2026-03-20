@@ -138,7 +138,9 @@ class EvaluationSuiteResult:
                         assertion["metadata"] = score.metadata
                     assertions.append(assertion)
 
-                run_passed = all(a["passed"] for a in assertions) if assertions else True
+                run_passed = (
+                    all(a["passed"] for a in assertions) if assertions else True
+                )
 
                 run: Dict[str, Any] = {
                     "trial_id": test_result_.trial_id,
@@ -198,4 +200,3 @@ class EvaluationSuiteResult:
     def to_dict(self) -> Dict[str, Any]:
         """Alias for to_report_dict()."""
         return self.to_report_dict()
-

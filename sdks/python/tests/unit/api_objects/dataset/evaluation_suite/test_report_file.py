@@ -3,14 +3,12 @@
 import json
 import os
 
-import pytest
-from unittest import mock
 
 from opik.api_objects.dataset.evaluation_suite import (
-    report_file,
     suite_result_constructor,
     types as suite_types,
 )
+from opik.api_objects.dataset.evaluation_suite.report_processors import file_writer
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import evaluation_result, test_result, test_case
 from opik.evaluation.metrics import score_result
@@ -209,13 +207,10 @@ class TestSaveReport:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(
-            trs, suite_name="Test Suite", total_time=5.0
-        )
+        suite_result = _make_suite_result(trs, suite_name="Test Suite", total_time=5.0)
         output_path = str(tmp_path / "report.json")
 
-        report_dict = suite_result.to_report_dict()
-        result_path = report_file.save_report_file(report_dict, output_path)
+        result_path = file_writer.save_report(suite_result, output_path)
 
         assert result_path == output_path
         assert os.path.exists(output_path)
@@ -239,10 +234,8 @@ class TestSaveReport:
             ),
         ]
         suite_result = _make_suite_result(trs)
-        report_dict = suite_result.to_report_dict()
 
-        output_path = report_file.build_default_report_path("my-experiment")
-        result_path = report_file.save_report_file(report_dict, output_path)
+        result_path = file_writer.save_report(suite_result)
 
         assert "my-experiment" in os.path.basename(result_path)
         assert result_path.endswith(".json")
@@ -260,24 +253,23 @@ class TestSaveReport:
             ),
         ]
         suite_result = _make_suite_result(trs)
-        report_dict = suite_result.to_report_dict()
 
-        result_path = report_file.save_report_file(report_dict, output_path)
+        result_path = file_writer.save_report(suite_result, output_path)
 
         assert os.path.exists(result_path)
 
 
 class TestBuildDefaultReportPath:
     def test_replaces_unsafe_characters(self):
-        path = report_file.build_default_report_path("my/suite:name")
+        path = file_writer.build_default_report_path("my/suite:name")
         assert os.path.basename(path) == "my_suite_name.json"
 
     def test_keeps_safe_characters(self):
-        path = report_file.build_default_report_path("my-suite_v1.0")
+        path = file_writer.build_default_report_path("my-suite_v1.0")
         assert os.path.basename(path) == "my-suite_v1.0.json"
 
     def test_replaces_spaces(self):
-        path = report_file.build_default_report_path("my suite")
+        path = file_writer.build_default_report_path("my suite")
         assert os.path.basename(path) == "my_suite.json"
 
 
@@ -311,8 +303,7 @@ class TestEvaluationSuiteResultMethods:
         suite_result = _make_suite_result(trs)
         output_path = str(tmp_path / "result.json")
 
-        report_dict = suite_result.to_report_dict()
-        path = report_file.save_report_file(report_dict, output_path)
+        path = file_writer.save_report(suite_result, output_path)
 
         assert os.path.exists(path)
         with open(path) as f:
