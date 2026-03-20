@@ -8633,10 +8633,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8646,6 +8642,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9165,10 +9165,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9178,6 +9174,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9515,10 +9515,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9528,6 +9524,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9961,10 +9961,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9974,6 +9970,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10055,10 +10055,6 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -10068,6 +10064,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -16314,10 +16314,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16446,10 +16446,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16541,10 +16541,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         exclude_blueprint_update_for_projects:
           uniqueItems: true
           type: array
@@ -16590,10 +16590,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16690,81 +16690,6 @@ components:
         created_by:
           type: string
           readOnly: true
-<<<<<<< yaricom/OPIK-4961-add-project_name
-    PromptPage_Public:
-      type: object
-      properties:
-        page:
-          type: integer
-          format: int32
-        size:
-          type: integer
-          format: int32
-        total:
-          type: integer
-          format: int64
-        content:
-          type: array
-          items:
-            $ref: "#/components/schemas/Prompt_Public"
-        sortableBy:
-          type: array
-          items:
-            type: string
-    Prompt_Public:
-      required:
-      - name
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          minLength: 1
-          type: string
-        project_id:
-          type: string
-          description: Project ID. Takes precedence over project_name when both are
-            provided.
-          format: uuid
-        description:
-          maxLength: 255
-          minLength: 0
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        template_structure:
-          type: string
-          description: "Template structure type: 'text' or 'chat'. Immutable after\
-            \ creation."
-          enum:
-          - text
-          - chat
-          default: text
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        version_count:
-          type: integer
-          format: int64
-          readOnly: true
-=======
->>>>>>> main
     PromptVersionCommitsRequest_Public:
       required:
       - commits
