@@ -17,5 +17,6 @@ public record OptimizationSearchCriteria(
         Boolean datasetDeleted,
         Collection<UUID> datasetIds,
         Boolean studioOnly,
+        UUID projectId,
         List<? extends Filter> filters) {
 }

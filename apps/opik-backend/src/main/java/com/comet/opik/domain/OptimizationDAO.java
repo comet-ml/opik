@@ -119,6 +119,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                     <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                     <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, dataset_id, id
                 )
@@ -389,6 +390,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                     <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                     <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, dataset_id, id
                 )
@@ -701,6 +703,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .filter(Boolean.TRUE::equals)
                 .ifPresent(studioOnly -> template.add("studio_only", "true"));
 
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
+
         Optional.ofNullable(searchCriteria.filters())
                 .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.OPTIMIZATION))
                 .ifPresent(optimizationFilters -> template.add("filters", optimizationFilters));
@@ -723,6 +728,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
+
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> statement.bind("project_id", projectId.toString()));
 
         Optional.ofNullable(searchCriteria.filters())
                 .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.OPTIMIZATION));
