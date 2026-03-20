@@ -7,6 +7,7 @@ import httpx
 from .. import opik_context
 from ..api_objects import opik_client, rest_helpers
 from ..rest_api import client as rest_api_client
+
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 120
@@ -71,7 +72,8 @@ class LocalRunnerTask:
     def _get_distributed_trace_headers(self) -> Optional[Dict[str, str]]:
         """Return distributed trace headers if a span context is active, else None."""
         try:
-            return dict(opik_context.get_distributed_trace_headers())
+            headers = opik_context.get_distributed_trace_headers()
+            return {k: v for k, v in headers.items()}
         except Exception:
             return None
 

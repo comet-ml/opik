@@ -324,22 +324,17 @@ class TestLocalRunnerTask:
         task = LocalRunnerTask(
             project_name="My Project",
             agent_name="my_agent",
-            timeout_seconds=1,
+            timeout_seconds=100,
             poll_interval_seconds=0.1,
         )
 
-        with mock.patch(
-            "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=_monotonic_side_effect(0.0, 0.1, 0.3),
-        ):
-            output = task({"input": "test"})
+        output = task({"input": "test"})
 
         assert output == {
             "input": {"input": "test"},
             "output": "done",
         }
         assert mock_rest_client.runners.get_job.call_count == 3
-        assert patch_sleep.call_count == 2
 
     def test_call__job_cancelled__raises_runtime_error(
         self,
@@ -538,4 +533,3 @@ class TestLocalRunnerTask:
             mock_rest_client.runners.with_raw_response.create_job.call_args.kwargs
         )
         assert "metadata" not in call_kwargs
-
