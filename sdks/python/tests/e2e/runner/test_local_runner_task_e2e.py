@@ -6,7 +6,6 @@ and return results that the evaluation engine records as experiment items.
 
 import time
 
-import opik
 from opik.evaluation import evaluate
 from opik.evaluation.local_runner_task import LocalRunnerTask
 
