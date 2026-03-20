@@ -21,14 +21,9 @@ type AssertionRowData = {
   name: string;
 } & Record<string, AssertionScoreAverage | string | undefined>;
 
-type AssertionScoreMap = Record<
-  string,
-  Record<string, AssertionScoreAverage>
->;
+type AssertionScoreMap = Record<string, Record<string, AssertionScoreAverage>>;
 
-function getAssertionScoreMap(
-  experiments: Experiment[],
-): AssertionScoreMap {
+function getAssertionScoreMap(experiments: Experiment[]): AssertionScoreMap {
   return experiments.reduce<AssertionScoreMap>((acc, e) => {
     acc[e.id] = (e.assertion_scores ?? []).reduce<
       Record<string, AssertionScoreAverage>

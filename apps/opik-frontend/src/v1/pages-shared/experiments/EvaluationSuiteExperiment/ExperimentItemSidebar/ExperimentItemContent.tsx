@@ -123,7 +123,7 @@ const SingleExperimentSection: React.FC<SingleExperimentSectionProps> = ({
             }}
           >
             <ListTree className="size-3" />
-            Go to traces
+            Trace
           </Tag>
         )}
       </div>
