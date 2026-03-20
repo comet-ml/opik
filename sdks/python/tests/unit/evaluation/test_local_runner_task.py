@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from opik.evaluation.local_runner_task import LocalRunnerTask
+from opik.exceptions import OpikException
 
 
 def _monotonic_side_effect(*values):
@@ -475,7 +476,7 @@ class TestLocalRunnerTask:
         with pytest.raises(RuntimeError, match="network error"):
             task({"input": "test"})
 
-    def test_call__distributed_trace_headers_forwarded(
+    def test_call__distributed_trace_headers_forwarded__metadata_sent(
         self,
         mock_rest_client,
         patch_get_client,
@@ -504,7 +505,7 @@ class TestLocalRunnerTask:
             "opik_parent_span_id": "span-xyz",
         }
 
-    def test_call__no_span_context__headers_omitted(
+    def test_call__no_span_context__metadata_omitted(
         self,
         mock_rest_client,
         patch_get_client,
@@ -521,7 +522,7 @@ class TestLocalRunnerTask:
         # No patch_distributed_headers — get_distributed_trace_headers raises
         with mock.patch(
             "opik.evaluation.local_runner_task.opik_context.get_distributed_trace_headers",
-            side_effect=Exception("no span context"),
+            side_effect=OpikException("no span context"),
         ):
             task = LocalRunnerTask(
                 project_name="My Project",

@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-from .. import opik_context
+from .. import exceptions, opik_context
 from ..api_objects import opik_client, rest_helpers
 from ..rest_api import client as rest_api_client
 
@@ -73,7 +73,7 @@ class LocalRunnerTask:
         """Return distributed trace headers if a span context is active, else None."""
         try:
             return opik_context.get_distributed_trace_headers()
-        except Exception:
+        except exceptions.OpikException:
             return None
 
     def _submit_job(self, inputs: Dict[str, Any]) -> str:
