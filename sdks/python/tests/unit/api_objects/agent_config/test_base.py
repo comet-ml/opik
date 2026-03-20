@@ -1216,25 +1216,21 @@ class TestGetAgentConfigFallbackOnError:
 
 
 class TestTrackContextGuard:
+    @pytest.fixture(autouse=True)
+    def fake_track_context(self):
+        """Override the module-level autouse fixture: no trace context for these tests."""
+        yield
+
     def test_outside_track_context__raises_runtime_error(
-        self, mock_rest_client, mock_opik_client, fake_track_context
+        self, mock_rest_client, mock_opik_client
     ):
         class MyConfig(AgentConfig):
             temp: float
 
         fallback = MyConfig(temp=0.5)
 
-        # Override the autouse fixture: pop the span to simulate no @track context
-        context_storage.pop_span_data()
-
-        try:
-            with pytest.raises(RuntimeError, match="@opik.track"):
-                mock_opik_client.get_agent_config(fallback=fallback)
-        finally:
-            # Restore so clear_caches / other fixtures don't break
-            context_storage.add_span_data(
-                span_data_mod.SpanData(trace_id="fake-trace", name="restore")
-            )
+        with pytest.raises(RuntimeError, match="@opik.track"):
+            mock_opik_client.get_agent_config(fallback=fallback)
 
     def test_inside_track_context_via_span__succeeds(
         self, mock_rest_client, mock_opik_client
@@ -1255,28 +1251,22 @@ class TestTrackContextGuard:
         mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
         mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
 
-        # fake_track_context autouse fixture provides the span — no error expected
-        result = mock_opik_client.get_agent_config(fallback=fallback)
+        span = span_data_mod.SpanData(trace_id="fake-trace", name="test-span")
+        with context_storage.temporary_context(span, trace_data=None):
+            result = mock_opik_client.get_agent_config(fallback=fallback)
 
         assert result.temp == pytest.approx(0.9)
 
     def test_outside_track_context__error_message_mentions_api_methods(
-        self, mock_rest_client, mock_opik_client, fake_track_context
+        self, mock_rest_client, mock_opik_client
     ):
         class MySpecialConfig(AgentConfig):
             temp: float
 
         fallback = MySpecialConfig(temp=0.5)
 
-        context_storage.pop_span_data()
-
-        try:
-            with pytest.raises(RuntimeError, match="get_agent_config"):
-                mock_opik_client.get_agent_config(fallback=fallback)
-        finally:
-            context_storage.add_span_data(
-                span_data_mod.SpanData(trace_id="fake-trace", name="restore")
-            )
+        with pytest.raises(RuntimeError, match="get_agent_config"):
+            mock_opik_client.get_agent_config(fallback=fallback)
 
     def test_creating_fallback_instance_outside_track__no_error(self):
         """Plain AgentConfig instantiation (for use as fallback) must not require @track."""

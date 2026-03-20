@@ -3,10 +3,9 @@ from unittest import mock
 import pytest
 
 from opik.api_objects import opik_client
-from opik.api_objects.span import span_data as span_data_mod
-from opik import context_storage
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
+from opik.decorator.context_manager import start_as_current_trace
 
 
 def make_raw_blueprint(blueprint_id="bp-1", name=None, values=None, description=None):
@@ -55,8 +54,7 @@ def clear_caches():
 
 @pytest.fixture(autouse=True)
 def fake_track_context():
-    """Push a fake span so _resolve_from_backend's @track guard passes in all unit tests."""
-    span = span_data_mod.SpanData(trace_id="fake-trace", name="test-span")
-    context_storage.add_span_data(span)
-    yield
-    context_storage.pop_span_data()
+    """Push a fake trace so _resolve_from_backend's @track guard passes in all unit tests."""
+    with mock.patch.object(opik_client, "get_client_cached", return_value=mock.Mock()):
+        with start_as_current_trace(name="test-trace"):
+            yield
