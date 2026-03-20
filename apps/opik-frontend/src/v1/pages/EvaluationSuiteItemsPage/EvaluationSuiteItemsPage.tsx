@@ -95,6 +95,12 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
   const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
   const latestVersion = suite?.latest_version;
 
+  const suiteTags = suite?.tags ?? [];
+  const showTags = canEditDatasets || suiteTags.length > 0;
+  const tagListProps = canEditDatasets
+    ? { tags: suiteTags }
+    : { tags: [] as string[], immutableTags: suiteTags };
+
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: suiteId, page: 1, size: 1 },
     { enabled: isEvaluationSuite },
@@ -388,13 +394,14 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               </TooltipPortal>
             </Tooltip>
           )}
-          {canEditDatasets && (
+          {showTags && (
             <>
               <Separator orientation="vertical" className="ml-1.5 mt-1 h-4" />
               <TagListRenderer
-                tags={suite?.tags ?? []}
+                {...tagListProps}
                 onAddTag={handleAddTag}
                 onDeleteTag={handleDeleteTag}
+                canAdd={canEditDatasets}
                 align="start"
                 className="min-h-0 w-auto"
               />

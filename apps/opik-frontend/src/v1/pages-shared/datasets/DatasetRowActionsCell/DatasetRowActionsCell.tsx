@@ -31,13 +31,11 @@ type CreateDatasetRowActionsCellConfig = {
     setOpen: (open: boolean) => void;
     dataset?: Dataset;
   }>;
-  showDownload?: boolean;
 };
 
 export const createDatasetRowActionsCell = ({
   entityName,
   EditDialog,
-  showDownload = false,
 }: CreateDatasetRowActionsCellConfig): React.FunctionComponent<
   CellContext<Dataset, unknown>
 > => {
@@ -57,7 +55,6 @@ export const createDatasetRowActionsCell = ({
     const isDatasetExportEnabled = useIsFeatureEnabled(
       FeatureToggleKeys.DATASET_EXPORT_ENABLED,
     );
-    const canDownload = showDownload && isDatasetExportEnabled;
 
     const {
       permissions: { canEditDatasets, canDeleteDatasets },
@@ -140,7 +137,7 @@ export const createDatasetRowActionsCell = ({
                 Edit
               </DropdownMenuItem>
             )}
-            {canDownload && (
+            {isDatasetExportEnabled && (
               <DropdownMenuItem
                 onClick={downloadDatasetHandler}
                 disabled={isExportStarting}
@@ -149,9 +146,10 @@ export const createDatasetRowActionsCell = ({
                 Download
               </DropdownMenuItem>
             )}
-            {canDeleteDatasets && (canEditDatasets || canDownload) && (
-              <DropdownMenuSeparator />
-            )}
+            {canDeleteDatasets &&
+              (canEditDatasets || isDatasetExportEnabled) && (
+                <DropdownMenuSeparator />
+              )}
             {canDeleteDatasets && (
               <DropdownMenuItem
                 onClick={() => {
