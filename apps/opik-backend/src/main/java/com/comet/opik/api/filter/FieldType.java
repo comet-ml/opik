@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 public enum FieldType {
     STRING("string"),
+    STRING_EXACT("string_exact"),
     STRING_STATE_DB("string_state_db"),
     DATE_TIME("date_time"),
     DATE_TIME_STATE_DB("date_time_state_db"),
