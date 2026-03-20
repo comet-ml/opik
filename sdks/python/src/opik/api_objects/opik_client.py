@@ -834,24 +834,24 @@ class Opik:
             project_name: The name of the project to search the threads for. If not provided,
                 the project name configured when the Client was created will be used.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
-                The format is: ``"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"``
+                The format is: `"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"`
 
                 Supported columns:
-                - ``id``: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
-                - ``first_message``, ``last_message``: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
-                - ``status``: Enum (=, !=)
-                - ``start_time``, ``end_time``, ``created_at``, ``last_updated_at``: DateTime (=, !=, >, >=, <, <=)
-                - ``feedback_scores``: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
-                - ``tags``, ``annotation_queue_ids``: List (=, !=, contains, not_contains, is_empty, is_not_empty)
-                - ``duration``, ``number_of_messages``: Numeric (=, !=, >, >=, <, <=)
+                - `id`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - `first_message`, `last_message`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - `status`: Enum (=, !=)
+                - `start_time`, `end_time`, `created_at`, `last_updated_at`: DateTime (=, !=, >, >=, <, <=)
+                - `feedback_scores`: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
+                - `tags`, `annotation_queue_ids`: List (=, !=, contains, not_contains, is_empty, is_not_empty)
+                - `duration`, `number_of_messages`: Numeric (=, !=, >, >=, <, <=)
 
                 Examples:
-                - ``status = "active"`` - Filter by thread status
-                - ``id = "thread_123"`` - Filter by specific thread ID
-                - ``number_of_messages >= 5`` - Filter by message count
-                - ``first_message contains "hello"`` - Filter by first message content
-                - ``feedback_scores.user_frustration > 0.5`` - Filter by feedback score
-                - ``tags contains "important"`` - Filter by tag
+                - `status = "active"` - Filter by thread status
+                - `id = "thread_123"` - Filter by specific thread ID
+                - `number_of_messages >= 5` - Filter by message count
+                - `first_message contains "hello"` - Filter by first message content
+                - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
+                - `tags contains "important"` - Filter by tag
 
                 If not provided, all threads in the project will be returned up to the limit.
             max_results: The maximum number of threads to retrieve. The default value is 1000.

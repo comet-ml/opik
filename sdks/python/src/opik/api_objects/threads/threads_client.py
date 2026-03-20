@@ -67,14 +67,14 @@ class ThreadsClient:
                 - `duration`, `number_of_messages`: Numeric (=, !=, >, >=, <, <=)
 
                 Examples:
-                - ``status = "active"`` - Filter by thread status
-                - ``id = "thread_123"`` - Filter by specific thread ID
-                - ``duration > 300`` - Filter by thread duration (seconds)
-                - ``number_of_messages >= 5`` - Filter by message count
-                - ``first_message contains "hello"`` - Filter by first message content
-                - ``feedback_scores.user_frustration > 0.5`` - Filter by feedback score
-                - ``feedback_scores.my_metric is_empty`` - Filter threads with empty feedback score
-                - ``tags contains "important"`` - Filter by tag
+                - `status = "active"` - Filter by thread status
+                - `id = "thread_123"` - Filter by specific thread ID
+                - `duration > 300` - Filter by thread duration (seconds)
+                - `number_of_messages >= 5` - Filter by message count
+                - `first_message contains "hello"` - Filter by first message content
+                - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter threads with empty feedback score
+                - `tags contains "important"` - Filter by tag
 
                 If not provided, all threads in the project will be returned up to the limit.
             max_results:
