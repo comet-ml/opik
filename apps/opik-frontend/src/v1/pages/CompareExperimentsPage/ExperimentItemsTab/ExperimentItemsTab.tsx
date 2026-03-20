@@ -748,14 +748,19 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
-      {isEvalSuite ? (
-        <EvaluationSuiteExperimentPanel
-          {...sharedPanelProps}
-          datasetId={datasetId!}
-        />
-      ) : (
-        <CompareExperimentsPanel {...sharedPanelProps} />
-      )}
+      <EvaluationSuiteExperimentPanel
+        {...sharedPanelProps}
+        experimentsCompareId={
+          isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
+        }
+        datasetId={datasetId ?? ""}
+      />
+      <CompareExperimentsPanel
+        {...sharedPanelProps}
+        experimentsCompareId={
+          !isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
+        }
+      />
       <TraceDetailsPanel
         traceId={traceId!}
         spanId={spanId!}

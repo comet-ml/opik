@@ -163,7 +163,7 @@ export interface Experiment {
   total_count?: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
-  assertion_aggregations?: AssertionAggregation[];
+  assertion_scores?: AssertionScoreAverage[];
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
@@ -174,7 +174,7 @@ export interface EvalSuiteExperiment extends Experiment {
   pass_rate: number;
   passed_count: number;
   total_count: number;
-  assertion_aggregations: AssertionAggregation[];
+  assertion_scores: AssertionScoreAverage[];
 }
 
 export interface ExperimentItem {
@@ -202,11 +202,9 @@ export interface AssertionResult {
   reason?: string;
 }
 
-export interface AssertionAggregation {
+export interface AssertionScoreAverage {
   name: string;
-  pass_rate: number;
-  passed_count: number;
-  total_count: number;
+  value: number;
 }
 
 export interface ExperimentRunSummary {
