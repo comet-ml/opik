@@ -358,10 +358,18 @@ class DatasetServiceImpl implements DatasetService {
     public Dataset findByName(@NonNull String workspaceId, @NonNull DatasetIdentifier identifier,
             Visibility visibility) {
         UUID projectId = null;
-        if (StringUtils.isNotBlank(identifier.projectName())) {
+        boolean projectNameProvided = StringUtils.isNotBlank(identifier.projectName());
+        if (projectNameProvided) {
             projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
         }
-        return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
+        Dataset dataset = findByName(workspaceId, identifier.datasetName(), projectId, visibility);
+        // Project name was given but couldn't be resolved to a known project — dataset found workspace-wide
+        if (projectNameProvided && projectId == null) {
+            requestContext.get().setWorkspaceFallbackMessage(
+                    RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                            identifier.datasetName()));
+        }
+        return dataset;
     }
 
     /**
