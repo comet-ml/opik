@@ -90,7 +90,7 @@ class MessageContentNormalizerTest {
 
         var request = ChatCompletionRequest.builder()
                 .messages(List.of(userMessage))
-                .model("gpt-4-vision-preview")
+                .model("gpt-4-turbo")
                 .build();
 
         var normalized = MessageContentNormalizer.normalizeRequest(request);
@@ -106,7 +106,7 @@ class MessageContentNormalizerTest {
 
         var request = ChatCompletionRequest.builder()
                 .messages(List.of(userMessage))
-                .model("gpt-4-vision-preview")
+                .model("gpt-4-turbo")
                 .build();
 
         var normalized = MessageContentNormalizer.normalizeRequest(request);
@@ -174,7 +174,7 @@ class MessageContentNormalizerTest {
 
         var request = ChatCompletionRequest.builder()
                 .messages(List.of(userMessage))
-                .model("claude-3-5-sonnet-20241022")
+                .model("claude-3-7-sonnet-20250219")
                 .build();
 
         var normalized = MessageContentNormalizer.normalizeRequest(request);
@@ -213,7 +213,7 @@ class MessageContentNormalizerTest {
 
         var request = ChatCompletionRequest.builder()
                 .messages(List.of(userMessage))
-                .model("gemini-1.5-pro")
+                .model("gemini-2.5-pro")
                 .build();
 
         var normalized = MessageContentNormalizer.normalizeRequest(request);
@@ -268,7 +268,7 @@ class MessageContentNormalizerTest {
 
         var request = ChatCompletionRequest.builder()
                 .messages(List.of(userMessage))
-                .model("gpt-4-vision-preview")
+                .model("gpt-4-turbo")
                 .build();
 
         var normalized = MessageContentNormalizer.normalizeRequest(request);
@@ -295,7 +295,7 @@ class MessageContentNormalizerTest {
 
         var request = ChatCompletionRequest.builder()
                 .messages(List.of(userMessage))
-                .model("gpt-4-vision-preview")
+                .model("gpt-4-turbo")
                 .build();
 
         var normalized = MessageContentNormalizer.normalizeRequest(request);
@@ -317,7 +317,7 @@ class MessageContentNormalizerTest {
 
         var request = ChatCompletionRequest.builder()
                 .messages(List.of(userMessage))
-                .model("gpt-4-vision-preview")
+                .model("gpt-4-turbo")
                 .build();
 
         var normalized = MessageContentNormalizer.normalizeRequest(request);
