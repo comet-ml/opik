@@ -2,6 +2,8 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
+from ..types import DistributedTraceHeadersDict
+
 import httpx
 
 from .. import exceptions, opik_context
@@ -69,7 +71,9 @@ class LocalRunnerTask:
             )
         return self._project_id
 
-    def _get_distributed_trace_headers(self) -> Optional[Dict[str, str]]:
+    def _get_distributed_trace_headers(
+        self,
+    ) -> Optional[DistributedTraceHeadersDict]:
         """Return distributed trace headers if a span context is active, else None."""
         try:
             return opik_context.get_distributed_trace_headers()
