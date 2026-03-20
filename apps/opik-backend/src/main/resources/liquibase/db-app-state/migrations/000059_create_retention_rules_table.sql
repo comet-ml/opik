@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset daniela:000055_create_retention_rules_table
+--changeset daniela:000059_create_retention_rules_table
 --comment: Create retention rules table for data retention management
 
 CREATE TABLE retention_rules (
