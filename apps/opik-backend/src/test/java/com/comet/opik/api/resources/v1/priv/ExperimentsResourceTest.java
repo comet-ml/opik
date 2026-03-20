@@ -4581,6 +4581,58 @@ class ExperimentsResourceTest {
             assertExperiments(
                     null, expectedExperiments, unexpectedExperiments, null, actualExperiments);
         }
+
+        @Test
+        void streamByProjectName_whenProjectExists_thenReturnOnlyExperimentsForThatProject() {
+            var name = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+            var project1 = podamFactory.manufacturePojo(Project.class);
+            var project1Id = projectResourceClient.createProject(project1, API_KEY, TEST_WORKSPACE);
+
+            var project2 = podamFactory.manufacturePojo(Project.class);
+            projectResourceClient.createProject(project2, API_KEY, TEST_WORKSPACE);
+
+            // experiment1 belongs to project1
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .name(name)
+                    .projectName(project1.name())
+                    .build();
+            experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+
+            // experiment2 belongs to project2
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .name(name)
+                    .projectName(project2.name())
+                    .build();
+            experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+
+            var request = ExperimentStreamRequest.builder()
+                    .name(name)
+                    .projectName(project1.name())
+                    .build();
+            var actualExperiments = experimentResourceClient.streamExperiments(request, API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualExperiments).hasSize(1);
+            assertThat(actualExperiments.getFirst().projectId()).isEqualTo(project1Id);
+        }
+
+        @Test
+        void streamByProjectName_whenProjectNotFound_thenReturnEmpty() {
+            var name = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name(name)
+                    .build();
+            experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var request = ExperimentStreamRequest.builder()
+                    .name(name)
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(20))
+                    .build();
+            var actualExperiments = experimentResourceClient.streamExperiments(request, API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualExperiments).isEmpty();
+        }
     }
 
     @Nested
@@ -5740,6 +5792,119 @@ class ExperimentsResourceTest {
                                     .value(podamFactory.manufacturePojo(BigDecimal.class))
                                     .build())
                             .collect(toList()));
+        }
+
+        @Test
+        void streamByExperimentNameAndProjectName_whenProjectExists_thenReturnOnlyItemsForThatProject() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project1 = podamFactory.manufacturePojo(Project.class);
+            var project1Id = projectResourceClient.createProject(project1, apiKey, workspaceName);
+
+            var project2 = podamFactory.manufacturePojo(Project.class);
+            var project2Id = projectResourceClient.createProject(project2, apiKey, workspaceName);
+
+            var traceProject1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project1.name())
+                    .build();
+            traceResourceClient.createTrace(traceProject1, apiKey, workspaceName);
+
+            var traceProject2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project2.name())
+                    .build();
+            traceResourceClient.createTrace(traceProject2, apiKey, workspaceName);
+
+            // Both experiments share the same name but belong to different projects
+            var experimentName = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var experiment1 = experimentResourceClient.createPartialExperiment().name(experimentName)
+                    .projectId(project1Id).build();
+            experimentResourceClient.create(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment().name(experimentName)
+                    .projectId(project2Id).build();
+            experimentResourceClient.create(experiment2, apiKey, workspaceName);
+
+            // Items in experiment1 belong to project1
+            var itemsProject1 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
+                    .map(item -> item.toBuilder()
+                            .experimentId(experiment1.id())
+                            .traceId(traceProject1.id())
+                            .projectId(project1Id)
+                            .projectName(project1.name())
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(null)
+                            .build())
+                    .collect(toUnmodifiableSet());
+            experimentResourceClient.createExperimentItem(itemsProject1, apiKey, workspaceName);
+
+            // Items in experiment2 belong to project2
+            var itemsProject2 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
+                    .map(item -> item.toBuilder()
+                            .experimentId(experiment2.id())
+                            .traceId(traceProject2.id())
+                            .projectId(project2Id)
+                            .projectName(project2.name())
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(null)
+                            .build())
+                    .collect(toUnmodifiableSet());
+            experimentResourceClient.createExperimentItem(itemsProject2, apiKey, workspaceName);
+
+            var expectedItemsProject1 = List.copyOf(itemsProject1).stream()
+                    .map(item -> item.toBuilder()
+                            .input(traceProject1.input())
+                            .output(traceProject1.output())
+                            .feedbackScores(null)
+                            .comments(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traceProject1.startTime(), traceProject1.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(ExperimentItem::id).reversed())
+                    .toList();
+
+            var expectedItemsProject2 = List.copyOf(itemsProject2).stream()
+                    .map(item -> item.toBuilder()
+                            .input(traceProject2.input())
+                            .output(traceProject2.output())
+                            .feedbackScores(null)
+                            .comments(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traceProject2.startTime(), traceProject2.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(ExperimentItem::id).reversed())
+                    .toList();
+
+            var request = ExperimentItemStreamRequest.builder()
+                    .experimentName(experimentName)
+                    .projectName(project1.name())
+                    .build();
+            streamAndAssert(request, expectedItemsProject1, expectedItemsProject2, apiKey, workspaceName);
+        }
+
+        @Test
+        void streamByExperimentNameAndProjectName_whenProjectNotFound_thenReturnEmpty() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = generateExperiment();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var request = ExperimentItemStreamRequest.builder()
+                    .experimentName(experiment.name())
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(20))
+                    .build();
+            streamAndAssert(request, List.of(), List.of(), apiKey, workspaceName);
         }
 
     }

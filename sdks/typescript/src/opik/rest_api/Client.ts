@@ -15,6 +15,7 @@ import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
 import { LlmProviderKeyClient } from "./api/resources/llmProviderKey/client/Client.js";
 import { ManualEvaluationClient } from "./api/resources/manualEvaluation/client/Client.js";
 import { OllamaClient } from "./api/resources/ollama/client/Client.js";
+import { OllieStateClient } from "./api/resources/ollieState/client/Client.js";
 import { OpenTelemetryIngestionClient } from "./api/resources/openTelemetryIngestion/client/Client.js";
 import { OptimizationsClient } from "./api/resources/optimizations/client/Client.js";
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
@@ -61,6 +62,7 @@ export class OpikApiClient {
     protected _runners: RunnersClient | undefined;
     protected _manualEvaluation: ManualEvaluationClient | undefined;
     protected _ollama: OllamaClient | undefined;
+    protected _ollieState: OllieStateClient | undefined;
     protected _openTelemetryIngestion: OpenTelemetryIngestionClient | undefined;
     protected _optimizations: OptimizationsClient | undefined;
     protected _projects: ProjectsClient | undefined;
@@ -143,6 +145,10 @@ export class OpikApiClient {
 
     public get ollama(): OllamaClient {
         return (this._ollama ??= new OllamaClient(this._options));
+    }
+
+    public get ollieState(): OllieStateClient {
+        return (this._ollieState ??= new OllieStateClient(this._options));
     }
 
     public get openTelemetryIngestion(): OpenTelemetryIngestionClient {

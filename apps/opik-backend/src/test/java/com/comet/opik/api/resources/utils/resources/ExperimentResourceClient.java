@@ -183,7 +183,7 @@ public class ExperimentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_OCTET_STREAM)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new ExperimentItemStreamRequest(experimentName, null, null, false)))) {
+                .post(Entity.json(ExperimentItemStreamRequest.builder().experimentName(experimentName).build()))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return getStreamed(response, ITEM_TYPE_REFERENCE);
         }
