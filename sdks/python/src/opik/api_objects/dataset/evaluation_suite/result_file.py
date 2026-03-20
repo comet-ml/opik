@@ -27,9 +27,9 @@ def suite_result_to_dict(
     for item_id, item_result in suite_result.item_results.items():
         runs: List[Dict[str, Any]] = []
 
-        for tr in item_result.test_results:
+        for test_result in item_result.test_results:
             assertions: List[Dict[str, Any]] = []
-            for score in tr.score_results:
+            for score in test_result.score_results:
                 assertion: Dict[str, Any] = {
                     "name": score.name,
                     "passed": (
@@ -51,20 +51,20 @@ def suite_result_to_dict(
             run_passed = all(a["passed"] for a in assertions) if assertions else True
 
             run: Dict[str, Any] = {
-                "trial_id": tr.trial_id,
+                "trial_id": test_result.trial_id,
                 "passed": run_passed,
-                "input": tr.test_case.task_output.get("input"),
-                "output": tr.test_case.task_output.get("output"),
+                "input": test_result.test_case.task_output.get("input"),
+                "output": test_result.test_case.task_output.get("output"),
                 "assertions": assertions,
             }
-            if tr.test_case.trace_id:
-                run["trace_id"] = tr.test_case.trace_id
-            if tr.task_execution_time is not None:
+            if test_result.test_case.trace_id:
+                run["trace_id"] = test_result.test_case.trace_id
+            if test_result.task_execution_time is not None:
                 run["task_execution_time_seconds"] = round(
-                    tr.task_execution_time, 3
+                    test_result.task_execution_time, 3
                 )
-            if tr.scoring_time is not None:
-                run["scoring_time_seconds"] = round(tr.scoring_time, 3)
+            if test_result.scoring_time is not None:
+                run["scoring_time_seconds"] = round(test_result.scoring_time, 3)
             runs.append(run)
 
         items.append(
