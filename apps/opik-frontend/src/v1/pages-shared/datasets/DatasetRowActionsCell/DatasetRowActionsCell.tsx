@@ -57,6 +57,7 @@ export const createDatasetRowActionsCell = ({
     const isDatasetExportEnabled = useIsFeatureEnabled(
       FeatureToggleKeys.DATASET_EXPORT_ENABLED,
     );
+    const canDownload = showDownload && isDatasetExportEnabled;
 
     const {
       permissions: { canEditDatasets, canDeleteDatasets },
@@ -139,7 +140,7 @@ export const createDatasetRowActionsCell = ({
                 Edit
               </DropdownMenuItem>
             )}
-            {showDownload && isDatasetExportEnabled && (
+            {canDownload && (
               <DropdownMenuItem
                 onClick={downloadDatasetHandler}
                 disabled={isExportStarting}
@@ -148,11 +149,9 @@ export const createDatasetRowActionsCell = ({
                 Download
               </DropdownMenuItem>
             )}
-            {canDeleteDatasets &&
-              (canEditDatasets ||
-                (showDownload && isDatasetExportEnabled)) && (
-                <DropdownMenuSeparator />
-              )}
+            {canDeleteDatasets && (canEditDatasets || canDownload) && (
+              <DropdownMenuSeparator />
+            )}
             {canDeleteDatasets && (
               <DropdownMenuItem
                 onClick={() => {
