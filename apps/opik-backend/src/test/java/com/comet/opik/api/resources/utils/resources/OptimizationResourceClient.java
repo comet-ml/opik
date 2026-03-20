@@ -186,6 +186,37 @@ public class OptimizationResourceClient {
         }
     }
 
+    public Optimization.OptimizationPage findByProject(UUID projectId, String apiKey, String workspaceName,
+            int page, int size, UUID datasetId, String name, Boolean datasetDeleted, int expectedStatus) {
+        WebTarget webTarget = client
+                .target("%s/v1/private/projects/%s/optimizations".formatted(baseURI, projectId))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("dataset_id", datasetId);
+        }
+
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+
+        if (datasetDeleted != null) {
+            webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            return response.readEntity(Optimization.OptimizationPage.class);
+        }
+    }
+
     public void cancelStudio(UUID id, String apiKey, String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("studio")
