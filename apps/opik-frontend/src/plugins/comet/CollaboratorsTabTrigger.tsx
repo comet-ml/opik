@@ -6,9 +6,9 @@ export interface CollaboratorsTabTriggerProps {
 }
 
 const CollaboratorsTabTrigger = ({ value }: CollaboratorsTabTriggerProps) => {
-  const { canUpdateUserRole } = useUserPermission();
+  const { isWorkspaceOwner } = useUserPermission();
 
-  if (!canUpdateUserRole) {
+  if (!isWorkspaceOwner) {
     return null;
   }
 

@@ -1283,15 +1283,15 @@ class SpansResourceTest {
                             JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "USD")), null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                            "gemini-1.5-pro-preview-0514", "google_vertexai",
+                            "gemini-2.5-pro", "google_vertexai",
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                            "claude-3-5-haiku-latest", "anthropic",
+                            "claude-haiku-4-5", "anthropic",
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                            "claude-3-5-sonnet-v2@20241022", "anthropic_vertexai",
+                            "claude-sonnet-4-5", "anthropic_vertexai",
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
@@ -1317,7 +1317,7 @@ class SpansResourceTest {
                     Arguments.of(
                             Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                            "claude-3-5-sonnet-latest", "anthropic",
+                            "claude-sonnet-4-5", "anthropic",
                             null, null),
                     Arguments.of(
                             Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
@@ -1327,7 +1327,7 @@ class SpansResourceTest {
                                     Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "original_usage.cache_creation_input_tokens",
                                     Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                            "claude-3-5-sonnet-latest", "anthropic",
+                            "claude-sonnet-4-5", "anthropic",
                             null, null),
                     Arguments.of(
                             Map.of("original_usage.inputTokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
@@ -2232,7 +2232,7 @@ class SpansResourceTest {
 
             return Stream.of(
                     arguments(SpanUpdate.builder().model("gpt-4o-2024-05-13").totalEstimatedCost(null).build(), null),
-                    arguments(SpanUpdate.builder().model("gemini-1.5-pro-002").provider("google_ai")
+                    arguments(SpanUpdate.builder().model("gemini-pro-latest").provider("google_ai")
                             .totalEstimatedCost(null).build(), null),
                     arguments(SpanUpdate.builder()
                             .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
