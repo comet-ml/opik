@@ -62,8 +62,7 @@ def build_suite_result(
         runs_passed = sum(
             1
             for r in item_test_results
-            if not r.score_results
-            or all(is_score_passed(s) for s in r.score_results)
+            if not r.score_results or all(is_score_passed(s) for s in r.score_results)
         )
 
         passed = runs_passed >= pass_threshold

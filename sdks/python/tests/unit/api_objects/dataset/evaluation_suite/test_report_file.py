@@ -72,7 +72,9 @@ def _make_suite_result(
 
 
 class TestToReportDict:
-    def test_to_report_dict__single_item_with_mixed_scores__returns_correct_structure(self):
+    def test_to_report_dict__single_item_with_mixed_scores__returns_correct_structure(
+        self,
+    ):
         test_results_list = [
             _make_test_result(
                 dataset_item_id="item-1",
@@ -207,7 +209,9 @@ class TestSaveReport:
                 execution_policy={"runs_per_item": 1, "pass_threshold": 1},
             ),
         ]
-        suite_result = _make_suite_result(test_results_list, suite_name="Test Suite", total_time=5.0)
+        suite_result = _make_suite_result(
+            test_results_list, suite_name="Test Suite", total_time=5.0
+        )
         output_path = str(tmp_path / "report.json")
 
         result_path = file_writer.save_report(suite_result, output_path)
@@ -260,7 +264,9 @@ class TestSaveReport:
 
 
 class TestBuildDefaultReportPath:
-    def test_build_default_report_path__unsafe_characters__replaces_with_underscore(self):
+    def test_build_default_report_path__unsafe_characters__replaces_with_underscore(
+        self,
+    ):
         path = file_writer.build_default_report_path("my/suite:name")
         assert os.path.basename(path) == "my_suite_name.json"
 
