@@ -10,11 +10,13 @@ export const PromptVersionRetrieveDetail: core.serialization.Schema<
 > = core.serialization.object({
     name: core.serialization.string(),
     commit: core.serialization.string().optional(),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
 });
 
 export declare namespace PromptVersionRetrieveDetail {
     export interface Raw {
         name: string;
         commit?: string | null;
+        project_name?: string | null;
     }
 }

@@ -45,6 +45,8 @@ export * from "./AnnotationQueueWrite.js";
 export * from "./AnnotationQueueWriteScope.js";
 export * from "./AssertionResult.js";
 export * from "./AssertionResultCompare.js";
+export * from "./AssertionScoreAverage.js";
+export * from "./AssertionScoreAveragePublic.js";
 export * from "./AssistantMessage.js";
 export * from "./AssistantMessageRole.js";
 export * from "./Attachment.js";

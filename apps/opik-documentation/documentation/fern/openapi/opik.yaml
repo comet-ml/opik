@@ -69,6 +69,8 @@ tags:
 - name: Ollama
   description: Ollama provider configuration endpoints with OpenAI-compatible API
     support.
+- name: Ollie State
+  description: Ollie pod state persistence
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -313,6 +315,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Agent Configs
+      summary: Delete environment
+      description: Soft-deletes an environment by setting its ended_at timestamp
+      operationId: deleteEnv
+      parameters:
+      - name: env_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Environment deleted
         "401":
           description: Unauthorized
           content:
@@ -2897,14 +2926,6 @@ paths:
         in: query
         schema:
           type: string
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -4094,6 +4115,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ollie/state:
+    get:
+      tags:
+      - Ollie State
+      summary: Download ollie state
+      description: Download stored ollie state file
+      operationId: downloadOllieState
+      responses:
+        "200":
+          description: Ollie state file
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Unauthorized
+          content:
+            application/gzip:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/gzip:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    put:
+      tags:
+      - Ollie State
+      summary: Replace ollie state
+      description: "Upload gzip-compressed SQLite DB file, replacing any existing\
+        \ state"
+      operationId: replaceOllieState
+      parameters:
+      - name: Content-Length
+        in: header
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/gzip:
+            schema:
+              type: object
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Ollie State
+      summary: Delete ollie state
+      description: Clear stored ollie state
+      operationId: deleteOllieState
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/otel/v1/traces:
     post:
       tags:
@@ -4490,14 +4592,6 @@ paths:
         in: query
         schema:
           type: string
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -5465,14 +5559,6 @@ paths:
           - tool
           - llm
           - guardrail
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -6079,14 +6165,6 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -6107,14 +6185,6 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: exclude_category_names
-        in: query
-        schema:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            default: suite_assertion
       responses:
         "200":
           description: Find Trace Threads Feedback Score names
@@ -12350,6 +12420,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentScore"
+    AssertionScoreAverage:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
+      description: Per-assertion average pass rates for evaluation suite experiments.
+        Null for regular experiments.
+      readOnly: true
     Experiment:
       required:
       - dataset_name
@@ -12492,6 +12576,13 @@ components:
             for regular experiments.
           format: int64
           readOnly: true
+        assertion_scores:
+          type: array
+          description: Per-assertion average pass rates for evaluation suite experiments.
+            Null for regular experiments.
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AssertionScoreAverage"
     PercentageValues:
       type: object
       properties:
@@ -13236,6 +13327,20 @@ components:
         span_id:
           type: string
       readOnly: true
+    AssertionScoreAverage_Public:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
+      description: Per-assertion average pass rates for evaluation suite experiments.
+        Null for regular experiments.
+      readOnly: true
     Comment_Public:
       required:
       - text
@@ -13436,6 +13541,13 @@ components:
             for regular experiments.
           format: int64
           readOnly: true
+        assertion_scores:
+          type: array
+          description: Per-assertion average pass rates for evaluation suite experiments.
+            Null for regular experiments.
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AssertionScoreAverage_Public"
     JsonListString_Public:
       type: object
       anyOf:
@@ -16129,6 +16241,16 @@ components:
             description: Optional set of project IDs to exclude from automatic blueprint
               creation when this prompt version is committed.
             format: uuid
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If provided, scopes the prompt to the specified project. Ignored\
+            \ when project_id is provided."
     Prompt_Detail:
       required:
       - name
@@ -16348,6 +16470,10 @@ components:
           type: string
         commit:
           type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If provided, scopes the search to the specified project"
     Prompt_Updatable:
       required:
       - name
