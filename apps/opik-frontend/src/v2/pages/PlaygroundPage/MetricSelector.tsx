@@ -1,8 +1,15 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, {
+  useMemo,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import { ChevronDown, ExternalLink, Plus } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/ui/button";
+import RemovableTag from "@/shared/RemovableTag/RemovableTag";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
@@ -13,6 +20,8 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
+
+const MAX_VISIBLE_TAGS = 3;
 
 interface MetricSelectorProps {
   rules: EvaluatorsRule[];
@@ -35,6 +44,8 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const tagsRef = useRef<HTMLDivElement>(null);
+  const deletingRef = useRef(false);
 
   const {
     permissions: { canUpdateOnlineEvaluationRules },
@@ -42,6 +53,11 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const isAllSelected =
     selectedRuleIds === null || selectedRuleIds.length === rules.length;
+
+  const selectedRules = useMemo(() => {
+    if (!selectedRuleIds) return rules;
+    return rules.filter((rule) => selectedRuleIds.includes(rule.id));
+  }, [rules, selectedRuleIds]);
 
   const filteredRules = useMemo(() => {
     if (!search) return rules;
@@ -99,50 +115,16 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const openChangeHandler = useCallback(
     (newOpen: boolean) => {
-      // Prevent opening if disabled (no dataset selected)
-      if (newOpen && !datasetId) {
+      if (newOpen && !datasetId) return;
+      if (deletingRef.current) {
+        deletingRef.current = false;
         return;
       }
       setOpen(newOpen);
-      if (!newOpen) {
-        setSearch("");
-      }
+      if (!newOpen) setSearch("");
     },
     [datasetId],
   );
-
-  const selectedRules = useMemo(() => {
-    if (!selectedRuleIds) {
-      return rules;
-    }
-    return rules.filter((rule) => selectedRuleIds.includes(rule.id));
-  }, [rules, selectedRuleIds]);
-
-  const displayValue = useMemo(() => {
-    if (!datasetId) {
-      return "Select metrics";
-    }
-    if (rules.length === 0) {
-      return "Select metrics";
-    }
-    if (isAllSelected) {
-      return "All selected";
-    }
-    if (selectedRules.length === 0) {
-      return "Select metrics";
-    }
-    return selectedRules.map((rule) => rule.name).join(", ");
-  }, [isAllSelected, selectedRules, rules.length, datasetId]);
-
-  const tooltipContent = useMemo(() => {
-    if (!datasetId && rules.length > 0) {
-      return "Select an evaluation suite first to choose metrics";
-    }
-    if (datasetId && selectedRules.length > 0) {
-      return selectedRules.map((rule) => rule.name).join(", ");
-    }
-    return null;
-  }, [datasetId, rules.length, selectedRules]);
 
   const isSelected = useCallback(
     (ruleId: string) => {
@@ -155,7 +137,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const hasNoRules = rules.length === 0;
   const isDisabled = !datasetId;
 
-  // Close popover when dataset is deselected
   useEffect(() => {
     if (!datasetId && open) {
       setOpen(false);
@@ -163,45 +144,92 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     }
   }, [datasetId, open]);
 
-  const buttonElement = (
-    <Button
-      className="group w-[200px] justify-between"
-      size="sm"
-      variant="outline"
-      type="button"
-      disabled={isDisabled}
+  useEffect(() => {
+    if (open && tagsRef.current) {
+      tagsRef.current.scrollTo({
+        left: tagsRef.current.scrollWidth,
+        behavior: "smooth",
+      });
+    }
+  }, [open, selectedRules.length]);
+
+  const visibleTags = selectedRules.slice(
+    0,
+    open ? undefined : MAX_VISIBLE_TAGS,
+  );
+  const overflowCount = open
+    ? 0
+    : Math.max(0, selectedRules.length - MAX_VISIBLE_TAGS);
+
+  const renderTriggerContent = () => {
+    if (!datasetId || rules.length === 0 || selectedRules.length === 0) {
+      return <span className="truncate text-muted-slate">Select metrics</span>;
+    }
+
+    return (
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+        <div
+          ref={tagsRef}
+          className={cn(
+            "comet-no-scrollbar flex min-w-0 shrink items-center gap-2",
+            open ? "overflow-x-auto" : "overflow-hidden",
+          )}
+        >
+          {visibleTags.map((rule) => (
+            <RemovableTag
+              key={rule.id}
+              label={rule.name}
+              variant="purple"
+              size="default"
+              onDelete={() => {
+                deletingRef.current = true;
+                handleSelect(rule.id);
+              }}
+            />
+          ))}
+        </div>
+        {overflowCount > 0 && (
+          <span className="ml-1 shrink-0 text-xs text-muted-slate">
+            +{overflowCount}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const triggerElement = (
+    <div
+      tabIndex={0}
+      className={cn(
+        "flex h-8 w-full cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-3 text-sm hover:shadow-sm focus:border-primary focus:outline-none",
+        isDisabled && "cursor-not-allowed opacity-50",
+        open && "border-primary",
+      )}
     >
-      <span className="truncate">{displayValue}</span>
+      {renderTriggerContent()}
       <ChevronDown
         className={cn(
-          "ml-2 size-4 shrink-0",
+          "ml-auto size-4 shrink-0",
           isDisabled ? "text-muted-gray" : "text-light-slate",
         )}
       />
-    </Button>
+    </div>
   );
 
   return (
     <Popover onOpenChange={openChangeHandler} open={open && !isDisabled} modal>
-      {tooltipContent ? (
-        <TooltipWrapper content={tooltipContent}>
-          <PopoverTrigger asChild={!isDisabled} disabled={isDisabled}>
-            {isDisabled ? (
-              <span className="inline-block w-[200px]">{buttonElement}</span>
-            ) : (
-              buttonElement
-            )}
-          </PopoverTrigger>
-        </TooltipWrapper>
-      ) : (
-        <PopoverTrigger asChild disabled={isDisabled}>
-          {buttonElement}
-        </PopoverTrigger>
-      )}
+      <PopoverTrigger asChild={!isDisabled} disabled={isDisabled}>
+        {isDisabled ? (
+          <TooltipWrapper content="Select an evaluation suite first to choose metrics">
+            <span className="block">{triggerElement}</span>
+          </TooltipWrapper>
+        ) : (
+          triggerElement
+        )}
+      </PopoverTrigger>
       <PopoverContent
-        align="end"
-        style={{ width: "200px" }}
-        className="relative p-1 pt-12"
+        align="start"
+        className="relative w-[--radix-popover-trigger-width] p-1 pt-12"
         hideWhenDetached
         onCloseAutoFocus={(e) => e.preventDefault()}
       >

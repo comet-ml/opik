@@ -57,7 +57,10 @@ import {
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import Loader from "@/shared/Loader/Loader";
-import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
+import {
+  buildDatasetFilterColumns,
+  mapDynamicColumnTypesToColumnType,
+} from "@/lib/filters";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -403,24 +406,7 @@ function EvaluationSuiteItemsTab({
   });
 
   const filtersColumnData = useMemo(
-    () => [
-      {
-        id: "id",
-        label: "ID",
-        type: COLUMN_TYPE.string,
-      },
-      ...datasetColumns.map((c) => ({
-        id: `${COLUMN_DATA_ID}.${c.name}`,
-        label: c.name,
-        type: COLUMN_TYPE.string,
-      })),
-      {
-        id: "tags",
-        label: "Tags",
-        type: COLUMN_TYPE.list,
-        iconType: "tags" as const,
-      },
-    ],
+    () => buildDatasetFilterColumns(datasetColumns, true),
     [datasetColumns],
   );
 

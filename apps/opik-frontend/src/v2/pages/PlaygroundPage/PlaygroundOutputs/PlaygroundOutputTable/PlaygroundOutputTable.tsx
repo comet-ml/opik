@@ -16,6 +16,8 @@ import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { getAlphabetLetter } from "@/lib/utils";
 import PlaygroundOutputCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputCell";
+import PlaygroundOutputColumnHeader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputColumnHeader";
+import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 
 import PlaygroundVariableCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
@@ -136,10 +138,12 @@ const PlaygroundOutputTable = ({
         id: `output-${promptId}`,
         label: `Output ${getAlphabetLetter(promptIdx)}`,
         type: COLUMN_TYPE.string,
+        header: PlaygroundOutputColumnHeader as never,
         cell: PlaygroundOutputCell as never,
         minSize: 350,
         customMeta: {
           promptId: promptId,
+          promptIndex: promptIdx,
         },
       } as ColumnData<PlaygroundOutputTableData>;
     });
@@ -209,6 +213,7 @@ const PlaygroundOutputTable = ({
         columnPinningState={columnPinning}
         noData={<DataTableNoData title={noDataMessage} />}
         showLoadingOverlay={isFetchingData}
+        TableWrapper={PageBodyStickyTableWrapper}
       />
     </div>
   );

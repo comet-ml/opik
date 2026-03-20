@@ -2,11 +2,7 @@ import { RefObject, useState } from "react";
 import { Copy, File, Plus } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import {
@@ -76,8 +72,8 @@ const PlaygroundAddVariant = ({
   };
 
   return (
-    <div className="mt-16 flex shrink-0 items-start self-stretch border-r border-t bg-background px-3">
-      <div className="flex h-[calc(50vh-4rem)] items-center">
+    <div className="flex w-[var(--add-variant-width)] shrink-0 items-start justify-center self-stretch border-r bg-background">
+      <div className="flex h-[50vh] items-center">
         <Popover open={addVariantOpen} onOpenChange={setAddVariantOpen}>
           <PopoverTrigger asChild>
             <div className="group/variant flex cursor-pointer flex-col items-center gap-3">
