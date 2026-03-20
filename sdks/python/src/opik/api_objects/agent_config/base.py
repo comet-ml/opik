@@ -2,7 +2,6 @@ import dataclasses
 import logging
 import typing
 
-from opik import context_storage
 from opik.exceptions import AgentConfigNotFound
 from . import type_helpers
 from . import cache as cache_mod
@@ -229,9 +228,11 @@ class AgentConfig:
         version: typing.Optional[str],
         timeout_in_seconds: typing.Optional[int] = None,
     ) -> T:
+        from opik import opik_context  # avoid circular import
+
         if (
-            context_storage.get_trace_data() is None
-            and context_storage.span_data_stack_empty()
+            opik_context.get_current_trace_data() is None
+            and opik_context.get_current_span_data() is None
         ):
             raise RuntimeError(
                 "get_agent_config() must be called inside a function decorated with "
