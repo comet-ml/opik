@@ -2,9 +2,11 @@ package com.comet.opik.infrastructure.bi;
 
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
+import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.domain.alerts.MetricsAlertJob;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
+import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.google.inject.Injector;
@@ -45,6 +47,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setTraceThreadsClosingJob();
                 setMetricsAlertJob();
                 setExperimentDenormalizationJob();
+                setLocalRunnerReaperJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
 
@@ -79,7 +82,6 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
     }
 
-    // This method sets up a job that periodically checks for trace threads that need to be closed.
     private void setTraceThreadsClosingJob() {
         TraceThreadConfig traceThreadConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getTraceThreadConfig();
@@ -89,32 +91,10 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
 
-        Duration closeTraceThreadJobInterval = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration();
-
-        var jobDetail = JobBuilder.newJob(TraceThreadsClosingJob.class)
-                .storeDurably()
-                .build();
-
-        var trigger = TriggerBuilder.newTrigger()
-                .forJob(jobDetail)
-                .startNow()
-                .withSchedule(
-                        org.quartz.SimpleScheduleBuilder.simpleSchedule()
-                                .withIntervalInMilliseconds(closeTraceThreadJobInterval.toMillis())
-                                .repeatForever())
-                .build();
-
-        try {
-            var scheduler = getScheduler();
-            scheduler.addJob(jobDetail, false);
-            scheduler.scheduleJob(trigger);
-            log.info("Trace thread closing job scheduled successfully");
-        } catch (SchedulerException e) {
-            log.error("Failed to schedule job '{}'", jobDetail.getKey(), e);
-        }
+        scheduleRepeatingJob(TraceThreadsClosingJob.class,
+                traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration(), null);
     }
 
-    // This method sets up a job that periodically flushes debounced experiment aggregation events.
     private void setExperimentDenormalizationJob() {
         ExperimentDenormalizationConfig denormConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getExperimentDenormalization();
@@ -124,66 +104,61 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
 
-        Duration jobInterval = denormConfig.getJobInterval().toJavaDuration();
+        scheduleRepeatingJob(ExperimentDenormalizationJob.class,
+                denormConfig.getJobInterval().toJavaDuration(), null);
+    }
 
-        var jobDetail = JobBuilder.newJob(ExperimentDenormalizationJob.class)
+    private void setMetricsAlertJob() {
+        var webhookConfig = injector.get().getInstance(OpikConfiguration.class).getWebhook();
+
+        if (webhookConfig == null || webhookConfig.getMetrics() == null) {
+            log.warn("Webhook metrics configuration not found, skipping metrics alert job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(MetricsAlertJob.class,
+                webhookConfig.getMetrics().getFixedDelay().toJavaDuration(),
+                webhookConfig.getMetrics().getInitialDelay().toJavaDuration());
+    }
+
+    private void setLocalRunnerReaperJob() {
+        LocalRunnerConfig localRunnerConfig = injector.get().getInstance(OpikConfiguration.class).getLocalRunner();
+
+        if (!localRunnerConfig.isEnabled()) {
+            log.info("Local runner reaper job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(LocalRunnerReaperJob.class,
+                localRunnerConfig.getReaperJobInterval().toJavaDuration(), null);
+    }
+
+    private void scheduleRepeatingJob(Class<? extends org.quartz.Job> jobClass, Duration interval,
+            Duration initialDelay) {
+        var jobDetail = JobBuilder.newJob(jobClass)
                 .storeDurably()
                 .build();
 
-        var trigger = TriggerBuilder.newTrigger()
+        var triggerBuilder = TriggerBuilder.newTrigger()
                 .forJob(jobDetail)
-                .startNow()
                 .withSchedule(
                         org.quartz.SimpleScheduleBuilder.simpleSchedule()
-                                .withIntervalInMilliseconds(jobInterval.toMillis())
-                                .repeatForever())
-                .build();
+                                .withIntervalInMilliseconds(interval.toMillis())
+                                .repeatForever());
 
-        try {
-            var scheduler = getScheduler();
-            scheduler.addJob(jobDetail, false);
-            scheduler.scheduleJob(trigger);
-            log.info("Experiment denormalization job scheduled successfully with interval '{}'", jobInterval);
-        } catch (SchedulerException e) {
-            log.error("Failed to schedule experiment denormalization job", e);
+        if (initialDelay != null && !initialDelay.isZero()) {
+            triggerBuilder.startAt(java.util.Date.from(java.time.Instant.now().plus(initialDelay)));
+        } else {
+            triggerBuilder.startNow();
         }
-    }
 
-    // This method sets up a job that periodically evaluates metrics-based alerts for cost and latency thresholds.
-    private void setMetricsAlertJob() {
         try {
-            var webhookConfig = injector.get().getInstance(OpikConfiguration.class).getWebhook();
-
-            if (webhookConfig == null || webhookConfig.getMetrics() == null) {
-                log.warn("Webhook metrics configuration not found, skipping metrics alert job setup");
-                return;
-            }
-
-            Duration initialDelay = webhookConfig.getMetrics().getInitialDelay().toJavaDuration();
-            Duration fixedDelay = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
-
-            var jobDetail = JobBuilder.newJob(MetricsAlertJob.class)
-                    .storeDurably()
-                    .build();
-
-            var trigger = TriggerBuilder.newTrigger()
-                    .forJob(jobDetail)
-                    .startAt(java.util.Date.from(java.time.Instant.now().plus(initialDelay)))
-                    .withSchedule(
-                            org.quartz.SimpleScheduleBuilder.simpleSchedule()
-                                    .withIntervalInMilliseconds(fixedDelay.toMillis())
-                                    .repeatForever())
-                    .build();
-
             var scheduler = getScheduler();
             scheduler.addJob(jobDetail, false);
-            scheduler.scheduleJob(trigger);
-            log.info("Metrics alert job scheduled successfully with initial delay of '{}' and fixed delay of '{}'",
-                    initialDelay, fixedDelay);
+            scheduler.scheduleJob(triggerBuilder.build());
+            log.info("'{}' scheduled successfully with interval '{}'", jobClass.getSimpleName(), interval);
         } catch (SchedulerException e) {
-            log.error("Failed to schedule metrics alert job", e);
-        } catch (Exception e) {
-            log.error("Unexpected error setting up metrics alert job", e);
+            log.error("Failed to schedule '{}'", jobClass.getSimpleName(), e);
         }
     }
 

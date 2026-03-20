@@ -13,7 +13,6 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
@@ -2601,22 +2600,6 @@ class ProjectsResourceTest {
             Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
 
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject,
-                    apiKey, workspaceName);
-
-            // Create a suite_assertion score on the main project to verify default exclusion
-            var suiteAssertionTrace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(project.name())
-                    .build();
-            traceResourceClient.createTrace(suiteAssertionTrace, apiKey, workspaceName);
-            traceResourceClient.feedbackScores(List.of(
-                    FeedbackScoreBatchItem.builder()
-                            .id(suiteAssertionTrace.id())
-                            .projectName(project.name())
-                            .name("suite_assertion_score")
-                            .categoryName("suite_assertion")
-                            .value(BigDecimal.ONE)
-                            .source(ScoreSource.SDK)
-                            .build()),
                     apiKey, workspaceName);
 
             String projectIdsQueryParam = userProjectId ? JsonUtils.writeValueAsString(List.of(projectId)) : null;

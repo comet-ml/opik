@@ -85,7 +85,7 @@ public interface PromptService {
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
-    PromptVersion retrievePromptVersion(String name, String commit);
+    PromptVersion retrievePromptVersion(String name, String commit, String projectName);
 
     PromptVersion retrievePromptVersion(String name, String commit, UUID projectId);
 
@@ -248,10 +248,21 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
-    private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
-            TemplateStructure templateStructure) {
+    private UUID resolveProjectId(UUID projectId, String projectName, String workspaceId, String userName) {
+        if (projectId != null) {
+            projectService.validateProjectIdExists(projectId, workspaceId);
+            return projectId;
+        }
+        if (StringUtils.isNotBlank(projectName)) {
+            return projectService.getOrCreate(workspaceId, projectName, userName).id();
+        }
+        return null;
+    }
 
-        Prompt prompt = findByName(workspaceId, name, null);
+    private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
+            TemplateStructure templateStructure, UUID projectId) {
+
+        Prompt prompt = findByName(workspaceId, name, projectId);
 
         if (prompt != null) {
             // For existing prompts, ignore the templateStructure parameter and use the existing prompt's structure.
@@ -267,13 +278,14 @@ class PromptServiceImpl implements PromptService {
                 .id(idGenerator.generateId())
                 .name(name)
                 .templateStructure(templateStructure)
+                .projectId(projectId)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
 
         return EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .onErrorDo(() -> findByName(workspaceId, name, null));
+                .onErrorDo(() -> findByName(workspaceId, name, projectId));
     }
 
     private Prompt findByName(String workspaceId, String name, UUID projectId) {
@@ -306,7 +318,11 @@ class PromptServiceImpl implements PromptService {
 
         TemplateStructure templateStructure = createPromptVersion.templateStructure();
 
-        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure);
+        UUID projectId = resolveProjectId(createPromptVersion.projectId(), createPromptVersion.projectName(),
+                workspaceId, userName);
+
+        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure,
+                projectId);
 
         EntityConstraintHandler<PromptVersion> handler = EntityConstraintHandler.handle(() -> {
             PromptVersion promptVersion = createPromptVersion.version().toBuilder()
@@ -619,19 +635,23 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
-        return retrievePromptVersion(name, commit, null);
+    public PromptVersion retrievePromptVersion(@NonNull String name, String commit, String projectName) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        UUID projectId = null;
+        if (StringUtils.isNotBlank(projectName)) {
+            projectId = projectService.findProjectIdByName(workspaceId, projectName).orElse(null);
+        }
+        return retrievePromptVersion(name, commit, projectId);
     }
 
     @Override
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit, UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptDAO promptDAO = handle.attach(PromptDAO.class);
-            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+        Prompt prompt = findByName(workspaceId, name, projectId);
 
-            Prompt prompt = findByName(workspaceId, name, projectId);
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);

@@ -529,11 +529,7 @@ class RawExperimentsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
@@ -541,8 +537,6 @@ class RawExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -557,7 +551,6 @@ class RawExperimentsClient:
             method="GET",
             params={
                 "experiment_ids": experiment_ids,
-                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
@@ -1585,11 +1578,7 @@ class AsyncRawExperimentsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
@@ -1597,8 +1586,6 @@ class AsyncRawExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1613,7 +1600,6 @@ class AsyncRawExperimentsClient:
             method="GET",
             params={
                 "experiment_ids": experiment_ids,
-                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )

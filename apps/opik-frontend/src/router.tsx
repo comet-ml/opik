@@ -302,7 +302,7 @@ const evaluationSuitesRoute = createRoute({
   path: "/evaluation-suites",
   getParentRoute: () => workspaceRoute,
   staticData: {
-    title: "Evaluation suites",
+    title: "Datasets",
   },
 });
 

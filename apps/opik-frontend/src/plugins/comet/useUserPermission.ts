@@ -60,17 +60,13 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const checkNullablePermission = useCallback(
-    (permissionName: ManagementPermissionsNames, requireExplicit?: boolean) => {
+    (permissionName: ManagementPermissionsNames) => {
       if (isWorkspaceOwner) return true;
 
       const permissionValue = getUserPermissionValue(
         workspacePermissions,
         permissionName,
       );
-
-      if (requireExplicit) {
-        return permissionValue === true;
-      }
 
       // should default to true if the permission is not found
       return permissionValue !== false;
@@ -151,15 +147,6 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
-  const canUpdateUserRole = useMemo(
-    () =>
-      checkNullablePermission(
-        ManagementPermissionsNames.USER_ROLE_UPDATE,
-        true,
-      ),
-    [checkNullablePermission],
-  );
-
   const canConfigureWorkspaceSettings = useMemo(
     () =>
       checkNullablePermission(
@@ -210,6 +197,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_CREATE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -225,7 +217,6 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteTraces,
     canDeletePrompts,
     canDeleteOptimizationRuns,
-    canUpdateUserRole,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
     canCreateProjects,
@@ -233,6 +224,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
+    canCreateDashboards,
     canTagTrace,
     isPending: isEnabled && isPending,
   };

@@ -82,5 +82,6 @@ jobs:
               if: always()
               with:
                 action_fail: true
+                comment_mode: failures
                 check_name: "Backend Tests - ${{ matrix.name }}"
                 files: '**/target/surefire-reports/TEST-*.xml'

@@ -74,7 +74,6 @@ import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
@@ -404,8 +403,7 @@ public class SpansResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId,
-            @QueryParam("type") SpanType type,
-            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
+            @QueryParam("type") SpanType type) {
 
         if (projectId == null) {
             throw new BadRequestException("project_id must be provided");
@@ -416,7 +414,7 @@ public class SpansResource {
         log.info("Find feedback score names by project_id '{}', on workspaceId '{}'",
                 projectId, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getSpanFeedbackScoreNames(projectId, type, excludeCategoryNames)
+                .getSpanFeedbackScoreNames(projectId, type)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by project_id '{}', on workspaceId '{}'",

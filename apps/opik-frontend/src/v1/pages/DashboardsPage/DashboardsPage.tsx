@@ -49,6 +49,7 @@ import {
   generateSelectColumDef,
   getRowId,
 } from "@/shared/DataTable/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { Filter } from "@/types/filters";
 import {
   DASHBOARD_TYPE_OPTIONS,
@@ -183,6 +184,10 @@ const DashboardsPage: React.FunctionComponent = () => {
       },
     ];
   }, []);
+
+  const {
+    permissions: { canCreateDashboards },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -379,9 +384,15 @@ const DashboardsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewDashboardClick}>
-            Create new dashboard
-          </Button>
+          {canCreateDashboards && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleNewDashboardClick}
+            >
+              Create new dashboard
+            </Button>
+          )}
         </div>
       </div>
       <DataTable
@@ -398,7 +409,7 @@ const DashboardsPage: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateDashboards && (
               <Button variant="link" onClick={handleNewDashboardClick}>
                 Create new dashboard
               </Button>

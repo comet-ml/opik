@@ -1,19 +1,20 @@
 import { CellContext } from "@tanstack/react-table";
-import { GitCommitVertical } from "lucide-react";
-import { Tag } from "@/ui/tag";
+import ConfigurationVersionTag from "@/shared/ConfigurationVersionTag/ConfigurationVersionTag";
+
+export type ConfigurationVersionCellData = {
+  version: string;
+  maskId?: string;
+};
 
 const ConfigurationVersionCell = <TData,>(
   context: CellContext<TData, unknown>,
 ) => {
-  const value = context.getValue() as string;
+  const value = context.getValue() as ConfigurationVersionCellData | undefined;
 
-  if (!value || value === "-") return null;
+  if (!value) return null;
 
   return (
-    <Tag className="inline-flex items-center gap-1" variant="gray" size="md">
-      <GitCommitVertical className="size-3.5 shrink-0" />
-      {value}
-    </Tag>
+    <ConfigurationVersionTag version={value.version} maskId={value.maskId} />
   );
 };
 

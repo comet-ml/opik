@@ -67,7 +67,8 @@ class ExperimentItemMapper {
                     .executionPolicy(ExecutionPolicyMapper.fromJson(
                             row.get("execution_policy", String.class)))
                     .build();
-            return AssertionResultMapper.enrichWithAssertions(item);
+            var assertionsJson = row.get("assertions_array", String.class);
+            return AssertionResultMapper.enrichWithAssertions(item, assertionsJson);
         });
     }
 

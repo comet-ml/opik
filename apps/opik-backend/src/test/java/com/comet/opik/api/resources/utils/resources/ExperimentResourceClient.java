@@ -21,7 +21,6 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.net.HttpHeaders;
-import jakarta.annotation.Nullable;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
@@ -184,7 +183,7 @@ public class ExperimentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_OCTET_STREAM)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new ExperimentItemStreamRequest(experimentName, null, null, false)))) {
+                .post(Entity.json(ExperimentItemStreamRequest.builder().experimentName(experimentName).build()))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return getStreamed(response, ITEM_TYPE_REFERENCE);
         }
@@ -428,18 +427,12 @@ public class ExperimentResourceClient {
         }
     }
 
-    public FeedbackScoreNames getFeedbackScoreNames(List<UUID> experimentIds,
-            @Nullable Set<String> excludeCategoryNames, String apiKey, String workspaceName) {
+    public FeedbackScoreNames getFeedbackScoreNames(List<UUID> experimentIds, String apiKey, String workspaceName) {
         var ids = JsonUtils.writeValueAsString(experimentIds);
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .path("names")
                 .queryParam("experiment_ids", ids);
-        if (excludeCategoryNames != null) {
-            for (String categoryName : excludeCategoryNames) {
-                webTarget = webTarget.queryParam("exclude_category_names", categoryName);
-            }
-        }
         try (var response = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)

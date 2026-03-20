@@ -88,6 +88,8 @@ public interface ProjectService {
 
     Optional<UUID> findProjectIdByName(String workspaceId, String projectName);
 
+    Mono<Optional<UUID>> resolveProjectId(String projectName);
+
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
 
     Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
@@ -516,6 +518,15 @@ class ProjectServiceImpl implements ProjectService {
         return findByNames(workspaceId, List.of(projectName)).stream()
                 .findFirst()
                 .map(Project::id);
+    }
+
+    @Override
+    public Mono<Optional<UUID>> resolveProjectId(String projectName) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> findProjectIdByName(workspaceId, projectName))
+                    .subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     @Override

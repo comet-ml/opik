@@ -328,7 +328,6 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
               </>
             )}
           </div>
-
           <Separator className="my-1" />
           <ListAction onClick={handleCreateNew}>
             <Plus className="size-4 shrink-0" />
