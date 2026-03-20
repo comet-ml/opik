@@ -42,8 +42,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
     : `Compare (${experimentsIds.length})`;
 
   useEffect(() => {
-    title && setBreadcrumbParam("compare", "compare", title);
-    return () => setBreadcrumbParam("compare", "compare", "");
+    title && setBreadcrumbParam("compare", "Compare", title);
+    return () => setBreadcrumbParam("compare", "Compare", "");
   }, [title, setBreadcrumbParam]);
 
   const experimentTracesSearch = useMemo(
