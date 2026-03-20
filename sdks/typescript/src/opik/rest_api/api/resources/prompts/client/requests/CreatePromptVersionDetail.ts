@@ -18,4 +18,8 @@ export interface CreatePromptVersionDetail {
     templateStructure?: OpikApi.CreatePromptVersionDetailTemplateStructure;
     /** Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed. */
     excludeBlueprintUpdateForProjects?: string[];
+    /** Project ID. Takes precedence over project_name when both are provided. */
+    projectId?: string;
+    /** If provided, scopes the prompt to the specified project. Ignored when project_id is provided. */
+    projectName?: string;
 }

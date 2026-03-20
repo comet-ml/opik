@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AssertionScoreAverage } from "./AssertionScoreAverage.js";
 import { Comment } from "./Comment.js";
 import { DatasetVersionSummary } from "./DatasetVersionSummary.js";
 import { ExperimentEvaluationMethod } from "./ExperimentEvaluationMethod.js";
@@ -60,6 +61,10 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         passRate: core.serialization.property("pass_rate", core.serialization.number().optional()),
         passedCount: core.serialization.property("passed_count", core.serialization.number().optional()),
         totalCount: core.serialization.property("total_count", core.serialization.number().optional()),
+        assertionScores: core.serialization.property(
+            "assertion_scores",
+            core.serialization.list(AssertionScoreAverage).optional(),
+        ),
     });
 
 export declare namespace Experiment {
@@ -96,5 +101,6 @@ export declare namespace Experiment {
         pass_rate?: number | null;
         passed_count?: number | null;
         total_count?: number | null;
+        assertion_scores?: AssertionScoreAverage.Raw[] | null;
     }
 }
