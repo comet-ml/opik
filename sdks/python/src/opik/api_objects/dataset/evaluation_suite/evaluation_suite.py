@@ -497,6 +497,11 @@ class EvaluationSuite:
             dataset_item_ids: Subset of dataset item IDs to evaluate.
             dataset_filter_string: OQL filter string to filter dataset items.
             client: Opik client instance. If not provided, uses the cached client.
+            generate_report: Whether to generate a structured JSON report file
+                after the evaluation completes. Defaults to True.
+            report_output_path: Optional file path for the report. If not
+                provided, a default path is generated under
+                ``opik_evaluation_suite_reports/``.
 
         Returns:
             EvaluationSuiteResult with pass/fail status based on execution policy.
