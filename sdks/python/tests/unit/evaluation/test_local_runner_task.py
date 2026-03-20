@@ -57,6 +57,18 @@ def patch_sleep():
         yield patched
 
 
+@pytest.fixture
+def patch_distributed_headers():
+    with mock.patch(
+        "opik.evaluation.local_runner_task.opik_context.get_distributed_trace_headers",
+        return_value={
+            "opik_trace_id": "trace-abc",
+            "opik_parent_span_id": "span-xyz",
+        },
+    ) as patched:
+        yield patched
+
+
 def _make_job(status, result=None, error=None):
     job = mock.MagicMock()
     job.status = status
@@ -138,16 +150,16 @@ class TestLocalRunnerTask:
         task = LocalRunnerTask(
             project_name="My Project",
             agent_name="my_agent",
-            timeout_seconds=4,
-            poll_interval_seconds=2,
+            timeout_seconds=1,
+            poll_interval_seconds=0.1,
         )
 
-        # monotonic: deadline=0+4=4, poll at 1.0 (<4 ok), poll at 5.0 (>=4 timeout)
+        # monotonic: deadline=0+1=1, poll at 0.3 (<1 ok), poll at 1.5 (>=1 timeout)
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=_monotonic_side_effect(0.0, 1.0, 5.0),
+            side_effect=_monotonic_side_effect(0.0, 0.3, 1.5),
         ):
-            with pytest.raises(TimeoutError, match="did not complete within 4s"):
+            with pytest.raises(TimeoutError, match="did not complete within 1s"):
                 task({"input": "test"})
 
     def test_call__no_job_id_in_location_header__raises_runtime_error(
@@ -312,14 +324,13 @@ class TestLocalRunnerTask:
         task = LocalRunnerTask(
             project_name="My Project",
             agent_name="my_agent",
-            timeout_seconds=10,
-            poll_interval_seconds=2,
+            timeout_seconds=1,
+            poll_interval_seconds=0.1,
         )
 
-        # monotonic: deadline=0+10=10, then check 1+2<10, 3+2<10, completes
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=_monotonic_side_effect(0.0, 1.0, 3.0),
+            side_effect=_monotonic_side_effect(0.0, 0.1, 0.3),
         ):
             output = task({"input": "test"})
 
@@ -394,14 +405,13 @@ class TestLocalRunnerTask:
         task = LocalRunnerTask(
             project_name="My Project",
             agent_name="my_agent",
-            timeout_seconds=10,
-            poll_interval_seconds=2,
+            timeout_seconds=1,
+            poll_interval_seconds=0.1,
         )
 
-        # monotonic: deadline=0+10=10, error at 1.0 → 1+2<10 retry, completes
         with mock.patch(
             "opik.evaluation.local_runner_task.time.monotonic",
-            side_effect=_monotonic_side_effect(0.0, 1.0),
+            side_effect=_monotonic_side_effect(0.0, 0.1),
         ):
             output = task({"input": "test"})
 
@@ -469,3 +479,63 @@ class TestLocalRunnerTask:
         )
         with pytest.raises(RuntimeError, match="network error"):
             task({"input": "test"})
+
+    def test_call__distributed_trace_headers_forwarded(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+        patch_distributed_headers,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-traced")
+        )
+        mock_rest_client.runners.get_job.return_value = _make_job(
+            "completed", result={"result": "ok"}
+        )
+
+        task = LocalRunnerTask(
+            project_name="My Project",
+            agent_name="my_agent",
+        )
+        task({"input": "test"})
+
+        call_kwargs = (
+            mock_rest_client.runners.with_raw_response.create_job.call_args.kwargs
+        )
+        assert call_kwargs["metadata"] == {
+            "opik_trace_id": "trace-abc",
+            "opik_parent_span_id": "span-xyz",
+        }
+
+    def test_call__no_span_context__headers_omitted(
+        self,
+        mock_rest_client,
+        patch_get_client,
+        patch_resolve_project_id,
+        patch_sleep,
+    ):
+        mock_rest_client.runners.with_raw_response.create_job.return_value = (
+            _make_create_job_response("/jobs/job-no-context")
+        )
+        mock_rest_client.runners.get_job.return_value = _make_job(
+            "completed", result={"result": "ok"}
+        )
+
+        # No patch_distributed_headers — get_distributed_trace_headers raises
+        with mock.patch(
+            "opik.evaluation.local_runner_task.opik_context.get_distributed_trace_headers",
+            side_effect=Exception("no span context"),
+        ):
+            task = LocalRunnerTask(
+                project_name="My Project",
+                agent_name="my_agent",
+            )
+            task({"input": "test"})
+
+        call_kwargs = (
+            mock_rest_client.runners.with_raw_response.create_job.call_args.kwargs
+        )
+        assert "metadata" not in call_kwargs
+

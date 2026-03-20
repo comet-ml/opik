@@ -1,21 +1,16 @@
 import logging
-import os
 import time
 from typing import Any, Dict, Optional
 
 import httpx
 
+from .. import opik_context
 from ..api_objects import opik_client, rest_helpers
 from ..rest_api import client as rest_api_client
-
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT_SECONDS = int(os.getenv("OPIK_LOCAL_RUNNER_TIMEOUT_SECONDS", "120"))
-DEFAULT_POLL_INTERVAL_SECONDS = int(
-    os.getenv("OPIK_LOCAL_RUNNER_POLL_INTERVAL_SECONDS", "2")
-)
-
-_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
+DEFAULT_TIMEOUT_SECONDS = 120
+DEFAULT_POLL_INTERVAL_SECONDS = 1
 
 
 class LocalRunnerTask:
@@ -31,14 +26,18 @@ class LocalRunnerTask:
     3. Polls until the job reaches a terminal status or the timeout expires.
     4. Returns ``{"input": <original item>, "output": <job result>}``.
 
+    Failures raise ``RuntimeError``; timeouts raise ``TimeoutError``.
+
+    If an Opik trace/span context is active (e.g. during ``evaluate()``),
+    distributed trace headers are automatically forwarded to the runner so the
+    remote agent's spans attach to the evaluation trace.
+
     Args:
         project_name: The project to submit jobs under.
         agent_name: The agent to execute the job.
         mask_id: Optional agent config override mask.
-        timeout_seconds: Max time to wait for job completion.
-            Defaults to ``OPIK_LOCAL_RUNNER_TIMEOUT_SECONDS`` env var or 120.
-        poll_interval_seconds: Interval between status polls.
-            Defaults to ``OPIK_LOCAL_RUNNER_POLL_INTERVAL_SECONDS`` env var or 2.
+        timeout_seconds: Max time to wait for job completion (default 120).
+        poll_interval_seconds: Interval between status polls (default 1).
     """
 
     def __init__(
@@ -69,6 +68,13 @@ class LocalRunnerTask:
             )
         return self._project_id
 
+    def _get_distributed_trace_headers(self) -> Optional[Dict[str, str]]:
+        """Return distributed trace headers if a span context is active, else None."""
+        try:
+            return dict(opik_context.get_distributed_trace_headers())
+        except Exception:
+            return None
+
     def _submit_job(self, inputs: Dict[str, Any]) -> str:
         rest_client = self._get_rest_client()
         project_id = self._resolve_project_id()
@@ -81,7 +87,12 @@ class LocalRunnerTask:
         if self._mask_id is not None:
             kwargs["mask_id"] = self._mask_id
 
+        headers = self._get_distributed_trace_headers()
+        if headers is not None:
+            kwargs["metadata"] = headers
+
         try:
+            # create_job raises for non-2xx responses internally
             resp = rest_client.runners.with_raw_response.create_job(**kwargs)
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             raise RuntimeError(
