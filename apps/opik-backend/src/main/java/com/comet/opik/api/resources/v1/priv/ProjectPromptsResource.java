@@ -54,7 +54,6 @@ public class ProjectPromptsResource {
     @Operation(operationId = "getPromptsByProject", summary = "Get prompts by project", description = "Get prompts scoped to a project", responses = {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptPage.class))),
     })
-    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     @JsonView(Prompt.View.Public.class)
     public Response getPrompts(
             @PathParam("projectId") UUID projectId,
