@@ -44,9 +44,6 @@ This test ensures proper synchronization of experiment items between UI and back
     });
 
     await test.step('Verify trace count via backend', async () => {
-      const experimentBackend = await helperClient.getExperiment(experiment.id);
-      // Note: experiment.trace_count is not directly exposed in the Experiment type
-      // but we can verify by getting experiment items
       const experimentItems = await helperClient.getExperimentItems(experiment.name);
       expect(experimentItems.length).toBe(datasetSize);
     });
@@ -70,7 +67,7 @@ This test ensures proper synchronization of experiment items between UI and back
       const firstRow = page.locator('table tbody tr').first();
       await firstRow.click();
 
-      const datasetItemHeading = page.getByRole('heading', { name: 'Dataset item', level: 4 });
+      const datasetItemHeading = page.getByRole('heading', { name: 'Evaluation suite item', level: 4 });
       await expect(datasetItemHeading).toBeVisible({ timeout: 10000 });
 
       const traceButton = page.getByRole('button', { name: 'Trace' });

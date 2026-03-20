@@ -8,20 +8,21 @@ title: Export by SDK, REST, and UI
 toc_max_heading_level: 4
 ---
 
-When working with Opik, it is important to be able to export traces and spans so that you can use them to fine-tune your models or run deeper analysis.
+When working with Opik, it is important to be able to export traces, spans, and threads so that you can use them to fine-tune your models or run deeper analysis.
 
-You can export the traces you have logged to the Opik platform using:
+You can export the data you have logged to the Opik platform using:
 
-1. Using the Opik SDK: You can use the Python SDK methods ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces) and [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans)) or the TypeScript SDK method (`client.searchTraces()`) to export traces and spans.
+1. Using the Opik SDK: You can use the Python SDK methods ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces), [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans), and [`Opik.search_threads`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_threads)) or the TypeScript SDK method (`client.searchTraces()`) to export traces, spans, and threads.
 2. Using the Opik REST API: You can use the [`/traces`](/reference/rest-api/traces/get-traces-by-project) and [`/spans`](/reference/rest-api/spans/get-spans-by-project) endpoints to export traces and spans.
 3. Using the UI: Once you have selected the traces or spans you want to export, you can click on the `Export CSV` button in the `Actions` dropdown.
 
 <Tip>
-  The recommended way to export traces is to use the SDK methods in the Opik
+  The recommended way to export data is to use the SDK methods in the Opik
   Python SDK
-  ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces)
+  ([`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces),
+  [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans),
   and
-  [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans))
+  [`Opik.search_threads`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_threads))
   or TypeScript SDK (`client.searchTraces()`).
 </Tip>
 
@@ -97,78 +98,98 @@ You can use the `filter_string` (Python) / `filterString` (TypeScript) parameter
   </Tab>
 </Tabs>
 
-The `filter_string` (Python) / `filterString` (TypeScript) parameter should be a string in the following format using Opik Query Language (OQL):
+### Filtering with Opik Query Language (OQL)
+
+All search methods (`search_traces`, `search_spans`, and `search_threads`) accept a `filter_string` (Python) / `filterString` (TypeScript) parameter that uses Opik Query Language (OQL):
 
 ```
 "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 ```
 
-**Supported columns and operators:**
+**Rules:**
+
+- String values must be wrapped in double quotes
+- Multiple conditions can be combined with `AND` (OR is not supported)
+- DateTime fields require ISO 8601 format (e.g., `"2024-01-01T00:00:00Z"`)
+- Use dot notation for nested fields: `metadata.model`, `feedback_scores.accuracy`
+
+Each entity type supports a different set of filter columns. The tables below list the available columns for each.
+
+#### Trace columns
 
 | Column                    | Type       | Operators                                                                   |
 | ------------------------- | ---------- | --------------------------------------------------------------------------- |
 | `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `name`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `created_by`              | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `input`, `output`         | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `thread_id`               | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `type`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `guardrails`              | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `experiment_id`           | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `start_time`, `end_time`  | DateTime   | `=`, `!=`, `>`, `>=`, `<`, `<=`                                             |
+| `created_at`, `last_updated_at` | DateTime | `=`, `!=`, `>`, `>=`, `<`, `<=`                                        |
+| `metadata`                | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `input_json`, `output_json` | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `feedback_scores`         | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `span_feedback_scores`    | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `tags`                    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `annotation_queue_ids`    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=` |
+| `duration`, `total_estimated_cost`, `llm_span_count` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=`              |
+| `error_info`              | Container  | `is_empty`, `is_not_empty`                                                  |
+
+#### Span columns
+
+| Column                    | Type       | Operators                                                                   |
+| ------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `name`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `input`, `output`         | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `model`                   | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `provider`                | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `status`                  | String     | `=`, `contains`, `not_contains`                                             |
-| `start_time`              | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
-| `end_time`                | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
-| `input`                   | String     | `=`, `contains`, `not_contains`                                             |
-| `output`                  | String     | `=`, `contains`, `not_contains`                                             |
-| `metadata`                | Dictionary | `=`, `contains`, `>`, `<`                                                   |
-| `feedback_scores`         | Numeric    | `=`, `>`, `<`, `>=`, `<=`, `is_empty`, `is_not_empty`                      |
-| `tags`                    | List       | `contains`                                                                  |
-| `usage.total_tokens`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `usage.prompt_tokens`     | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `usage.completion_tokens` | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `duration`                | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `number_of_messages`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
-| `total_estimated_cost`    | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `trace_id`                | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `type`                    | Enum       | `=`, `!=`                                                                   |
+| `start_time`, `end_time`  | DateTime   | `=`, `!=`, `>`, `>=`, `<`, `<=`                                             |
+| `metadata`                | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `input_json`, `output_json` | Dictionary | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `>=`, `<`, `<=` |
+| `feedback_scores`         | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `tags`                    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=` |
+| `duration`, `total_estimated_cost` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=`                                  |
+| `error_info`              | Container  | `is_empty`, `is_not_empty`                                                  |
 
-**Rules:**
+#### Thread columns
 
-- String values must be wrapped in double quotes
-- Multiple conditions can be combined with `AND` (OR is not supported)
-- DateTime fields require ISO 8601 format (e.g., "2024-01-01T00:00:00Z")
-- Use dot notation for nested objects: `metadata.model`, `feedback_scores.accuracy`
-
-Here are some full examples of using `filter_string` / `filterString` values in searches:
+| Column                    | Type       | Operators                                                                   |
+| ------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `first_message`, `last_message` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `status`                  | Enum       | `=`, `!=`                                                                   |
+| `start_time`, `end_time`  | DateTime   | `=`, `!=`, `>`, `>=`, `<`, `<=`                                             |
+| `created_at`, `last_updated_at` | DateTime | `=`, `!=`, `>`, `>=`, `<`, `<=`                                        |
+| `feedback_scores`         | Numeric    | `=`, `!=`, `>`, `>=`, `<`, `<=`, `is_empty`, `is_not_empty`                |
+| `tags`                    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `annotation_queue_ids`    | List       | `=`, `!=`, `contains`, `not_contains`, `is_empty`, `is_not_empty`           |
+| `duration`, `number_of_messages` | Numeric | `=`, `!=`, `>`, `>=`, `<`, `<=`                                       |
 
 <Tabs>
   <Tab value="Python" title="Python">
     ```python
     import opik
 
-    client = opik.Opik(
-        project_name="Default project"
-    )
+    client = opik.Opik(project_name="Default project")
 
-    # Search for traces where the input contains text
-    traces = client.search_traces(
-      filter_string='input contains "Opik"'
-    )
-
-    # Search for traces that were logged after a specific date
+    # Trace filters
+    traces = client.search_traces(filter_string='input contains "Opik"')
     traces = client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
-
-    # Search for traces that have a specific tag
+    traces = client.search_traces(filter_string='usage.total_tokens > 1000')
+    traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
+    traces = client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
     traces = client.search_traces(filter_string='tags contains "production"')
 
-    # Search for traces based on the number of tokens used
-    traces = client.search_traces(filter_string='usage.total_tokens > 1000')
-
-    # Search for traces based on the model used
-    traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
-
-    # Search for traces that have a feedback score (not empty)
-    traces = client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
-
-    # Search for traces that don't have a feedback score (empty)
-    traces = client.search_traces(filter_string='feedback_scores.user_rating is_empty')
+    # Thread filters
+    threads = client.search_threads(filter_string='number_of_messages >= 5')
+    threads = client.search_threads(filter_string='first_message contains "hello"')
+    threads = client.search_threads(filter_string='status = "active"')
     ```
 
   </Tab>
@@ -176,44 +197,15 @@ Here are some full examples of using `filter_string` / `filterString` values in 
     ```typescript
     import { Opik } from "opik";
 
-    const client = new Opik({
-      projectName: "Default project"
-    });
+    const client = new Opik({ projectName: "Default project" });
 
-    // Search for traces where the input contains text
-    const traces1 = await client.searchTraces({
-      filterString: 'input contains "Opik"'
-    });
-
-    // Search for traces that were logged after a specific date
-    const traces2 = await client.searchTraces({
-      filterString: 'start_time >= "2024-01-01T00:00:00Z"'
-    });
-
-    // Search for traces that have a specific tag
-    const traces3 = await client.searchTraces({
-      filterString: 'tags contains "production"'
-    });
-
-    // Search for traces based on the number of tokens used
-    const traces4 = await client.searchTraces({
-      filterString: 'usage.total_tokens > 1000'
-    });
-
-    // Search for traces based on the model used
-    const traces5 = await client.searchTraces({
-      filterString: 'metadata.model = "gpt-4o"'
-    });
-
-    // Search for traces that have a feedback score (not empty)
-    const traces6 = await client.searchTraces({
-      filterString: 'feedback_scores.user_rating is_not_empty'
-    });
-
-    // Search for traces that don't have a feedback score (empty)
-    const traces7 = await client.searchTraces({
-      filterString: 'feedback_scores.user_rating is_empty'
-    });
+    // Trace filters
+    const t1 = await client.searchTraces({ filterString: 'input contains "Opik"' });
+    const t2 = await client.searchTraces({ filterString: 'start_time >= "2024-01-01T00:00:00Z"' });
+    const t3 = await client.searchTraces({ filterString: 'usage.total_tokens > 1000' });
+    const t4 = await client.searchTraces({ filterString: 'metadata.model = "gpt-4o"' });
+    const t5 = await client.searchTraces({ filterString: 'feedback_scores.user_rating is_not_empty' });
+    const t6 = await client.searchTraces({ filterString: 'tags contains "production"' });
     ```
 
   </Tab>
@@ -223,11 +215,11 @@ Here are some full examples of using `filter_string` / `filterString` values in 
 If your `feedback_scores` key contains spaces, you will need to wrap
 it in double quotes:
 
-`'feedback_score."My Score" > 0'`
+`'feedback_scores."My Score" > 0'`
 
-If the `feedback_score` key contains both spaces and double quotes, you will need to escape the double quotes as `""`:
+If the `feedback_scores` key contains both spaces and double quotes, you will need to escape the double quotes as `""`:
 
-`'feedback_score."Score ""with"" Quotes" > 0'`
+`'feedback_scores."Score ""with"" Quotes" > 0'`
 
 or by using different quotes, surrounding in triple-quotes, like this:
 
@@ -237,7 +229,7 @@ or by using different quotes, surrounding in triple-quotes, like this:
 
 ### Exporting spans
 
-You can export spans using the [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans) method. This methods allows you to search for spans based on `trace_id` or based on a filter string.
+You can export spans using the [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans) method. This method allows you to search for spans based on `trace_id` or based on a filter string.
 
 #### Exporting spans based on `trace_id`
 
@@ -269,11 +261,55 @@ spans = client.search_spans(
 )
 ```
 
-<Tip>
-  The `filter_string` parameter should follow the same format as the
-  `filter_string` parameter in the `Opik.search_traces` method as [defined
-  above](#search-for-specific-traces).
-</Tip>
+### Exporting threads
+
+You can export threads using the [`Opik.search_threads`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_threads) method. This method allows you to search for conversational threads in a project.
+
+#### Exporting all threads
+
+To export all threads, you will need to specify a `max_results` value that is higher than the total number of threads in your project:
+
+```python
+import opik
+
+client = opik.Opik()
+
+threads = client.search_threads(project_name="Default project", max_results=1000000)
+```
+
+#### Search for specific threads
+
+You can use the `filter_string` parameter to search for specific threads:
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Search for a specific thread by ID
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='id = "thread_123"'
+)
+
+# Search for threads with many messages
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='number_of_messages >= 5'
+)
+
+# Search for threads with a specific feedback score
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='feedback_scores.user_satisfaction > 0.8'
+)
+
+# Search for threads by tag
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='tags contains "important"'
+)
+```
 
 ## Using the Opik REST API
 

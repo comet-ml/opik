@@ -173,7 +173,8 @@ public class DatasetsResource {
         log.info("Found datasets by '{}', sorted with: {}, count '{}' on workspaceId '{}'", criteria, sorting,
                 datasetPage.size(), workspaceId);
 
-        return Response.ok(datasetPage).build();
+        var builder = Response.ok(datasetPage);
+        return builder.build();
     }
 
     @POST

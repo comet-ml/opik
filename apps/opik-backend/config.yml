@@ -795,16 +795,54 @@ serviceToggles:
 
 # Local Runner configuration
 localRunner:
+  # Default: false
+  # Description: Whether the local runner feature is enabled
   enabled: ${TOGGLE_RUNNERS_ENABLED:-false}
+  # Default: 30m
+  # Description: Maximum time a job can run before being considered timed out
   jobTimeout: ${OPIK_RUNNER_JOB_TIMEOUT:-30m}
+  # Default: 100
+  # Description: Maximum number of pending jobs allowed in a runner's queue
   maxPendingJobsPerRunner: ${OPIK_RUNNER_MAX_PENDING:-100}
+  # Default: 15s
+  # Description: Time-to-live for runner heartbeats; runners not heartbeating within this window are considered dead
   heartbeatTtl: ${OPIK_RUNNER_HEARTBEAT_TTL:-15s}
+  # Default: 10s
+  # Description: How long the nextJob long-poll blocks waiting for a new job before returning empty
   nextJobPollTimeout: ${OPIK_RUNNER_NEXT_JOB_POLL_TIMEOUT:-10s}
+  # Default: 24h
+  # Description: How long after a runner dies before its data is purged from Redis
   deadRunnerPurgeTime: ${OPIK_RUNNER_DEAD_PURGE_HOURS:-24h}
+  # Default: 7d
+  # Description: How long completed job metadata is retained in Redis
   completedJobTtl: ${OPIK_RUNNER_COMPLETED_JOB_TTL:-7d}
+  # Default: 60s
+  # Description: Interval between reaper job executions that clean up dead runners
+  reaperJobInterval: ${OPIK_RUNNER_REAPER_JOB_INTERVAL:-60s}
+  # Default: 55s
+  # Description: How long the reaper holds its distributed lock while processing
   reaperLockDuration: ${OPIK_RUNNER_REAPER_LOCK_DURATION:-55s}
+  # Default: 5s
+  # Description: How long the reaper waits to acquire the distributed lock before giving up
   reaperLockWait: ${OPIK_RUNNER_REAPER_LOCK_WAIT:-5s}
+  # Default: 5s
+  # Description: Extra buffer added to the async response timeout beyond nextJobPollTimeout
   nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
+  # Default: 300s
+  # Description: Time-to-live for pairing codes used during runner registration
+  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-300s}
+  # Default: 600s
+  # Description: Time-to-live for runner entries during the pairing process
+  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-600s}
+  # Default: 100
+  # Description: Maximum number of runners the reaper processes per cycle across all workspaces
+  reaperMaxRunnersPerCycle: ${OPIK_RUNNER_REAPER_MAX_RUNNERS_PER_CYCLE:-100}
+  # Default: 50
+  # Description: Maximum number of agents allowed per runner
+  maxAgentsPerRunner: ${OPIK_RUNNER_MAX_AGENTS_PER_RUNNER:-50}
+  # Default: 1000
+  # Description: Maximum number of log entries a runner can send in a single batch
+  maxLogEntriesPerBatch: ${OPIK_RUNNER_MAX_LOG_ENTRIES_PER_BATCH:-1000}
 
 # Trace Thread configuration
 traceThreadConfig:

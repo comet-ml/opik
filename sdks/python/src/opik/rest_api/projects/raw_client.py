@@ -355,11 +355,7 @@ class RawProjectsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_feedback_score_names_by_project_ids(
-        self,
-        *,
-        project_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, project_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[FeedbackScoreNames]:
         """
         Find Feedback Score names By Project Ids
@@ -367,8 +363,6 @@ class RawProjectsClient:
         Parameters
         ----------
         project_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -383,7 +377,6 @@ class RawProjectsClient:
             method="GET",
             params={
                 "project_ids": project_ids,
-                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
@@ -1004,11 +997,7 @@ class AsyncRawProjectsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_feedback_score_names_by_project_ids(
-        self,
-        *,
-        project_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, project_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[FeedbackScoreNames]:
         """
         Find Feedback Score names By Project Ids
@@ -1016,8 +1005,6 @@ class AsyncRawProjectsClient:
         Parameters
         ----------
         project_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1032,7 +1019,6 @@ class AsyncRawProjectsClient:
             method="GET",
             params={
                 "project_ids": project_ids,
-                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )

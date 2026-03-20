@@ -105,27 +105,27 @@ class CostServiceTest {
     private static Stream<Arguments> provideModelNamesForNormalization() {
         return Stream.of(
                 // Dot notation should work (normalized to hyphens)
-                Arguments.of("claude-3.5-sonnet-20241022", "anthropic", true),
+                Arguments.of("claude-3.7-sonnet-20250219", "anthropic", true),
                 Arguments.of("claude-sonnet-4.5", "anthropic", true),
                 Arguments.of("claude-haiku-4.5", "anthropic", true),
                 Arguments.of("claude-sonnet-4.5-20250929", "anthropic", true),
                 Arguments.of("claude-haiku-4.5-20251001", "anthropic", true),
 
                 // Case insensitivity should work
-                Arguments.of("Claude-3.5-Sonnet-20241022", "anthropic", true),
+                Arguments.of("Claude-3.7-Sonnet-20250219", "anthropic", true),
                 Arguments.of("CLAUDE-SONNET-4.5", "anthropic", true),
 
                 // Backwards compatibility - exact matches still work
-                Arguments.of("claude-3-5-sonnet-20241022", "anthropic", true),
+                Arguments.of("claude-3-7-sonnet-20250219", "anthropic", true),
                 Arguments.of("claude-haiku-4-5", "anthropic", true),
                 Arguments.of("claude-sonnet-4-5", "anthropic", true),
 
                 // Provider prefix + dot notation should work (prefix stripped, then dots normalized)
-                Arguments.of("anthropic/claude-3.5-sonnet-20241022", "anthropic", true),
+                Arguments.of("anthropic/claude-3.7-sonnet-20250219", "anthropic", true),
                 Arguments.of("anthropic/claude-sonnet-4.5", "anthropic", true),
 
                 // Provider prefix + case variation should work
-                Arguments.of("anthropic/Claude-3.5-Sonnet-20241022", "anthropic", true),
+                Arguments.of("anthropic/Claude-3.7-Sonnet-20250219", "anthropic", true),
 
                 // Unknown models should gracefully return zero
                 Arguments.of("claude-3.5.1", "anthropic", false),
@@ -178,8 +178,8 @@ class CostServiceTest {
         return Stream.of(
                 Arguments.of("openai/gpt-4o", "openai"),
                 Arguments.of("openai/gpt-4o-mini", "openai"),
-                Arguments.of("anthropic/claude-3-5-sonnet-20241022", "anthropic"),
-                Arguments.of("anthropic/claude-3-5-haiku-20241022", "anthropic"));
+                Arguments.of("anthropic/claude-3-7-sonnet-20250219", "anthropic"),
+                Arguments.of("anthropic/claude-haiku-4-5-20251001", "anthropic"));
     }
 
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {

@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .assertion_score_average import AssertionScoreAverage
 from .comment import Comment
 from .dataset_version_summary import DatasetVersionSummary
 from .experiment_evaluation_method import ExperimentEvaluationMethod
@@ -72,6 +73,11 @@ class Experiment(UniversalBaseModel):
     total_count: typing.Optional[int] = pydantic.Field(default=None)
     """
     Total number of items for evaluation suite experiments. Null for regular experiments.
+    """
+
+    assertion_scores: typing.Optional[typing.List[AssertionScoreAverage]] = pydantic.Field(default=None)
+    """
+    Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments.
     """
 
     if IS_PYDANTIC_V2:

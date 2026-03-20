@@ -130,10 +130,8 @@ def test_annotation_queue__add_threads__happyflow(
     opik_client.flush()
 
     # Wait for threads to be available (which also ensures project is created)
-    threads_client = opik_client.get_threads_client()
-
     def threads_available():
-        threads = threads_client.search_threads(
+        threads = opik_client.search_threads(
             project_name=temporary_project_name,
             max_results=100,
         )
@@ -160,7 +158,7 @@ def test_annotation_queue__add_threads__happyflow(
     )
 
     # Get threads from API and filter by our thread IDs
-    threads = threads_client.search_threads(
+    threads = opik_client.search_threads(
         project_name=temporary_project_name,
         max_results=10,
     )

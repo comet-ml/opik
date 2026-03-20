@@ -50,6 +50,7 @@ export interface AgentConfigEnvsRequest {
 
 export interface ConfigHistoryItem {
   id: string;
+  name: string;
   description: string;
   created_by: string;
   created_at: string;
