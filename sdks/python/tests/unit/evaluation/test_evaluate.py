@@ -190,6 +190,7 @@ def test_evaluate__happyflow(
         prompts=None,
         tags=experiment_tags,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -435,6 +436,7 @@ def test_evaluate_with_scoring_key_mapping(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
     mock_experiment.insert.assert_has_calls(
         [
@@ -739,6 +741,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_called_once_with(
@@ -887,6 +890,7 @@ def test_evaluate__with_random_sampler__happy_flow(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1320,6 +1324,7 @@ def test_evaluate_prompt_happyflow(
         prompts=None,
         tags=experiment_tags,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1534,6 +1539,7 @@ def test_evaluate__aggregated_metric__happy_flow(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1898,6 +1904,7 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -2006,6 +2013,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
@@ -2175,6 +2183,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
