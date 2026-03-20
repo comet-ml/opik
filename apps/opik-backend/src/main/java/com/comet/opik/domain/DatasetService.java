@@ -336,8 +336,7 @@ class DatasetServiceImpl implements DatasetService {
                         }
                         return dao.findByName(workspaceId, name, null).map(d -> {
                             requestContext.get().setWorkspaceFallbackMessage(
-                                    "Dataset '%s' was found via workspace-wide search. In a future version, you will need to specify the project explicitly."
-                                            .formatted(name));
+                                    RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset", name));
                             return d;
                         });
                     })

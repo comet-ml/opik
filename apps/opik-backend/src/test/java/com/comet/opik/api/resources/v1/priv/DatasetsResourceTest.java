@@ -1727,9 +1727,8 @@ class DatasetsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
-                        .isEqualTo(
-                                "Dataset '%s' was found via workspace-wide search. In a future version, you will need to specify the project explicitly."
-                                        .formatted(dataset.name()));
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                                dataset.name()));
             }
         }
 

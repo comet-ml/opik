@@ -297,8 +297,7 @@ class PromptServiceImpl implements PromptService {
                 prompt = promptDAO.findByName(name, workspaceId, null);
                 if (prompt != null) {
                     requestContext.get().setWorkspaceFallbackMessage(
-                            "Prompt '%s' was found via workspace-wide search. In a future version, you will need to specify the project explicitly."
-                                    .formatted(name));
+                            RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt", name));
                 }
             }
             return prompt;

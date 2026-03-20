@@ -2875,9 +2875,8 @@ class PromptResourceTest {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
-                        .isEqualTo(
-                                "Prompt '%s' was found via workspace-wide search. In a future version, you will need to specify the project explicitly."
-                                        .formatted(prompt.name()));
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
+                                prompt.name()));
             }
         }
 
