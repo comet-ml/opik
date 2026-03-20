@@ -25,6 +25,8 @@ public class RequestContext {
     public static final String VISIBILITY = "visibility";
     public static final String RATE_LIMIT_RESET = "RateLimit-Reset";
 
+    public static final String WORKSPACE_FALLBACK_HEADER = "X-Opik-Deprecation";
+
     public static final String PROJECT_NAME = "projectName";
     // used by Optimization Studio to pass the Opik API key to the optimizer job, while keeping auth as is
     public static final String OPIK_API_KEY = "opikApiKey";
@@ -37,4 +39,5 @@ public class RequestContext {
     private MultivaluedMap<String, String> headers;
     private List<Quota> quotas;
     private Visibility visibility;
+    private String workspaceFallbackMessage;
 }

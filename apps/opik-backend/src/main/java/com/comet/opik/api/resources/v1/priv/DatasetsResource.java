@@ -285,7 +285,12 @@ public class DatasetsResource {
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
                 workspaceId);
 
-        return Response.ok(dataset).build();
+        var responseBuilder = Response.ok(dataset);
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+        return responseBuilder.build();
     }
 
     @POST

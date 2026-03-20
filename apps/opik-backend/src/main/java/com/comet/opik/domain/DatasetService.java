@@ -330,7 +330,17 @@ class DatasetServiceImpl implements DatasetService {
             var dao = handle.attach(DatasetDAO.class);
 
             return dao.findByName(workspaceId, name, projectId)
-                    .or(() -> projectId != null ? dao.findByName(workspaceId, name, null) : Optional.empty())
+                    .or(() -> {
+                        if (projectId == null) {
+                            return Optional.empty();
+                        }
+                        return dao.findByName(workspaceId, name, null).map(d -> {
+                            requestContext.get().setWorkspaceFallbackMessage(
+                                    "Dataset '%s' was found via workspace-wide search. In a future version, you will need to specify the project explicitly."
+                                            .formatted(name));
+                            return d;
+                        });
+                    })
                     .orElseThrow(this::newNotFoundException);
         });
 
