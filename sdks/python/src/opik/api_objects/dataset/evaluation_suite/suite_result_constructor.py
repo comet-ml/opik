@@ -16,6 +16,8 @@ from . import types as suite_types
 
 def build_suite_result(
     eval_result: evaluation_result.EvaluationResult,
+    suite_name: Optional[str] = None,
+    total_time: Optional[float] = None,
 ) -> suite_types.EvaluationSuiteResult:
     """
     Build an EvaluationSuiteResult from an EvaluationResult.
@@ -82,4 +84,6 @@ def build_suite_result(
         items_total=len(results_by_item),
         item_results=item_results,
         evaluation_result_=eval_result,
+        suite_name=suite_name,
+        total_time=total_time,
     )

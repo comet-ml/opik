@@ -16,7 +16,7 @@ from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
 from opik.api_objects.dataset import dataset, dataset_item
 
-from . import types as suite_types
+from . import types as suite_types, report_file
 from .. import validators, execution_policy, rest_operations
 
 
@@ -512,7 +512,7 @@ class EvaluationSuite:
         def _validated_task(data: Dict[str, Any]) -> Any:
             return validate_task_result(task(data))
 
-        return opik_evaluator.evaluate_suite(
+        suite_result = opik_evaluator.evaluate_suite(
             dataset=self._dataset,
             task=_validated_task,
             client=client,
@@ -529,6 +529,34 @@ class EvaluationSuite:
             evaluator_model=model,
             optimization_id=optimization_id,
             experiment_type=experiment_type,
-            generate_report=generate_report,
-            report_output_path=report_output_path,
         )
+
+        report_path: Optional[str] = None
+        if generate_report:
+            try:
+                output_path = report_output_path or report_file.build_default_report_path(
+                    suite_result.experiment_name or suite_result.experiment_id
+                )
+                report_path = report_file.save_report_file(
+                    suite_result.to_report_dict(),
+                    output_path,
+                )
+            except Exception:
+                LOGGER.warning(
+                    "Failed to save evaluation suite report file.",
+                    exc_info=True,
+                )
+
+        if verbose >= 1:
+            from opik.evaluation import report
+
+            report.display_suite_results(
+                self._dataset.name,
+                suite_result.total_time,
+                suite_result,
+                verbose=verbose,
+                experiment_url=suite_result.experiment_url,
+                report_path=report_path,
+            )
+
+        return suite_result

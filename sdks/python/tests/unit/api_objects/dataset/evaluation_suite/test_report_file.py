@@ -7,7 +7,7 @@ import pytest
 from unittest import mock
 
 from opik.api_objects.dataset.evaluation_suite import (
-    result_file,
+    report_file,
     suite_result_constructor,
     types as suite_types,
 )
@@ -66,13 +66,14 @@ def _make_suite_result(
         experiment_url="http://example.com/experiment/exp-123",
         trial_count=1,
     )
-    result = suite_result_constructor.build_suite_result(eval_result)
-    result._suite_name = suite_name
-    result._total_time = total_time
-    return result
+    return suite_result_constructor.build_suite_result(
+        eval_result,
+        suite_name=suite_name,
+        total_time=total_time,
+    )
 
 
-class TestSuiteResultToDict:
+class TestToReportDict:
     def test_basic_structure(self):
         trs = [
             _make_test_result(
@@ -88,7 +89,7 @@ class TestSuiteResultToDict:
         ]
         suite_result = _make_suite_result(trs, suite_name="My Suite")
 
-        result = result_file.suite_result_to_dict(suite_result)
+        result = suite_result.to_report_dict()
 
         assert result["suite_passed"] is False
         assert result["items_passed"] == 0
@@ -140,7 +141,7 @@ class TestSuiteResultToDict:
         ]
         suite_result = _make_suite_result(trs)
 
-        result = result_file.suite_result_to_dict(suite_result)
+        result = suite_result.to_report_dict()
 
         assert result["suite_passed"] is True
         assert result["items_passed"] == 2
@@ -157,7 +158,7 @@ class TestSuiteResultToDict:
         ]
         suite_result = _make_suite_result(trs, total_time=12.3456)
 
-        result = result_file.suite_result_to_dict(suite_result)
+        result = suite_result.to_report_dict()
 
         assert result["total_time_seconds"] == 12.346
 
@@ -190,7 +191,7 @@ class TestSuiteResultToDict:
         ]
         suite_result = _make_suite_result(trs)
 
-        result = result_file.suite_result_to_dict(suite_result)
+        result = suite_result.to_report_dict()
 
         assertion = result["items"][0]["runs"][0]["assertions"][0]
         assert assertion["passed"] is False
@@ -213,7 +214,8 @@ class TestSaveReport:
         )
         output_path = str(tmp_path / "report.json")
 
-        result_path = result_file.save_report(suite_result, output_path)
+        report_dict = suite_result.to_report_dict()
+        result_path = report_file.save_report_file(report_dict, output_path)
 
         assert result_path == output_path
         assert os.path.exists(output_path)
@@ -237,8 +239,10 @@ class TestSaveReport:
             ),
         ]
         suite_result = _make_suite_result(trs)
+        report_dict = suite_result.to_report_dict()
 
-        result_path = result_file.save_report(suite_result)
+        output_path = report_file.build_default_report_path("my-experiment")
+        result_path = report_file.save_report_file(report_dict, output_path)
 
         assert "my-experiment" in os.path.basename(result_path)
         assert result_path.endswith(".json")
@@ -256,23 +260,25 @@ class TestSaveReport:
             ),
         ]
         suite_result = _make_suite_result(trs)
+        report_dict = suite_result.to_report_dict()
 
-        result_path = result_file.save_report(
-            suite_result, output_path=output_path
-        )
+        result_path = report_file.save_report_file(report_dict, output_path)
 
         assert os.path.exists(result_path)
 
 
-class TestSanitizeFilename:
+class TestBuildDefaultReportPath:
     def test_replaces_unsafe_characters(self):
-        assert result_file._sanitize_filename("my/suite:name") == "my_suite_name"
+        path = report_file.build_default_report_path("my/suite:name")
+        assert os.path.basename(path) == "my_suite_name.json"
 
     def test_keeps_safe_characters(self):
-        assert result_file._sanitize_filename("my-suite_v1.0") == "my-suite_v1.0"
+        path = report_file.build_default_report_path("my-suite_v1.0")
+        assert os.path.basename(path) == "my-suite_v1.0.json"
 
     def test_replaces_spaces(self):
-        assert result_file._sanitize_filename("my suite") == "my_suite"
+        path = report_file.build_default_report_path("my suite")
+        assert os.path.basename(path) == "my_suite.json"
 
 
 class TestEvaluationSuiteResultMethods:
@@ -293,7 +299,7 @@ class TestEvaluationSuiteResultMethods:
         assert result["suite_passed"] is True
         assert "items" in result
 
-    def test_save_report(self, tmp_path):
+    def test_to_report_dict_and_save(self, tmp_path):
         trs = [
             _make_test_result(
                 dataset_item_id="item-1",
@@ -305,7 +311,8 @@ class TestEvaluationSuiteResultMethods:
         suite_result = _make_suite_result(trs)
         output_path = str(tmp_path / "result.json")
 
-        path = suite_result.save_report(output_path=output_path)
+        report_dict = suite_result.to_report_dict()
+        path = report_file.save_report_file(report_dict, output_path)
 
         assert os.path.exists(path)
         with open(path) as f:
