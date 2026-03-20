@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Getter
 public enum SpanField implements Field {
-    ID(ID_QUERY_PARAM, FieldType.STRING),
+    ID(ID_QUERY_PARAM, FieldType.STRING_EXACT),
     NAME(NAME_QUERY_PARAM, FieldType.STRING),
     START_TIME(START_TIME_QUERY_PARAM, FieldType.DATE_TIME),
     END_TIME(END_TIME_QUERY_PARAM, FieldType.DATE_TIME),
@@ -28,7 +28,7 @@ public enum SpanField implements Field {
     ERROR_INFO(ERROR_INFO_QUERY_PARAM, FieldType.ERROR_CONTAINER),
     ERROR_TYPE(ERROR_TYPE_QUERY_PARAM, FieldType.STRING),
     TYPE(TYPE_QUERY_PARAM, FieldType.ENUM),
-    TRACE_ID(TRACE_ID_QUERY_PARAM, FieldType.STRING),
+    TRACE_ID(TRACE_ID_QUERY_PARAM, FieldType.STRING_EXACT),
     CUSTOM(CUSTOM_QUERY_PARAM, FieldType.CUSTOM),
     ;
 
