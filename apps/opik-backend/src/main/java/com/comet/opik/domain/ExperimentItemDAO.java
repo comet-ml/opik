@@ -126,6 +126,7 @@ class ExperimentItemDAO {
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experiment_ids
                 AND experiment_id NOT IN (SELECT id FROM experiment_aggregated_scope_ids)
+                <if(project_id)> AND project_id = :project_id <endif>
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -137,6 +138,7 @@ class ExperimentItemDAO {
                 WHERE eia.workspace_id = :workspace_id
                 AND eia.experiment_id IN :experiment_ids
                 AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
+                <if(project_id)> AND eia.project_id = :project_id <endif>
                 <if(lastRetrievedId)> AND eia.id \\< :lastRetrievedId <endif>
                 ORDER BY eia.id DESC, eia.last_updated_at DESC
                 LIMIT 1 BY eia.id
@@ -726,6 +728,9 @@ class ExperimentItemDAO {
             if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                 template.add("has_target_projects", true);
             }
+            if (criteria.projectId() != null) {
+                template.add("project_id", true);
+            }
             var statement = connection.createStatement(template.render())
                     .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
                     .bind("limit", limit)
@@ -735,6 +740,9 @@ class ExperimentItemDAO {
             }
             if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                 statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+            }
+            if (criteria.projectId() != null) {
+                statement.bind("project_id", criteria.projectId());
             }
             return Flux.from(statement.execute());
         });
