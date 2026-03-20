@@ -35,6 +35,8 @@ public class OptimizationResourceClient {
     public Optimization.OptimizationBuilder createPartialOptimization() {
         return podamFactory.manufacturePojo(Optimization.class).toBuilder()
                 .status(OptimizationStatus.INITIALIZED)
+                .projectId(null)
+                .projectName(null)
                 .numTrials(0L)
                 .feedbackScores(null)
                 .experimentScores(null)

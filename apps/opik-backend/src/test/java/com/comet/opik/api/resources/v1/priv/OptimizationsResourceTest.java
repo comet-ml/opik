@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.Experiment;
@@ -106,7 +107,8 @@ class OptimizationsResourceTest {
     public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
             "lastUpdatedAt", "createdBy", "lastUpdatedBy", "studioConfig", "datasetName",
             "baselineObjectiveScore", "bestObjectiveScore", "baselineDuration", "bestDuration",
-            "baselineCost", "bestCost", "totalOptimizationCost", "experimentScores"};
+            "baselineCost", "bestCost", "totalOptimizationCost", "experimentScores",
+            "projectName"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -1669,6 +1671,41 @@ class OptimizationsResourceTest {
             assertThat(afterCompletedCompletedPage.content()).hasSize(1);
             assertThat(afterCompletedCompletedPage.content().get(0).id()).isEqualTo(optId);
             assertThat(afterCompletedCompletedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+        }
+    }
+
+    @Nested
+    @DisplayName("Project-scoped dataset creation")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ProjectScopedDatasetCreation {
+
+        @Test
+        @DisplayName("Create optimization with project_name implicitly creates dataset scoped to that project and returns project_id")
+        void createOptimizationWithProjectNameScopesDatasetToProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String datasetName = "dataset-" + UUID.randomUUID();
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetName(datasetName)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            var dataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
+
+            assertThat(dataset.projectId()).isEqualTo(projectId);
+
+            var fetchedOptimization = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+            assertThat(fetchedOptimization.projectId()).isEqualTo(projectId);
         }
     }
 }

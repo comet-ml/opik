@@ -497,7 +497,7 @@ public class ExperimentService {
             String userName = ctx.get(RequestContext.USER_NAME);
             return resolveProjectId(experiment, workspaceId, userName)
                     .flatMap(resolvedExperiment -> datasetService
-                            .getOrCreateDataset(resolvedExperiment.datasetName())
+                            .getOrCreateDataset(resolvedExperiment.datasetName(), resolvedExperiment.projectId())
                             .flatMap(datasetId -> {
                                 // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
                                 if (!featureFlags.isDatasetVersioningEnabled()) {

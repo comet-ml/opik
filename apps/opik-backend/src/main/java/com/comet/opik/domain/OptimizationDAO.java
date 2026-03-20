@@ -82,6 +82,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 dataset_id,
                 name,
                 workspace_id,
+                project_id,
                 objective_name,
                 status,
                 metadata,
@@ -95,6 +96,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 :dataset_id,
                 :name,
                 :workspace_id,
+                :project_id,
                 :objective_name,
                 :status,
                 :metadata,
@@ -419,13 +421,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
             )
             SELECT
                 id,
                 dataset_id,
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
+                project_id,
                 objective_name,
                 <if(status)> :status <else> status <endif> as status,
                 metadata,
@@ -443,13 +446,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
             )
             SELECT
                 id,
                 dataset_id,
                 name as name,
                 workspace_id,
+                project_id,
                 objective_name,
                 status as status,
                 metadata,
@@ -735,6 +739,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("id", optimization.id())
                 .bind("dataset_id", optimization.datasetId())
                 .bind("name", optimization.name())
+                .bind("project_id", optimization.projectId() != null ? optimization.projectId().toString() : "")
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
                 .bind("metadata", getStringOrDefault(optimization.metadata()));
@@ -786,10 +791,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 }
             }
 
+            String projectIdStr = row.get("project_id", String.class);
+            UUID projectId = StringUtils.isNotEmpty(projectIdStr) ? UUID.fromString(projectIdStr) : null;
+
             return Optimization.builder()
                     .id(row.get("id", UUID.class))
                     .name(row.get("name", String.class))
                     .datasetId(row.get("dataset_id", UUID.class))
+                    .projectId(projectId)
                     .objectiveName(row.get("objective_name", String.class))
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
