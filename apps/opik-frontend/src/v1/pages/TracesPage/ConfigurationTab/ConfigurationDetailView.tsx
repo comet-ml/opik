@@ -1,60 +1,36 @@
 import React, { useState } from "react";
-import {
-  Clock,
-  FilePen,
-  GitCompareArrows,
-  Pencil,
-  Rocket,
-  User,
-} from "lucide-react";
+import { Clock, FilePen, Pencil, User } from "lucide-react";
 
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
-import ColoredTag from "@/shared/ColoredTag/ColoredTag";
 import Loader from "@/shared/Loader/Loader";
 import { Card } from "@/ui/card";
-import ProdTag from "./ProdTag";
+import ChangeStagePopover from "./ChangeStagePopover";
 import BlueprintValuesList from "@/v1/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
 import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
-import {
-  generateBlueprintDescription,
-  isProdTag,
-  AGENT_CONFIGURATION_PROD_ENV_NAME,
-  sortTags,
-} from "@/utils/agent-configurations";
+import { generateBlueprintDescription } from "@/utils/agent-configurations";
 import { Button } from "@/ui/button";
 import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
-import useAgentConfigEnvsMutation from "@/api/agent-configs/useAgentConfigEnvsMutation";
 import useTracesList from "@/api/traces/useTracesList";
-import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Separator } from "@/ui/separator";
+import DiffVersionPopover from "./DiffVersionPopover";
+import ConfigTagList from "./ConfigTagList";
 
 type ConfigurationDetailViewProps = {
   item: ConfigHistoryItem;
-  version: number;
   projectId: string;
-  prodItemId?: string;
-  prodVersion: number | null;
+  versions: ConfigHistoryItem[];
   onEdit: () => void;
 };
 
-const renderTag = (tag: string) =>
-  isProdTag(tag) ? (
-    <ProdTag key={tag} value={tag} />
-  ) : (
-    <ColoredTag key={tag} label={tag} />
-  );
-
 const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
   item,
-  version,
   projectId,
-  prodItemId,
-  prodVersion,
+  versions,
   onEdit,
 }) => {
   const { data: agentConfig, isPending } = useAgentConfigById({
@@ -79,24 +55,18 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
 
   const hasTraces = (tracesData?.total ?? 0) > 0;
 
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [diffOpen, setDiffOpen] = useState(false);
+  const [diffBase, setDiffBase] = useState<{
+    label: string;
+    blueprintId: string;
+  } | null>(null);
 
-  const { mutate: promoteToProd, isPending: isPromoting } =
-    useAgentConfigEnvsMutation();
-
-  const handleConfirmPromote = () => {
-    promoteToProd({
-      envsRequest: {
-        project_id: projectId,
-        envs: [
-          {
-            env_name: AGENT_CONFIGURATION_PROD_ENV_NAME,
-            blueprint_id: item.id,
-          },
-        ],
-      },
+  const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
+    setDiffBase({
+      label: versionItem.name,
+      blueprintId: versionItem.id,
     });
+    setDiffOpen(true);
   };
 
   const description =
@@ -107,39 +77,18 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
       <Card className="mx-6 my-4 p-6">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="comet-title-m">v{version}</h2>
-            {sortTags(item.tags).map(renderTag)}
-            {prodItemId && prodItemId !== item.id && (
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => setDiffOpen(true)}
-              >
-                <GitCompareArrows className="mr-1.5 size-3.5" />
-                Show diff vs prod
-              </Button>
+            <h2 className="comet-title-m">{item.name}</h2>
+            <ConfigTagList tags={item.tags} maxWidth={200} />
+            {versions.length > 1 && (
+              <DiffVersionPopover
+                currentItemId={item.id}
+                versions={versions}
+                onSelectVersion={handleSelectDiffVersion}
+              />
             )}
           </div>
           <div className="flex items-center gap-2">
-            {!item.tags.some(isProdTag) && (
-              <TooltipWrapper
-                content={`This will affect your agent in production.${
-                  prodVersion
-                    ? ` Current version in production is v${prodVersion}.`
-                    : ""
-                }`}
-              >
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={isPromoting}
-                >
-                  <Rocket className="mr-1.5 size-3.5 text-[var(--color-lime)]" />
-                  {isPromoting ? "Promoting..." : "Promote to prod"}
-                </Button>
-              </TooltipWrapper>
-            )}
+            <ChangeStagePopover item={item} projectId={projectId} />
             {hasTraces && (
               <NavigationTag
                 id={projectId}
@@ -197,24 +146,16 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
         )}
       </Card>
 
-      <ConfirmDialog
-        open={confirmOpen}
-        setOpen={setConfirmOpen}
-        onConfirm={handleConfirmPromote}
-        title="Promote to production"
-        description={`This will set v${version} as the active configuration for the prod environment. Are you sure you want to continue?`}
-        confirmText="Promote to prod"
-      />
-      {prodItemId && prodItemId !== item.id && (
+      {diffBase && (
         <BlueprintDiffDialog
           open={diffOpen}
           setOpen={setDiffOpen}
           base={{
-            label: `Production (v${prodVersion})`,
-            blueprintId: prodItemId,
+            label: diffBase.label,
+            blueprintId: diffBase.blueprintId,
           }}
           diff={{
-            label: `v${version}`,
+            label: item.name,
             blueprintId: item.id,
           }}
         />
