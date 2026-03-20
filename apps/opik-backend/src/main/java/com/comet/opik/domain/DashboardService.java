@@ -158,11 +158,7 @@ class DashboardServiceImpl implements DashboardService {
                         if (projectId == null) {
                             return Optional.empty();
                         }
-                        return dao.findByName(workspaceId, name, null).map(d -> {
-                            requestContext.get().setWorkspaceFallbackMessage(
-                                    RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dashboard", name));
-                            return d;
-                        });
+                        return dao.findByName(workspaceId, name, null);
                     })
                     .orElseThrow(() -> {
                         log.info("Dashboard not found with name '{}' in workspace '{}'", name, workspaceId);
