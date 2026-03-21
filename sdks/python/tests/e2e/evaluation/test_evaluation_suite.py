@@ -506,7 +506,9 @@ def test_evaluation_suite__assertion_fails__item_fails(
     )
 
     # Additionally verify the assertion result indicates failure
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
+    )
     items = retrieved_experiment.get_items()
     assert len(items) > 0, "Expected at least 1 experiment item"
     assert len(items[0].assertion_results) > 0, "Expected at least 1 assertion result"
@@ -630,7 +632,9 @@ def test_evaluation_suite__multiple_assertions_multiple_runs__pass_threshold_log
     assert item_result.passed is True
 
     # Verify each experiment item has exactly 3 assertion results (one per assertion)
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
+    )
     assert retrieved_experiment.project_name == project_name
     for exp_item in retrieved_experiment.get_items():
         assert exp_item.assertion_results is not None
@@ -682,7 +686,9 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     )
 
     # 2. Retrieve from backend (simulates a fresh client loading existing suite)
-    retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
+    retrieved_suite = opik_client.get_evaluation_suite(
+        name=dataset_name, project_name=project_name
+    )
 
     # Verify item descriptions survived the round-trip
     retrieved_items = retrieved_suite.get_items()

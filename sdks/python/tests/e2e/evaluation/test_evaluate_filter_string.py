@@ -63,7 +63,9 @@ def test_evaluate__with_filter_string__filters_dataset_items(
 
     opik.flush_tracker()
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
+    )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 2, (
         f"Expected 2 experiment items (filtered by geography category), but got {len(experiment_items_contents)}. "
@@ -130,7 +132,9 @@ def test_evaluate_optimization_trial__with_filter_string__filters_dataset_items(
 
     opik.flush_tracker()
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
+    )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 1, (
         f"Expected 1 experiment item (filtered by math category), but got {len(experiment_items_contents)}. "

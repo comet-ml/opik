@@ -92,7 +92,9 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_id(
+        evaluation_result.experiment_id
+    )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 3, (
         f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
@@ -249,7 +251,14 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiments = opik_client.get_experiments_by_name(
+        experiment_name, project_name=project_name
+    )
+    assert len(retrieved_experiments) == 1, (
+        f"Expected 1 experiment, but got {len(retrieved_experiments)}. "
+        f"Experiments: {retrieved_experiments}"
+    )
+    retrieved_experiment = retrieved_experiments[0]
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 2, (
         f"Expected 2 experiment items, but got {len(experiment_items_contents)}. "
@@ -382,7 +391,9 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_id(
+        evaluation_result.experiment_id
+    )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 3, (
         f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
