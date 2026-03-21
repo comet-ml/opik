@@ -2597,13 +2597,6 @@ class Opik:
             return self._project_name
         return project_name
 
-    def _resolve_project_id(self, project_name: Optional[str]) -> Optional[str]:
-        project_name = self._resolve_project_name(project_name)
-        if project_name is None:
-            return None
-
-        return rest_helpers.resolve_project_id_by_name(self._rest_client, project_name)
-
 
 @functools.lru_cache()
 def get_client_cached() -> Opik:
