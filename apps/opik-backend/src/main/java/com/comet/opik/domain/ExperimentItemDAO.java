@@ -611,7 +611,8 @@ class ExperimentItemDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
 
-            var template = getSTWithLogComment(INSERT, "insert_experiment_items", workspaceId, experimentItems.size())
+            var template = getSTWithLogComment(INSERT, "insert_experiment_items", workspaceId, userName,
+                    experimentItems.size())
                     .add("items", queryItems);
 
             String sql = template.render();
@@ -716,7 +717,7 @@ class ExperimentItemDAO {
                 experimentIds.size(), limit, lastRetrievedId);
 
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(STREAM, "get_experiment_items_stream", workspaceId,
+            var template = getSTWithLogComment(STREAM, "get_experiment_items_stream", workspaceId, userName,
                     experimentIds.size());
             if (lastRetrievedId != null) {
                 template.add("lastRetrievedId", lastRetrievedId);

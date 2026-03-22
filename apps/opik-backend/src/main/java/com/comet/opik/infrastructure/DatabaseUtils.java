@@ -28,7 +28,7 @@ public class DatabaseUtils {
 
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
     public static final int UUID_POOL_MULTIPLIER = 2;
-    private static final String LOG_COMMENT = "<query_name>:<workspace_id>:<details>";
+    private static final String LOG_COMMENT = "<query_name>:<workspace_id>:<user_name>:<details>";
 
     /**
      * Generates a pool of UUIDv7 identifiers for batch operations.
@@ -171,16 +171,18 @@ public class DatabaseUtils {
                 .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));
     }
 
-    public static ST getSTWithLogComment(String query, String queryName, String workspaceId, Object details) {
-        var logComment = getLogComment(queryName, workspaceId, details);
+    public static ST getSTWithLogComment(String query, String queryName, String workspaceId, String userName,
+            Object details) {
+        var logComment = getLogComment(queryName, workspaceId, userName, details);
         return TemplateUtils.newST(query)
                 .add("log_comment", logComment);
     }
 
-    public static String getLogComment(String queryName, String workspaceId, Object details) {
+    public static String getLogComment(String queryName, String workspaceId, String userName, Object details) {
         return TemplateUtils.newST(LOG_COMMENT)
                 .add("query_name", queryName != null ? queryName.replace("'", "''") : null)
                 .add("workspace_id", workspaceId != null ? workspaceId.replace("'", "''") : null)
+                .add("user_name", userName != null ? userName.replace("'", "''") : null)
                 .add("details", details != null ? details.toString().replace("'", "''") : null)
                 .render();
     }

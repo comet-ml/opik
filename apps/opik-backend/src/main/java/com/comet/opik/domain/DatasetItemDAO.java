@@ -1096,7 +1096,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
-            var template = getSTWithLogComment(sqlTemplate, "save_dataset_items", workspaceId, items.size())
+            var template = getSTWithLogComment(sqlTemplate, "save_dataset_items", workspaceId, userName, items.size())
                     .add("items", queryItems);
 
             String sql = template.render();
@@ -1159,7 +1159,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
-                    datasetId.toString());
+                    userName, datasetId.toString());
 
             if (lastRetrievedId != null) {
                 template.add("lastRetrievedId", lastRetrievedId);
@@ -1243,7 +1243,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var template = getSTWithLogComment(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID,
-                    "get_output_columns", workspaceId, datasetId.toString());
+                    "get_output_columns", workspaceId, userName, datasetId.toString());
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", experimentIds);
@@ -1280,7 +1280,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(DELETE_DATASET_ITEM, "delete_dataset_items", workspaceId,
-                    hasIds ? ids.size() : 0);
+                    userName, hasIds ? ids.size() : 0);
 
             // Add ids or filters to template
             // Delete by specific IDs (mutually exclusive with dataset_id + filters)
@@ -1333,7 +1333,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria, String queryName,
             String workspaceId) {
-        var template = getSTWithLogComment(query, queryName, workspaceId, "");
+        var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
 
         Optional.ofNullable(datasetItemSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -1505,7 +1505,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID, "map_columns_field",
-                    workspaceId, "");
+                    workspaceId, userName, "");
             return Mono.from(connection.createStatement(template.render())
                     .bind("datasetId", datasetItemSearchCriteria.datasetId())
                     .bind("workspace_id", workspaceId)
@@ -1532,7 +1532,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS,
-                    "get_experiment_items_stats", workspaceId, experimentIds.size());
+                    "get_experiment_items_stats", workspaceId, userName, experimentIds.size());
             template.add("dataset_id", datasetId);
             if (!experimentIds.isEmpty()) {
                 template.add("experiment_ids", true);
@@ -1667,7 +1667,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private ST newBulkUpdateTemplate(com.comet.opik.api.DatasetItemUpdate update, String sql, boolean mergeTags,
             String queryName, String workspaceId) {
-        var template = getSTWithLogComment(sql, queryName, workspaceId, "");
+        var template = getSTWithLogComment(sql, queryName, workspaceId, "", "");
 
         Optional.ofNullable(update.input())
                 .ifPresent(input -> template.add("input", input));
