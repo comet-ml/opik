@@ -17,6 +17,7 @@ import {
 import { TriggerFormType, FeedbackScoreConditionType } from "./schema";
 import SlackIcon from "@/icons/slack.svg?react";
 import PagerDutyIcon from "@/icons/pagerduty.svg?react";
+import FeishuIcon from "@/icons/feishu.svg?react";
 
 export interface TriggerConfig {
   title: string;
@@ -28,12 +29,14 @@ export const ALERT_TYPE_LABELS: Record<ALERT_TYPE, string> = {
   [ALERT_TYPE.general]: "General",
   [ALERT_TYPE.slack]: "Slack",
   [ALERT_TYPE.pagerduty]: "PagerDuty",
+  [ALERT_TYPE.feishu]: "Feishu",
 };
 
 export const ALERT_TYPE_ICONS = {
   [ALERT_TYPE.general]: WebhookIcon,
   [ALERT_TYPE.slack]: SlackIcon,
   [ALERT_TYPE.pagerduty]: PagerDutyIcon,
+  [ALERT_TYPE.feishu]: FeishuIcon,
 };
 
 export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
@@ -361,6 +364,12 @@ export const ALERT_FIELD_MAPPINGS: AlertTypeMappings = {
     {
       sourceField: "name",
       targetPath: "blocks[0].text.text",
+    },
+  ],
+  [ALERT_TYPE.feishu]: [
+    {
+      sourceField: "name",
+      targetPath: "card.header.title.content",
     },
   ],
 };
