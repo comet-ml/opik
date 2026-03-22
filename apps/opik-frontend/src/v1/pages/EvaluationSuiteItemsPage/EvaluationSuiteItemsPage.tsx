@@ -362,7 +362,10 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
           {isEvaluationSuite && effectiveAssertions.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex shrink-0 cursor-pointer items-center gap-1 rounded bg-thread-active px-1.5 py-0.5">
+                <div
+                  className="flex shrink-0 cursor-pointer items-center gap-1 rounded bg-thread-active px-1.5 py-0.5"
+                  onClick={() => setSettingsDialogOpen(true)}
+                >
                   <CheckCheck className="size-3 text-muted-foreground" />
                   <span className="comet-body-s-accented text-muted-foreground">
                     {effectiveAssertions.length} global assertion

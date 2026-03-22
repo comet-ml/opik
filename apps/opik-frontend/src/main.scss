@@ -204,6 +204,11 @@
     /* Separator light color */
     --separator-light: #f1f5f9;
 
+    --stage-dev-bg: #93bbfd;
+    --stage-dev-text: #1e3a5f;
+    --stage-staging-bg: #fdad6e;
+    --stage-staging-text: #4a2512;
+
     /* Info box colors (blue variant for informational content) */
     --info-box-bg: 214 100% 92%;
     --info-box-text: 224 76% 40%;
@@ -396,6 +401,11 @@
 
     /* Separator light color - Dark Mode */
     --separator-light: #2a2a2a;
+
+    --stage-dev-bg: #1e3a5f;
+    --stage-dev-text: #93c5fd;
+    --stage-staging-bg: #4a2512;
+    --stage-staging-text: #fdba74;
 
     /* Info box colors - Dark Mode */
     --info-box-bg: 224 76% 33%;

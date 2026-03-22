@@ -45,8 +45,11 @@ class TraceThreadsClosingJobStreamAddParamsTest {
             .streamMaxLen(STREAM_MAX_LEN)
             .streamTrimLimit(STREAM_TRIM_LIMIT)
             .timeoutToMarkThreadAsInactive(Duration.seconds(30))
+            .closeTraceThreadJobInterval(Duration.seconds(15))
             .closeTraceThreadJobLockTime(Duration.seconds(4))
             .closeTraceThreadJobLockWaitTime(Duration.milliseconds(300))
+            .coldStartLookback(Duration.days(7))
+            .maxBackoffExponent(5)
             .build();
 
     private final JobTimeoutConfig jobTimeoutConfig = JobTimeoutConfig.builder()
@@ -73,7 +76,7 @@ class TraceThreadsClosingJobStreamAddParamsTest {
         var message = podamFactory.manufacturePojo(ProjectWithPendingClosureTraceThreads.class);
         when(redisClient.getStream(anyString(), any())).thenReturn(stream);
         when(stream.add(any())).thenReturn(Mono.just(new StreamMessageId(System.currentTimeMillis(), 0)));
-        when(traceThreadService.getProjectsWithPendingClosureThreads(any(), any(), anyInt()))
+        when(traceThreadService.getProjectsWithPendingClosureThreads(any(), any(), any(), anyInt()))
                 .thenReturn(Flux.just(message));
         when(traceThreadService.addToPendingQueue(any())).thenReturn(Mono.just(true));
         when(lockService.bestEffortLock(any(), any(), any(), any(), any()))

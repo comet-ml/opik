@@ -37,6 +37,7 @@ import java.util.UUID;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -52,7 +53,7 @@ public interface TraceThreadDAO {
     Mono<List<TraceThreadModel>> findThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
     Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(Instant now,
-            Duration defaultTimeoutToMarkThreadAsInactive, int limit);
+            Duration defaultTimeoutToMarkThreadAsInactive, Instant cachedMaxInactivePeriod, int limit);
 
     Mono<Long> openThread(UUID projectId, String threadId);
 
@@ -130,40 +131,56 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     private static final String FIND_THREADS_BY_PROJECT_SQL = """
-            SELECT *
-            FROM trace_threads
-            WHERE workspace_id = :workspace_id
-            <if(project_ids)>AND project_id IN :project_ids<endif>
+            SELECT * FROM (
+                SELECT *
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                <if(project_ids)>AND project_id IN :project_ids<endif>
+                <if(ids)> AND id IN :ids <endif>
+                <if(thread_ids)> AND thread_id IN :thread_ids <endif>
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            WHERE 1=1
             <if(status)> AND status = :status <endif>
-            <if(ids)> AND id IN :ids <endif>
-            <if(thread_ids)> AND thread_id IN :thread_ids <endif>
             <if(scored_at_empty)> AND scored_at IS NULL <endif>
-            ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     private static final String FIND_PENDING_CLOSURE_THREADS_SQL = """
-            SELECT DISTINCT
+            SELECT
                 tt.workspace_id,
                 tt.project_id
-            FROM trace_threads tt final
-            LEFT JOIN workspace_configurations wc final ON tt.workspace_id = wc.workspace_id
+            FROM (
+                SELECT workspace_id, project_id, status, min(last_updated_at) AS min_last_updated_at
+                FROM trace_threads FINAL
+                WHERE last_updated_at > parseDateTime64BestEffort(:cached_max_inactive_period, 6)
+                GROUP BY workspace_id, project_id, status
+            ) tt
+            LEFT ANY JOIN workspace_configurations wc FINAL
+                ON tt.workspace_id = wc.workspace_id
             WHERE tt.status = 'active'
-            AND tt.last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
-            ORDER BY tt.last_updated_at
+            AND tt.min_last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
+            ORDER BY tt.min_last_updated_at
             LIMIT :limit
+            SETTINGS use_skip_indexes_if_final=1
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
             INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, scored_at)
             SELECT
                 workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6), tags, sampling_per_rule, NULL
-            FROM trace_threads tt final
-            WHERE tt.workspace_id = :workspace_id
-            AND tt.project_id = :project_id
-            AND tt.status != :status
-            <if(thread_ids)>AND tt.thread_id IN :thread_ids<endif>
+            FROM (
+                SELECT *
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(thread_ids)>AND thread_id IN :thread_ids<endif>
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) tt
+            WHERE tt.status != :status
             ;
             """;
 
@@ -342,7 +359,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     public Mono<List<TraceThreadModel>> findThreadsByProject(int page, int size,
             @NonNull TraceThreadCriteria criteria) {
 
-        var template = TemplateUtils.newST(FIND_THREADS_BY_PROJECT_SQL);
+        var template = getSTWithLogComment(FIND_THREADS_BY_PROJECT_SQL, "find_threads_by_project", "", "");
         bindTemplateParam(criteria, template);
 
         int offset = (page - 1) * size;
@@ -364,11 +381,14 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(
-            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, int limit) {
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive,
+            @NonNull Instant cachedMaxInactivePeriod, int limit) {
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
                     .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("default_timeout_seconds", defaultTimeoutToMarkThreadAsInactive.toSeconds())
+                    .bind("cached_max_inactive_period",
+                            cachedMaxInactivePeriod.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("limit", limit);
 
             return Flux.from(statement.execute())
@@ -418,7 +438,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     @Override
     public Mono<TraceThreadModel> findByThreadModelId(@NonNull UUID threadModelId, @NonNull UUID projectId) {
         return asyncTemplate.nonTransaction(connection -> {
-            var template = TemplateUtils.newST(FIND_THREADS_BY_PROJECT_SQL);
+            var template = getSTWithLogComment(FIND_THREADS_BY_PROJECT_SQL, "find_thread_by_model_id", "", "");
 
             List<UUID> threadModelIds = List.of(threadModelId);
             List<UUID> projectIds = List.of(projectId);

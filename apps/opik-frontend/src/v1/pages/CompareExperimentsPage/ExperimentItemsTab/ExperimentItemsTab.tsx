@@ -398,16 +398,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       generateSelectColumDef<ExperimentsCompare>({
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
       }),
-      mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
-        id: COLUMN_ID_ID,
-        label: isEvalSuite ? "ID (Evaluation suite item)" : "Dataset item ID",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-        size: 180,
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_evaluation_suite_item],
-      }),
     ];
 
     if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
@@ -748,14 +738,19 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
-      {isEvalSuite ? (
-        <EvaluationSuiteExperimentPanel
-          {...sharedPanelProps}
-          datasetId={datasetId!}
-        />
-      ) : (
-        <CompareExperimentsPanel {...sharedPanelProps} />
-      )}
+      <EvaluationSuiteExperimentPanel
+        {...sharedPanelProps}
+        experimentsCompareId={
+          isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
+        }
+        datasetId={datasetId ?? ""}
+      />
+      <CompareExperimentsPanel
+        {...sharedPanelProps}
+        experimentsCompareId={
+          !isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
+        }
+      />
       <TraceDetailsPanel
         traceId={traceId!}
         spanId={spanId!}

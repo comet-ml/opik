@@ -6,7 +6,6 @@ import Loader from "@/shared/Loader/Loader";
 import { buildDocsUrl } from "@/lib/utils";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import { ConfigHistoryItem } from "@/types/agent-configs";
-import { isProdTag } from "@/utils/agent-configurations";
 import ConfigurationHistoryTimeline from "./ConfigurationHistoryTimeline";
 import ConfigurationDetailView from "./ConfigurationDetailView";
 import ConfigurationEditView from "./ConfigurationEditView";
@@ -19,10 +18,7 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
   const [selectedId, setSelectedId] = useQueryParam("configId", StringParam, {
     updateType: "replaceIn",
   });
-  const [editItem, setEditItem] = useState<{
-    item: ConfigHistoryItem;
-    version: number;
-  } | null>(null);
+  const [editItem, setEditItem] = useState<ConfigHistoryItem | null>(null);
 
   const { data, isPending, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useConfigHistoryListInfinite({ projectId });
@@ -31,22 +27,12 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
     () => data?.pages.flatMap((p) => p.content) ?? [],
     [data],
   );
-  const total = data?.pages[0]?.total ?? 0;
 
   const selectedIndex = useMemo(() => {
     if (!selectedId) return 0;
     const idx = allRows.findIndex((r) => r.id === selectedId);
     return idx >= 0 ? idx : 0;
   }, [allRows, selectedId]);
-
-  const prodVersion = useMemo(() => {
-    const idx = allRows.findIndex((r) => r.tags.some(isProdTag));
-    return idx >= 0 ? total - idx : null;
-  }, [allRows, total]);
-
-  const prodItem = useMemo(() => {
-    return allRows.find((r) => r.tags.some(isProdTag));
-  }, [allRows]);
 
   if (isPending) {
     return <Loader />;
@@ -83,10 +69,8 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
     return (
       <div className="w-[70vw]">
         <ConfigurationEditView
-          item={editItem.item}
+          item={editItem}
           projectId={projectId}
-          version={editItem.version}
-          latestVersion={total}
           onCancel={() => setEditItem(null)}
           onSaved={() => {
             setSelectedId(undefined);
@@ -107,16 +91,9 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
         {selectedItem ? (
           <ConfigurationDetailView
             item={selectedItem}
-            version={total - selectedIndex}
             projectId={projectId}
-            prodItemId={prodItem?.id}
-            prodVersion={prodVersion}
-            onEdit={() =>
-              setEditItem({
-                item: selectedItem,
-                version: total - selectedIndex,
-              })
-            }
+            versions={allRows}
+            onEdit={() => setEditItem(allRows[0])}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-slate">
@@ -130,7 +107,6 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
 
         <ConfigurationHistoryTimeline
           items={allRows}
-          total={total}
           selectedIndex={selectedIndex}
           onSelect={(index) => setSelectedId(allRows[index]?.id ?? undefined)}
           hasNextPage={hasNextPage}

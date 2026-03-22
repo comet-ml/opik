@@ -95,7 +95,10 @@ const BlueprintValuePrompt = forwardRef<
       getCurrentTemplate: () => {
         return isChatPrompt
           ? JSON.stringify(
-              draftMessages.map((m) => ({ role: m.role, content: m.content })),
+              draftMessages.map((m) => ({
+                role: m.role,
+                content: m.content,
+              })),
               null,
               2,
             )
@@ -123,7 +126,10 @@ const BlueprintValuePrompt = forwardRef<
 
         const currentTemplate = isChatPrompt
           ? JSON.stringify(
-              draftMessages.map((m) => ({ role: m.role, content: m.content })),
+              draftMessages.map((m) => ({
+                role: m.role,
+                content: m.content,
+              })),
               null,
               2,
             )

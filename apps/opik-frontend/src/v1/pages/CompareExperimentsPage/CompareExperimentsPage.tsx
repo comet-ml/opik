@@ -44,9 +44,12 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
 
   const isEvalSuite = isEvalSuiteExperiment(memorizedExperiments[0]);
 
-  const hasAssertionAggregations = memorizedExperiments.some(
-    (e) => (e.assertion_aggregations ?? []).length > 0,
+  const hasAssertionScores = memorizedExperiments.some(
+    (e) => (e.assertion_scores ?? []).length > 0,
   );
+
+  const showScoresTab =
+    memorizedExperiments.length > 0 && (!isEvalSuite || hasAssertionScores);
 
   const renderContent = () => {
     return (
@@ -67,7 +70,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             <TabsTrigger variant="underline" value="config">
               Configuration
             </TabsTrigger>
-            {!(isEvalSuite && !hasAssertionAggregations) && (
+            {showScoresTab && (
               <TabsTrigger variant="underline" value="scores">
                 {isEvalSuite ? "Assertions" : "Feedback scores"}
                 {!isEvalSuite && (
@@ -97,7 +100,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             isPending={isPending}
           />
         </TabsContent>
-        {!(isEvalSuite && !hasAssertionAggregations) && (
+        {showScoresTab && (
           <TabsContent value="scores">
             {isEvalSuite ? (
               <ExperimentAssertionsTab

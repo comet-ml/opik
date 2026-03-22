@@ -4418,6 +4418,242 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/projects/{projectId}/dashboards:
+    get:
+      tags:
+      - Projects
+      summary: Find dashboards by project
+      description: Find dashboards scoped to a project
+      operationId: findDashboardsByProject
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter dashboards by name (partial match, case insensitive)"
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Dashboard page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPage_Public"
+  /v1/private/projects/{projectId}/datasets:
+    get:
+      tags:
+      - Projects
+      summary: Find datasets by project
+      description: Find datasets scoped to a project
+      operationId: findDatasetsByProject
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: with_experiments_only
+        in: query
+        schema:
+          type: boolean
+      - name: with_optimizations_only
+        in: query
+        schema:
+          type: boolean
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter datasets by name (partial match, case insensitive)"
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Dataset page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetPage_Public"
+  /v1/private/projects/{projectId}/experiments:
+    get:
+      tags:
+      - Projects
+      summary: Find experiments by project
+      description: Find experiments scoped to a project
+      operationId: findExperimentsByProject
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: datasetId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: optimization_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: types
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter experiments by name (partial match, case insensitive)"
+      - name: dataset_deleted
+        in: query
+        schema:
+          type: boolean
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: experiment_ids
+        in: query
+        schema:
+          type: string
+          description: Filter experiments by a list of experiment IDs
+      - name: force_sorting
+        in: query
+        schema:
+          type: boolean
+          description: Force sorting even when exceeding the endpoint result set limit.
+            May result in slower queries
+          default: false
+      responses:
+        "200":
+          description: Experiments page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/projects/{projectId}/prompts:
+    get:
+      tags:
+      - Projects
+      summary: Get prompts by project
+      description: Get prompts scoped to a project
+      operationId: getPromptsByProject
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter prompts by name (partial match, case insensitive)"
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptPage_Public"
   /v1/private/projects:
     get:
       tags:
@@ -13689,6 +13925,9 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
     ChunkedOutputJsonNode_Public:
       type: object
       properties:
@@ -13715,6 +13954,9 @@ components:
         last_retrieved_id:
           type: string
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
     BooleanFeedbackDefinition:
       required:
       - details
@@ -15474,6 +15716,78 @@ components:
           - cancelled
           - initialized
           - error
+    PromptPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Prompt_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
+    Prompt_Public:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          minLength: 1
+          type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
+        description:
+          maxLength: 255
+          minLength: 0
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          default: text
+          enum:
+          - text
+          - chat
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        version_count:
+          type: integer
+          format: int64
+          readOnly: true
     ErrorCountWithDeviation:
       type: object
       properties:
@@ -16375,78 +16689,6 @@ components:
           readOnly: true
         created_by:
           type: string
-          readOnly: true
-    PromptPage_Public:
-      type: object
-      properties:
-        page:
-          type: integer
-          format: int32
-        size:
-          type: integer
-          format: int32
-        total:
-          type: integer
-          format: int64
-        content:
-          type: array
-          items:
-            $ref: "#/components/schemas/Prompt_Public"
-        sortableBy:
-          type: array
-          items:
-            type: string
-    Prompt_Public:
-      required:
-      - name
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          minLength: 1
-          type: string
-        project_id:
-          type: string
-          description: Project ID. Takes precedence over project_name when both are
-            provided.
-          format: uuid
-        description:
-          maxLength: 255
-          minLength: 0
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        template_structure:
-          type: string
-          description: "Template structure type: 'text' or 'chat'. Immutable after\
-            \ creation."
-          default: text
-          enum:
-          - text
-          - chat
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        version_count:
-          type: integer
-          format: int64
           readOnly: true
     PromptVersionCommitsRequest_Public:
       required:

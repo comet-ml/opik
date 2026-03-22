@@ -9,5 +9,7 @@ public record ExperimentItemSearchCriteria(
         String experimentName,
         Integer limit,
         UUID lastRetrievedId,
-        boolean truncate) {
+        boolean truncate,
+        String projectName,
+        UUID projectId) {
 }

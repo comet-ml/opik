@@ -20,7 +20,6 @@ public enum WorkspaceUserPermission {
     PROMPT_DELETE("prompt_delete"),
     OPTIMIZATION_RUN_DELETE("optimization_run_delete"),
     WORKSPACE_SETTINGS_CONFIGURE("workspace_settings_configure"),
-    USER_ROLE_UPDATE("user_role_update"),
     AI_PROVIDER_UPDATE("ai_provider_update"),
     ANNOTATION_QUEUE_ANNOTATE("annotation_queue_annotate");
 
