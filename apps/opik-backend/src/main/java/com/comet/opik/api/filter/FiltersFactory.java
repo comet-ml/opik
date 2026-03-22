@@ -39,6 +39,7 @@ public class FiltersFactory {
     private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
             ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
                     .put(FieldType.STRING, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.STRING_EXACT, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.STRING_STATE_DB, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.ENUM, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.DATE_TIME, filter -> {
@@ -130,7 +131,8 @@ public class FiltersFactory {
     }
 
     private Filter toValidAndDecoded(Filter filter) {
-        if (filter.field().getType() != FieldType.STRING) {
+        if (filter.field().getType() != FieldType.STRING
+                && filter.field().getType() != FieldType.STRING_EXACT) {
             // don't decode value for string fields as it is already decoded during JSON deserialization
             try {
                 filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));

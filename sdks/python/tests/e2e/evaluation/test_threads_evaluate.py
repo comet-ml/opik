@@ -2,8 +2,8 @@ import time
 import uuid
 import pytest
 
+import opik
 from opik import synchronization
-from opik.api_objects.threads import threads_client
 from opik.evaluation import metrics
 from opik.evaluation.threads import evaluator
 from opik.types import FeedbackScoreDict
@@ -60,19 +60,15 @@ def active_thread_and_project_name(
     return thread_id, temporary_project_name
 
 
-def _one_thread_is_active(
-    project_name: str, threads_client_: threads_client.ThreadsClient
-) -> bool:
-    threads = threads_client_.search_threads(
+def _one_thread_is_active(project_name: str, opik_client: opik.Opik) -> bool:
+    threads = opik_client.search_threads(
         project_name=project_name, filter_string='status = "active"'
     )
     return len(threads) == 1
 
 
-def _all_threads_closed(
-    project_name: str, threads_client_: threads_client.ThreadsClient
-) -> bool:
-    threads = threads_client_.search_threads(
+def _all_threads_closed(project_name: str, opik_client: opik.Opik) -> bool:
+    threads = opik_client.search_threads(
         project_name=project_name, filter_string='status = "active"'
     )
     return len(threads) == 0
@@ -90,10 +86,9 @@ def test_evaluate_threads__happy_path(
     opik_client, active_thread_and_project_name, eval_project_name
 ):
     active_thread, project_name = active_thread_and_project_name
-    threads_client_ = opik_client.get_threads_client()
     # wait for active threads to propagate
     if not synchronization.until(
-        lambda: _one_thread_is_active(project_name, threads_client_), max_try_seconds=30
+        lambda: _one_thread_is_active(project_name, opik_client), max_try_seconds=30
     ):
         raise AssertionError(f"Failed to create threads in project '{project_name}'")
 
@@ -102,7 +97,7 @@ def test_evaluate_threads__happy_path(
         project_name=project_name, thread_id=active_thread
     )
     if not synchronization.until(
-        lambda: _all_threads_closed(project_name, threads_client_), max_try_seconds=10
+        lambda: _all_threads_closed(project_name, opik_client), max_try_seconds=10
     ):
         raise AssertionError(
             f"Failed to get closed threads from project '{project_name}'"
@@ -178,11 +173,9 @@ def test_evaluate_threads__no_truncation_for_long_traces(
 
     opik_client.flush()
 
-    threads_client_ = opik_client.get_threads_client()
-
     # Wait for thread to be created
     if not synchronization.until(
-        lambda: _one_thread_is_active(temporary_project_name, threads_client_),
+        lambda: _one_thread_is_active(temporary_project_name, opik_client),
         max_try_seconds=30,
     ):
         raise AssertionError(
@@ -194,7 +187,7 @@ def test_evaluate_threads__no_truncation_for_long_traces(
         project_name=temporary_project_name, thread_id=thread_id
     )
     if not synchronization.until(
-        lambda: _all_threads_closed(temporary_project_name, threads_client_),
+        lambda: _all_threads_closed(temporary_project_name, opik_client),
         max_try_seconds=10,
     ):
         raise AssertionError(

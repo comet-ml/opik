@@ -682,6 +682,7 @@ class ExperimentsClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -698,6 +699,8 @@ class ExperimentsClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -711,6 +714,7 @@ class ExperimentsClient:
             limit=limit,
             last_retrieved_id=last_retrieved_id,
             truncate=truncate,
+            project_name=project_name,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -721,6 +725,7 @@ class ExperimentsClient:
         name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -734,6 +739,8 @@ class ExperimentsClient:
 
         last_retrieved_id : typing.Optional[str]
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -743,7 +750,11 @@ class ExperimentsClient:
             Experiments stream or error during process
         """
         with self._raw_client.stream_experiments(
-            name=name, limit=limit, last_retrieved_id=last_retrieved_id, request_options=request_options
+            name=name,
+            limit=limit,
+            last_retrieved_id=last_retrieved_id,
+            project_name=project_name,
+            request_options=request_options,
         ) as r:
             yield from r.data
 
@@ -1441,6 +1452,7 @@ class AsyncExperimentsClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -1457,6 +1469,8 @@ class AsyncExperimentsClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1470,6 +1484,7 @@ class AsyncExperimentsClient:
             limit=limit,
             last_retrieved_id=last_retrieved_id,
             truncate=truncate,
+            project_name=project_name,
             request_options=request_options,
         ) as r:
             async for data in r.data:
@@ -1481,6 +1496,7 @@ class AsyncExperimentsClient:
         name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -1494,6 +1510,8 @@ class AsyncExperimentsClient:
 
         last_retrieved_id : typing.Optional[str]
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1503,7 +1521,11 @@ class AsyncExperimentsClient:
             Experiments stream or error during process
         """
         async with self._raw_client.stream_experiments(
-            name=name, limit=limit, last_retrieved_id=last_retrieved_id, request_options=request_options
+            name=name,
+            limit=limit,
+            last_retrieved_id=last_retrieved_id,
+            project_name=project_name,
+            request_options=request_options,
         ) as r:
             async for data in r.data:
                 yield data

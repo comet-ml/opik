@@ -173,7 +173,8 @@ public class DatasetsResource {
         log.info("Found datasets by '{}', sorted with: {}, count '{}' on workspaceId '{}'", criteria, sorting,
                 datasetPage.size(), workspaceId);
 
-        return Response.ok(datasetPage).build();
+        var builder = Response.ok(datasetPage);
+        return builder.build();
     }
 
     @POST
@@ -284,7 +285,12 @@ public class DatasetsResource {
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
                 workspaceId);
 
-        return Response.ok(dataset).build();
+        var responseBuilder = Response.ok(dataset);
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+        return responseBuilder.build();
     }
 
     @POST

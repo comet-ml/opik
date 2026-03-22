@@ -1595,6 +1595,7 @@ class ExperimentDAO {
             FROM experiments
             WHERE workspace_id = :workspace_id
             AND ilike(name, CONCAT('%', :name, '%'))
+            <if(project_id)> AND project_id = :project_id <endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
@@ -1863,7 +1864,7 @@ class ExperimentDAO {
     }
 
     @WithSpan
-    Flux<Experiment> get(@NonNull ExperimentStreamRequest request) {
+    Flux<Experiment> get(@NonNull ExperimentStreamRequest request, UUID projectId) {
         log.info("Getting experiment by '{}'", request);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
@@ -1874,13 +1875,18 @@ class ExperimentDAO {
                     }
                     template.add("has_aggregated", true);
                     template.add("has_raw", true);
-
                     template.add("limit", request.limit());
+                    if (projectId != null) {
+                        template.add("project_id", projectId);
+                    }
                     return Flux.from(get(template.render(), connection,
                             statement -> {
                                 statement.bind("name", request.name());
                                 if (request.lastRetrievedId() != null) {
                                     statement = statement.bind("lastRetrievedId", request.lastRetrievedId());
+                                }
+                                if (projectId != null) {
+                                    statement = statement.bind("project_id", projectId);
                                 }
                                 return statement.bind("limit", request.limit()).bind("workspace_id", workspaceId)
                                         .bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID);
@@ -2228,14 +2234,33 @@ class ExperimentDAO {
     Flux<Experiment> findByName(String name) {
         Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> findByName(name, connection))
+                .flatMapMany(connection -> findByName(name, null, connection))
                 .flatMap(this::mapToDto);
     }
 
-    private Publisher<? extends Result> findByName(String name, Connection connection) {
-        log.info("Finding experiment by name '{}'", name);
-        var statement = connection.createStatement(FIND_BY_NAME).bind("name", name);
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    @WithSpan
+    Flux<Experiment> findByName(String name, @NonNull UUID projectId) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> findByName(name, projectId, connection))
+                .flatMap(this::mapToDto);
+    }
+
+    private Publisher<? extends Result> findByName(String name, UUID projectId, Connection connection) {
+        return makeFluxContextAware((userName, workspaceId) -> {
+            log.info("Finding experiment by name '{}'", name);
+            var template = getSTWithLogComment(FIND_BY_NAME, "find_experiments_by_name", workspaceId, "");
+            if (projectId != null) {
+                template.add("project_id", true);
+            }
+            var statement = connection.createStatement(template.render())
+                    .bind("name", name)
+                    .bind("workspace_id", workspaceId);
+            if (projectId != null) {
+                statement.bind("project_id", projectId);
+            }
+            return Flux.from(statement.execute());
+        });
     }
 
     @WithSpan

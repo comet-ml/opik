@@ -178,6 +178,7 @@ public class ExperimentsResource {
                 .block();
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",
                 experimentSearchCriteria, experiments.size(), page, size);
+
         return Response.ok().entity(experiments).build();
     }
 
@@ -443,6 +444,7 @@ public class ExperimentsResource {
                 .limit(request.limit())
                 .lastRetrievedId(request.lastRetrievedId())
                 .truncate(request.truncate())
+                .projectName(request.projectName())
                 .build();
         var items = experimentItemService.getExperimentItems(criteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)

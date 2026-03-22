@@ -6,8 +6,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Getter
 public enum AnnotationQueueField implements Field {
-    ID(ID_QUERY_PARAM, FieldType.STRING),
-    PROJECT_ID("project_id", FieldType.STRING),
+    ID(ID_QUERY_PARAM, FieldType.STRING_EXACT),
+    PROJECT_ID("project_id", FieldType.STRING_EXACT),
     NAME(NAME_QUERY_PARAM, FieldType.STRING),
     DESCRIPTION(DESCRIPTION_QUERY_PARAM, FieldType.STRING),
     INSTRUCTIONS("instructions", FieldType.STRING),

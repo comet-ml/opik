@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
@@ -18,6 +19,8 @@ public interface WorkspaceConfigurationService {
     Mono<WorkspaceConfiguration> getConfiguration();
 
     Mono<Void> deleteConfiguration();
+
+    Mono<Long> getMaxTimeoutMarkThreadAsInactive();
 }
 
 @Singleton
@@ -45,6 +48,13 @@ class WorkspaceConfigurationServiceImpl implements WorkspaceConfigurationService
             return workspaceConfigurationDAO.getConfiguration(workspaceId)
                     .doOnSuccess(config -> log.info("Found workspace configuration for workspace '{}'", workspaceId));
         });
+    }
+
+    @Override
+    @Cacheable(name = "max_timeout_mark_thread_as_inactive", key = "'global'", returnType = Long.class)
+    public Mono<Long> getMaxTimeoutMarkThreadAsInactive() {
+        log.info("Fetching max timeout_mark_thread_as_inactive across all workspaces");
+        return workspaceConfigurationDAO.getMaxTimeoutMarkThreadAsInactive();
     }
 
     @Override

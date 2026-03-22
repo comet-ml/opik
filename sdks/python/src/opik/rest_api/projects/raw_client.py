@@ -16,12 +16,16 @@ from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.breakdown_config_public import BreakdownConfigPublic
+from ..types.dashboard_page_public import DashboardPagePublic
+from ..types.dataset_page_public import DatasetPagePublic
+from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.feedback_score_names import FeedbackScoreNames
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.prompt_page_public import PromptPagePublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
@@ -38,6 +42,301 @@ OMIT = typing.cast(typing.Any, ...)
 class RawProjectsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def find_dashboards_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[DashboardPagePublic]:
+        """
+        Find dashboards scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DashboardPagePublic]
+            Dashboard page
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/dashboards",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DashboardPagePublic,
+                    parse_obj_as(
+                        type_=DashboardPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def find_datasets_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
+        with_optimizations_only: typing.Optional[bool] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[DatasetPagePublic]:
+        """
+        Find datasets scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
+
+        with_optimizations_only : typing.Optional[bool]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetPagePublic]
+            Dataset page
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/datasets",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "with_experiments_only": with_experiments_only,
+                "with_optimizations_only": with_optimizations_only,
+                "name": name,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetPagePublic,
+                    parse_obj_as(
+                        type_=DatasetPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def find_experiments_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        optimization_id: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ExperimentPagePublic]:
+        """
+        Find experiments scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        optimization_id : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ExperimentPagePublic]
+            Experiments page
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/experiments",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "datasetId": dataset_id,
+                "optimization_id": optimization_id,
+                "types": types,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "sorting": sorting,
+                "filters": filters,
+                "experiment_ids": experiment_ids,
+                "force_sorting": force_sorting,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentPagePublic,
+                    parse_obj_as(
+                        type_=ExperimentPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_prompts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[PromptPagePublic]:
+        """
+        Get prompts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[PromptPagePublic]
+            OK
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/prompts",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PromptPagePublic,
+                    parse_obj_as(
+                        type_=PromptPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_projects(
         self,
@@ -680,6 +979,301 @@ class RawProjectsClient:
 class AsyncRawProjectsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def find_dashboards_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[DashboardPagePublic]:
+        """
+        Find dashboards scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DashboardPagePublic]
+            Dashboard page
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/dashboards",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DashboardPagePublic,
+                    parse_obj_as(
+                        type_=DashboardPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def find_datasets_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
+        with_optimizations_only: typing.Optional[bool] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[DatasetPagePublic]:
+        """
+        Find datasets scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
+
+        with_optimizations_only : typing.Optional[bool]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetPagePublic]
+            Dataset page
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/datasets",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "with_experiments_only": with_experiments_only,
+                "with_optimizations_only": with_optimizations_only,
+                "name": name,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetPagePublic,
+                    parse_obj_as(
+                        type_=DatasetPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def find_experiments_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        optimization_id: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ExperimentPagePublic]:
+        """
+        Find experiments scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        optimization_id : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ExperimentPagePublic]
+            Experiments page
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/experiments",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "datasetId": dataset_id,
+                "optimization_id": optimization_id,
+                "types": types,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "sorting": sorting,
+                "filters": filters,
+                "experiment_ids": experiment_ids,
+                "force_sorting": force_sorting,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentPagePublic,
+                    parse_obj_as(
+                        type_=ExperimentPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_prompts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[PromptPagePublic]:
+        """
+        Get prompts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[PromptPagePublic]
+            OK
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/prompts",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PromptPagePublic,
+                    parse_obj_as(
+                        type_=PromptPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_projects(
         self,

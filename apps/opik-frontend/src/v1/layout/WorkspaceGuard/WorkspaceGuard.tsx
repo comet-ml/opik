@@ -4,6 +4,7 @@ import usePluginStore from "@/store/PluginsStore";
 import { FeatureTogglesProvider } from "@/v1/feature-toggles-provider";
 import { ServerSyncProvider } from "@/v1/server-sync-provider";
 import PermissionsGuard from "@/v1/layout/PermissionsGuard/PermissionsGuard";
+import WorkspaceVersionResolver from "@/shared/WorkspaceVersionResolver/WorkspaceVersionResolver";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 
@@ -33,15 +34,17 @@ const WorkspaceGuard = ({
 
   return (
     <WorkspacePreloader>
-      {PermissionsProviderPlugin ? (
-        <PermissionsProviderPlugin>
-          <PermissionsGuard>{layout}</PermissionsGuard>
-        </PermissionsProviderPlugin>
-      ) : (
-        <PermissionsProvider value={DEFAULT_PERMISSIONS}>
-          {layout}
-        </PermissionsProvider>
-      )}
+      <WorkspaceVersionResolver>
+        {PermissionsProviderPlugin ? (
+          <PermissionsProviderPlugin>
+            <PermissionsGuard>{layout}</PermissionsGuard>
+          </PermissionsProviderPlugin>
+        ) : (
+          <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+            {layout}
+          </PermissionsProvider>
+        )}
+      </WorkspaceVersionResolver>
     </WorkspacePreloader>
   );
 };

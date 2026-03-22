@@ -318,7 +318,7 @@ const AlertsPage: React.FunctionComponent = () => {
     navigate({
       to: "/$workspaceName/alerts/new",
       params: { workspaceName },
-      search: (prev) => prev,
+      search: (prev: Record<string, unknown>) => prev,
     });
   }, [navigate, workspaceName]);
 

@@ -27,6 +27,371 @@ export class ProjectsClient {
     }
 
     /**
+     * Find dashboards scoped to a project
+     *
+     * @param {string} projectId
+     * @param {OpikApi.FindDashboardsByProjectRequest} request
+     * @param {ProjectsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.projects.findDashboardsByProject("projectId")
+     */
+    public findDashboardsByProject(
+        projectId: string,
+        request: OpikApi.FindDashboardsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DashboardPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findDashboardsByProject(projectId, request, requestOptions));
+    }
+
+    private async __findDashboardsByProject(
+        projectId: string,
+        request: OpikApi.FindDashboardsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DashboardPagePublic>> {
+        const { page, size, name, sorting, filters } = request;
+        const _queryParams: Record<string, unknown> = {
+            page,
+            size,
+            name,
+            sorting,
+            filters,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${core.url.encodePathParam(projectId)}/dashboards`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DashboardPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/projects/{projectId}/dashboards",
+        );
+    }
+
+    /**
+     * Find datasets scoped to a project
+     *
+     * @param {string} projectId
+     * @param {OpikApi.FindDatasetsByProjectRequest} request
+     * @param {ProjectsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.projects.findDatasetsByProject("projectId")
+     */
+    public findDatasetsByProject(
+        projectId: string,
+        request: OpikApi.FindDatasetsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findDatasetsByProject(projectId, request, requestOptions));
+    }
+
+    private async __findDatasetsByProject(
+        projectId: string,
+        request: OpikApi.FindDatasetsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetPagePublic>> {
+        const { page, size, withExperimentsOnly, withOptimizationsOnly, name, sorting, filters } = request;
+        const _queryParams: Record<string, unknown> = {
+            page,
+            size,
+            with_experiments_only: withExperimentsOnly,
+            with_optimizations_only: withOptimizationsOnly,
+            name,
+            sorting,
+            filters,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${core.url.encodePathParam(projectId)}/datasets`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/projects/{projectId}/datasets",
+        );
+    }
+
+    /**
+     * Find experiments scoped to a project
+     *
+     * @param {string} projectId
+     * @param {OpikApi.FindExperimentsByProjectRequest} request
+     * @param {ProjectsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     *
+     * @example
+     *     await client.projects.findExperimentsByProject("projectId")
+     */
+    public findExperimentsByProject(
+        projectId: string,
+        request: OpikApi.FindExperimentsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ExperimentPagePublic> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__findExperimentsByProject(projectId, request, requestOptions),
+        );
+    }
+
+    private async __findExperimentsByProject(
+        projectId: string,
+        request: OpikApi.FindExperimentsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ExperimentPagePublic>> {
+        const {
+            page,
+            size,
+            datasetId,
+            optimizationId,
+            types,
+            name,
+            datasetDeleted,
+            sorting,
+            filters,
+            experimentIds,
+            forceSorting,
+        } = request;
+        const _queryParams: Record<string, unknown> = {
+            page,
+            size,
+            datasetId,
+            optimization_id: optimizationId,
+            types,
+            name,
+            dataset_deleted: datasetDeleted,
+            sorting,
+            filters,
+            experiment_ids: experimentIds,
+            force_sorting: forceSorting,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${core.url.encodePathParam(projectId)}/experiments`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ExperimentPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/projects/{projectId}/experiments",
+        );
+    }
+
+    /**
+     * Get prompts scoped to a project
+     *
+     * @param {string} projectId
+     * @param {OpikApi.GetPromptsByProjectRequest} request
+     * @param {ProjectsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.projects.getPromptsByProject("projectId")
+     */
+    public getPromptsByProject(
+        projectId: string,
+        request: OpikApi.GetPromptsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.PromptPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getPromptsByProject(projectId, request, requestOptions));
+    }
+
+    private async __getPromptsByProject(
+        projectId: string,
+        request: OpikApi.GetPromptsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptPagePublic>> {
+        const { page, size, name, sorting, filters } = request;
+        const _queryParams: Record<string, unknown> = {
+            page,
+            size,
+            name,
+            sorting,
+            filters,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${core.url.encodePathParam(projectId)}/prompts`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.PromptPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/projects/{projectId}/prompts",
+        );
+    }
+
+    /**
      * Find projects
      *
      * @param {OpikApi.FindProjectsRequest} request

@@ -5,6 +5,7 @@ import pytest
 from opik.api_objects import opik_client
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
+from opik.decorator.context_manager import start_as_current_trace
 
 
 def make_raw_blueprint(blueprint_id="bp-1", name=None, values=None, description=None):
@@ -49,3 +50,11 @@ def clear_caches():
     from opik.api_objects.agent_config.cache import get_global_registry
 
     get_global_registry().clear()
+
+
+@pytest.fixture(autouse=True)
+def fake_track_context():
+    """Push a fake trace so _resolve_from_backend's @track guard passes in all unit tests."""
+    with mock.patch.object(opik_client, "get_client_cached", return_value=mock.Mock()):
+        with start_as_current_trace(name="test-trace"):
+            yield

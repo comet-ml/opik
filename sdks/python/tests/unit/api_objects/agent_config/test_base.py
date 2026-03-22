@@ -1,14 +1,15 @@
 import dataclasses
-import warnings
 from typing import Annotated, Optional
 from unittest import mock
 
 import pytest
 
+from opik import context_storage
 from opik.api_objects.agent_config.base import AgentConfig
 from opik.api_objects.agent_config.blueprint import Blueprint
 from opik.api_objects.agent_config.cache import get_global_registry, get_cached_config
 from opik.api_objects.agent_config.context import agent_config_context
+from opik.api_objects.span import span_data as span_data_mod
 from opik.exceptions import AgentConfigNotFound, OpikException
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.core.request_options import RequestOptions
@@ -1147,39 +1148,6 @@ class TestGetAgentConfigWithMask:
             with pytest.raises(AgentConfigNotFound, match="env='prod'"):
                 mock_opik_client.get_agent_config(fallback=fallback)
 
-    def test_instance_resolved_without_mask__warns_when_mask_active_on_access(
-        self, mock_rest_client, mock_opik_client
-    ):
-        class MyConfig(AgentConfig):
-            greeting: str
-
-        fallback = MyConfig(greeting="default")
-
-        bp = AgentBlueprintPublic(
-            id="bp-1",
-            type="blueprint",
-            values=[
-                AgentConfigValuePublic(
-                    key="MyConfig.greeting", type="string", value="prod-greeting"
-                ),
-            ],
-        )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
-        mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
-        mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
-
-        result = mock_opik_client.get_agent_config(fallback=fallback)
-
-        with agent_config_context("mask-xyz"):
-            with pytest.warns(
-                UserWarning, match="instantiated outside of an agent entrypoint"
-            ):
-                _ = result.greeting
-            # second access must not warn again
-            with warnings.catch_warnings():
-                warnings.simplefilter("error")
-                _ = result.greeting
-
 
 # ---------------------------------------------------------------------------
 # Fallback on unexpected backend errors
@@ -1240,3 +1208,72 @@ class TestGetAgentConfigFallbackOnError:
 
         assert result.temp == 0.5
         assert result.is_fallback is True
+
+
+# ---------------------------------------------------------------------------
+# @track context guard tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrackContextGuard:
+    @pytest.fixture(autouse=True)
+    def fake_track_context(self):
+        """Override the module-level autouse fixture: no trace context for these tests."""
+        yield
+
+    def test_outside_track_context__raises_runtime_error(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+
+        fallback = MyConfig(temp=0.5)
+
+        with pytest.raises(RuntimeError, match="@opik.track"):
+            mock_opik_client.get_agent_config(fallback=fallback)
+
+    def test_inside_track_context_via_span__succeeds(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+
+        fallback = MyConfig(temp=0.5)
+
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
+            ],
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
+        mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
+
+        span = span_data_mod.SpanData(trace_id="fake-trace", name="test-span")
+        with context_storage.temporary_context(span, trace_data=None):
+            result = mock_opik_client.get_agent_config(fallback=fallback)
+
+        assert result.temp == pytest.approx(0.9)
+
+    def test_outside_track_context__error_message_mentions_api_methods(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MySpecialConfig(AgentConfig):
+            temp: float
+
+        fallback = MySpecialConfig(temp=0.5)
+
+        with pytest.raises(RuntimeError, match="get_agent_config"):
+            mock_opik_client.get_agent_config(fallback=fallback)
+
+    def test_creating_fallback_instance_outside_track__no_error(self):
+        """Plain AgentConfig instantiation (for use as fallback) must not require @track."""
+
+        class MyConfig(AgentConfig):
+            temp: float
+
+        # Should not raise even when no trace context is present
+        cfg = MyConfig(temp=0.5)
+        assert cfg.temp == 0.5

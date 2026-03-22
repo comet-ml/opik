@@ -6,12 +6,16 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.breakdown_config_public import BreakdownConfigPublic
+from ..types.dashboard_page_public import DashboardPagePublic
+from ..types.dataset_page_public import DatasetPagePublic
+from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.feedback_score_names import FeedbackScoreNames
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.prompt_page_public import PromptPagePublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
@@ -40,6 +44,250 @@ class ProjectsClient:
         RawProjectsClient
         """
         return self._raw_client
+
+    def find_dashboards_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DashboardPagePublic:
+        """
+        Find dashboards scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DashboardPagePublic
+            Dashboard page
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.find_dashboards_by_project(project_id='projectId', )
+        """
+        _response = self._raw_client.find_dashboards_by_project(
+            project_id,
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def find_datasets_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
+        with_optimizations_only: typing.Optional[bool] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetPagePublic:
+        """
+        Find datasets scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
+
+        with_optimizations_only : typing.Optional[bool]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetPagePublic
+            Dataset page
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.find_datasets_by_project(project_id='projectId', )
+        """
+        _response = self._raw_client.find_datasets_by_project(
+            project_id,
+            page=page,
+            size=size,
+            with_experiments_only=with_experiments_only,
+            with_optimizations_only=with_optimizations_only,
+            name=name,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def find_experiments_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        optimization_id: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentPagePublic:
+        """
+        Find experiments scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        optimization_id : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentPagePublic
+            Experiments page
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.find_experiments_by_project(project_id='projectId', )
+        """
+        _response = self._raw_client.find_experiments_by_project(
+            project_id,
+            page=page,
+            size=size,
+            dataset_id=dataset_id,
+            optimization_id=optimization_id,
+            types=types,
+            name=name,
+            dataset_deleted=dataset_deleted,
+            sorting=sorting,
+            filters=filters,
+            experiment_ids=experiment_ids,
+            force_sorting=force_sorting,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def get_prompts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> PromptPagePublic:
+        """
+        Get prompts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptPagePublic
+            OK
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.get_prompts_by_project(project_id='projectId', )
+        """
+        _response = self._raw_client.get_prompts_by_project(
+            project_id,
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
+        )
+        return _response.data
 
     def find_projects(
         self,
@@ -438,6 +686,262 @@ class AsyncProjectsClient:
         AsyncRawProjectsClient
         """
         return self._raw_client
+
+    async def find_dashboards_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DashboardPagePublic:
+        """
+        Find dashboards scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DashboardPagePublic
+            Dashboard page
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.find_dashboards_by_project(project_id='projectId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_dashboards_by_project(
+            project_id,
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def find_datasets_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        with_experiments_only: typing.Optional[bool] = None,
+        with_optimizations_only: typing.Optional[bool] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetPagePublic:
+        """
+        Find datasets scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        with_experiments_only : typing.Optional[bool]
+
+        with_optimizations_only : typing.Optional[bool]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetPagePublic
+            Dataset page
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.find_datasets_by_project(project_id='projectId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_datasets_by_project(
+            project_id,
+            page=page,
+            size=size,
+            with_experiments_only=with_experiments_only,
+            with_optimizations_only=with_optimizations_only,
+            name=name,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def find_experiments_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        optimization_id: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentPagePublic:
+        """
+        Find experiments scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        optimization_id : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentPagePublic
+            Experiments page
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.find_experiments_by_project(project_id='projectId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_experiments_by_project(
+            project_id,
+            page=page,
+            size=size,
+            dataset_id=dataset_id,
+            optimization_id=optimization_id,
+            types=types,
+            name=name,
+            dataset_deleted=dataset_deleted,
+            sorting=sorting,
+            filters=filters,
+            experiment_ids=experiment_ids,
+            force_sorting=force_sorting,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def get_prompts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> PromptPagePublic:
+        """
+        Get prompts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptPagePublic
+            OK
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.get_prompts_by_project(project_id='projectId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_prompts_by_project(
+            project_id,
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            filters=filters,
+            request_options=request_options,
+        )
+        return _response.data
 
     async def find_projects(
         self,

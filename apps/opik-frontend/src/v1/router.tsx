@@ -48,15 +48,6 @@ import EvaluationSuitesPage from "@/v1/pages/EvaluationSuitesPage/EvaluationSuit
 import EvaluationSuitePage from "@/v1/pages/EvaluationSuitePage/EvaluationSuitePage";
 import EvaluationSuiteItemsPage from "@/v1/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
 
-declare module "@tanstack/react-router" {
-  interface StaticDataRouteOption {
-    hideUpgradeButton?: boolean;
-    title?: string;
-    param?: string;
-    paramValue?: string;
-  }
-}
-
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
     ? () => null // Render nothing in production
@@ -236,9 +227,8 @@ const compareExperimentsRoute = createRoute({
   getParentRoute: () => experimentsRoute,
   component: CompareExperimentsPage,
   staticData: {
-    title: "Compare",
     param: "compare",
-    paramValue: "compare",
+    paramValue: "Compare",
   },
 });
 
@@ -588,8 +578,4 @@ export const router = createRouter({
   routeTree,
 });
 
-declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
-}
+export type AppRouter = typeof router;
