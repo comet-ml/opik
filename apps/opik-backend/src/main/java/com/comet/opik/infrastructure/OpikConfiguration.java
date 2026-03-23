@@ -124,7 +124,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private LlmModelRegistryConfig llmModelRegistry = new LlmModelRegistryConfig();
-  
+
     @Valid @NotNull @JsonProperty
     private OllieStateConfig ollieStateConfig = new OllieStateConfig();
 }
