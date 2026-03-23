@@ -178,3 +178,20 @@ before running the evaluation. This ensures the scoring is done on the full cont
   The default cooldown period is 15 minutes but can be configured at the workspace level under "Thread online scoring rule cooldown period".
   For self-hosted installations, set the `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable.
 </Note>
+
+## Running online evaluations on historical data
+
+By default, a newly created online evaluation rule will only run on traces or threads logged after the rule was defined. To run a rule against historical data, you can trigger it manually from the UI:
+
+1. Navigate to the **Traces** or **Threads** tab of your project.
+2. Select the traces or threads you want to evaluate.
+3. Click the brain icon (<Icon icon="brain" />) in the toolbar.
+4. You will be prompted to choose which online evaluation rule to apply to the selected items.
+
+<Frame>
+  <img src="/img/production/online_evaluation_historical.png" alt="Running an online evaluation rule on historical traces" />
+</Frame>
+
+<Note>
+  Depending on the model configured in the rule, evaluations may take some time to complete. You can monitor progress in the evaluation rule logs or by refreshing the traces/threads in the UI.
+</Note>
