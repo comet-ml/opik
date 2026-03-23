@@ -530,7 +530,11 @@ class DatasetsClient:
         return _response.data
 
     def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete dataset by name
@@ -538,6 +542,8 @@ class DatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -552,7 +558,9 @@ class DatasetsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.datasets.delete_dataset_by_name(dataset_name='dataset_name', )
         """
-        _response = self._raw_client.delete_dataset_by_name(dataset_name=dataset_name, request_options=request_options)
+        _response = self._raw_client.delete_dataset_by_name(
+            dataset_name=dataset_name, project_name=project_name, request_options=request_options
+        )
         return _response.data
 
     def delete_dataset_items(
@@ -780,7 +788,11 @@ class DatasetsClient:
         return _response.data
 
     def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPublic:
         """
         Get dataset by name
@@ -788,6 +800,8 @@ class DatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -804,7 +818,7 @@ class DatasetsClient:
         client.datasets.get_dataset_by_identifier(dataset_name='dataset_name', )
         """
         _response = self._raw_client.get_dataset_by_identifier(
-            dataset_name=dataset_name, request_options=request_options
+            dataset_name=dataset_name, project_name=project_name, request_options=request_options
         )
         return _response.data
 
@@ -1142,6 +1156,7 @@ class DatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
@@ -1158,6 +1173,8 @@ class DatasetsClient:
 
         dataset_version : typing.Optional[str]
 
+        project_name : typing.Optional[str]
+
         filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
@@ -1173,6 +1190,7 @@ class DatasetsClient:
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
             dataset_version=dataset_version,
+            project_name=project_name,
             filters=filters,
             request_options=request_options,
         ) as r:
@@ -1943,7 +1961,11 @@ class AsyncDatasetsClient:
         return _response.data
 
     async def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete dataset by name
@@ -1951,6 +1973,8 @@ class AsyncDatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1969,7 +1993,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_dataset_by_name(
-            dataset_name=dataset_name, request_options=request_options
+            dataset_name=dataset_name, project_name=project_name, request_options=request_options
         )
         return _response.data
 
@@ -2214,7 +2238,11 @@ class AsyncDatasetsClient:
         return _response.data
 
     async def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPublic:
         """
         Get dataset by name
@@ -2222,6 +2250,8 @@ class AsyncDatasetsClient:
         Parameters
         ----------
         dataset_name : str
+
+        project_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2241,7 +2271,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_dataset_by_identifier(
-            dataset_name=dataset_name, request_options=request_options
+            dataset_name=dataset_name, project_name=project_name, request_options=request_options
         )
         return _response.data
 
@@ -2606,6 +2636,7 @@ class AsyncDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
@@ -2622,6 +2653,8 @@ class AsyncDatasetsClient:
 
         dataset_version : typing.Optional[str]
 
+        project_name : typing.Optional[str]
+
         filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
@@ -2637,6 +2670,7 @@ class AsyncDatasetsClient:
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
             dataset_version=dataset_version,
+            project_name=project_name,
             filters=filters,
             request_options=request_options,
         ) as r:

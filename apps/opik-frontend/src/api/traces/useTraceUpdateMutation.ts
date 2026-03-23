@@ -4,7 +4,7 @@ import get from "lodash/get";
 
 import api, { TRACE_KEY, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseTraceUpdateMutationParams = {
   projectId: string;

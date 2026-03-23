@@ -1,6 +1,6 @@
 import isNumber from "lodash/isNumber";
 
-import { ChartConfig } from "@/components/ui/chart";
+import { ChartConfig } from "@/ui/chart";
 export type { ChartConfig };
 
 type CalculateChartTruncateLength = {

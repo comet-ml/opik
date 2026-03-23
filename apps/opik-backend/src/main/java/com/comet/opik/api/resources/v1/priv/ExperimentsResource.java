@@ -178,6 +178,7 @@ public class ExperimentsResource {
                 .block();
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",
                 experimentSearchCriteria, experiments.size(), page, size);
+
         return Response.ok().entity(experiments).build();
     }
 
@@ -443,6 +444,7 @@ public class ExperimentsResource {
                 .limit(request.limit())
                 .lastRetrievedId(request.lastRetrievedId())
                 .truncate(request.truncate())
+                .projectName(request.projectName())
                 .build();
         var items = experimentItemService.getExperimentItems(criteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
@@ -551,8 +553,7 @@ public class ExperimentsResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(
-            @QueryParam("experiment_ids") String experimentIdsQueryParam,
-            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
+            @QueryParam("experiment_ids") String experimentIdsQueryParam) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .map(ParamsValidator::getIds)
@@ -563,7 +564,7 @@ public class ExperimentsResource {
         log.info("Find feedback score names by experiment_ids '{}', on workspaceId '{}'",
                 experimentIds, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getExperimentsFeedbackScoreNames(experimentIds, excludeCategoryNames)
+                .getExperimentsFeedbackScoreNames(experimentIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",

@@ -19,9 +19,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -289,11 +289,21 @@ public class ExperimentItemService {
 
     public Flux<ExperimentItem> getExperimentItems(@NonNull ExperimentItemSearchCriteria criteria) {
         log.info("Getting experiment items by '{}'", criteria);
-        return experimentService.findByName(criteria.experimentName())
-                .subscribeOn(Schedulers.boundedElastic())
+        if (StringUtils.isBlank(criteria.projectName())) {
+            return findExperimentIdsAndGetItems(criteria.experimentName(), criteria);
+        }
+        return projectService.resolveProjectId(criteria.projectName())
+                .flatMapMany(projectIdOpt -> projectIdOpt
+                        .map(projectId -> findExperimentIdsAndGetItems(
+                                criteria.experimentName(), criteria.toBuilder().projectId(projectId).build()))
+                        .orElseGet(Flux::empty));
+    }
+
+    private Flux<ExperimentItem> findExperimentIdsAndGetItems(
+            String experimentName, ExperimentItemSearchCriteria criteria) {
+        return experimentService.findByName(experimentName, criteria.projectId())
                 .collect(Collectors.mapping(Experiment::id, Collectors.toUnmodifiableSet()))
-                .flatMapMany(experimentIds -> experimentItemDAO.getItems(
-                        experimentIds, criteria));
+                .flatMapMany(experimentIds -> experimentItemDAO.getItems(experimentIds, criteria));
     }
 
     public Mono<Void> delete(@NonNull Set<UUID> ids) {

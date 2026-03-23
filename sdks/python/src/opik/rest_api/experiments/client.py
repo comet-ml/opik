@@ -176,6 +176,8 @@ class ExperimentsClient:
         *,
         id: typing.Optional[str] = OMIT,
         dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -197,6 +199,12 @@ class ExperimentsClient:
         id : typing.Optional[str]
 
         dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -237,6 +245,8 @@ class ExperimentsClient:
         _response = self._raw_client.create_experiment(
             id=id,
             dataset_name=dataset_name,
+            project_id=project_id,
+            project_name=project_name,
             name=name,
             metadata=metadata,
             tags=tags,
@@ -383,11 +393,7 @@ class ExperimentsClient:
         return _response.data
 
     def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -395,8 +401,6 @@ class ExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -413,9 +417,7 @@ class ExperimentsClient:
         client.experiments.find_feedback_score_names()
         """
         _response = self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids,
-            exclude_category_names=exclude_category_names,
-            request_options=request_options,
+            experiment_ids=experiment_ids, request_options=request_options
         )
         return _response.data
 
@@ -680,6 +682,7 @@ class ExperimentsClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -696,6 +699,8 @@ class ExperimentsClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -709,6 +714,7 @@ class ExperimentsClient:
             limit=limit,
             last_retrieved_id=last_retrieved_id,
             truncate=truncate,
+            project_name=project_name,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -719,6 +725,7 @@ class ExperimentsClient:
         name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -732,6 +739,8 @@ class ExperimentsClient:
 
         last_retrieved_id : typing.Optional[str]
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -741,7 +750,11 @@ class ExperimentsClient:
             Experiments stream or error during process
         """
         with self._raw_client.stream_experiments(
-            name=name, limit=limit, last_retrieved_id=last_retrieved_id, request_options=request_options
+            name=name,
+            limit=limit,
+            last_retrieved_id=last_retrieved_id,
+            project_name=project_name,
+            request_options=request_options,
         ) as r:
             yield from r.data
 
@@ -897,6 +910,8 @@ class AsyncExperimentsClient:
         *,
         id: typing.Optional[str] = OMIT,
         dataset_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -918,6 +933,12 @@ class AsyncExperimentsClient:
         id : typing.Optional[str]
 
         dataset_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
 
         name : typing.Optional[str]
 
@@ -961,6 +982,8 @@ class AsyncExperimentsClient:
         _response = await self._raw_client.create_experiment(
             id=id,
             dataset_name=dataset_name,
+            project_id=project_id,
+            project_name=project_name,
             name=name,
             metadata=metadata,
             tags=tags,
@@ -1119,11 +1142,7 @@ class AsyncExperimentsClient:
         return _response.data
 
     async def find_feedback_score_names(
-        self,
-        *,
-        experiment_ids: typing.Optional[str] = None,
-        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -1131,8 +1150,6 @@ class AsyncExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
-
-        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1152,9 +1169,7 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids,
-            exclude_category_names=exclude_category_names,
-            request_options=request_options,
+            experiment_ids=experiment_ids, request_options=request_options
         )
         return _response.data
 
@@ -1437,6 +1452,7 @@ class AsyncExperimentsClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -1453,6 +1469,8 @@ class AsyncExperimentsClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1466,6 +1484,7 @@ class AsyncExperimentsClient:
             limit=limit,
             last_retrieved_id=last_retrieved_id,
             truncate=truncate,
+            project_name=project_name,
             request_options=request_options,
         ) as r:
             async for data in r.data:
@@ -1477,6 +1496,7 @@ class AsyncExperimentsClient:
         name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -1490,6 +1510,8 @@ class AsyncExperimentsClient:
 
         last_retrieved_id : typing.Optional[str]
 
+        project_name : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1499,7 +1521,11 @@ class AsyncExperimentsClient:
             Experiments stream or error during process
         """
         async with self._raw_client.stream_experiments(
-            name=name, limit=limit, last_retrieved_id=last_retrieved_id, request_options=request_options
+            name=name,
+            limit=limit,
+            last_retrieved_id=last_retrieved_id,
+            project_name=project_name,
+            request_options=request_options,
         ) as r:
             async for data in r.data:
                 yield data

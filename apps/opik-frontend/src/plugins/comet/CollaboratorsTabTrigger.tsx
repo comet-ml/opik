@@ -1,4 +1,4 @@
-import { TabsTrigger } from "@/components/ui/tabs";
+import { TabsTrigger } from "@/ui/tabs";
 import useUserPermission from "./useUserPermission";
 
 export interface CollaboratorsTabTriggerProps {
@@ -6,9 +6,9 @@ export interface CollaboratorsTabTriggerProps {
 }
 
 const CollaboratorsTabTrigger = ({ value }: CollaboratorsTabTriggerProps) => {
-  const { canUpdateUserRole } = useUserPermission();
+  const { isWorkspaceOwner } = useUserPermission();
 
-  if (!canUpdateUserRole) {
+  if (!isWorkspaceOwner) {
     return null;
   }
 

@@ -6,18 +6,25 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
+import com.comet.opik.api.filter.PromptFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -54,6 +61,39 @@ public class PromptResourceClient {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             return TestUtils.getIdFromLocation(response.getLocation());
+        }
+    }
+
+    public Prompt.PromptPage getProjectPrompts(UUID projectId, int page, String name, List<SortingField> sortingFields,
+            List<PromptFilter> filters, String apiKey, String workspaceName) {
+
+        WebTarget target = client.target("%s/v1/private/projects/%s/prompts".formatted(baseURI, projectId));
+
+        if (name != null) {
+            target = target.queryParam("name", name);
+        }
+
+        if (page > 1) {
+            target = target.queryParam("page", page);
+        }
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            target = target.queryParam("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            target = target.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
+        }
+
+        try (var response = target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Prompt.PromptPage.class);
         }
     }
 

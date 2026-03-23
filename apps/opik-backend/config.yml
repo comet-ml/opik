@@ -344,6 +344,19 @@ rateLimit:
       userFacingBucketName: single_tracing_ops
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for single tracing operations. Please try again later."
+    ollieStateUpload:
+      # Default: 4
+      # Description: how many ollie state uploads are allowed in the specified time bucket (per API key)
+      limit: ${RATE_LIMIT_OLLIE_STATE_UPLOAD:-4}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_OLLIE_STATE_UPLOAD_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Ollie-State-Upload
+      # Description: User facing bucket name
+      userFacingBucketName: ollie_state_upload
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for ollie state uploads. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
@@ -641,6 +654,9 @@ cacheManager:
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
     experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
+    # Default: PT30M
+    # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
+    max_timeout_mark_thread_as_inactive: ${CACHE_MANAGER_MAX_TIMEOUT_MARK_THREAD_AS_INACTIVE_DURATION:-PT30M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -681,6 +697,12 @@ s3Config:
   s3Url: ${S3_URL:-http://localhost:9001}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
+
+# Ollie state persistence configuration
+ollieStateConfig:
+  # Default: 52428800 (50MB)
+  # Description: Maximum upload size in bytes for ollie state persistence
+  maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
 # Attachments configuration
 attachmentsConfig:
@@ -776,16 +798,54 @@ serviceToggles:
 
 # Local Runner configuration
 localRunner:
+  # Default: false
+  # Description: Whether the local runner feature is enabled
   enabled: ${TOGGLE_RUNNERS_ENABLED:-false}
+  # Default: 30m
+  # Description: Maximum time a job can run before being considered timed out
   jobTimeout: ${OPIK_RUNNER_JOB_TIMEOUT:-30m}
+  # Default: 100
+  # Description: Maximum number of pending jobs allowed in a runner's queue
   maxPendingJobsPerRunner: ${OPIK_RUNNER_MAX_PENDING:-100}
+  # Default: 15s
+  # Description: Time-to-live for runner heartbeats; runners not heartbeating within this window are considered dead
   heartbeatTtl: ${OPIK_RUNNER_HEARTBEAT_TTL:-15s}
+  # Default: 10s
+  # Description: How long the nextJob long-poll blocks waiting for a new job before returning empty
   nextJobPollTimeout: ${OPIK_RUNNER_NEXT_JOB_POLL_TIMEOUT:-10s}
+  # Default: 24h
+  # Description: How long after a runner dies before its data is purged from Redis
   deadRunnerPurgeTime: ${OPIK_RUNNER_DEAD_PURGE_HOURS:-24h}
+  # Default: 7d
+  # Description: How long completed job metadata is retained in Redis
   completedJobTtl: ${OPIK_RUNNER_COMPLETED_JOB_TTL:-7d}
+  # Default: 60s
+  # Description: Interval between reaper job executions that clean up dead runners
+  reaperJobInterval: ${OPIK_RUNNER_REAPER_JOB_INTERVAL:-60s}
+  # Default: 55s
+  # Description: How long the reaper holds its distributed lock while processing
   reaperLockDuration: ${OPIK_RUNNER_REAPER_LOCK_DURATION:-55s}
+  # Default: 5s
+  # Description: How long the reaper waits to acquire the distributed lock before giving up
   reaperLockWait: ${OPIK_RUNNER_REAPER_LOCK_WAIT:-5s}
+  # Default: 5s
+  # Description: Extra buffer added to the async response timeout beyond nextJobPollTimeout
   nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
+  # Default: 300s
+  # Description: Time-to-live for pairing codes used during runner registration
+  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-300s}
+  # Default: 600s
+  # Description: Time-to-live for runner entries during the pairing process
+  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-600s}
+  # Default: 100
+  # Description: Maximum number of runners the reaper processes per cycle across all workspaces
+  reaperMaxRunnersPerCycle: ${OPIK_RUNNER_REAPER_MAX_RUNNERS_PER_CYCLE:-100}
+  # Default: 50
+  # Description: Maximum number of agents allowed per runner
+  maxAgentsPerRunner: ${OPIK_RUNNER_MAX_AGENTS_PER_RUNNER:-50}
+  # Default: 1000
+  # Description: Maximum number of log entries a runner can send in a single batch
+  maxLogEntriesPerBatch: ${OPIK_RUNNER_MAX_LOG_ENTRIES_PER_BATCH:-1000}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -810,18 +870,37 @@ traceThreadConfig:
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
-  # Default: 3s
+  # Default: 15s
   # Description: The interval at which the close trace thread job will run to inactive threads
-  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-3s}
-  # Default: 4s
+  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-15s}
+  # Default: 14s
   # Description: The time to wait for the close trace threads job to finish before releasing the lock
-  closeTraceThreadJobLockTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_TIME:-4s}
+  closeTraceThreadJobLockTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_TIME:-14s}
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_WAIT_TIME:-300ms}
   # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+  # Default: 7d
+  # Type: Duration (e.g. 1d, 12h, 7d)
+  # Scope: Global — applies to the trace-thread closing job on every instance
+  # Description: On first run after startup (or after an outage), look back this far to catch threads
+  #   that became stale during downtime. The minmax skip index keeps cost proportional to matching
+  #   granules, so wider windows are cheap. Subsequent runs use the normal computed lookback.
+  # Impact: Larger values scan more granules on first run but reduce risk of missing stale threads
+  #   after prolonged outages. Smaller values reduce first-run cost but may miss old threads.
+  # Safe range: 1d–30d
+  coldStartLookback: ${OPIK_CLOSE_TRACE_THREAD_COLD_START_LOOKBACK:-7d}
+  # Default: 5
+  # Type: Integer (exponent, not the backoff duration itself)
+  # Scope: Global — applies to the trace-thread closing job on every instance
+  # Description: Max exponent for exponential backoff on consecutive failures.
+  #   Backoff duration = closeTraceThreadJobInterval * 2^exponent (e.g. 15s * 2^5 = 480s = 8min).
+  # Impact: Higher values allow longer backoff on persistent failures, reducing load on ClickHouse.
+  #   Lower values resume faster after transient errors but risk hammering a struggling server.
+  # Safe range: 1–10
+  maxBackoffExponent: ${OPIK_CLOSE_TRACE_THREAD_MAX_BACKOFF_EXPONENT:-5}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${OPIK_REDIS_TRACE_THREAD_CLAIM_INTERVAL_RATIO:-10}

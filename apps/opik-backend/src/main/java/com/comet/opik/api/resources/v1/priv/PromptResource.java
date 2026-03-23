@@ -369,12 +369,17 @@ public class PromptResource {
                 request.name(), request.commit(), workspaceId);
 
         PromptVersion promptVersion = promptService.retrievePromptVersion(
-                request.name(), request.commit());
+                request.name(), request.commit(), request.projectName());
 
         log.info("Retrieved prompt name '{}'  with commit '{}' on workspace_id '{}'", request.name(),
                 request.commit(), workspaceId);
 
-        return Response.ok(promptVersion).build();
+        var responseBuilder = Response.ok(promptVersion);
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+        return responseBuilder.build();
     }
 
     @POST

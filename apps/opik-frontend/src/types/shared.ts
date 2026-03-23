@@ -76,7 +76,15 @@ export type Explainer = {
   docHash?: string;
 };
 
-export type HeaderIconType = COLUMN_TYPE | "guardrails" | "tags" | "version";
+export type HeaderIconType =
+  | COLUMN_TYPE
+  | "guardrails"
+  | "tags"
+  | "version"
+  | "assertions"
+  | "execution_policy"
+  | "pass_rate"
+  | "result";
 
 export type ColumnData<T> = {
   id: string;
@@ -192,3 +200,9 @@ export interface AggregatedDuration {
   p90: number;
   p99: number;
 }
+
+export type ConfigurationType = Record<string, unknown>;
+
+export type GoogleColabCardCoreProps = {
+  link: string;
+};

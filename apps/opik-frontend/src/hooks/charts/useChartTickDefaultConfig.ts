@@ -1,8 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { AxisDomain, AxisInterval } from "recharts/types/util/types";
 import isInteger from "lodash/isInteger";
-import isNull from "lodash/isNull";
-
 import { getTextWidth } from "@/lib/utils";
 
 const DEFAULT_TARGET_TICK_COUNT = 5;
@@ -40,6 +38,10 @@ const generateNiceTicks = (
   max: number,
   targetCount: number,
 ): number[] => {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return [0];
+  }
+
   if (targetCount <= 2) return [min, max];
 
   const range = max - min;
@@ -95,7 +97,7 @@ const useChartTickDefaultConfig = (
   }: UseChartTickDefaultConfigProps = {},
 ): ChartTickConfig => {
   const filteredValues = useMemo(
-    () => values.filter((v): v is number => !isNull(v)),
+    () => values.filter((v): v is number => Number.isFinite(v as number)),
     [values],
   );
 

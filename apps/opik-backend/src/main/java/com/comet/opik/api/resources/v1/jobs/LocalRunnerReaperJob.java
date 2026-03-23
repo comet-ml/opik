@@ -4,7 +4,6 @@ import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
-import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -21,7 +20,6 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@Every("60s")
 public class LocalRunnerReaperJob extends Job implements InterruptableJob {
 
     private static final Lock REAPER_LOCK = new Lock("runner_reaper", LocalRunnerReaperJob.class.getSimpleName());

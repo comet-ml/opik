@@ -1,15 +1,16 @@
 export interface Permissions {
   canViewExperiments: boolean;
+  canCreateExperiments: boolean;
   canViewDashboards: boolean;
   canViewDatasets: boolean;
+  canEditDatasets: boolean;
+  canDeleteDatasets: boolean;
   canDeleteProjects: boolean;
   canCreateAnnotationQueues: boolean;
   canDeleteAnnotationQueues: boolean;
   canDeleteTraces: boolean;
   canDeletePrompts: boolean;
-  canDeleteDatasets: boolean;
   canDeleteOptimizationRuns: boolean;
-  canUpdateUserRole: boolean;
   canConfigureWorkspaceSettings: boolean;
   canUpdateAIProviders: boolean;
   canCreateProjects: boolean;
@@ -17,6 +18,7 @@ export interface Permissions {
   canUpdateOnlineEvaluationRules: boolean;
   canUpdateAlerts: boolean;
   canAnnotateTraceSpanThread: boolean;
+  canCreateDashboards: boolean;
   canTagTrace: boolean;
 }
 
@@ -28,16 +30,17 @@ export interface PermissionsContextValue {
 export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
   permissions: {
     canViewExperiments: true,
+    canCreateExperiments: true,
     canViewDashboards: true,
     canViewDatasets: true,
+    canEditDatasets: true,
+    canDeleteDatasets: true,
     canDeleteProjects: true,
     canCreateAnnotationQueues: true,
     canDeleteAnnotationQueues: true,
     canDeleteTraces: true,
     canDeletePrompts: true,
-    canDeleteDatasets: true,
     canDeleteOptimizationRuns: true,
-    canUpdateUserRole: true,
     canConfigureWorkspaceSettings: true,
     canUpdateAIProviders: true,
     canCreateProjects: true,
@@ -45,6 +48,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canUpdateOnlineEvaluationRules: true,
     canUpdateAlerts: true,
     canAnnotateTraceSpanThread: true,
+    canCreateDashboards: true,
     canTagTrace: true,
   },
   isPending: false,

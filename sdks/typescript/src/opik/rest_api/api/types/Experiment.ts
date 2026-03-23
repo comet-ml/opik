@@ -6,7 +6,9 @@ export interface Experiment {
     id?: string;
     datasetName: string | null;
     datasetId?: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
     projectId?: string;
+    /** Project name. Creates project if it doesn't exist. Ignored when project_id is provided. */
     projectName?: string;
     name?: string;
     metadata?: OpikApi.JsonListString;
@@ -39,4 +41,6 @@ export interface Experiment {
     passedCount?: number;
     /** Total number of items for evaluation suite experiments. Null for regular experiments. */
     totalCount?: number;
+    /** Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments. */
+    assertionScores?: OpikApi.AssertionScoreAverage[];
 }

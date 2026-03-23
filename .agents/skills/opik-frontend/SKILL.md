@@ -53,12 +53,24 @@ const { selectedEntity, filters } = useEntityStore();
 ```
 
 ## Layer Architecture
-```
-ui → shared → pages-shared → pages (one-way only)
-```
-- No circular dependencies
-- No cross-page imports
+
+### Shared layers (used by all versions)
+`ui → shared` (one-way only)
+
+### Per-version layers
+`ui → shared → v1/pages-shared → v1/pages` (one-way only)
+`ui → shared → v2/pages-shared → v2/pages` (one-way only)
+
+### Module boundaries
+- v1/ CANNOT import from v2/
+- v2/ CANNOT import from v1/
+- `src/components/` is BLOCKED (old structure, no longer exists)
 - After modifying imports: `npm run deps:validate`
+
+### Shared component rules
+- Backward-compatible changes only
+- Must not be version-aware (use `showProjectSelector={true}` not `isV2={true}`)
+- If behavior needs to change, create a new component instead
 
 ## State Location Decisions
 - **URL state**: filters, pagination, selected items

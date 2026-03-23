@@ -54,6 +54,12 @@ export class DatasetItemsPage {
 
     await row.getByRole('button', { name: 'Actions menu' }).click();
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+    // New UI shows a "Remove suite items" confirmation dialog (unless "don't ask again" was set)
+    const removeItemsBtn = this.page.getByRole('button', { name: 'Remove suite items' });
+    await removeItemsBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+    if (await removeItemsBtn.isVisible()) {
+      await removeItemsBtn.click();
+    }
     await this.page.getByRole('button', { name: 'Save changes' }).click();
     await this.page.getByRole('button', { name: 'Save changes' }).click();
 

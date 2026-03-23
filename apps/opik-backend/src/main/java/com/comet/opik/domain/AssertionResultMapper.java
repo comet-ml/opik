@@ -1,54 +1,65 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AssertionResult;
+import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentRunSummary;
 import com.comet.opik.api.RunStatus;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 
-import java.math.BigDecimal;
+import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @UtilityClass
+@Slf4j
 class AssertionResultMapper {
 
-    static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
+    private static final TypeReference<List<AssertionResultRow>> ASSERTION_LIST_TYPE = new TypeReference<>() {
+    };
 
-    static ExperimentItem enrichWithAssertions(@NonNull ExperimentItem item) {
-        var feedbackScores = item.feedbackScores();
-        if (CollectionUtils.isEmpty(feedbackScores)) {
+    record AssertionResultRow(String value, AssertionStatus passed, String reason) {
+    }
+
+    static ExperimentItem enrichWithAssertions(@NonNull ExperimentItem item, @Nullable String assertionsJson) {
+        if (StringUtils.isBlank(assertionsJson)) {
             return item;
         }
 
-        var partitioned = feedbackScores.stream()
-                .collect(Collectors.partitioningBy(
-                        fs -> SUITE_ASSERTION_CATEGORY.equals(fs.categoryName())));
-
-        var assertions = partitioned.get(true);
-        var regularScores = partitioned.get(false);
-
-        if (CollectionUtils.isEmpty(assertions)) {
+        List<AssertionResultRow> rows;
+        try {
+            rows = JsonUtils.readValue(assertionsJson, ASSERTION_LIST_TYPE);
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to parse assertions_array JSON", e);
             return item;
         }
 
-        var assertionResults = assertions.stream()
-                .map(fs -> AssertionResult.builder()
-                        .value(fs.name())
-                        .passed(fs.value().compareTo(BigDecimal.ONE) >= 0)
-                        .reason(fs.reason())
+        if (CollectionUtils.isEmpty(rows)) {
+            return item;
+        }
+
+        var assertionResults = rows.stream()
+                .map(row -> AssertionResult.builder()
+                        .value(row.value())
+                        .passed(AssertionStatus.PASSED == row.passed())
+                        .reason(row.reason())
                         .build())
                 .toList();
 
-        boolean allPassed = assertionResults.stream().allMatch(AssertionResult::passed);
+        boolean allPassed = assertionResults.stream()
+                .allMatch(AssertionResult::passed);
 
         return item.toBuilder()
-                .feedbackScores(regularScores.isEmpty() ? null : regularScores)
                 .assertionResults(assertionResults)
                 .status(allPassed ? RunStatus.PASSED : RunStatus.FAILED)
                 .build();
@@ -69,7 +80,7 @@ class AssertionResultMapper {
             boolean hasAssertions = group.stream()
                     .anyMatch(i -> i.assertionResults() != null);
 
-            if (!hasAssertions || group.size() <= 1) {
+            if (!hasAssertions) {
                 continue;
             }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { isBase64DataUrl, getBase64SizeInMB } from "@/lib/base64";
 
 interface UseBase64InputHandlerProps {

@@ -173,7 +173,8 @@ public class DatasetsResource {
         log.info("Found datasets by '{}', sorted with: {}, count '{}' on workspaceId '{}'", criteria, sorting,
                 datasetPage.size(), workspaceId);
 
-        return Response.ok(datasetPage).build();
+        var builder = Response.ok(datasetPage);
+        return builder.build();
     }
 
     @POST
@@ -277,13 +278,19 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         Visibility visibility = requestContext.get().getVisibility();
-        String name = identifier.datasetName();
 
-        log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
-        Dataset dataset = service.findByName(workspaceId, name, visibility);
-        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
+        log.info("Finding dataset by name '{}', projectName '{}' on workspace_id '{}'", identifier.datasetName(),
+                identifier.projectName(), workspaceId);
+        Dataset dataset = service.findByName(workspaceId, identifier, visibility);
+        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
+                workspaceId);
 
-        return Response.ok(dataset).build();
+        var responseBuilder = Response.ok(dataset);
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+        return responseBuilder.build();
     }
 
     @POST
@@ -432,12 +439,14 @@ public class DatasetsResource {
         List<DatasetItemFilter> queryFilters = Optional.ofNullable((List<DatasetItemFilter>) filtersFactory.newFilters(
                 request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE)).orElse(List.of());
 
-        log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+        log.info("Streaming dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
+                request.datasetName(), request.projectName(), workspaceId);
         var items = itemService.getItems(workspaceId, request, queryFilters, visibility)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var outputStream = streamer.getOutputStream(items);
-        log.info("Streamed dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+        log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
+                request.datasetName(), request.projectName(), workspaceId);
         return outputStream;
     }
 

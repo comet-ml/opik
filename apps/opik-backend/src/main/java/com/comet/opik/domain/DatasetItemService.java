@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
@@ -808,9 +809,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 request.datasetName(), !filters.isEmpty(),
                 request.datasetVersion(), workspaceId);
 
-        return Mono
-                .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
-                .subscribeOn(Schedulers.boundedElastic())
+        return datasetService.resolveDatasetByName(
+                DatasetIdentifier.builder()
+                        .datasetName(request.datasetName())
+                        .projectName(request.projectName())
+                        .build(),
+                visibility)
                 .flatMap(dataset -> Mono.deferContextual(ctx -> {
                     // Ensure dataset is migrated if lazy migration is enabled
                     return ensureLazyMigration(dataset.id(), workspaceId)

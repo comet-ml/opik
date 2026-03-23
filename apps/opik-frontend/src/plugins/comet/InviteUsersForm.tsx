@@ -3,8 +3,8 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Send, UserPlus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
 import {
   Form,
   FormControl,
@@ -12,7 +12,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
+} from "@/ui/form";
 import useAppStore from "@/store/AppStore";
 import useUser from "@/plugins/comet/useUser";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";

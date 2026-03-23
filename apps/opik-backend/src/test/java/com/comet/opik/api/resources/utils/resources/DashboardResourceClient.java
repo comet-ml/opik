@@ -131,6 +131,33 @@ public class DashboardResourceClient {
         }
     }
 
+    public DashboardPage getProjectDashboards(UUID projectId, String apiKey, String workspaceName,
+            int page, int size, String name, List<SortingField> sorting, List<DashboardFilter> filters) {
+        var target = client.target("%s/v1/private/projects/%s/dashboards".formatted(baseURI, projectId))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (name != null) {
+            target = target.queryParam("name", name);
+        }
+
+        if (CollectionUtils.isNotEmpty(sorting)) {
+            target = target.queryParam("sorting", TestUtils.toURLEncodedQueryParam(sorting));
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            target = target.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
+        }
+
+        try (var response = target.request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DashboardPage.class);
+        }
+    }
+
     public void update(UUID id, DashboardUpdate update, String apiKey, String workspaceName, int expectedStatus) {
         try (var response = callUpdate(id, update, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);

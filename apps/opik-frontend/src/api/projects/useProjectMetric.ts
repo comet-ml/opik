@@ -3,8 +3,7 @@ import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { ProjectMetricTrace } from "@/types/projects";
 import { Filter } from "@/types/filters";
 import { processFiltersArray } from "@/lib/filters";
-import { BreakdownConfig } from "@/types/dashboard";
-import { BREAKDOWN_FIELD } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
+import { BreakdownConfig, BREAKDOWN_FIELD } from "@/types/dashboard";
 
 export enum METRIC_NAME_TYPE {
   FEEDBACK_SCORES = "FEEDBACK_SCORES",

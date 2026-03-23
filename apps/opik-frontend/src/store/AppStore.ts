@@ -2,6 +2,8 @@ import { create } from "zustand";
 import axiosInstance from "@/api/api";
 import { DEFAULT_USERNAME, isDefaultUser } from "@/constants/user";
 
+export type WorkspaceVersion = "v1" | "v2";
+
 type AppUser = {
   apiKey: string;
   userName: string;
@@ -11,6 +13,8 @@ type AppStore = {
   setUser: (user: AppUser) => void;
   activeWorkspaceName: string;
   setActiveWorkspaceName: (workspaceName: string) => void;
+  workspaceVersion: WorkspaceVersion | null;
+  setWorkspaceVersion: (version: WorkspaceVersion) => void;
 };
 
 const useAppStore = create<AppStore>((set) => ({
@@ -27,10 +31,16 @@ const useAppStore = create<AppStore>((set) => ({
       activeWorkspaceName: workspaceName,
     }));
   },
+  workspaceVersion: null,
+  setWorkspaceVersion: (version: WorkspaceVersion) =>
+    set({ workspaceVersion: version }),
 }));
 
 export const useActiveWorkspaceName = () =>
   useAppStore((state) => state.activeWorkspaceName);
+
+export const useWorkspaceVersion = () =>
+  useAppStore((state) => state.workspaceVersion);
 
 const getResolvedUserName = (userName: string, defaultUserName?: string) => {
   return isDefaultUser(userName) ? defaultUserName : userName;

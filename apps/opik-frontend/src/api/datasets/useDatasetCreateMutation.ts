@@ -3,7 +3,7 @@ import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Dataset } from "@/types/datasets";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
 type UseDatasetCreateMutationParams = {
@@ -27,7 +27,9 @@ const useDatasetCreateMutation = () => {
       const extractedId = extractIdFromLocation(headers?.location);
 
       if (!extractedId) {
-        throw new Error("Failed to create dataset: No ID returned from server");
+        throw new Error(
+          "Failed to create evaluation suite: No ID returned from server",
+        );
       }
 
       return {

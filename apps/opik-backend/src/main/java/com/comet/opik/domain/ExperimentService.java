@@ -278,10 +278,32 @@ public class ExperimentService {
                 .collect(Collectors.toSet());
     }
 
-    public Flux<Experiment> findByName(String name) {
+    public Flux<Experiment> findByName(String name, String projectName) {
         Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
-        log.info("Finding experiments by name '{}'", name);
-        return experimentDAO.findByName(name);
+        log.info("Finding experiments by name '{}' and projectName '{}'", name, projectName);
+
+        if (StringUtils.isBlank(projectName)) {
+            return experimentDAO.findByName(name);
+        }
+
+        return getProjectByName(projectName)
+                .flatMapMany(projectIdOpt -> {
+                    if (projectIdOpt.isEmpty()) {
+                        return Flux.empty();
+                    }
+                    return experimentDAO.findByName(name, projectIdOpt.get());
+                });
+    }
+
+    public Flux<Experiment> findByName(String name, UUID projectId) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(name), "Argument 'name' must not be blank");
+        log.info("Finding experiments by name '{}' and projectId '{}'", name, projectId);
+
+        if (projectId == null) {
+            return experimentDAO.findByName(name);
+        }
+
+        return experimentDAO.findByName(name, projectId);
     }
 
     @WithSpan
@@ -375,10 +397,26 @@ public class ExperimentService {
     @WithSpan
     public Flux<Experiment> get(@NonNull ExperimentStreamRequest request) {
         log.info("Getting experiments by '{}'", request);
-        return experimentDAO.get(request)
-                .collectList()
-                .flatMap(this::enrichExperiments)
-                .flatMapMany(Flux::fromIterable);
+        if (StringUtils.isBlank(request.projectName())) {
+            return experimentDAO.get(request, null)
+                    .collectList()
+                    .flatMap(this::enrichExperiments)
+                    .flatMapMany(Flux::fromIterable);
+        }
+        return getProjectByName(request.projectName())
+                .flatMapMany(projectIdOpt -> {
+                    if (projectIdOpt.isEmpty()) {
+                        return Flux.empty();
+                    }
+                    return experimentDAO.get(request, projectIdOpt.get())
+                            .collectList()
+                            .flatMap(this::enrichExperiments)
+                            .flatMapMany(Flux::fromIterable);
+                });
+    }
+
+    private Mono<Optional<UUID>> getProjectByName(String projectName) {
+        return projectService.resolveProjectId(projectName);
     }
 
     private Mono<Experiment> enrichExperiment(Mono<Experiment> experimentMono, String errorMsg) {
@@ -454,36 +492,42 @@ public class ExperimentService {
         var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
         IdGenerator.validateVersion(id, "Experiment");
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
-        return datasetService.getOrCreateDataset(experiment.datasetName())
-                .flatMap(datasetId -> {
-                    // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
-                    if (!featureFlags.isDatasetVersioningEnabled()) {
-                        return processExperimentCreation(experiment, id, name, datasetId, null);
-                    }
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return resolveProjectId(experiment, workspaceId, userName)
+                    .flatMap(resolvedExperiment -> datasetService
+                            .getOrCreateDataset(resolvedExperiment.datasetName())
+                            .flatMap(datasetId -> {
+                                // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
+                                if (!featureFlags.isDatasetVersioningEnabled()) {
+                                    return processExperimentCreation(resolvedExperiment, id, name, datasetId, null);
+                                }
 
-                    // Case 2: Feature toggle ON - resolve version and link experiment
-                    return resolveDatasetVersion(experiment, datasetId)
-                            .flatMap(resolved -> {
-                                var experimentWithVersion = experiment.toBuilder()
-                                        .datasetVersionId(resolved.versionId())
-                                        .build();
-                                return processExperimentCreation(experimentWithVersion, id, name, datasetId,
-                                        resolved.executionPolicy());
-                            })
-                            .switchIfEmpty(Mono.defer(() -> {
-                                // No version found - proceed with null dataset_version_id
-                                log.info(
-                                        "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
-                                        datasetId);
-                                var experimentWithNullVersion = experiment.toBuilder()
-                                        .datasetVersionId(null)
-                                        .build();
-                                return processExperimentCreation(experimentWithNullVersion, id, name, datasetId, null);
-                            }));
-                })
-                // If a conflict occurs, we just return the id of the existing experiment.
-                // If any other error occurs, we throw it. The event is not posted for both cases.
-                .onErrorResume(throwable -> handleCreateError(throwable, id));
+                                // Case 2: Feature toggle ON - resolve version and link experiment
+                                return resolveDatasetVersion(resolvedExperiment, datasetId)
+                                        .flatMap(resolved -> {
+                                            var experimentWithVersion = resolvedExperiment.toBuilder()
+                                                    .datasetVersionId(resolved.versionId())
+                                                    .build();
+                                            return processExperimentCreation(experimentWithVersion, id, name,
+                                                    datasetId,
+                                                    resolved.executionPolicy());
+                                        })
+                                        .switchIfEmpty(Mono.defer(() -> {
+                                            log.info(
+                                                    "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
+                                                    datasetId);
+                                            var experimentWithNullVersion = resolvedExperiment.toBuilder()
+                                                    .datasetVersionId(null)
+                                                    .build();
+                                            return processExperimentCreation(experimentWithNullVersion, id, name,
+                                                    datasetId,
+                                                    null);
+                                        }));
+                            }))
+                    .onErrorResume(throwable -> handleCreateError(throwable, id));
+        });
     }
 
     /**
@@ -584,6 +628,25 @@ public class ExperimentService {
                         return Mono.empty();
                     });
         });
+    }
+
+    private Mono<Experiment> resolveProjectId(Experiment experiment, String workspaceId, String userName) {
+        return Mono.fromCallable(() -> {
+            UUID resolvedProjectId;
+            if (StringUtils.isNotBlank(experiment.projectName()) && experiment.projectId() == null) {
+                var project = projectService.getOrCreate(workspaceId, experiment.projectName(), userName);
+                resolvedProjectId = project.id();
+            } else {
+                resolvedProjectId = experiment.projectId();
+            }
+
+            if (resolvedProjectId != null) {
+                projectService.validateProjectIdExists(resolvedProjectId, workspaceId);
+                return experiment.toBuilder().projectId(resolvedProjectId).build();
+            }
+
+            return experiment;
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private boolean hasPromptVersionLinks(Experiment experiment) {

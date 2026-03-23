@@ -12,6 +12,7 @@ export const ExperimentItemStreamRequest: core.serialization.Schema<
     limit: core.serialization.number().optional(),
     lastRetrievedId: core.serialization.property("last_retrieved_id", core.serialization.string().optional()),
     truncate: core.serialization.boolean().optional(),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
 });
 
 export declare namespace ExperimentItemStreamRequest {
@@ -20,5 +21,6 @@ export declare namespace ExperimentItemStreamRequest {
         limit?: number | null;
         last_retrieved_id?: string | null;
         truncate?: boolean | null;
+        project_name?: string | null;
     }
 }
