@@ -87,6 +87,7 @@ class EvaluationEngine:
             "scoring_key_mapping",
             "evaluator_model",
         ],
+        source="experiment",
     )
     def _compute_test_result_for_test_case(
         self,
@@ -124,6 +125,7 @@ class EvaluationEngine:
     @opik.track(  # type: ignore[attr-defined,has-type]
         name="task_span_metrics_calculation",
         ignore_arguments=["test_case_", "task_span_evaluator"],
+        source="experiment",
     )
     def _compute_scores_for_test_case_with_task_span(
         self,
@@ -164,7 +166,7 @@ class EvaluationEngine:
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
-            task = opik.track(name=name)(task)  # type: ignore[attr-defined,has-type]
+            task = opik.track(name=name, source="experiment")(task)  # type: ignore[attr-defined,has-type]
 
         item_content = item.get_content(include_id=True)
         trace_data = trace.TraceData(

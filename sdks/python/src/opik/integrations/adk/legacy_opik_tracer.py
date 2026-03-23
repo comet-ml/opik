@@ -81,7 +81,7 @@ class LegacyOpikTracer:
             return
         trace_data.init_end_time()
         if opik.is_tracing_active():
-            self._opik_client.trace(**trace_data.as_parameters)
+            self._opik_client.__internal_api__trace__(**trace_data.as_parameters)
 
     def _end_current_span(
         self,
@@ -92,21 +92,21 @@ class LegacyOpikTracer:
             return
         span_data.init_end_time()
         if opik.is_tracing_active():
-            self._opik_client.span(**span_data.as_parameters)
+            self._opik_client.__internal_api__span__(**span_data.as_parameters)
 
     def _start_span(self, span_data: span.SpanData) -> None:
         self._context_storage.add_span_data(span_data)
         self._opik_created_spans.add(span_data.id)
 
         if self._opik_client.config.log_start_trace_span and opik.is_tracing_active():
-            self._opik_client.span(**span_data.as_start_parameters)
+            self._opik_client.__internal_api__span__(**span_data.as_start_parameters)
 
     def _start_trace(self, trace_data: trace.TraceData) -> None:
         self._context_storage.set_trace_data(trace_data)
         self._current_trace_created_by_opik_tracer.set(trace_data.id)
 
         if self._opik_client.config.log_start_trace_span and opik.is_tracing_active():
-            self._opik_client.trace(**trace_data.as_start_parameters)
+            self._opik_client.__internal_api__trace__(**trace_data.as_start_parameters)
 
     def _set_current_context_data(self, value: SpanOrTraceData) -> None:
         if isinstance(value, span.SpanData):

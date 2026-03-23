@@ -63,7 +63,7 @@ def start_as_current_trace(
 
     client = opik_client.get_client_cached()
     if client.config.log_start_trace_span:
-        client.trace(**trace_data.as_start_parameters)
+        client.__internal_api__trace__(**trace_data.as_start_parameters)
 
     try:
         yield trace_data
@@ -79,7 +79,7 @@ def start_as_current_trace(
     finally:
         try:
             client = opik_client.get_client_cached()
-            client.trace(**trace_data.init_end_time().as_parameters)
+            client.__internal_api__trace__(**trace_data.init_end_time().as_parameters)
 
             if flush:
                 client.flush()

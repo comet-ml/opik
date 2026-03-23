@@ -231,6 +231,7 @@ def test_evaluate__happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -264,8 +265,10 @@ def test_evaluate__happyflow(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         ),
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -275,6 +278,7 @@ def test_evaluate__happyflow(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -306,6 +310,7 @@ def test_evaluate__happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -337,8 +342,10 @@ def test_evaluate__happyflow(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         )
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -348,6 +355,7 @@ def test_evaluate__happyflow(
                     value=0.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -476,6 +484,7 @@ def test_evaluate_with_scoring_key_mapping(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -511,8 +520,10 @@ def test_evaluate_with_scoring_key_mapping(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         ),
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -522,6 +533,7 @@ def test_evaluate_with_scoring_key_mapping(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -555,6 +567,7 @@ def test_evaluate_with_scoring_key_mapping(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -590,8 +603,10 @@ def test_evaluate_with_scoring_key_mapping(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         )
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -601,6 +616,7 @@ def test_evaluate_with_scoring_key_mapping(
                     value=0.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -782,8 +798,10 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="experiment",
             ),
         ],
+        source="experiment",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
@@ -1365,6 +1383,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1375,6 +1394,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[ANY_BUT_NONE],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1384,6 +1404,7 @@ def test_evaluate_prompt_happyflow(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -1421,6 +1442,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1431,6 +1453,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[ANY_BUT_NONE],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1440,6 +1463,7 @@ def test_evaluate_prompt_happyflow(
                     value=0.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -1575,6 +1599,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1628,6 +1653,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                                 SpanModel(
                                     id=ANY_BUT_NONE,
@@ -1649,10 +1675,13 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                             ],
+                            source="experiment",
                         ),
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1663,6 +1692,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     value=2.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -1694,6 +1724,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1745,6 +1776,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                                 SpanModel(
                                     id=ANY_BUT_NONE,
@@ -1766,10 +1798,13 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                             ],
+                            source="experiment",
                         )
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1780,6 +1815,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -2056,6 +2092,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=1.0,
             )
         ],
+        source="experiment",
         spans=ANY_BUT_NONE,  # We don't need to verify span details for this test
     )
 
@@ -2078,6 +2115,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=0.0,
             )
         ],
+        source="experiment",
         spans=ANY_BUT_NONE,  # We don't need to verify span details for this test
     )
 
@@ -2228,6 +2266,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=1.0,
             )
         ],
+        source="experiment",
         spans=ANY_LIST,  # We don't need to verify span details for this test
     )
 
@@ -2253,6 +2292,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=0.0,
             )
         ],
+        source="experiment",
         spans=ANY_LIST,  # We don't need to verify span details for this test
     )
 
