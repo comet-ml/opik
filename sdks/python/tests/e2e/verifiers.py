@@ -713,7 +713,7 @@ def verify_dataset_filtered_items(
     filter_string: str,
     expected_count: int,
     expected_inputs: Set[str],
-    project_name: Optional[str],
+    project_name: Optional[str] = None,
 ) -> None:
     """
     Verifies that filtering dataset items with filter_string returns the expected results.
