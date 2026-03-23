@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "@/v1/router";
-import { ThemeProvider } from "@/v1/theme-provider";
+import { ThemeProvider } from "@/contexts/theme-provider";
 import { Toaster } from "@/ui/toaster";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";

@@ -47,7 +47,7 @@ import DatasetTypeCell from "@/v1/pages/EvaluationSuitesPage/DatasetTypeCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const EvaluationSuiteRowActionsCell = createDatasetRowActionsCell({

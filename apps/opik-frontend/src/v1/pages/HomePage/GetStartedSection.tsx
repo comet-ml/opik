@@ -11,7 +11,7 @@ import SideDialog from "@/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/v1/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import AddExperimentDialog from "@/v1/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import { SheetTitle } from "@/ui/sheet";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";

@@ -13,7 +13,7 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import PromptTagsList from "@/v1/pages/PromptPage/PromptTagsList";
 import { Separator } from "@/ui/separator";
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import ExperimentsTab from "./ExperimentsTab/ExperimentsTab";

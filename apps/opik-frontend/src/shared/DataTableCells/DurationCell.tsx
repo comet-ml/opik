@@ -10,7 +10,7 @@ import { formatDuration } from "@/lib/date";
 import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
-} from "@/v1/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
+} from "@/shared/DataTableCells/VerticallySplitCellWrapper";
 
 const DurationCell = <TData,>(context: CellContext<TData, number>) => {
   const value = context.getValue();

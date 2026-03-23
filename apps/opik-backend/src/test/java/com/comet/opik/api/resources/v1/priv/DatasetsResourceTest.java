@@ -10489,6 +10489,37 @@ class DatasetsResourceTest {
             assertDataset(page.content().getFirst(), projectDataset);
         }
 
+        @Test
+        @DisplayName("Put dataset items with project_name implicitly creates dataset scoped to that project")
+        void putDatasetItemsWithProjectNameScopesDatasetToProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String datasetName = "dataset-" + UUID.randomUUID();
+
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .id(null)
+                    .build();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetName(datasetName)
+                    .projectName(projectName)
+                    .items(List.of(item))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch, workspaceName, apiKey);
+
+            var dataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
+
+            assertThat(dataset.projectId()).isEqualTo(projectId);
+        }
+
         private void assertDataset(Dataset actual, Dataset expected) {
             assertThat(actual)
                     .usingRecursiveComparison()

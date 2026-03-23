@@ -48,7 +48,7 @@ import { cn } from "@/lib/utils";
 import {
   STICKY_ATTRIBUTE_VERTICAL,
   STICKY_DIRECTION,
-} from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+} from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import useCustomRowClick from "@/shared/DataTable/useCustomRowClick";
 

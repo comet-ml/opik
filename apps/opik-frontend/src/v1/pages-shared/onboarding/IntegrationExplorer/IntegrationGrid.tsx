@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Button } from "@/ui/button";
 import { BookOpen, Plus } from "lucide-react";
-import { useTheme } from "@/v1/theme-provider";
+import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import IntegrationCard from "@/v1/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import RequestIntegrationDialog from "@/v1/pages-shared/onboarding/IntegrationExplorer/components/RequestIntegrationDialog";

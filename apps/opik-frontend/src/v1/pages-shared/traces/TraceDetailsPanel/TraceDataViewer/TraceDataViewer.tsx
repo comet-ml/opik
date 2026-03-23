@@ -17,7 +17,7 @@ import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
-import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
+import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
@@ -35,7 +35,7 @@ import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDataViewerActionsPanel from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
-import UserCommentHoverList from "@/v1/pages-shared/traces/UserComment/UserCommentHoverList";
+import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,
@@ -46,7 +46,7 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import { detectLLMMessages } from "@/shared/PrettyLLMMessage/llmMessages";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 

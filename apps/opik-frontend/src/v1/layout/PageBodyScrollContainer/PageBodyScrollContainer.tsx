@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import { STICKY_ATTRIBUTE_VERTICAL } from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
-import { PageBodyScrollContainerContext } from "@/v1/layout/PageBodyScrollContainer/usePageBodyScrollContainer";
+import { STICKY_ATTRIBUTE_VERTICAL } from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
+import { PageBodyScrollContainerContext } from "@/contexts/usePageBodyScrollContainer";
 import { TABLE_WRAPPER_ATTRIBUTE } from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 
 type PageBodyScrollContainerProps = {

@@ -21,7 +21,7 @@ import usePromptById from "@/api/prompts/usePromptById";
 import PromptsSelectBox from "@/v1/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/v1/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
-import PromptImprovementDialog from "@/shared/PromptImprovementDialog/PromptImprovementDialog";
+import PromptImprovementDialog from "@/v1/pages-shared/llm/PromptImprovementDialog/PromptImprovementDialog";
 import {
   LLMPromptConfigsType,
   COMPOSED_PROVIDER_TYPE,

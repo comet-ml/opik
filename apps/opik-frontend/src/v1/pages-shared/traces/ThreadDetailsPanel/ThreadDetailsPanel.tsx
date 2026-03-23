@@ -36,7 +36,7 @@ import { Trace } from "@/types/traces";
 import { Filter } from "@/types/filters";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
-import { manageToolFilter } from "@/lib/traces";
+import { manageToolFilter } from "@/v1/pages-shared/traces/spanTypeFilter";
 import useAppStore from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -82,7 +82,7 @@ import AddToDropdown from "@/v1/pages-shared/traces/AddToDropdown/AddToDropdown"
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import AttachmentsList from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { useThreadMedia } from "@/hooks/useThreadMedia";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
