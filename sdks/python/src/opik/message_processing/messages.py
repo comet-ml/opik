@@ -81,6 +81,7 @@ class CreateTraceMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
     last_updated_at: Optional[datetime.datetime]
+    source: str
 
     message_type = "CreateTraceMessage"
 
@@ -115,6 +116,7 @@ class UpdateTraceMessage(BaseMessage):
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
+    source: str
 
     message_type = "UpdateTraceMessage"
 
@@ -154,6 +156,7 @@ class CreateSpanMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
     last_updated_at: Optional[datetime.datetime]
+    source: str
 
     message_type = "CreateSpanMessage"
 
@@ -192,6 +195,7 @@ class UpdateSpanMessage(BaseMessage):
     provider: Optional[Union[LLMProvider, str]]
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
+    source: str
 
     message_type = "UpdateSpanMessage"
 

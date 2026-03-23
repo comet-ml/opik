@@ -84,6 +84,7 @@ from ..types import (
     FeedbackScoreDict,
     LLMProvider,
     SpanType,
+    TraceSource,
 )
 from ..file_upload import upload_manager
 
@@ -292,6 +293,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
+        source: TraceSource = "sdk",
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
@@ -339,6 +341,7 @@ class Opik:
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            source=source,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
@@ -368,6 +371,7 @@ class Opik:
             message_streamer=self._streamer,
             project_name=project_name,
             url_override=self._config.url_override,
+            source=source,
         )
 
     def copy_traces(
@@ -458,6 +462,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
         attachments: Optional[List[Attachment]] = None,
+        source: TraceSource = "sdk",
     ) -> span.Span:
         """
         Create and log a new span.
@@ -517,6 +522,7 @@ class Opik:
                 error_info=error_info,
                 thread_id=None,
                 last_updated_at=datetime_helpers.local_timestamp(),
+                source=source,
             )
             self._streamer.put(create_trace_message)
 
@@ -549,6 +555,7 @@ class Opik:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=source,
         )
 
     def update_span(
@@ -568,6 +575,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
         attachments: Optional[List[Attachment]] = None,
+        source: TraceSource = "sdk",
     ) -> None:
         """
         Update the attributes of an existing span.
@@ -630,6 +638,7 @@ class Opik:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=source,
         )
 
     def update_trace(
@@ -643,6 +652,7 @@ class Opik:
         tags: Optional[List[Any]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
+        source: TraceSource = "sdk",
     ) -> None:
         """
         Update the trace attributes.
@@ -692,6 +702,7 @@ class Opik:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            source=source,
         )
 
     def log_spans_feedback_scores(

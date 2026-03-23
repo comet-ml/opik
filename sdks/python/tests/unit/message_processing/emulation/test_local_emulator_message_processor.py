@@ -189,6 +189,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             error_info=None,
             thread_id="thread_123",
             last_updated_at=self.test_datetime,
+            source="sdk",
         )
 
         with patch.object(processor, "_dispatch_message") as mock_dispatch:
@@ -213,6 +214,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             error_info=None,
             thread_id="thread_123",
             last_updated_at=self.test_datetime,
+            source="sdk",
         )
 
         with patch.object(processor, "_dispatch_message") as mock_dispatch:
@@ -237,6 +239,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         with patch.object(
@@ -268,6 +271,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             error_info=None,
             thread_id="thread_123",
             last_updated_at=self.test_datetime,
+            source="sdk",
         )
 
         message_2 = messages.CreateTraceMessage(
@@ -283,6 +287,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             error_info=None,
             thread_id=None,
             last_updated_at=self.test_datetime,
+            source="sdk",
         )
         # mark as the second delivery attempt
         message_2.delivery_attempts = 2
@@ -314,6 +319,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             error_info=None,
             thread_id="thread_123",
             last_updated_at=self.test_datetime,
+            source="sdk",
         )
         retry_message = messages.CreateTraceMessage(
             trace_id="test_trace_1",
@@ -328,6 +334,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             error_info=None,
             thread_id="thread_123",
             last_updated_at=self.test_datetime,
+            source="sdk",
         )
         retry_message.delivery_attempts = 2
 
@@ -364,6 +371,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id="thread_1",
             last_updated_at=self.test_datetime,
+            source="sdk",
         )
 
         self.processor.process(trace_message)
@@ -389,6 +397,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
 
         span1_message = messages.CreateSpanMessage(
@@ -410,6 +419,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         span2_message = messages.CreateSpanMessage(
@@ -431,6 +441,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         self.processor.process(trace_message)
@@ -517,6 +528,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
         orphan_span_message = messages.CreateSpanMessage(
             span_id="span_orphan",
@@ -537,6 +549,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         self.processor.process(trace_message)
@@ -562,6 +575,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
 
         parent_span_message = messages.CreateSpanMessage(
@@ -583,6 +597,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         child_span_message = messages.CreateSpanMessage(
@@ -604,6 +619,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         self.processor.process(trace_message)
@@ -690,6 +706,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         trace2_message = messages.CreateTraceMessage(
@@ -705,6 +722,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         self.processor.process(trace1_message)
@@ -730,6 +748,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         # Create batch feedback score messages for trace
@@ -795,6 +814,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         span_message = messages.CreateSpanMessage(
@@ -816,6 +836,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         # Create batch feedback score messages for span
@@ -887,6 +908,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         span_message = messages.CreateSpanMessage(
@@ -908,6 +930,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         # Trace feedback scores
@@ -976,6 +999,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         empty_trace_feedback_batch = messages.AddTraceFeedbackScoresBatchMessage(
@@ -1011,6 +1035,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         # First batch of trace feedback scores
@@ -1160,6 +1185,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
 
         # Create batch span write objects
@@ -1290,6 +1316,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
 
         parent_span_write = span_write.SpanWrite(
@@ -1417,6 +1444,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         empty_traces_batch = messages.CreateTraceBatchMessage(batch=[])
@@ -1449,6 +1477,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         # Batch trace message
@@ -1489,6 +1518,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         # Batch span message
