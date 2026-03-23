@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.Experiment;
@@ -106,7 +107,8 @@ class OptimizationsResourceTest {
     public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
             "lastUpdatedAt", "createdBy", "lastUpdatedBy", "studioConfig", "datasetName",
             "baselineObjectiveScore", "bestObjectiveScore", "baselineDuration", "bestDuration",
-            "baselineCost", "bestCost", "totalOptimizationCost", "experimentScores"};
+            "baselineCost", "bestCost", "totalOptimizationCost", "experimentScores",
+            "projectName"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -1669,6 +1671,172 @@ class OptimizationsResourceTest {
             assertThat(afterCompletedCompletedPage.content()).hasSize(1);
             assertThat(afterCompletedCompletedPage.content().get(0).id()).isEqualTo(optId);
             assertThat(afterCompletedCompletedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+        }
+    }
+
+    @Nested
+    @DisplayName("Project-scoped dataset creation")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ProjectScopedDatasetCreation {
+
+        @Test
+        @DisplayName("Create optimization with project_name implicitly creates dataset scoped to that project and returns project_id")
+        void createOptimizationWithProjectNameScopesDatasetToProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String datasetName = "dataset-" + UUID.randomUUID();
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetName(datasetName)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            var dataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
+
+            assertThat(dataset.projectId()).isEqualTo(projectId);
+
+            var fetchedOptimization = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+            assertThat(fetchedOptimization.projectId()).isEqualTo(projectId);
+        }
+    }
+
+    @Nested
+    @DisplayName("Find project optimizations")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindProjectOptimizations {
+
+        @Test
+        @DisplayName("when getting optimizations by project, then return only that project's optimizations")
+        void whenGettingOptimizationsByProjectId__thenReturnOnlyProjectOptimizations() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var optimizations = List.of(
+                    optimizationResourceClient.createPartialOptimization().projectName(projectName).build(),
+                    optimizationResourceClient.createPartialOptimization().projectName(projectName).build());
+            var ids = optimizations.stream()
+                    .map(o -> optimizationResourceClient.create(o, apiKey, workspaceName))
+                    .toList();
+            var expected = List.of(
+                    optimizations.get(0).toBuilder().id(ids.get(0)).projectId(projectId).build(),
+                    optimizations.get(1).toBuilder().id(ids.get(1)).projectId(projectId).build());
+
+            // Create optimizations in a different project — must not appear
+            var otherProjectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
+            optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization().projectName(otherProjectName).build(),
+                    apiKey, workspaceName);
+
+            var page = optimizationResourceClient.findByProject(
+                    projectId, apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+            assertThat(page.total()).isEqualTo(2);
+            assertThat(page.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(expected.reversed());
+        }
+
+        @Test
+        @DisplayName("when filtering by name, then return only matching optimizations")
+        void whenFilteringByName__thenReturnMatchingOptimizations() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var matchingName = "matching-" + UUID.randomUUID();
+            var matched = optimizationResourceClient.createPartialOptimization()
+                    .name(matchingName).projectName(projectName).build();
+            var matchedId = optimizationResourceClient.create(matched, apiKey, workspaceName);
+            matched = matched.toBuilder().id(matchedId).projectId(projectId).build();
+
+            // Different name — must not appear
+            optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization().projectName(projectName).build(),
+                    apiKey, workspaceName);
+
+            var page = optimizationResourceClient.findByProject(
+                    projectId, apiKey, workspaceName, 1, 10, null, matchingName, null, 200);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(List.of(matched));
+        }
+
+        @Test
+        @DisplayName("when project has no optimizations, then return empty page")
+        void whenProjectHasNoOptimizations__thenReturnEmptyPage() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var page = optimizationResourceClient.findByProject(
+                    projectId, apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+            assertThat(page.total()).isEqualTo(0);
+            assertThat(page.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("when filtering by datasetId, then return only optimizations with that dataset")
+        void whenFilteringByDatasetId__thenReturnMatchingOptimizations() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var matched = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset.id()).datasetName(dataset.name()).projectName(projectName).build();
+            var matchedId = optimizationResourceClient.create(matched, apiKey, workspaceName);
+            matched = matched.toBuilder().id(matchedId).projectId(projectId).build();
+
+            // Different dataset — must not appear
+            optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization().projectName(projectName).build(),
+                    apiKey, workspaceName);
+
+            var page = optimizationResourceClient.findByProject(
+                    projectId, apiKey, workspaceName, 1, 10, dataset.id(), null, null, 200);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(List.of(matched));
         }
     }
 }

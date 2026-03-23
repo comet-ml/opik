@@ -2,7 +2,7 @@ import React from "react";
 import { create } from "zustand";
 
 import WorkspacePreloader from "@/shared/WorkspacePreloader/WorkspacePreloader";
-import { GoogleColabCardCoreProps } from "@/v1/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
+import { GoogleColabCardCoreProps } from "@/types/shared";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";

@@ -35,6 +35,8 @@ public class OptimizationResourceClient {
     public Optimization.OptimizationBuilder createPartialOptimization() {
         return podamFactory.manufacturePojo(Optimization.class).toBuilder()
                 .status(OptimizationStatus.INITIALIZED)
+                .projectId(null)
+                .projectName(null)
                 .numTrials(0L)
                 .feedbackScores(null)
                 .experimentScores(null)
@@ -181,6 +183,37 @@ public class OptimizationResourceClient {
             }
 
             return null;
+        }
+    }
+
+    public Optimization.OptimizationPage findByProject(UUID projectId, String apiKey, String workspaceName,
+            int page, int size, UUID datasetId, String name, Boolean datasetDeleted, int expectedStatus) {
+        WebTarget webTarget = client
+                .target("%s/v1/private/projects/%s/optimizations".formatted(baseURI, projectId))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("dataset_id", datasetId);
+        }
+
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+
+        if (datasetDeleted != null) {
+            webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            return response.readEntity(Optimization.OptimizationPage.class);
         }
     }
 

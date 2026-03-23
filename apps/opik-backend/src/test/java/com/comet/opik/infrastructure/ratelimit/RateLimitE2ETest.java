@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.ratelimit;
 
-import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
@@ -19,6 +18,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -574,7 +574,7 @@ class RateLimitE2ETest {
                 .toList();
 
         var datasetItems = IntStream.range(0, (int) LIMIT)
-                .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                         .experimentItems(null)
                         .build())
                 .toList();

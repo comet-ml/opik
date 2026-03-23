@@ -85,7 +85,7 @@ import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableState
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/v1/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/v1/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v1/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
@@ -96,7 +96,7 @@ import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { isAgentConfigurationMetadata } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
@@ -109,10 +109,10 @@ import {
   DetailsActionSectionValue,
 } from "@/v1/pages-shared/traces/DetailsActionSection";
 import { GuardrailResult } from "@/types/guardrails";
-import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
+import { getSpanTypeFilterConfig } from "@/v1/pages-shared/traces/spanTypeFilter";
 import SpanTypeCell from "@/shared/DataTableCells/SpanTypeCell";
 import { Filter, FilterOperator } from "@/types/filters";
-import { useTruncationEnabled } from "@/v1/server-sync-provider";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import LogsTypeToggle from "@/v1/pages/TracesPage/LogsTab/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 

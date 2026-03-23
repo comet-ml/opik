@@ -82,6 +82,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 dataset_id,
                 name,
                 workspace_id,
+                project_id,
                 objective_name,
                 status,
                 metadata,
@@ -95,6 +96,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 :dataset_id,
                 :name,
                 :workspace_id,
+                :project_id,
                 :objective_name,
                 :status,
                 :metadata,
@@ -117,6 +119,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                     <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                     <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, dataset_id, id
                 )
@@ -387,6 +390,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                     <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                     <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, dataset_id, id
                 )
@@ -419,13 +423,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
             )
             SELECT
                 id,
                 dataset_id,
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
+                project_id,
                 objective_name,
                 <if(status)> :status <else> status <endif> as status,
                 metadata,
@@ -443,13 +448,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
             )
             SELECT
                 id,
                 dataset_id,
                 name as name,
                 workspace_id,
+                project_id,
                 objective_name,
                 status as status,
                 metadata,
@@ -697,6 +703,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .filter(Boolean.TRUE::equals)
                 .ifPresent(studioOnly -> template.add("studio_only", "true"));
 
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
+
         Optional.ofNullable(searchCriteria.filters())
                 .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.OPTIMIZATION))
                 .ifPresent(optimizationFilters -> template.add("filters", optimizationFilters));
@@ -720,6 +729,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
 
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> statement.bind("project_id", projectId.toString()));
+
         Optional.ofNullable(searchCriteria.filters())
                 .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.OPTIMIZATION));
 
@@ -735,6 +747,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("id", optimization.id())
                 .bind("dataset_id", optimization.datasetId())
                 .bind("name", optimization.name())
+                .bind("project_id", optimization.projectId() != null ? optimization.projectId().toString() : "")
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
                 .bind("metadata", getStringOrDefault(optimization.metadata()));
@@ -786,10 +799,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 }
             }
 
+            String projectIdStr = row.get("project_id", String.class);
+            UUID projectId = StringUtils.isNotEmpty(projectIdStr) ? UUID.fromString(projectIdStr) : null;
+
             return Optimization.builder()
                     .id(row.get("id", UUID.class))
                     .name(row.get("name", String.class))
                     .datasetId(row.get("dataset_id", UUID.class))
+                    .projectId(projectId)
                     .objectiveName(row.get("objective_name", String.class))
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))

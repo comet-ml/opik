@@ -1,8 +1,7 @@
 import React from "react";
 import useUser from "./useUser";
-import GoogleColabCardCore, {
-  GoogleColabCardCoreProps,
-} from "@/v1/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
+import GoogleColabCardCore from "@/shared/GoogleColabCardCore/GoogleColabCardCore";
+import { GoogleColabCardCoreProps } from "@/types/shared";
 
 const GoogleColabCard: React.FC<GoogleColabCardCoreProps> = (props) => {
   const { data: user } = useUser();

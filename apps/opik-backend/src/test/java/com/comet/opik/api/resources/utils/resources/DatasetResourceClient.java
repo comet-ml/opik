@@ -68,6 +68,21 @@ public class DatasetResourceClient {
                 .toList();
     }
 
+    public static DatasetItem buildDatasetItem(PodamFactory factory) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .experimentItems(null)
+                .runSummariesByExperiment(null)
+                .datasetId(null)
+                .build();
+    }
+
+    public static DatasetItemBatch buildDatasetItemBatch(PodamFactory factory) {
+        return factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                .projectId(null)
+                .projectName(null)
+                .build();
+    }
+
     public Response callCreateDataset(Dataset dataset, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
