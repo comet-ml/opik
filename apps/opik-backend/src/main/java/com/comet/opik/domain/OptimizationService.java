@@ -131,22 +131,7 @@ class OptimizationServiceImpl implements OptimizationService {
     }
 
     private Mono<Optional<UUID>> resolveProjectId(Optimization optimization) {
-
-        if (optimization.projectId() != null) {
-            return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
-                projectService.validateProjectIdExists(optimization.projectId(), ctx.get(RequestContext.WORKSPACE_ID));
-                return Optional.of(optimization.projectId());
-            }).subscribeOn(Schedulers.boundedElastic()));
-        }
-
-        if (StringUtils.isBlank(optimization.projectName())) {
-            return Mono.just(Optional.empty());
-        }
-
-        return Mono.deferContextual(ctx -> Mono.fromCallable(
-                () -> Optional.of(projectService.getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
-                        optimization.projectName(), ctx.get(RequestContext.USER_NAME)).id()))
-                .subscribeOn(Schedulers.boundedElastic()));
+        return projectService.resolveProjectIdOrCreate(optimization.projectId(), optimization.projectName());
     }
 
     /**

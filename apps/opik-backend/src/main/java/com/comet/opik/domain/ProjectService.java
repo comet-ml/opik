@@ -21,6 +21,7 @@ import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -103,6 +104,8 @@ public interface ProjectService {
     Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames);
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+
+    Mono<Optional<UUID>> resolveProjectIdOrCreate(@Nullable UUID projectId, @Nullable String projectName);
 
     Mono<UUID> resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
 
@@ -527,6 +530,25 @@ class ProjectServiceImpl implements ProjectService {
             return Mono.fromCallable(() -> findProjectIdByName(workspaceId, projectName))
                     .subscribeOn(Schedulers.boundedElastic());
         });
+    }
+
+    @Override
+    public Mono<Optional<UUID>> resolveProjectIdOrCreate(@Nullable UUID projectId, @Nullable String projectName) {
+        if (projectId != null) {
+            return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
+                validateProjectIdExists(projectId, ctx.get(RequestContext.WORKSPACE_ID));
+                return Optional.of(projectId);
+            }).subscribeOn(Schedulers.boundedElastic()));
+        }
+
+        if (StringUtils.isBlank(projectName)) {
+            return Mono.just(Optional.empty());
+        }
+
+        return Mono.deferContextual(ctx -> Mono.fromCallable(
+                () -> Optional.of(getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
+                        projectName, ctx.get(RequestContext.USER_NAME)).id()))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     @Override
