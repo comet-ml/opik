@@ -9,9 +9,6 @@ on:
       - 'apps/opik-backend/src/main/java/**/*.java'
       - 'apps/opik-backend/src/main/resources/openapi_template.yml'
       - 'apps/opik-backend/pom.xml'
-  pull_request:
-    paths:
-      - '.github/workflows/sdks_generate_openapi_spec_and_fern_code.yml'
   workflow_dispatch: # Allows manual trigger
 
 concurrency:
@@ -164,7 +161,7 @@ jobs:
     needs: [update-open-api-spec-and-fern-code, resolve-trigger-context]
     if: >-
       !failure() &&
-      (github.event_name == 'push' || github.event_name == 'pull_request') &&
+      github.event_name == 'push' &&
       needs.update-open-api-spec-and-fern-code.outputs.pr_url != ''
 
     steps:
@@ -253,9 +250,6 @@ jobs:
               }]
             }
             ' > payload.json
-
-          # Skip actual Slack post during PR testing — will be removed in a follow-up commit
-          exit 0
 
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST \
