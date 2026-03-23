@@ -129,6 +129,7 @@ class ThreadsEvaluationEngine:
             name="evaluation_task",
             created_by="evaluation",
             project_name=eval_project_name,
+            source="experiment",
         )
 
         with opik_context.trace_context(

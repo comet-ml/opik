@@ -172,6 +172,7 @@ class EvaluationEngine:
             name=EVALUATION_TASK_NAME,
             created_by="evaluation",
             project_name=self._project_name,
+            source="experiment",
         )
 
         execution_policy_dict = None
@@ -322,6 +323,7 @@ class EvaluationEngine:
                 created_by="evaluation",
                 error_info=task_trace.error_info,
                 thread_id=task_trace.thread_id,
+                source="experiment",
             ),
             client=self._client,
         ):

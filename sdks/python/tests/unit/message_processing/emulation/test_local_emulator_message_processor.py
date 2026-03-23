@@ -482,6 +482,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                     error_info=None,
                     total_cost=None,
                     last_updated_at=None,
+                    source="sdk",
                 ),
                 models.SpanModel(
                     id="span_2",
@@ -502,12 +503,14 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                     error_info=None,
                     total_cost=None,
                     last_updated_at=None,
+                    source="sdk",
                 ),
             ],
             feedback_scores=[],
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
 
         assert_helpers.assert_equal(
@@ -672,6 +675,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                             error_info=None,
                             total_cost=None,
                             last_updated_at=None,
+                            source="sdk",
                         )
                     ],
                     feedback_scores=[],
@@ -680,12 +684,14 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                     error_info=None,
                     total_cost=None,
                     last_updated_at=None,
+                    source="sdk",
                 )
             ],
             feedback_scores=[],
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
 
         assert_helpers.assert_equal(
@@ -1149,6 +1155,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                 error_info=None,
                 thread_id="thread_1",
                 last_updated_at=None,
+                source="sdk",
             ),
             models.TraceModel(
                 id="trace_2",
@@ -1165,6 +1172,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                 error_info=None,
                 thread_id="thread_2",
                 last_updated_at=None,
+                source="sdk",
             ),
         ]
 
@@ -1271,6 +1279,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                     error_info=None,
                     total_cost=0.005,
                     last_updated_at=None,
+                    source="sdk",
                 ),
                 models.SpanModel(
                     id="span_2",
@@ -1291,12 +1300,14 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                     error_info=None,
                     total_cost=0.02,
                     last_updated_at=None,
+                    source="sdk",
                 ),
             ],
             feedback_scores=[],
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
 
         assert_helpers.assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])
@@ -1412,6 +1423,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                             error_info=None,
                             total_cost=None,
                             last_updated_at=None,
+                            source="sdk",
                         )
                     ],
                     feedback_scores=[],
@@ -1420,12 +1432,14 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                     error_info=None,
                     total_cost=None,
                     last_updated_at=None,
+                    source="sdk",
                 )
             ],
             feedback_scores=[],
             error_info=None,
             thread_id=None,
             last_updated_at=self.later_datetime,
+            source="sdk",
         )
         assert_helpers.assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])
 
@@ -1584,12 +1598,14 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                         error_info=None,
                         total_cost=None,
                         last_updated_at=None,
+                        source="sdk",
                     )
                 ],
                 feedback_scores=[],
                 error_info=None,
                 thread_id=None,
                 last_updated_at=None,
+                source="sdk",
             ),
             models.TraceModel(
                 id="trace_2",
@@ -1621,12 +1637,14 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
                         error_info=None,
                         total_cost=None,
                         last_updated_at=None,
+                        source="sdk",
                     )
                 ],
                 feedback_scores=[],
                 error_info=None,
                 thread_id=None,
                 last_updated_at=None,
+                source="sdk",
             ),
         ]
         assert_helpers.assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees)

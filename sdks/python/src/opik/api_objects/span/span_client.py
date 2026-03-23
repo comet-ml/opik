@@ -223,6 +223,7 @@ class Span:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=self.source,
         )
 
     def log_feedback_score(

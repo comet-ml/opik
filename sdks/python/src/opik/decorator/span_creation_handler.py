@@ -82,6 +82,7 @@ def create_span_respecting_context(
             parent_span_id=current_span_data.id,
             trace_id=current_span_data.trace_id,
         )
+        span_data.source = current_span_data.source
 
         return SpanCreationResult(None, span_data, should_process_span_data=True)
 
@@ -104,6 +105,7 @@ def create_span_respecting_context(
             parent_span_id=None,
             trace_id=current_trace_data.id,
         )
+        span_data.source = current_trace_data.source
 
         return SpanCreationResult(None, span_data, should_process_span_data=True)
 
