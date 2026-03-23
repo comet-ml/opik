@@ -54,10 +54,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const isAllSelected =
     selectedRuleIds === null || selectedRuleIds.length === rules.length;
 
+  const selectedRuleIdsSet = useMemo(
+    () => new Set(selectedRuleIds ?? []),
+    [selectedRuleIds],
+  );
+
   const selectedRules = useMemo(() => {
     if (!selectedRuleIds) return rules;
-    return rules.filter((rule) => selectedRuleIds.includes(rule.id));
-  }, [rules, selectedRuleIds]);
+    return rules.filter((rule) => selectedRuleIdsSet.has(rule.id));
+  }, [rules, selectedRuleIds, selectedRuleIdsSet]);
 
   const filteredRules = useMemo(() => {
     if (!search) return rules;
@@ -74,7 +79,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         onSelectionChange(newSelection.length > 0 ? newSelection : []);
       } else {
         // Some items selected or none selected
-        const isSelected = selectedRuleIds.includes(ruleId);
+        const isSelected = selectedRuleIdsSet.has(ruleId);
         if (isSelected) {
           const newSelection = selectedRuleIds.filter((id) => id !== ruleId);
           // If deselecting the last one, set to empty array (none selected)
@@ -88,7 +93,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         }
       }
     },
-    [selectedRuleIds, rules, onSelectionChange],
+    [selectedRuleIds, selectedRuleIdsSet, rules, onSelectionChange],
   );
 
   const handleSelectAll = useCallback(
@@ -129,9 +134,9 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const isSelected = useCallback(
     (ruleId: string) => {
       if (isAllSelected) return true;
-      return selectedRuleIds?.includes(ruleId) || false;
+      return selectedRuleIdsSet.has(ruleId);
     },
-    [isAllSelected, selectedRuleIds],
+    [isAllSelected, selectedRuleIdsSet],
   );
 
   const hasNoRules = rules.length === 0;
