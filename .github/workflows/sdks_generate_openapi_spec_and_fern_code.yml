@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     permissions:
-      pull-requests: read
+      contents: read
     outputs:
       trigger_author: ${{ steps.get-author.outputs.author }}
       originating_pr_url: ${{ steps.find-pr.outputs.pr_url }}
@@ -49,6 +49,8 @@ jobs:
     needs: resolve-trigger-context
     if: ${{ !failure() }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 15
     outputs:
       pr_url: ${{ steps.create-pr.outputs.pull-request-url }}
@@ -158,6 +160,7 @@ jobs:
   notify-slack:
     name: Notify #code-review
     runs-on: ubuntu-latest
+    permissions: {}
     needs: [update-open-api-spec-and-fern-code, resolve-trigger-context]
     if: >-
       !failure() &&
@@ -250,6 +253,9 @@ jobs:
               }]
             }
             ' > payload.json
+
+          # Skip actual Slack post during PR testing — will be removed in a follow-up commit
+          exit 0
 
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST \
