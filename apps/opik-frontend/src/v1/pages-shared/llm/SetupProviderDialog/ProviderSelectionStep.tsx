@@ -1,6 +1,10 @@
 import React from "react";
-import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
-import ProviderGrid, { ProviderGridOption } from "./ProviderGrid";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_TYPE,
+  ProviderGridOption,
+} from "@/types/providers";
+import ProviderGrid from "./ProviderGrid";
 
 interface ProviderSelectionStepProps {
   providerOptions: ProviderGridOption[];

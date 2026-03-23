@@ -16,3 +16,7 @@ export const WorkspacePreferenceParam =
     WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
     WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
   ]);
+
+export const WORKSPACE_PREFERENCES_QUERY_PARAMS = {
+  EDIT_PREFERENCE: "editPreference",
+} as const;

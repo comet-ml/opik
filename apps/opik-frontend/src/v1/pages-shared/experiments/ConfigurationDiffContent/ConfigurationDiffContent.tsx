@@ -12,8 +12,7 @@ import {
 } from "@/lib/configuration-renderer";
 import DiffSection from "./DiffSection";
 import { formatValue } from "./configDiffUtils";
-
-export type ConfigurationType = Record<string, unknown>;
+import { ConfigurationType } from "@/types/shared";
 
 type DiffEntry = {
   key: string;

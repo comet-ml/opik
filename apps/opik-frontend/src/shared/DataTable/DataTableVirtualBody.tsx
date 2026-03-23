@@ -5,7 +5,7 @@ import last from "lodash/last";
 
 import { TableBody } from "@/ui/table";
 import { DataTableBodyProps } from "@/shared/DataTable/DataTableBody";
-import usePageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/usePageBodyScrollContainer";
+import usePageBodyScrollContainer from "@/contexts/usePageBodyScrollContainer";
 import { cn } from "@/lib/utils";
 
 const ROW_BORDER_SIZE = 1;

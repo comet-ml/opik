@@ -10,7 +10,7 @@ import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/v1/pages-shared/traces/TraceMessages/TraceMessages";
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import { manageToolFilter } from "@/lib/traces";
+import { manageToolFilter } from "@/v1/pages-shared/traces/spanTypeFilter";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes

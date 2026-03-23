@@ -4,8 +4,10 @@ import { Link } from "@tanstack/react-router";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Button } from "@/ui/button";
 import useAppStore from "@/store/AppStore";
-import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/v1/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
-import { WORKSPACE_PREFERENCE_TYPE } from "@/v1/pages/ConfigurationPage/WorkspacePreferencesTab/types";
+import {
+  WORKSPACE_PREFERENCES_QUERY_PARAMS,
+  WORKSPACE_PREFERENCE_TYPE,
+} from "@/constants/workspace-preferences";
 
 type TruncationConfigPopoverProps = {
   children: React.ReactNode;

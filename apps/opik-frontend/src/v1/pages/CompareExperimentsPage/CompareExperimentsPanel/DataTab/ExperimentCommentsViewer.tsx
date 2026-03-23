@@ -5,7 +5,7 @@ import useUpdateTraceCommentMutation from "@/api/traces/useUpdateTraceCommentMut
 import { CommentItems } from "@/types/comment";
 import { MessageSquareMore } from "lucide-react";
 import ExpandableSection from "@/shared/ExpandableSection/ExpandableSection";
-import CommentsSection from "@/v1/pages-shared/traces/UserComment/CommentsSection";
+import CommentsSection from "@/shared/UserComment/CommentsSection";
 
 export type ExperimentCommentsViewerProps = {
   comments?: CommentItems;

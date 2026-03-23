@@ -4,7 +4,10 @@ import { SPAN_TYPE } from "@/types/traces";
 import { DropdownOption } from "@/types/shared";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import { SelectItem } from "@/ui/select";
-import BaseTraceDataTypeIcon from "@/v1/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
+import { SPAN_TYPE_FILTER_COLUMN } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
+import { Filter } from "@/types/filters";
+import { createFilter } from "@/lib/filters";
 
 export const getSpanTypeOptions = (isGuardrailsEnabled: boolean) => [
   { value: SPAN_TYPE.general, label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general] },
@@ -45,3 +48,40 @@ export const getSpanTypeFilterConfig = (isGuardrailsEnabled: boolean) => ({
     },
   },
 });
+
+/**
+ * Predicate to check if a filter is a tool span filter.
+ */
+const isToolFilter = (filter: Filter): boolean => {
+  return (
+    filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
+    filter.value === SPAN_TYPE.tool
+  );
+};
+
+export const manageToolFilter = (
+  currentFilters: Filter[] | null | undefined,
+  shouldFilter: boolean,
+): Filter[] => {
+  const filters = currentFilters || [];
+  const hasToolFilter = filters.some(isToolFilter);
+
+  if (shouldFilter && !hasToolFilter) {
+    return [
+      ...filters,
+      createFilter({
+        id: SPAN_TYPE_FILTER_COLUMN.id,
+        field: SPAN_TYPE_FILTER_COLUMN.id,
+        type: SPAN_TYPE_FILTER_COLUMN.type,
+        operator: "=",
+        value: SPAN_TYPE.tool,
+      }),
+    ];
+  }
+
+  if (!shouldFilter && hasToolFilter) {
+    return filters.filter((filter) => !isToolFilter(filter));
+  }
+
+  return filters;
+};

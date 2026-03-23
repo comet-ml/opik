@@ -1,7 +1,6 @@
 import React from "react";
-import GoogleColabCardCore, {
-  GoogleColabCardCoreProps,
-} from "./GoogleColabCardCore";
+import GoogleColabCardCore from "@/shared/GoogleColabCardCore/GoogleColabCardCore";
+import { GoogleColabCardCoreProps } from "@/types/shared";
 import usePluginsStore from "@/store/PluginsStore";
 
 const GoogleColabCard: React.FC<GoogleColabCardCoreProps> = (props) => {

@@ -15,7 +15,7 @@ import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
 import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import {
   useAddExportJob,
   useSetPanelExpanded,

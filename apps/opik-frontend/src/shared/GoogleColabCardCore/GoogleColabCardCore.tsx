@@ -2,9 +2,8 @@ import { Button } from "@/ui/button";
 import { ExternalLink } from "lucide-react";
 import colabLogo from "/images/colab-logo.png";
 
-export type GoogleColabCardCoreProps = {
-  link: string;
-};
+import { GoogleColabCardCoreProps } from "@/types/shared";
+
 const GoogleColabCardCore: React.FC<GoogleColabCardCoreProps> = ({ link }) => {
   return (
     <div className="flex flex-1 flex-col justify-between gap-4 rounded-md border bg-background p-6">

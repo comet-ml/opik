@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import ExperimentItemsTab from "@/v1/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 import ConfigurationTab from "@/v1/pages/CompareExperimentsPage/ConfigurationTab/ConfigurationTab";
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import ExperimentFeedbackScoresTab from "@/v1/pages/CompareExperimentsPage/ExperimentFeedbackScoresTab/ExperimentFeedbackScoresTab";
 import ExperimentAssertionsTab from "@/v1/pages/CompareExperimentsPage/ExperimentAssertionsTab/ExperimentAssertionsTab";
 import ExperimentInsightsTab from "@/v1/pages/CompareExperimentsPage/ExperimentInsightsTab/ExperimentInsightsTab";

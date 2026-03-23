@@ -3,7 +3,7 @@ import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
 import { getIsParentFeedbackScoreRow } from "../utils";
-import BaseTraceDataTypeIcon from "@/v1/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import { SPAN_TYPE } from "@/types/traces";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 

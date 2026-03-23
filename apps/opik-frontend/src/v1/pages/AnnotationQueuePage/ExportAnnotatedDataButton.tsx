@@ -29,7 +29,7 @@ import {
 import { prettifyMessage } from "@/lib/traces";
 import { JsonNode } from "@/types/shared";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const MAX_EXPORT_ITEMS = 15000;

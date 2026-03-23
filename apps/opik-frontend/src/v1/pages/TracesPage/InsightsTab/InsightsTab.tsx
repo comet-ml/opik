@@ -16,7 +16,7 @@ import {
   useDashboardStore,
   selectSetRuntimeConfig,
 } from "@/store/DashboardStore";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import {
   PROJECT_TEMPLATE_LIST,
   DEPRECATED_PROJECT_METRICS_ID,

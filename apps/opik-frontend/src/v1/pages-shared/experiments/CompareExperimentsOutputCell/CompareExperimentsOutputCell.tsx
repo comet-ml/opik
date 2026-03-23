@@ -12,7 +12,7 @@ import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
 import VerticallySplitCellWrapper, {
   CustomMeta,
-} from "@/v1/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
+} from "@/shared/DataTableCells/VerticallySplitCellWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import { Button } from "@/ui/button";

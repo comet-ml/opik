@@ -1,7 +1,7 @@
 import { CellContext } from "@tanstack/react-table";
 import { Button } from "@/ui/button";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import { WorkspacePreference } from "@/v1/pages/ConfigurationPage/WorkspacePreferencesTab/types";
+import { WorkspacePreference } from "@/constants/workspace-preferences";
 
 type CustomMeta = {
   onEdit: (row: WorkspacePreference) => void;

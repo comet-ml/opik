@@ -24,7 +24,7 @@ import { DropdownOption } from "@/types/shared";
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { cn } from "@/lib/utils";
 import FeedbackScoreConditions, {

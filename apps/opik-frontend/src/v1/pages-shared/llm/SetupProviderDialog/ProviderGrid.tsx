@@ -1,18 +1,13 @@
 import React from "react";
 import { Label } from "@/ui/label";
 import { Tag } from "@/ui/tag";
-import { COMPOSED_PROVIDER_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_TYPE,
+  ProviderGridOption,
+} from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import { cn } from "@/lib/utils";
-
-export interface ProviderGridOption {
-  value: COMPOSED_PROVIDER_TYPE;
-  label: string;
-  providerType: PROVIDER_TYPE;
-  configuredId?: string;
-  isConfigured?: boolean;
-  description?: string;
-}
 
 interface ProviderGridProps {
   options: ProviderGridOption[];

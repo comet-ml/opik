@@ -21,8 +21,8 @@ import {
   COLUMN_METADATA_ID,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { getSpanTypeFilterConfig } from "@/v1/pages-shared/traces/spanTypeFilter";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
   TRACE_FILTER_COLUMNS,

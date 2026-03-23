@@ -15,9 +15,8 @@ import {
   flattenConfig,
   makeSkipKey,
 } from "@/lib/configuration-renderer";
-import ConfigurationDiffContent, {
-  ConfigurationType,
-} from "@/v1/pages-shared/experiments/ConfigurationDiffContent/ConfigurationDiffContent";
+import ConfigurationDiffContent from "@/v1/pages-shared/experiments/ConfigurationDiffContent/ConfigurationDiffContent";
+import { ConfigurationType } from "@/types/shared";
 import {
   isRecord,
   formatPrimitive,

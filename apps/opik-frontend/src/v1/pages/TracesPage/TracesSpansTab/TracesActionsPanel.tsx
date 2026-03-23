@@ -13,7 +13,7 @@ import AddTagDialog from "@/v1/pages-shared/traces/AddTagDialog/AddTagDialog";
 import EvaluateButton from "@/v1/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v1/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
 import { usePermissions } from "@/contexts/PermissionsContext";

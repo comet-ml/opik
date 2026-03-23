@@ -1,6 +1,6 @@
 import { ColumnPinningState } from "@tanstack/react-table";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { WorkspacePreference } from "./types";
+import { WorkspacePreference } from "@/constants/workspace-preferences";
 
 export const WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT = "PT15M";
 export const WORKSPACE_PREFERENCES_DEFAULT_TRUNCATION_TOGGLE = true;
@@ -24,7 +24,3 @@ export const WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING: ColumnPinningState =
     left: [COLUMN_NAME_ID],
     right: [],
   };
-
-export const WORKSPACE_PREFERENCES_QUERY_PARAMS = {
-  EDIT_PREFERENCE: "editPreference",
-} as const;

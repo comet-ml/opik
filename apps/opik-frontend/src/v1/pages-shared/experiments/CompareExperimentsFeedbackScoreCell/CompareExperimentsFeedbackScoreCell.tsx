@@ -4,7 +4,7 @@ import { CellContext, TableMeta } from "@tanstack/react-table";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   CustomMeta,
-} from "@/v1/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
+} from "@/shared/DataTableCells/VerticallySplitCellWrapper";
 import { isAggregatedScore, getTrialAvgTooltip } from "@/lib/trials";
 import { MessageSquareMore } from "lucide-react";
 import FeedbackScoreReasonTooltip from "@/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";

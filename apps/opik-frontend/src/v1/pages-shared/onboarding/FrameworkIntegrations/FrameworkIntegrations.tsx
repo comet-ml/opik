@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Button } from "@/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import { ExternalLink } from "lucide-react";
-import { useTheme } from "@/v1/theme-provider";
+import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import ApiKeyCard from "../ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "../GoogleColabCard/GoogleColabCard";

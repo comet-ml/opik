@@ -15,21 +15,21 @@ import dspyLogoUrl from "/images/integrations/dspy.png";
 import geminiLogoUrl from "/images/integrations/gemini.png";
 import groqLogoUrl from "/images/integrations/groq.png";
 
-import functionDecoratorsCode from "./integration-scripts/FunctionDecorators.py?raw";
-import openAiCode from "./integration-scripts/OpenAI.py?raw";
-import anthropicCode from "./integration-scripts/Anthropic.py?raw";
-import bedrockCode from "./integration-scripts/Bedrock.py?raw";
-import geminiCode from "./integration-scripts/Gemini.py?raw";
-import langChainCode from "./integration-scripts/LangChain.py?raw";
-import langGraphCode from "./integration-scripts/LangGraph.py?raw";
-import llamaIndexCode from "./integration-scripts/LlamaIndex.py?raw";
-import haystackCode from "./integration-scripts/Haystack.py?raw";
-import liteLLMCode from "./integration-scripts/LiteLLM.py?raw";
-import ragasCode from "./integration-scripts/Ragas.py?raw";
-import groqCode from "./integration-scripts/Groq.py?raw";
-import dspyCode from "./integration-scripts/DSPy.py?raw";
+import functionDecoratorsCode from "@/integrations/integration-scripts/FunctionDecorators.py?raw";
+import openAiCode from "@/integrations/integration-scripts/OpenAI.py?raw";
+import anthropicCode from "@/integrations/integration-scripts/Anthropic.py?raw";
+import bedrockCode from "@/integrations/integration-scripts/Bedrock.py?raw";
+import geminiCode from "@/integrations/integration-scripts/Gemini.py?raw";
+import langChainCode from "@/integrations/integration-scripts/LangChain.py?raw";
+import langGraphCode from "@/integrations/integration-scripts/LangGraph.py?raw";
+import llamaIndexCode from "@/integrations/integration-scripts/LlamaIndex.py?raw";
+import haystackCode from "@/integrations/integration-scripts/Haystack.py?raw";
+import liteLLMCode from "@/integrations/integration-scripts/LiteLLM.py?raw";
+import ragasCode from "@/integrations/integration-scripts/Ragas.py?raw";
+import groqCode from "@/integrations/integration-scripts/Groq.py?raw";
+import dspyCode from "@/integrations/integration-scripts/DSPy.py?raw";
 
-import { integrationLogsMap } from "./integration-logs";
+import { integrationLogsMap } from "@/integrations/integration-logs";
 
 export type FrameworkIntegration = {
   label: string;
