@@ -800,7 +800,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             }
 
             String projectIdStr = row.get("project_id", String.class);
-            UUID projectId = StringUtils.isNotEmpty(projectIdStr) ? UUID.fromString(projectIdStr) : null;
+            UUID projectId = StringUtils.isNotBlank(projectIdStr) ? UUID.fromString(projectIdStr) : null;
 
             return Optimization.builder()
                     .id(row.get("id", UUID.class))

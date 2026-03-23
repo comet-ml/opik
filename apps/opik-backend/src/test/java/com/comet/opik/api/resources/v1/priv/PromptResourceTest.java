@@ -2867,12 +2867,8 @@ class PromptResourceTest {
                     .projectName(projectName)
                     .build();
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(retrieveRequest))) {
-
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
                         .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
@@ -2909,12 +2905,8 @@ class PromptResourceTest {
                     .projectName(projectName)
                     .build();
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(retrieveRequest))) {
-
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
             }

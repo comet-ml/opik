@@ -1657,8 +1657,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when retrieving dataset by name with project_name filter, then return dataset")
-        void getDatasetByIdentifier__whenProjectNameFilter__thenReturnDataset() {
+        @DisplayName("when retrieving dataset by name with project_name filter, then return dataset and no X-Opik-Deprecation header")
+        void getDatasetByIdentifier__whenProjectNameFilter__thenReturnDatasetAndNoDeprecationHeader() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -1679,92 +1679,39 @@ class DatasetsResourceTest {
                     .projectName(projectName)
                     .build();
 
-            var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, apiKey, workspaceName);
-            assertThat(actualEntity).usingRecursiveComparison()
-                    .ignoringFields(DATASET_IGNORED_FIELDS)
-                    .isEqualTo(dataset.toBuilder().projectId(projectId).build());
-        }
-
-        @Test
-        @DisplayName("when retrieving dataset by name with non-existing project_name, then return dataset without project scope")
-        void getDatasetByIdentifier__whenNonExistingProjectName__thenReturnDatasetWithoutProjectScope() {
-            var dataset = buildDataset().toBuilder()
-                    .id(null)
-                    .build();
-
-            createAndAssert(dataset);
-
-            var identifier = DatasetIdentifier.builder()
-                    .datasetName(dataset.name())
-                    .projectName("nonexistent-project-" + UUID.randomUUID())
-                    .build();
-
-            var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, API_KEY, TEST_WORKSPACE);
-            assertThat(actualEntity).usingRecursiveComparison()
-                    .ignoringFields(DATASET_IGNORED_FIELDS)
-                    .isEqualTo(dataset);
-        }
-
-        @Test
-        @DisplayName("when retrieving dataset by name with non-existing project_name, then return X-Opik-Deprecation header")
-        void getDatasetByIdentifier__whenNonExistingProjectName__thenReturnDeprecationHeader() {
-            var dataset = buildDataset().toBuilder()
-                    .id(null)
-                    .build();
-
-            createAndAssert(dataset);
-
-            var identifier = DatasetIdentifier.builder()
-                    .datasetName(dataset.name())
-                    .projectName("nonexistent-project-" + UUID.randomUUID())
-                    .build();
-
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(identifier))) {
-
+            try (var actualResponse = datasetResourceClient.callGetDatasetByIdentifier(identifier, apiKey,
+                    workspaceName)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
-                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
-                                dataset.name()));
+                assertThat(actualResponse.readEntity(Dataset.class)).usingRecursiveComparison()
+                        .ignoringFields(DATASET_IGNORED_FIELDS)
+                        .isEqualTo(dataset.toBuilder().projectId(projectId).build());
+                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
             }
         }
 
         @Test
-        @DisplayName("when retrieving dataset by name with matching project_name, then no X-Opik-Deprecation header")
-        void getDatasetByIdentifier__whenMatchingProjectName__thenNoDeprecationHeader() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = "project-" + UUID.randomUUID();
-            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
+        @DisplayName("when retrieving dataset by name with non-existing project_name, then return dataset without project scope and X-Opik-Deprecation header")
+        void getDatasetByIdentifier__whenNonExistingProjectName__thenReturnDatasetWithoutProjectScopeAndDeprecationHeader() {
             var dataset = buildDataset().toBuilder()
                     .id(null)
-                    .projectId(projectId)
                     .build();
 
-            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+            createAndAssert(dataset);
 
             var identifier = DatasetIdentifier.builder()
                     .datasetName(dataset.name())
-                    .projectName(projectName)
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(identifier))) {
-
+            try (var actualResponse = datasetResourceClient.callGetDatasetByIdentifier(identifier, API_KEY,
+                    TEST_WORKSPACE)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+                assertThat(actualResponse.readEntity(Dataset.class)).usingRecursiveComparison()
+                        .ignoringFields(DATASET_IGNORED_FIELDS)
+                        .isEqualTo(dataset);
+                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                                dataset.name()));
             }
         }
 
