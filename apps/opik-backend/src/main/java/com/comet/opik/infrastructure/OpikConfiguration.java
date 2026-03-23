@@ -123,5 +123,8 @@ public class OpikConfiguration extends JobConfiguration {
     private ExperimentDenormalizationConfig experimentDenormalization = new ExperimentDenormalizationConfig();
 
     @Valid @NotNull @JsonProperty
+    private LlmModelRegistryConfig llmModelRegistry = new LlmModelRegistryConfig();
+
+    @Valid @NotNull @JsonProperty
     private OllieStateConfig ollieStateConfig = new OllieStateConfig();
 }

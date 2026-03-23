@@ -1072,3 +1072,8 @@ datasetVersioningMigration:
   # Description: Job execution timeout in seconds for the items_total migration
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
+
+llmModelRegistry:
+  defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
+  localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
+  refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}
