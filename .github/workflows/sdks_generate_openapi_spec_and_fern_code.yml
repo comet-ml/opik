@@ -19,6 +19,8 @@ jobs:
   update-open-api-spec-and-fern-code:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
 
     outputs:
       pr_url: ${{ steps.create-pr.outputs.pull-request-url }}
