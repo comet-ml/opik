@@ -13,6 +13,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
@@ -156,6 +157,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull DatasetVersioningMigrationService migrationService;
+    private final @NonNull ProjectService projectService;
     private final @NonNull @Config OpikConfiguration config;
 
     @Override
@@ -274,28 +276,40 @@ class DatasetItemServiceImpl implements DatasetItemService {
         }).then();
     }
 
+    private Mono<UUID> resolveProjectId(DatasetItemBatch batch) {
+        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> Optional.ofNullable(batch.projectId())
+                .map(projectId -> projectService.get(projectId, ctx.get(RequestContext.WORKSPACE_ID)))
+                .or(() -> Optional.ofNullable(batch.projectName())
+                        .map(projectName -> projectService.getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
+                                projectName, ctx.get(RequestContext.USER_NAME))))
+                .map(Project::id)
+                .orElse(null)))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
     private Mono<UUID> getDatasetId(DatasetItemBatch batch) {
-        return Mono.deferContextual(ctx -> {
-            String userName = ctx.get(RequestContext.USER_NAME);
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+        return resolveProjectId(batch)
+                .flatMap(projectId -> getDatasetIdForProject(batch, projectId))
+                .switchIfEmpty(Mono.defer(() -> getDatasetIdForProject(batch, null)));
+    }
 
-            return Mono.fromCallable(() -> {
+    private Mono<UUID> getDatasetIdForProject(DatasetItemBatch batch, UUID projectId) {
+        if (batch.datasetId() == null) {
+            return datasetService.getOrCreateDataset(batch.datasetName(), projectId);
+        }
 
-                if (batch.datasetId() == null) {
-                    return datasetService.getOrCreate(workspaceId, batch.datasetName(), userName);
-                }
+        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
 
-                Dataset dataset = datasetService.findById(batch.datasetId(), workspaceId, visibility);
+            Dataset dataset = datasetService.findById(batch.datasetId(),
+                    ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.VISIBILITY));
 
-                if (dataset == null) {
-                    throw newConflict(
-                            "workspace_name from dataset item batch and dataset_id from item does not match");
-                }
+            if (dataset == null) {
+                throw newConflict(
+                        "workspace_name from dataset item batch and dataset_id from item does not match");
+            }
 
-                return dataset.id();
-            }).subscribeOn(Schedulers.boundedElastic());
-        });
+            return dataset.id();
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Throwable failWithError(String error) {
@@ -1665,30 +1679,32 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch) {
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
 
-            if (!featureFlags.isDatasetVersioningEnabled()) {
-                // Legacy: save to legacy table
-                log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
-                return verifyDatasetExistsAndSave(batch).then(Mono.empty());
-            }
+        if (!featureFlags.isDatasetVersioningEnabled()) {
+            // Legacy: save to legacy table
+            log.info("Saving items to legacy table for dataset '{}'", batch.datasetId());
+            return verifyDatasetExistsAndSave(batch).then(Mono.empty());
+        }
 
-            UUID datasetId = resolveDatasetId(batch, workspaceId, userName);
-            UUID batchGroupId = batch.batchGroupId();
+        return getDatasetId(batch)
+                .flatMap(datasetId -> Mono.deferContextual(ctx -> {
 
-            if (batchGroupId == null) {
-                // No batch_group_id: mutate the latest version (backwards compatibility)
-                log.info("Mutating latest version for dataset '{}' (no batch_group_id)", datasetId);
-                return mutateLatestVersionWithInsert(batch, datasetId, workspaceId, userName);
-            }
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
 
-            // batch_group_id provided: create new version with batch grouping
-            log.info("Creating version with batch grouping for dataset '{}', batch_group_id: '{}'", datasetId,
-                    batchGroupId);
-            return handleGroupedInsertion(batchGroupId, batch, datasetId, workspaceId, userName);
-        });
+                    UUID batchGroupId = batch.batchGroupId();
+
+                    if (batchGroupId == null) {
+                        // No batch_group_id: mutate the latest version (backwards compatibility)
+                        log.info("Mutating latest version for dataset '{}' (no batch_group_id)", datasetId);
+                        return mutateLatestVersionWithInsert(batch, datasetId, workspaceId, userName);
+                    }
+
+                    // batch_group_id provided: create new version with batch grouping
+                    log.info("Creating version with batch grouping for dataset '{}', batch_group_id: '{}'", datasetId,
+                            batchGroupId);
+                    return handleGroupedInsertion(batchGroupId, batch, datasetId, workspaceId, userName);
+                }));
     }
 
     /**
@@ -1853,19 +1869,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * This delegates to either createFirstVersion or createVersionWithDelta, then associates
      * the batch_group_id with the created version.
      */
-
-    private UUID resolveDatasetId(DatasetItemBatch batch, String workspaceId, String userName) {
-        if (batch.datasetId() == null) {
-            return datasetService.getOrCreate(workspaceId, batch.datasetName(), userName);
-        }
-
-        Dataset dataset = datasetService.findById(batch.datasetId(), workspaceId, null);
-        if (dataset == null) {
-            throw new NotFoundException("Dataset not found: '%s'".formatted(batch.datasetId()));
-        }
-        return dataset.id();
-    }
-
     private Mono<DatasetVersion> saveItemsWithVersion(DatasetItemBatch batch, UUID datasetId, UUID batchGroupId) {
         if (batch.items() == null || batch.items().isEmpty()) {
             log.debug("Empty batch, skipping version creation for dataset '{}'", datasetId);

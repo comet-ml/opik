@@ -4,6 +4,7 @@ import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.AssertionScoreAverage;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemChanges;
@@ -5942,9 +5943,9 @@ class ExperimentsResourceTest {
         }
 
         private UUID createDatasetItem(String workspaceName, String apiKey) {
-            var item = podamFactory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(podamFactory);
 
-            var batch = podamFactory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(podamFactory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -9774,5 +9775,36 @@ class ExperimentsResourceTest {
             resultBuilder.projectId(projectId);
         }
         return resultBuilder.build();
+    }
+
+    @Nested
+    @DisplayName("Project-scoped dataset creation")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ProjectScopedDatasetCreation {
+
+        @Test
+        @DisplayName("Create experiment with project_name implicitly creates dataset scoped to that project")
+        void createExperimentWithProjectNameScopesDatasetToProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String datasetName = "dataset-" + UUID.randomUUID();
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .projectName(projectName)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var dataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
+
+            assertThat(dataset.projectId()).isEqualTo(projectId);
+        }
     }
 }

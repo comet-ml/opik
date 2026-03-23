@@ -174,7 +174,7 @@ class DatasetVersionResourceTest {
     private void createDatasetItems(UUID datasetId, int count) {
         List<DatasetItem> itemsList = IntStream.range(0, count)
                 .mapToObj(i -> {
-                    DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                    DatasetItem item = DatasetResourceClient.buildDatasetItem(factory);
                     Map<String, JsonNode> data = Map.of(
                             "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
                             "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
@@ -218,7 +218,7 @@ class DatasetVersionResourceTest {
     private void createDatasetItemsWithoutBatchGroupId(UUID datasetId, int count) {
         List<DatasetItem> itemsList = IntStream.range(0, count)
                 .mapToObj(i -> {
-                    DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                    DatasetItem item = DatasetResourceClient.buildDatasetItem(factory);
                     Map<String, JsonNode> data = Map.of(
                             "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
                             "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
@@ -756,7 +756,7 @@ class DatasetVersionResourceTest {
             var dataset2Id = createDataset(UUID.randomUUID().toString());
 
             // Create identical items for both datasets
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .data(Map.of("key", JsonUtils.getJsonNodeFromString("\"value\"")))
                     .build();
@@ -2029,35 +2029,35 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(UUID.randomUUID().toString());
 
             // Create items with specific tags for filtering
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .traceId(null)
                     .spanId(null)
                     .tags(Set.of("filter-me", "tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .traceId(null)
                     .spanId(null)
                     .tags(Set.of("filter-me", "tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .traceId(null)
                     .spanId(null)
                     .tags(Set.of("keep-me", "tag3"))
                     .build();
-            var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item4 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .traceId(null)
                     .spanId(null)
                     .tags(Set.of("filter-me", "tag4"))
                     .build();
-            var item5 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item5 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .source(DatasetItemSource.MANUAL)
                     .traceId(null)
@@ -2139,7 +2139,7 @@ class DatasetVersionResourceTest {
             // Given - Create dataset with items having different tags
             var datasetId = createDataset(UUID.randomUUID().toString());
 
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .datasetItemId(null)
                     .source(DatasetItemSource.MANUAL)
@@ -2147,7 +2147,7 @@ class DatasetVersionResourceTest {
                     .spanId(null)
                     .tags(Set.of("tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .datasetItemId(null)
                     .source(DatasetItemSource.MANUAL)
@@ -2155,7 +2155,7 @@ class DatasetVersionResourceTest {
                     .spanId(null)
                     .tags(Set.of("tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .datasetItemId(null)
                     .source(DatasetItemSource.MANUAL)
@@ -2450,7 +2450,7 @@ class DatasetVersionResourceTest {
 
             // Create dataset items with custom fields different from trace input/output
             List<DatasetItem> itemsList = List.of(
-                    factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                             .id(null)
                             .source(DatasetItemSource.MANUAL)
                             .traceId(null)
@@ -2984,7 +2984,7 @@ class DatasetVersionResourceTest {
 
             var items = IntStream.range(0, 2)
                     .mapToObj(i -> {
-                        DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                        DatasetItem item = DatasetResourceClient.buildDatasetItem(factory);
                         Map<String, JsonNode> data = Map.of(
                                 "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
                                 "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));

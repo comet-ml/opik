@@ -695,7 +695,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -743,7 +743,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -793,7 +793,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -840,7 +840,7 @@ class DatasetsResourceTest {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -889,9 +889,9 @@ class DatasetsResourceTest {
                     .visibility(visibility)
                     .build());
 
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1186,7 +1186,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -1234,7 +1234,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1283,7 +1283,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1331,7 +1331,7 @@ class DatasetsResourceTest {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1383,9 +1383,9 @@ class DatasetsResourceTest {
                     .visibility(visibility)
                     .build());
 
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -3644,15 +3644,15 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("Success")
         void createDatasetItem() {
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .build();
 
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2))
                     .datasetId(null)
                     .build();
@@ -3663,9 +3663,9 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when item id is null, then return no content and create item")
         void createDatasetItem__whenItemIdIsNull__thenReturnNoContentAndCreateItem() {
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3695,25 +3695,26 @@ class DatasetsResourceTest {
         public Stream<Arguments> invalidDatasetItemBatches() {
             return Stream.of(
                     arguments(
-                            factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                            DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                                     .items(List.of()).build(),
                             "items size must be between 1 and 1000"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .items(null).build(),
                             "items must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .datasetName(null)
                             .datasetId(null)
                             .build(),
                             "The request body must provide either a dataset_name or a dataset_id"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .datasetName("")
                             .datasetId(null)
                             .build(),
                             "datasetName must not be blank"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .datasetId(null)
-                            .items(IntStream.range(0, 1001).mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .items(IntStream.range(0, 1001)
+                                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                                     .toList())
                             .build(),
                             "items size must be between 1 and 1000"));
@@ -3723,7 +3724,7 @@ class DatasetsResourceTest {
         @DisplayName("when dataset id not found, then return 404")
         void createDatasetItem__whenDatasetIdNotFound__thenReturn404() {
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class);
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -3742,11 +3743,11 @@ class DatasetsResourceTest {
         @DisplayName("when dataset item id not valid, then return bad request")
         void createDatasetItem__whenDatasetItemIdIsNotValid__thenReturnBadRequest() {
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(UUID.randomUUID())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3768,9 +3769,9 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when dataset item already exists, then return no content and update item")
         void createDatasetItem__whenDatasetItemAlreadyExists__thenReturnNoContentAndUpdateItem() {
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3779,7 +3780,7 @@ class DatasetsResourceTest {
 
             getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
 
-            var newItem = factory.manufacturePojo(DatasetItem.class)
+            var newItem = DatasetResourceClient.buildDatasetItem(factory)
                     .toBuilder()
                     .id(item.id())
                     .build();
@@ -3794,11 +3795,11 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when dataset item support null values for data fields, then return no content and create item")
         void createDatasetItem__whenDatasetItemSupportNullValuesForDataFields__thenReturnNoContentAndCreateItem() {
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(Map.of("test", NullNode.getInstance()))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3832,7 +3833,7 @@ class DatasetsResourceTest {
         void createDatasetItem__whenDatasetMultipleItems__thenReturnNoContentAndCreateItems() {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -3844,82 +3845,82 @@ class DatasetsResourceTest {
 
         public Stream<Arguments> invalidDatasetItems() {
             return Stream.of(
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .data(null)
                                     .build()))
                             .build(),
                             "items[0].data must not be empty"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .data(Map.of())
                                     .build()))
                             .build(),
                             "items[0].data must not be empty"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(null)
                                     .build()))
                             .build(),
                             "items[0].source must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.MANUAL)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .traceId(null)
                                     .build()))
                             .build(),
                             "items[0].source when it is manual, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.MANUAL)
                                     .spanId(null)
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is manual, trace_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SDK)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .traceId(null)
                                     .build()))
                             .build(),
                             "items[0].source when it is sdk, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SDK)
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .spanId(null)
                                     .build()))
                             .build(),
                             "items[0].source when it is sdk, trace_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SPAN)
                                     .spanId(null)
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is span, span_id must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SPAN)
                                     .traceId(null)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is span, trace_id must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.TRACE)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is trace, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.TRACE)
                                     .spanId(null)
                                     .traceId(null)
@@ -3939,14 +3940,14 @@ class DatasetsResourceTest {
             UUID id = createAndAssert(dataset);
 
             var items = IntStream.range(0, 1000)
-                    .mapToObj(__ -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .mapToObj(__ -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(id)
                     .datasetName(null)
@@ -3973,13 +3974,13 @@ class DatasetsResourceTest {
                     .projectName(UUID.randomUUID().toString())
                     .build(), API_KEY, TEST_WORKSPACE);
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .traceId(traceId)
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .build();
@@ -4022,13 +4023,13 @@ class DatasetsResourceTest {
                     .projectName(projectName)
                     .build(), API_KEY, TEST_WORKSPACE);
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .spanId(spanId)
                     .traceId(traceId)
                     .source(DatasetItemSource.SPAN)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .build();
@@ -4065,10 +4066,10 @@ class DatasetsResourceTest {
         @DisplayName("Success")
         void getDatasetItemById() {
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -4108,10 +4109,10 @@ class DatasetsResourceTest {
         void streamDataItems__whenStreamingDatasetItems__thenReturnItemsSortedByCreatedDate() {
 
             var items = IntStream.range(0, 10)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4133,10 +4134,10 @@ class DatasetsResourceTest {
         void streamDataItems__whenStreamingDatasetItemsWithLastRetrievedId__thenReturnItemsSortedByCreatedDate() {
 
             var items = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4389,7 +4390,7 @@ class DatasetsResourceTest {
 
             // Create 3000 items total, but insert in batches of 1000 (max batch size)
             var allItems = IntStream.range(0, 3000)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
@@ -4401,7 +4402,7 @@ class DatasetsResourceTest {
             // Insert items in 3 batches of 1000 each
             for (int i = 0; i < 3; i++) {
                 var batchItems = allItems.subList(i * 1000, (i + 1) * 1000);
-                var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                         .datasetName(datasetName)
                         .items(batchItems)
                         .datasetId(null)
@@ -4435,10 +4436,10 @@ class DatasetsResourceTest {
         @DisplayName("when streaming dataset items without filters, then return all items")
         void streamDataItems__whenStreamingWithoutFilters__thenReturnAllItems() {
             var items = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4472,10 +4473,10 @@ class DatasetsResourceTest {
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             var items = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(dataset.name())
@@ -4509,10 +4510,10 @@ class DatasetsResourceTest {
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             var items = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(dataset.name())
@@ -4535,10 +4536,10 @@ class DatasetsResourceTest {
         @DisplayName("when streaming dataset items with non-existing project_name, then return items without project scope")
         void streamDataItems__whenNonExistingProjectName__thenReturnItemsWithoutProjectScope() {
             var items = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4635,14 +4636,14 @@ class DatasetsResourceTest {
         @DisplayName("Success: patch different fields")
         void patchDatasetItem(String scenarioName, java.util.function.Function<DatasetItem, DatasetItem> patchBuilder) {
             // Create initial item with SPAN source
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .source(DatasetItemSource.SPAN)
                     .traceId(GENERATOR.generate())
                     .spanId(GENERATOR.generate())
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4714,11 +4715,11 @@ class DatasetsResourceTest {
         @DisplayName("Success: add tags to dataset item")
         void patchDatasetItem__whenAddingTags__thenSucceed() {
             // Create initial item without tags
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4747,11 +4748,11 @@ class DatasetsResourceTest {
         void patchDatasetItem__whenUpdatingTags__thenSucceed() {
             // Create initial item with tags
             var initialTags = Set.of("tag1", "tag2");
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(initialTags)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4780,11 +4781,11 @@ class DatasetsResourceTest {
         void patchDatasetItem__whenRemovingTags__thenSucceed() {
             // Create initial item with tags
             var initialTags = Set.of("tag1", "tag2", "tag3");
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(initialTags)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4813,11 +4814,11 @@ class DatasetsResourceTest {
         void patchDatasetItem__whenClearingAllTags__thenSucceed() {
             // Create initial item with tags
             var initialTags = Set.of("tag1", "tag2", "tag3");
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(initialTags)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4850,17 +4851,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch add tags with merge")
         void batchUpdateDatasetItems__whenAddingTagsWithMerge__thenSucceed() {
             // Create items with different initial tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("existing1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("existing2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -4900,14 +4901,14 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch replace tags without merge")
         void batchUpdateDatasetItems__whenReplacingTagsWithoutMerge__thenSucceed() {
             // Create items with initial tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("old1", "old2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("old3", "old4"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2))
                     .datasetId(null)
                     .build();
@@ -4983,17 +4984,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update by filters with merge tags")
         void batchUpdateDatasetItems__whenUsingFiltersWithMerge__thenSucceed() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("exclude", "tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5039,17 +5040,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update by filters automatically merges tags even when mergeTags is false")
         void batchUpdateDatasetItems__whenUsingFiltersWithMergeFalse__thenAutoMerges() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("other"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5131,17 +5132,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update with empty filters updates all items")
         void batchUpdateDatasetItems__whenEmptyFilters__thenUpdatesAllItems() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5184,28 +5185,28 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update by filters with dataset_id only affects specified dataset")
         void batchUpdateDatasetItems__whenFilterWithDatasetId__thenAffectsOnlySpecifiedDataset() {
             // Create two separate datasets with items that have similar tags
-            var dataset1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var dataset1 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(null)
                     .datasetName("dataset-1")
                     .build();
 
-            var dataset2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var dataset2 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(null)
                     .datasetName("dataset-2")
                     .build();
 
             // Create items with matching tags in both datasets
-            var dataset1Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset1Item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("target-tag"))
                     .build();
-            var dataset1Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset1Item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("other-tag"))
                     .build();
 
-            var dataset2Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset2Item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("target-tag"))
                     .build();
-            var dataset2Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset2Item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("other-tag"))
                     .build();
 
@@ -5282,11 +5283,11 @@ class DatasetsResourceTest {
         @DisplayName("Error: batch update by filters without dataset_id should fail")
         void batchUpdateDatasetItems__whenFilterWithoutDatasetId__thenFails() {
             // Create a dataset with items
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("some-tag"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -5329,7 +5330,7 @@ class DatasetsResourceTest {
         void deleteDatasetItem() {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -5456,17 +5457,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: delete by filters")
         void deleteDatasetItems__whenUsingFilters__thenSucceed() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("keep-me", "tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5532,25 +5533,25 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with identical tags in both datasets
-            var item1Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1Dataset1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset1"))
                     .build();
-            var item2Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2Dataset1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset1"))
                     .build();
-            var item3Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3Dataset1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("keep-me", "dataset1"))
                     .build();
 
-            var item1Dataset2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1Dataset2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset2"))
                     .build();
-            var item2Dataset2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2Dataset2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset2"))
                     .build();
 
             // Insert items into dataset 1
-            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch1 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1Dataset1, item2Dataset1, item3Dataset1))
                     .datasetId(dataset1Id)
                     .datasetName(null)
@@ -5558,7 +5559,7 @@ class DatasetsResourceTest {
             putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
 
             // Insert items into dataset 2
-            var batch2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch2 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1Dataset2, item2Dataset2))
                     .datasetId(dataset2Id)
                     .datasetName(null)
@@ -5622,17 +5623,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: delete all items in dataset using dataset_id filter only")
         void deleteDatasetItems__whenOnlyDatasetIdFilter__thenDeletesAllItemsInDataset() {
             // Create items
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5688,7 +5689,7 @@ class DatasetsResourceTest {
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5717,7 +5718,7 @@ class DatasetsResourceTest {
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5749,7 +5750,7 @@ class DatasetsResourceTest {
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5790,7 +5791,7 @@ class DatasetsResourceTest {
                     .id(null)
                     .build());
 
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
             var item2 = item.toBuilder()
                     .id(factory.manufacturePojo(UUID.class))
@@ -5810,7 +5811,7 @@ class DatasetsResourceTest {
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item, item2, item3))
                     .datasetId(datasetId)
                     .build();
@@ -5842,7 +5843,7 @@ class DatasetsResourceTest {
                     .map(item -> item.toBuilder().data(ImmutableMap.of("image", original)).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5942,16 +5943,16 @@ class DatasetsResourceTest {
                     .build());
 
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
-            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var matchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(matchingDataSupplier.apply(searchKey))
                     .build();
 
-            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var nonMatchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(nonMatchingDataSupplier.apply(searchKey))
                     .build();
 
             var items = List.of(matchingItem, nonMatchingItem);
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -6013,16 +6014,16 @@ class DatasetsResourceTest {
                     .build());
 
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
-            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var matchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(matchingDataSupplier.apply(searchKey))
                     .build();
 
-            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var nonMatchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(nonMatchingDataSupplier.apply(searchKey))
                     .build();
 
             var items = List.of(matchingItem, nonMatchingItem);
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -6047,7 +6048,7 @@ class DatasetsResourceTest {
 
         // Helper method to create dataset items with content
         private DatasetItem createDatasetItem(String content) {
-            return factory.manufacturePojo(DatasetItem.class).toBuilder()
+            return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(Map.of("content", new TextNode(content)))
                     .build();
         }
@@ -6070,20 +6071,20 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1", "tag2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2", "tag3"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3", "tag4"))
                     .build();
-            var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item4 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag5"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3, item4))
                     .datasetId(datasetId)
                     .build();
@@ -6111,17 +6112,17 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1", "tag2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2", "tag3"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3", "tag4"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(datasetId)
                     .build();
@@ -6145,14 +6146,14 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1", "tag2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3", "tag4"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2))
                     .datasetId(datasetId)
                     .build();
@@ -6176,17 +6177,17 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items, some with tags and some without
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(null)
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(datasetId)
                     .build();
@@ -6311,7 +6312,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating 5 dataset items for the dataset above
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -6530,7 +6531,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating 5 dataset items for the dataset above
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetName(dataset.name())
                     .datasetId(datasetId)
                     .build();
@@ -6718,7 +6719,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating 5 dataset items for the dataset above
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             var datasetItemBatchWithImage = datasetItemBatch.toBuilder()
@@ -7035,7 +7036,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating a dataset item
-            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory);
             var datasetItemBatch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
@@ -7171,7 +7172,7 @@ class DatasetsResourceTest {
         private void createDatasetItems(List<DatasetItem> items) {
             for (int i = 0; i < 5; i++) {
                 if (i == 0) {
-                    DatasetItem item = factory.manufacturePojo(DatasetItem.class)
+                    DatasetItem item = DatasetResourceClient.buildDatasetItem(factory)
                             .toBuilder()
                             .source(DatasetItemSource.SDK)
                             .data(new HashMap<>() {
@@ -7213,7 +7214,7 @@ class DatasetsResourceTest {
 
                     items.add(item);
                 } else {
-                    var item = factory.manufacturePojo(DatasetItem.class);
+                    var item = DatasetResourceClient.buildDatasetItem(factory);
 
                     items.add(item);
                 }
@@ -7503,9 +7504,9 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Create dataset items with conditional search term placement
-            var datasetItem1Builder = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem1Builder = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId);
-            var datasetItem2Builder = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem2Builder = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId);
 
             if ("dataset_item_data".equals(searchField)) {
@@ -7643,7 +7644,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7706,7 +7707,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7763,7 +7764,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7853,7 +7854,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7929,7 +7930,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -8001,7 +8002,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -8119,10 +8120,10 @@ class DatasetsResourceTest {
             traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
 
             // Create dataset items
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(traces.stream()
-                            .map(trace -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .map(trace -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .datasetId(datasetId)
                                     .traceId(trace.id())
                                     .spanId(null)
@@ -8281,14 +8282,14 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
                     .build();
@@ -8360,14 +8361,14 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
                     .build();
@@ -8428,14 +8429,14 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
                     .build();
@@ -8525,7 +8526,7 @@ class DatasetsResourceTest {
             traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
 
             var datasetItems = traces.stream()
-                    .map(trace -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .map(trace -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                             .datasetId(datasetId)
                             .traceId(trace.id())
                             .spanId(null)
@@ -8678,7 +8679,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -8733,7 +8734,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -8810,7 +8811,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -9009,7 +9010,7 @@ class DatasetsResourceTest {
         allItems.addAll(matchingItems);
         allItems.addAll(nonMatchingItems);
 
-        var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+        var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                 .items(allItems)
                 .datasetId(null)
                 .build();
@@ -9026,7 +9027,7 @@ class DatasetsResourceTest {
      * @return DatasetItem with specified tags
      */
     private DatasetItem createItemWithTags(Set<String> tags) {
-        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+        return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .tags(tags)
                 .build();
     }
@@ -9038,7 +9039,7 @@ class DatasetsResourceTest {
      * @return DatasetItem with specified data
      */
     private DatasetItem createItemWithData(Map<String, JsonNode> data) {
-        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+        return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .data(data)
                 .build();
     }
@@ -9051,7 +9052,7 @@ class DatasetsResourceTest {
      * @return DatasetItem with specified tags and null experimentItems, createdAt, lastUpdatedAt
      */
     private DatasetItem createItemWithTagsAndNulls(Set<String> tags) {
-        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+        return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .tags(tags)
                 .experimentItems(null)
                 .createdAt(null)
@@ -9103,8 +9104,8 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experiment2, apiKey, workspaceName);
 
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
 
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
@@ -9283,8 +9284,8 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
 
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
@@ -9445,9 +9446,9 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experiment3, apiKey, workspaceName);
 
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem3 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem3 = DatasetResourceClient.buildDatasetItem(factory);
 
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
@@ -9621,8 +9622,8 @@ class DatasetsResourceTest {
             createAndAssert(experiment, apiKey, workspaceName);
 
             // Create dataset items
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
                             .items(List.of(datasetItem1, datasetItem2))
@@ -9763,9 +9764,9 @@ class DatasetsResourceTest {
             createAndAssert(experiment, apiKey, workspaceName);
 
             // Create dataset items
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem3 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem3 = DatasetResourceClient.buildDatasetItem(factory);
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
                             .items(List.of(datasetItem1, datasetItem2, datasetItem3))
@@ -9927,7 +9928,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Create dataset item
-            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory);
             var datasetItemBatch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
@@ -10054,10 +10055,10 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
-                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                             .toList())
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
@@ -10159,10 +10160,10 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
-                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                             .toList())
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
@@ -10273,10 +10274,10 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Create 3 dataset items
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
-                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                             .toList())
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
@@ -10464,6 +10465,37 @@ class DatasetsResourceTest {
 
             assertThat(page.content()).hasSize(1);
             assertDataset(page.content().getFirst(), projectDataset);
+        }
+
+        @Test
+        @DisplayName("Put dataset items with project_name implicitly creates dataset scoped to that project")
+        void putDatasetItemsWithProjectNameScopesDatasetToProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String datasetName = "dataset-" + UUID.randomUUID();
+
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .id(null)
+                    .build();
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetName(datasetName)
+                    .projectName(projectName)
+                    .items(List.of(item))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch, workspaceName, apiKey);
+
+            var dataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
+
+            assertThat(dataset.projectId()).isEqualTo(projectId);
         }
 
         private void assertDataset(Dataset actual, Dataset expected) {
