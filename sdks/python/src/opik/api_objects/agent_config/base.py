@@ -302,8 +302,8 @@ class AgentConfig:
             raise KeyError(
                 f"Agent config version {version_label!r} is missing expected field(s): "
                 f"{missing_keys}. The retrieved version does not contain all fields "
-                f"declared in {cls.__name__}. Re-publish the config with "
-                f"create_agent_config_version() to include the missing fields."
+                f"declared in {cls.__name__}. Publish a new config or "
+                f"use an existing one that includes the missing fields."
             )
         for f_name, cf in cls.__field_metadata__.items():
             kwargs[f_name] = bp[cf.prefixed_key]
