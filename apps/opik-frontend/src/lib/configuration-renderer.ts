@@ -70,10 +70,13 @@ export const isOptimizerMetaEntry = (key: string, value: unknown): boolean =>
   (isArray(value) && (value as unknown[]).length === 0) ||
   value === null;
 
-export const shouldRenderConfigEntry = (entry: FlatConfigEntry): boolean =>
+export const shouldRenderConfigEntry = (
+  entry: FlatConfigEntry,
+  hasStructuredPrompt: boolean,
+): boolean =>
   entry.type !== "prompt" &&
   entry.type !== "tools" &&
-  !isOptimizerMetaEntry(entry.key, entry.value);
+  (!hasStructuredPrompt || !isOptimizerMetaEntry(entry.key, entry.value));
 
 export type FlatConfigEntry = {
   key: string;

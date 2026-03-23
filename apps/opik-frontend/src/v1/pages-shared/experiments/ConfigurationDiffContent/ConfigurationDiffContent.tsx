@@ -53,13 +53,13 @@ const ConfigurationDiffContent: React.FunctionComponent<
 
     const flatBase: ConfigurationType = {};
     for (const entry of baseFlat) {
-      if (shouldRenderConfigEntry(entry)) {
+      if (shouldRenderConfigEntry(entry, hasStructuredPrompt)) {
         flatBase[entry.key] = entry.value;
       }
     }
     const flatCurr: ConfigurationType = {};
     for (const entry of currFlat) {
-      if (shouldRenderConfigEntry(entry)) {
+      if (shouldRenderConfigEntry(entry, hasStructuredPrompt)) {
         flatCurr[entry.key] = entry.value;
       }
     }
