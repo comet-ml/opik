@@ -23,7 +23,7 @@ const PROMPT_KEYS = [
 
 const TOOLS_KEYS = ["tools", "functions", "tool_choice"];
 
-const isMessagesArray = (value: unknown): boolean => {
+export const isMessagesArray = (value: unknown): boolean => {
   if (!isArray(value)) return false;
   return value.every(
     (item) =>
@@ -54,16 +54,26 @@ export const makeSkipKey =
 
 const OPTIMIZER_META_KEYS = ["prompt_name", "prompt_project_name", "gepa"];
 
+const hasOptimizerMetaSegment = (key: string): boolean => {
+  const segments = key.split(".");
+  return segments.some((s) => OPTIMIZER_META_KEYS.includes(s));
+};
+
 export const makeSkipKeyWithOptimizerMeta =
   (hasStructuredPrompt: boolean) =>
   (key: string): boolean =>
     makeSkipKey(hasStructuredPrompt)(key) ||
-    (hasStructuredPrompt && OPTIMIZER_META_KEYS.includes(key));
+    (hasStructuredPrompt && hasOptimizerMetaSegment(key));
 
 export const isOptimizerMetaEntry = (key: string, value: unknown): boolean =>
-  OPTIMIZER_META_KEYS.some((m) => key.startsWith(m)) ||
+  hasOptimizerMetaSegment(key) ||
   (isArray(value) && (value as unknown[]).length === 0) ||
   value === null;
+
+export const shouldRenderConfigEntry = (entry: FlatConfigEntry): boolean =>
+  entry.type !== "prompt" &&
+  entry.type !== "tools" &&
+  !isOptimizerMetaEntry(entry.key, entry.value);
 
 export type FlatConfigEntry = {
   key: string;

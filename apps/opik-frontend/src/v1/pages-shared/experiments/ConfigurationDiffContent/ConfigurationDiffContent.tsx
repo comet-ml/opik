@@ -8,8 +8,8 @@ import { Experiment } from "@/types/datasets";
 import {
   detectConfigValueType,
   flattenConfig,
-  isOptimizerMetaEntry,
   makeSkipKeyWithOptimizerMeta,
+  shouldRenderConfigEntry,
 } from "@/lib/configuration-renderer";
 import DiffSection from "./DiffSection";
 import { formatValue } from "./configDiffUtils";
@@ -53,21 +53,13 @@ const ConfigurationDiffContent: React.FunctionComponent<
 
     const flatBase: ConfigurationType = {};
     for (const entry of baseFlat) {
-      if (
-        entry.type !== "prompt" &&
-        entry.type !== "tools" &&
-        !isOptimizerMetaEntry(entry.key, entry.value)
-      ) {
+      if (shouldRenderConfigEntry(entry)) {
         flatBase[entry.key] = entry.value;
       }
     }
     const flatCurr: ConfigurationType = {};
     for (const entry of currFlat) {
-      if (
-        entry.type !== "prompt" &&
-        entry.type !== "tools" &&
-        !isOptimizerMetaEntry(entry.key, entry.value)
-      ) {
+      if (shouldRenderConfigEntry(entry)) {
         flatCurr[entry.key] = entry.value;
       }
     }

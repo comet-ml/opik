@@ -3,6 +3,7 @@ import get from "lodash/get";
 
 import { OptimizationStudioConfig } from "@/types/optimizations";
 import { ConfigurationType } from "@/types/shared";
+import { isMessagesArray } from "@/lib/configuration-renderer";
 import { getOptimizerLabel } from "@/lib/optimizations";
 import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 
@@ -27,16 +28,6 @@ const toEntries = (arr: unknown[]): MessageEntry[] =>
     }
     return { role: "", content: JSON.stringify(m) };
   });
-
-const isMessagesArray = (v: unknown): boolean =>
-  isArray(v) &&
-  (v as unknown[]).length > 0 &&
-  (v as unknown[]).every(
-    (item) =>
-      isRecord(item) &&
-      "role" in (item as Record<string, unknown>) &&
-      "content" in (item as Record<string, unknown>),
-  );
 
 export const extractMessages = (value: unknown): MessageEntry[] | null => {
   if (isArray(value)) return toEntries(value);
