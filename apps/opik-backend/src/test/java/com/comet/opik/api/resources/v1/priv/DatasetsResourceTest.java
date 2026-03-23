@@ -82,6 +82,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -1702,6 +1703,59 @@ class DatasetsResourceTest {
             assertThat(actualEntity).usingRecursiveComparison()
                     .ignoringFields(DATASET_IGNORED_FIELDS)
                     .isEqualTo(dataset);
+        }
+
+        @Test
+        @DisplayName("when retrieving dataset by name with non-existing project_name, then return X-Opik-Deprecation header")
+        void getDatasetByIdentifier__whenNonExistingProjectName__thenReturnDeprecationHeader() {
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .build();
+
+            createAndAssert(dataset);
+
+            var identifier = DatasetIdentifier.builder()
+                    .datasetName(dataset.name())
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callGetDatasetByIdentifier(identifier, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                                dataset.name()));
+            }
+        }
+
+        @Test
+        @DisplayName("when retrieving dataset by name with matching project_name, then no X-Opik-Deprecation header")
+        void getDatasetByIdentifier__whenMatchingProjectName__thenNoDeprecationHeader() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .projectId(projectId)
+                    .build();
+
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var identifier = DatasetIdentifier.builder()
+                    .datasetName(dataset.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callGetDatasetByIdentifier(identifier, apiKey,
+                    workspaceName)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
         }
 
         @Test
