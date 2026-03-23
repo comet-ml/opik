@@ -19,6 +19,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_DURATION_ID,
+  COLUMN_USAGE_ID,
 } from "@/types/shared";
 import {
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -26,15 +27,17 @@ import {
 } from "@/constants/experiments";
 import { Separator } from "@/ui/separator";
 
-const EVALUATION_EXPORT_COLUMNS = [
+const COLUMN_PASSED_ID = "passed";
+const COLUMN_TOTAL_ESTIMATED_COST_ID = "total_estimated_cost";
+
+const EXPERIMENT_ITEM_COLUMNS = [
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   COLUMN_COMMENTS_ID,
   COLUMN_DURATION_ID,
+  COLUMN_USAGE_ID,
+  COLUMN_TOTAL_ESTIMATED_COST_ID,
 ];
 const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
-
-const extractFieldName = (column: string, prefix: string): string =>
-  column.replace(`${prefix}.`, "");
 
 const processNestedExportColumn = (
   item: ExperimentItem,
@@ -47,7 +50,7 @@ const processNestedExportColumn = (
   const prefixColumnKey = first(keys) as string;
 
   if (prefixColumnKey === COLUMN_FEEDBACK_SCORES_ID) {
-    const scoreName = extractFieldName(column, prefixColumnKey);
+    const scoreName = keys.slice(1).join(".");
     const scoreObject = item.feedback_scores?.find((f) => f.name === scoreName);
     accumulator[`${prefix}${column}`] = get(scoreObject, "value", "-");
 
@@ -58,20 +61,32 @@ const processNestedExportColumn = (
     return;
   }
 
-  if (EVALUATION_EXPORT_COLUMNS.includes(prefixColumnKey)) {
-    const evaluationName = extractFieldName(column, prefixColumnKey);
-    accumulator[`${prefix}evaluation_task.${evaluationName}`] = get(
-      item ?? {},
-      keys,
-      "-",
-    );
+  if (prefixColumnKey === COLUMN_PASSED_ID) {
+    accumulator[`${prefix}status`] = item?.status ?? "-";
+
+    (item?.assertion_results ?? []).forEach((ar, index) => {
+      const idx = index + 1;
+      accumulator[`${prefix}assertion_${idx}.name`] = ar.value;
+      accumulator[`${prefix}assertion_${idx}.result`] = ar.passed
+        ? "passed"
+        : "failed";
+      if (ar.reason) {
+        accumulator[`${prefix}assertion_${idx}.reason`] = ar.reason;
+      }
+    });
+
+    return;
+  }
+
+  if (EXPERIMENT_ITEM_COLUMNS.includes(prefixColumnKey)) {
+    accumulator[`${prefix}${column}`] = get(item ?? {}, keys, "-");
 
     return;
   }
 
   // Handle dataset columns with "data." prefix
   if (prefixColumnKey === EXPERIMENT_ITEM_DATASET_PREFIX) {
-    const fieldName = extractFieldName(column, prefixColumnKey);
+    const fieldName = keys.slice(1).join(".");
     accumulator[`${prefix}dataset.${fieldName}`] = get(rowData, fieldName, "-");
 
     return;
@@ -121,8 +136,9 @@ const CompareExperimentsActionsPanel: React.FC<
 
           const prefix = first(column.split(".")) as string;
           const isDatasetColumn = !(
-            EVALUATION_EXPORT_COLUMNS.includes(prefix) ||
-            prefix === COLUMN_FEEDBACK_SCORES_ID
+            EXPERIMENT_ITEM_COLUMNS.includes(prefix) ||
+            prefix === COLUMN_FEEDBACK_SCORES_ID ||
+            prefix === COLUMN_PASSED_ID
           );
 
           if (isDatasetColumn) {
