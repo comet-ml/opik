@@ -6,6 +6,10 @@ export interface Optimization {
     id?: string;
     name?: string;
     datasetName: string;
+    /** Project name. Creates project if it doesn't exist. Ignored when project_id is provided. */
+    projectName?: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
+    projectId?: string;
     objectiveName: string;
     status: OpikApi.OptimizationStatus;
     metadata?: OpikApi.JsonListString;

@@ -14,6 +14,8 @@ export const OptimizationWrite: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     name: core.serialization.string().optional(),
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     objectiveName: core.serialization.property("objective_name", core.serialization.string()),
     status: OptimizationWriteStatus,
     metadata: JsonListStringWrite.optional(),
@@ -26,6 +28,8 @@ export declare namespace OptimizationWrite {
         id?: string | null;
         name?: string | null;
         dataset_name: string;
+        project_name?: string | null;
+        project_id?: string | null;
         objective_name: string;
         status: OptimizationWriteStatus.Raw;
         metadata?: JsonListStringWrite.Raw | null;
