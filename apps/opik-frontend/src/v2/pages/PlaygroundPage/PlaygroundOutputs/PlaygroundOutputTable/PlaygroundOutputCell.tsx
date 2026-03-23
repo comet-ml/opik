@@ -14,6 +14,8 @@ import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
 import { cn } from "@/lib/utils";
+import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
+import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useAppStore from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -27,13 +29,14 @@ interface PlaygroundOutputCellData {
 
 interface CustomMeta {
   promptId: string;
+  promptIndex: number;
 }
 
 const PlaygroundOutputCell: React.FunctionComponent<
   CellContext<PlaygroundOutputCellData, unknown>
 > = (context) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { promptId } = (custom ?? {}) as CustomMeta;
+  const { promptId, promptIndex } = (custom ?? {}) as CustomMeta;
   const originalRow = context.row.original;
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -85,6 +88,12 @@ const PlaygroundOutputCell: React.FunctionComponent<
     }
   };
 
+  const hasOutput = value !== null || isLoading;
+  const promptColor =
+    PLAYGROUND_PROMPT_COLORS[
+      (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
+    ];
+
   const renderContent = () => {
     if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
@@ -107,28 +116,32 @@ const PlaygroundOutputCell: React.FunctionComponent<
       tableMetadata={context.table.options.meta}
       className="flex pt-5"
     >
-      <div className="group relative flex size-full flex-col">
-        {traceId && playgroundProject?.id && (
-          <TooltipWrapper content="Click to open original trace">
-            <Button
-              size="icon-xs"
-              variant="outline"
-              onClick={handleTraceLinkClick}
-              className="absolute right-1 top-1 hidden group-hover:flex"
-            >
-              <ListTree />
-            </Button>
-          </TooltipWrapper>
-        )}
-        <div className="mb-2 min-h-[var(--cell-top-height)]">
-          <PlaygroundOutputScoresContainer
-            traceId={traceId}
-            selectedRuleIds={selectedRuleIds}
-            stale={stale}
-          />
+      {hasOutput ? (
+        <div className="group relative flex size-full flex-col">
+          {traceId && playgroundProject?.id && (
+            <TooltipWrapper content="Click to open original trace">
+              <Button
+                size="icon-xs"
+                variant="outline"
+                onClick={handleTraceLinkClick}
+                className="absolute right-1 top-1 hidden group-hover:flex"
+              >
+                <ListTree />
+              </Button>
+            </TooltipWrapper>
+          )}
+          <div className="mb-2 min-h-[var(--cell-top-height)]">
+            <PlaygroundOutputScoresContainer
+              traceId={traceId}
+              selectedRuleIds={selectedRuleIds}
+              stale={stale}
+            />
+          </div>
+          <div className="flex-1 overflow-y-auto">{renderContent()}</div>
         </div>
-        <div className="flex-1 overflow-y-auto">{renderContent()}</div>
-      </div>
+      ) : (
+        <PlaygroundNoRunsYet color={promptColor.bg} />
+      )}
     </CellWrapper>
   );
 };

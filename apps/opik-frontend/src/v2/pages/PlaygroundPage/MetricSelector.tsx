@@ -201,7 +201,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     <div
       tabIndex={0}
       className={cn(
-        "flex h-8 w-full cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-3 text-sm hover:shadow-sm focus:border-primary focus:outline-none",
+        "flex h-8 w-full cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2 text-sm hover:shadow-sm focus:border-primary focus:outline-none",
         isDisabled && "cursor-not-allowed opacity-50",
         open && "border-primary",
       )}

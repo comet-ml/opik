@@ -103,7 +103,7 @@ const PlaygroundPage = () => {
     [filters],
   );
 
-  const { data: datasetItemsData, isFetching: isFetchingDatasetItems } =
+  const { data: datasetItemsData } =
     useDatasetItemsList(
       {
         datasetId: plainDatasetId!,
@@ -136,30 +136,7 @@ const PlaygroundPage = () => {
     datasetVersionId: parsedVersionId || undefined,
   });
 
-  const [pendingRun, setPendingRun] = useState(false);
-
   const isExperimentMode = !!datasetId;
-
-  useEffect(() => {
-    if (pendingRun && plainDatasetId && !isFetchingDatasetItems) {
-      setPendingRun(false);
-      if (datasetItems.length > 0) {
-        runAll();
-      }
-    }
-  }, [
-    pendingRun,
-    datasetItems.length,
-    plainDatasetId,
-    isFetchingDatasetItems,
-    runAll,
-  ]);
-
-  // Used by the "Run on dataset" dialog: the dataset ID may have just changed
-  // so we defer runAll until items are loaded and the effect above fires.
-  const handleDeferredRunAll = useCallback(() => {
-    setPendingRun(true);
-  }, []);
 
   // Keyboard shortcut: Shift+Enter to run all
   useEffect(() => {
@@ -206,7 +183,6 @@ const PlaygroundPage = () => {
             versionName={versionName}
             onChangeDatasetId={setDatasetId}
             onRunAll={runAll}
-            onDeferredRunAll={handleDeferredRunAll}
             onStopAll={stopAll}
             maxWidth={headerMaxWidth}
           />

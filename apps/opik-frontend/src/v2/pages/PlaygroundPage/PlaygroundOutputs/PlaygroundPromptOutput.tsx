@@ -1,5 +1,5 @@
 import React from "react";
-import { AlignLeft, Clock, Coins, Pause, Play } from "lucide-react";
+import { Clock, Coins, Pause, Play } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ import { Button } from "@/ui/button";
 import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
+import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 
 interface PlaygroundPromptOutputProps {
   promptId: string;
@@ -145,12 +146,8 @@ const PlaygroundPromptOutput = ({
           <div className="comet-body-s">{renderContent()}</div>
         </div>
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-background">
-          <AlignLeft className="size-5" style={{ color: promptColor.bg }} />
-          <p className="comet-body-s-accented">No runs yet</p>
-          <p className="comet-body-s text-light-slate">
-            Run a prompt to see results.
-          </p>
+        <div className="flex-1 bg-background">
+          <PlaygroundNoRunsYet color={promptColor.bg} />
         </div>
       )}
     </div>

@@ -21,6 +21,7 @@ import {
   useClearRunningMap,
   useSetPromptMap,
   useClearCreatedExperiments,
+  useCreatedExperiments,
   useIsRunning,
   useSelectedRuleIds,
   useSetSelectedRuleIds,
@@ -48,7 +49,7 @@ interface PlaygroundHeaderProps {
   versionName?: string;
   onChangeDatasetId: (id: string | null) => void;
   onRunAll: () => void;
-  onDeferredRunAll: () => void;
+
   onStopAll: () => void;
   maxWidth?: string;
 }
@@ -61,7 +62,6 @@ const PlaygroundHeader = ({
   versionName,
   onChangeDatasetId,
   onRunAll,
-  onDeferredRunAll,
   onStopAll,
   maxWidth,
 }: PlaygroundHeaderProps) => {
@@ -77,6 +77,7 @@ const PlaygroundHeader = ({
   const setDatasetFilters = useSetDatasetFilters();
   const setExperimentNamePrefix = useSetExperimentNamePrefix();
   const isRunning = useIsRunning();
+  const createdExperiments = useCreatedExperiments();
   const filters = useDatasetFilters();
 
   const resetKeyRef = useRef(0);
@@ -226,7 +227,6 @@ const PlaygroundHeader = ({
       setSelectedRuleIds(params.selectedRuleIds);
       setDatasetFilters(params.filters);
       setExperimentNamePrefix(params.experimentNamePrefix);
-      onDeferredRunAll();
     },
     [
       setDatasetVersionKey,
@@ -235,7 +235,6 @@ const PlaygroundHeader = ({
       setSelectedRuleIds,
       setDatasetFilters,
       setExperimentNamePrefix,
-      onDeferredRunAll,
     ],
   );
 
@@ -301,11 +300,18 @@ const PlaygroundHeader = ({
       );
     }
 
-    const label = isExperimentMode ? "Re-run" : "Run all";
+    const hasExperiments = createdExperiments.length > 0;
+    const label = isExperimentMode
+      ? hasExperiments
+        ? "Re-run"
+        : "Run experiment"
+      : "Run all";
     const tooltip =
       runDisabledReason ??
       (isExperimentMode
-        ? "Re-run experiment with same dataset and metrics"
+        ? hasExperiments
+          ? "Re-run experiment with same dataset and metrics"
+          : "Run experiment on dataset"
         : "Run your prompts");
 
     return (

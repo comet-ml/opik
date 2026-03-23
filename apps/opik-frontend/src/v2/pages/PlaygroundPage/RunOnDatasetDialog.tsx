@@ -246,7 +246,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
         <DialogContent className="max-w-lg sm:max-w-[560px]">
-          <DialogHeader>
+          <DialogHeader className="pb-0">
             <DialogTitle>Run on dataset</DialogTitle>
             <DialogDescription>
               Run your prompt suite against a dataset and score results with
@@ -254,7 +254,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 py-2">
+          <div className="flex flex-col gap-4 pb-2">
             <div className="flex flex-col gap-1.5">
               <Label>Dataset</Label>
               <div className="flex items-center gap-2">
@@ -306,7 +306,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 disabled={isRunDisabled}
                 style={isRunDisabled ? { pointerEvents: "auto" } : {}}
               >
-                Run experiment
+                Use dataset
               </Button>
             </TooltipWrapper>
           </DialogFooter>
