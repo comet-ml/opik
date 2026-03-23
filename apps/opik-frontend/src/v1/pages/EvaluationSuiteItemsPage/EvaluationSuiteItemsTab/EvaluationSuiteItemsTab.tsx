@@ -65,6 +65,7 @@ import {
 import { transformDataColumnFilters } from "@/lib/dataset-items";
 import { useEvaluationSuiteItemsWithDraft } from "./hooks/useMergedEvaluationSuiteItems";
 import { useEvaluationSuiteColumns } from "./useEvaluationSuiteColumns";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   useIsDraftMode,
   useIsAllItemsSelected,
@@ -146,6 +147,10 @@ function EvaluationSuiteItemsTab({
   suiteAssertions,
   onOpenSettings,
 }: EvaluationSuiteItemsTabProps): React.ReactElement | null {
+  const {
+    permissions: { canEditDatasets },
+  } = usePermissions();
+
   const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
   const storageKeys = isEvaluationSuite
     ? SUITE_STORAGE_KEYS
@@ -455,15 +460,22 @@ function EvaluationSuiteItemsTab({
           return getDraftStatusBorderClass(item);
         },
       }),
-      ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
-      generateActionsColumDef({
-        cell: DatasetItemRowActionsCell,
-      }),
+      ...(canEditDatasets
+        ? injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick)
+        : convertedColumns),
+      ...(canEditDatasets
+        ? [
+            generateActionsColumDef({
+              cell: DatasetItemRowActionsCell,
+            }),
+          ]
+        : []),
     ];
   }, [
     columnsData,
     columnsOrder,
     selectedColumns,
+    canEditDatasets,
     getDraftStatusBorderClass,
     handleRowClick,
   ]);
@@ -584,13 +596,15 @@ function EvaluationSuiteItemsTab({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleNewDatasetItemClick}
-          >
-            {isEvaluationSuite ? "Add suite item" : "Add dataset item"}
-          </Button>
+          {canEditDatasets && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleNewDatasetItemClick}
+            >
+              {isEvaluationSuite ? "Add suite item" : "Add dataset item"}
+            </Button>
+          )}
         </div>
       </div>
       {isProcessing && (
@@ -631,7 +645,7 @@ function EvaluationSuiteItemsTab({
       <DataTable
         columns={columns}
         data={rows}
-        onRowClick={handleRowClick}
+        onRowClick={canEditDatasets ? handleRowClick : undefined}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         showLoadingOverlay={isPlaceholderData && isFetching}
