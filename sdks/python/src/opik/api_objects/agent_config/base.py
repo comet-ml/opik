@@ -292,11 +292,21 @@ class AgentConfig:
             return fallback
 
         kwargs: typing.Dict[str, typing.Any] = {}
+        missing_keys = [
+            cf.prefixed_key
+            for cf in cls.__field_metadata__.values()
+            if cf.prefixed_key not in bp.keys()
+        ]
+        if missing_keys:
+            version_label = bp.name or bp.id or "unknown"
+            raise KeyError(
+                f"Agent config version {version_label!r} is missing expected field(s): "
+                f"{missing_keys}. The retrieved version does not contain all fields "
+                f"declared in {cls.__name__}. Re-publish the config with "
+                f"create_agent_config_version() to include the missing fields."
+            )
         for f_name, cf in cls.__field_metadata__.items():
-            if cf.prefixed_key in bp.keys():
-                kwargs[f_name] = bp[cf.prefixed_key]
-            else:
-                kwargs[f_name] = object.__getattribute__(fallback, f_name)
+            kwargs[f_name] = bp[cf.prefixed_key]
 
         instance = cls(**kwargs)
 
