@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -29,6 +30,7 @@ public class LlmModelRegistryService {
     };
 
     private final LlmModelRegistryConfig config;
+    // volatile: reload() will be called from a scheduler thread (remote YAML refresh, OPIK-5020)
     private volatile Map<String, List<LlmModelDefinition>> registry;
 
     @Inject
@@ -36,6 +38,7 @@ public class LlmModelRegistryService {
         this(configuration.getLlmModelRegistry());
     }
 
+    // visible for testing
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config) {
         this.config = config;
         this.registry = load();
@@ -93,8 +96,8 @@ public class LlmModelRegistryService {
     }
 
     static Map<String, List<LlmModelDefinition>> merge(
-            Map<String, List<LlmModelDefinition>> defaults,
-            Map<String, List<LlmModelDefinition>> overrides) {
+            @NonNull Map<String, List<LlmModelDefinition>> defaults,
+            @NonNull Map<String, List<LlmModelDefinition>> overrides) {
         var result = new LinkedHashMap<>(defaults);
 
         overrides.forEach((provider, overrideModels) -> {
@@ -103,9 +106,21 @@ public class LlmModelRegistryService {
             }
             var existing = result.getOrDefault(provider, List.of());
             var existingIds = new LinkedHashMap<String, LlmModelDefinition>();
-            existing.forEach(m -> existingIds.put(m.id(), m));
+            existing.forEach(m -> {
+                if (m.id() == null || m.id().isBlank()) {
+                    log.warn("Skipping default model with missing id for provider '{}'", provider);
+                    return;
+                }
+                existingIds.put(m.id(), m);
+            });
 
-            overrideModels.forEach(m -> existingIds.put(m.id(), m));
+            overrideModels.forEach(m -> {
+                if (m.id() == null || m.id().isBlank()) {
+                    log.warn("Skipping override model with missing id for provider '{}'", provider);
+                    return;
+                }
+                existingIds.put(m.id(), m);
+            });
 
             result.put(provider, List.copyOf(existingIds.values()));
         });

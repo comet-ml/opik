@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
