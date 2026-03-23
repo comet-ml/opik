@@ -8,8 +8,13 @@ from . import arguments_utils
 from .preprocessing import constants
 from ..rest_api.core import pydantic_utilities
 from ..rest_api.types import span_write, trace_write
-from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
-
+from ..types import (
+    SpanType,
+    ErrorInfoDict,
+    LLMProvider,
+    AttachmentEntityType,
+    TraceSource,
+)
 
 T = TypeVar("T", bound="BaseMessage")
 
@@ -81,7 +86,7 @@ class CreateTraceMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
     last_updated_at: Optional[datetime.datetime]
-    source: str
+    source: TraceSource
 
     message_type = "CreateTraceMessage"
 
@@ -156,7 +161,7 @@ class CreateSpanMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
     last_updated_at: Optional[datetime.datetime]
-    source: str
+    source: TraceSource
 
     message_type = "CreateSpanMessage"
 

@@ -693,7 +693,7 @@ def add_start_candidates(
     opik_args_data: Optional[opik_args.OpikArgs],
     tracing_active: bool,
     create_duplicate_root_span: bool,
-    source: TraceSource,
+    source: Optional[TraceSource],
 ) -> span_creation_handler.SpanCreationResult:
     """
     Handles the creation and registration of a new start span and trace while respecting the
