@@ -17,22 +17,39 @@ export const formatPrimitive = (value: unknown): string => {
 
 export type MessageEntry = { role: string; content: string };
 
-export const extractMessages = (value: unknown): MessageEntry[] | null => {
-  const toEntries = (arr: unknown[]): MessageEntry[] =>
-    arr.map((m) => {
-      if (isRecord(m) && "content" in m) {
-        return {
-          role: String(get(m, "role", "")),
-          content: String(get(m, "content", "")),
-        };
-      }
-      return { role: "", content: JSON.stringify(m) };
-    });
+const toEntries = (arr: unknown[]): MessageEntry[] =>
+  arr.map((m) => {
+    if (isRecord(m) && "content" in m) {
+      return {
+        role: String(get(m, "role", "")),
+        content: String(get(m, "content", "")),
+      };
+    }
+    return { role: "", content: JSON.stringify(m) };
+  });
 
+const isMessagesArray = (v: unknown): boolean =>
+  isArray(v) &&
+  (v as unknown[]).length > 0 &&
+  (v as unknown[]).every(
+    (item) =>
+      isRecord(item) &&
+      "role" in (item as Record<string, unknown>) &&
+      "content" in (item as Record<string, unknown>),
+  );
+
+export const extractMessages = (value: unknown): MessageEntry[] | null => {
   if (isArray(value)) return toEntries(value);
   if (isRecord(value) && "messages" in value) {
     const messages = get(value, "messages", []);
     if (isArray(messages)) return toEntries(messages);
+  }
+  // Named prompts: {"chat-prompt": [{role, content}, ...]}
+  if (isRecord(value)) {
+    const vals = Object.values(value as Record<string, unknown>);
+    if (vals.length > 0 && vals.every((v) => isMessagesArray(v))) {
+      return vals.flatMap((v) => toEntries(v as unknown[]));
+    }
   }
   return null;
 };

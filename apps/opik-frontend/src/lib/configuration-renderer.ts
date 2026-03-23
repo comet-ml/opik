@@ -52,6 +52,19 @@ export const makeSkipKey =
     EXCLUDED_CONFIG_KEYS.includes(key) ||
     shouldSkipRedundantKey(key, hasStructuredPrompt);
 
+const OPTIMIZER_META_KEYS = ["prompt_name", "prompt_project_name", "gepa"];
+
+export const makeSkipKeyWithOptimizerMeta =
+  (hasStructuredPrompt: boolean) =>
+  (key: string): boolean =>
+    makeSkipKey(hasStructuredPrompt)(key) ||
+    (hasStructuredPrompt && OPTIMIZER_META_KEYS.includes(key));
+
+export const isOptimizerMetaEntry = (key: string, value: unknown): boolean =>
+  OPTIMIZER_META_KEYS.some((m) => key.startsWith(m)) ||
+  (isArray(value) && (value as unknown[]).length === 0) ||
+  value === null;
+
 export type FlatConfigEntry = {
   key: string;
   value: unknown;

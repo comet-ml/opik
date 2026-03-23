@@ -13,6 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import {
   detectConfigValueType,
   flattenConfig,
+  isOptimizerMetaEntry,
   makeSkipKey,
 } from "@/lib/configuration-renderer";
 import ConfigurationDiffContent from "@/v1/pages-shared/experiments/ConfigurationDiffContent/ConfigurationDiffContent";
@@ -191,23 +192,34 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
     if (!configuration) return [];
 
     const hasStructuredPrompt = "prompt" in configuration;
+    const configPrompt = get(configuration, "prompt");
+    const promptMessages = configPrompt ? extractMessages(configPrompt) : null;
+
     const result = flattenConfig(
       configuration,
       makeSkipKey(hasStructuredPrompt),
     );
 
-    // If no prompt was found (old format without structured "prompt" key),
-    // try the top-level "prompt" as a fallback.
+    if (promptMessages) {
+      const filtered = result.filter(
+        (e) => e.type !== "prompt" && !isOptimizerMetaEntry(e.key, e.value),
+      );
+      filtered.unshift({
+        key: "Prompt",
+        value: configPrompt,
+        type: "prompt",
+      });
+      return filtered;
+    }
+
+    // Fallback: if no prompt entry found, try the top-level "prompt" key
     const hasPrompt = result.some((e) => e.type === "prompt");
-    if (!hasPrompt) {
-      const configPrompt = get(configuration, "prompt");
-      if (configPrompt) {
-        result.push({
-          key: "Prompt",
-          value: configPrompt,
-          type: "prompt",
-        });
-      }
+    if (!hasPrompt && configPrompt) {
+      result.push({
+        key: "Prompt",
+        value: configPrompt,
+        type: "prompt",
+      });
     }
 
     return result;
