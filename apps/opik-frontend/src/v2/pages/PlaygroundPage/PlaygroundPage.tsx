@@ -103,21 +103,20 @@ const PlaygroundPage = () => {
     [filters],
   );
 
-  const { data: datasetItemsData } =
-    useDatasetItemsList(
-      {
-        datasetId: plainDatasetId!,
-        page,
-        size,
-        truncate: true,
-        filters: transformedFilters,
-        versionId: versionHash,
-      },
-      {
-        enabled: !!plainDatasetId,
-        placeholderData: plainDatasetId ? keepPreviousData : undefined,
-      },
-    );
+  const { data: datasetItemsData } = useDatasetItemsList(
+    {
+      datasetId: plainDatasetId!,
+      page,
+      size,
+      truncate: true,
+      filters: transformedFilters,
+      versionId: versionHash,
+    },
+    {
+      enabled: !!plainDatasetId,
+      placeholderData: plainDatasetId ? keepPreviousData : undefined,
+    },
+  );
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
 
   const { data: datasetsData } = useDatasetsList(
@@ -137,19 +136,6 @@ const PlaygroundPage = () => {
   });
 
   const isExperimentMode = !!datasetId;
-
-  // Keyboard shortcut: Shift+Enter to run all
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.shiftKey && event.key === "Enter" && !isRunning) {
-        event.preventDefault();
-        event.stopPropagation();
-        runAll();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [runAll, isRunning]);
 
   useEffect(() => {
     return () => stopAll();

@@ -7,6 +7,11 @@ const hotkeyDisplayVariants = cva(
   "inline-flex items-center justify-center rounded-md opacity-90",
   {
     variants: {
+      variant: {
+        default: "bg-black/20",
+        outline:
+          "border border-input bg-background dark:border-border dark:bg-input dark:text-foreground-secondary dark:group-disabled:text-muted-gray",
+      },
       size: {
         default: "h-8 min-w-8 px-2",
         xs: "h-[18px] min-w-4 rounded px-[3px] text-xs",
@@ -15,6 +20,7 @@ const hotkeyDisplayVariants = cva(
       },
     },
     defaultVariants: {
+      variant: "default",
       size: "sm",
     },
   },
@@ -27,14 +33,10 @@ export interface HotkeyDisplayProps
 }
 
 const HotkeyDisplay = React.forwardRef<HTMLSpanElement, HotkeyDisplayProps>(
-  ({ className, size, hotkey, style, ...props }, ref) => {
+  ({ className, variant, size, hotkey, ...props }, ref) => {
     return (
       <span
-        className={cn(hotkeyDisplayVariants({ size, className }))}
-        style={{
-          backgroundColor: "rgba(255, 255, 255, 0.3)",
-          ...style,
-        }}
+        className={cn(hotkeyDisplayVariants({ variant, size, className }))}
         ref={ref}
         {...props}
       >

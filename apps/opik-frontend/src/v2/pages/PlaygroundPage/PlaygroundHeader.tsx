@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { Database, Pause, Pencil, Play, RotateCcw, X } from "lucide-react";
 
@@ -141,7 +141,8 @@ const PlaygroundHeader = ({
   const isRunDisabled =
     !allPromptsHaveModels ||
     !allMessagesNotEmpty ||
-    hasMediaCompatibilityIssues;
+    hasMediaCompatibilityIssues ||
+    (isExperimentMode && !datasetName);
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
@@ -150,8 +151,29 @@ const PlaygroundHeader = ({
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
+    if (isExperimentMode && !datasetName)
+      return "Your dataset has been removed. Select another one";
     return null;
-  }, [allPromptsHaveModels, allMessagesNotEmpty, hasMediaCompatibilityIssues]);
+  }, [
+    allPromptsHaveModels,
+    allMessagesNotEmpty,
+    hasMediaCompatibilityIssues,
+    isExperimentMode,
+    datasetName,
+  ]);
+
+  // Keyboard shortcut: Shift+Enter to run all
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.key === "Enter" && !isRunDisabled) {
+        event.preventDefault();
+        event.stopPropagation();
+        onRunAll();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [onRunAll, isRunDisabled]);
 
   const resetPlayground = useCallback(() => {
     const newPrompt = generateDefaultPrompt({

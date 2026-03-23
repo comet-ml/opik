@@ -240,7 +240,11 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   ]);
 
   const isRunDisabled =
-    !datasetId || isDatasetEmpty || isLoadingDatasetItems || isRunning;
+    !datasetId ||
+    !datasetName ||
+    isDatasetEmpty ||
+    isLoadingDatasetItems ||
+    isRunning;
 
   return (
     <>
