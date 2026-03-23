@@ -91,7 +91,6 @@ const CommentAndScoreViewer: React.FC = () => {
             >
               <HotkeyDisplay
                 hotkey={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display}
-                variant="outline"
                 size="sm"
                 className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
               />
@@ -135,7 +134,6 @@ const CommentAndScoreViewer: React.FC = () => {
                     hotkey={
                       SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].display
                     }
-                    variant="outline"
                     size="sm"
                     className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
                   />

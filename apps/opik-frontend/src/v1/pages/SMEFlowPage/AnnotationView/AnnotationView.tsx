@@ -124,16 +124,11 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                 content="Previous item"
                 hotkeys={[SME_HOTKEYS[SME_ACTION.PREVIOUS].display]}
               >
-                <Button
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={isFirstItem}
-                >
+                <Button onClick={handlePrevious} disabled={isFirstItem}>
                   <ChevronLeft className="mr-2 size-4" />
                   Previous
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.PREVIOUS].display}
-                    variant="outline"
                     size="sm"
                     className="ml-2"
                   />
@@ -143,14 +138,9 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                 content="Next item"
                 hotkeys={[SME_HOTKEYS[SME_ACTION.NEXT].display]}
               >
-                <Button
-                  variant="outline"
-                  onClick={handleNext}
-                  disabled={isLastItem}
-                >
+                <Button onClick={handleNext} disabled={isLastItem}>
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.NEXT].display}
-                    variant="outline"
                     size="sm"
                     className="mr-2"
                   />

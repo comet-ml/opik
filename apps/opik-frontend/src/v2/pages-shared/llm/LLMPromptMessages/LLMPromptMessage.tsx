@@ -294,46 +294,48 @@ const LLMPromptMessage = forwardRef<
               </div>
               <div
                 className={cn(
-                  "flex items-center invisible group-hover:visible [.group:focus-within_&]:visible",
+                  "flex min-w-0 items-center invisible group-hover:visible [.group:focus-within_&]:visible",
                   (showAlwaysActionsPanel || isHoldActionsVisible) && "visible",
                 )}
               >
                 {!hidePromptActions && (
-                  <>
-                    <LLMPromptMessageActions
-                      message={message}
-                      onChangeMessage={onChangeMessage}
-                      onReplaceWithChatPrompt={onReplaceWithChatPrompt}
-                      onClearOtherPromptLinks={onClearOtherPromptLinks}
-                      setIsLoading={setIsLoading}
-                      setIsHoldActionsVisible={setIsHoldActionsVisible}
-                      improvePromptConfig={improvePromptConfig}
-                    />
-                    <Separator orientation="vertical" className="mx-0.5 h-4" />
-                  </>
+                  <LLMPromptMessageActions
+                    message={message}
+                    onChangeMessage={onChangeMessage}
+                    onReplaceWithChatPrompt={onReplaceWithChatPrompt}
+                    onClearOtherPromptLinks={onClearOtherPromptLinks}
+                    setIsLoading={setIsLoading}
+                    setIsHoldActionsVisible={setIsHoldActionsVisible}
+                    improvePromptConfig={improvePromptConfig}
+                  />
                 )}
-                {!hideRemoveButton && (
-                  <TooltipWrapper content="Remove message">
+                <div className="flex shrink-0 items-center">
+                  {!hidePromptActions && (
+                    <Separator orientation="vertical" className="mx-1 h-4" />
+                  )}
+                  {!hideRemoveButton && (
+                    <TooltipWrapper content="Remove message">
+                      <Button
+                        variant="minimal"
+                        size="icon-sm"
+                        onClick={onRemoveMessage}
+                        type="button"
+                      >
+                        <Trash />
+                      </Button>
+                    </TooltipWrapper>
+                  )}
+                  <TooltipWrapper content="Duplicate message">
                     <Button
                       variant="minimal"
                       size="icon-sm"
-                      onClick={onRemoveMessage}
+                      onClick={onDuplicateMessage}
                       type="button"
                     >
-                      <Trash />
+                      <CopyPlus />
                     </Button>
                   </TooltipWrapper>
-                )}
-                <TooltipWrapper content="Duplicate message">
-                  <Button
-                    variant="minimal"
-                    size="icon-sm"
-                    onClick={onDuplicateMessage}
-                    type="button"
-                  >
-                    <CopyPlus />
-                  </Button>
-                </TooltipWrapper>
+                </div>
               </div>
             </div>
 

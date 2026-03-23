@@ -190,13 +190,13 @@ const PlaygroundPage = () => {
       className="-mx-6 h-full overflow-y-auto overflow-x-hidden"
       style={
         {
-          "--min-prompt-width": "380px",
+          "--min-prompt-width": "400px",
           "--max-prompt-width": "1440px",
           "--add-variant-width": "90px",
         } as React.CSSProperties
       }
     >
-      <div className="flex min-h-full min-w-full flex-col">
+      <div className="flex min-h-full min-w-full flex-col bg-background">
         <div className="bg-gray-100">
           <PlaygroundHeader
             workspaceName={workspaceName}
@@ -220,6 +220,7 @@ const PlaygroundPage = () => {
               <div
                 className="flex flex-1 shrink-0"
                 style={{
+                  minWidth: `calc(${promptCount} * var(--min-prompt-width))`,
                   maxWidth: `calc(${promptCount} * var(--max-prompt-width))`,
                 }}
               >
@@ -230,10 +231,7 @@ const PlaygroundPage = () => {
                 />
               </div>
 
-              <PlaygroundAddVariant
-                providerKeys={providerKeys}
-                containerRef={ref}
-              />
+              <PlaygroundAddVariant providerKeys={providerKeys} />
             </div>
 
             <PlaygroundOutputs
@@ -241,7 +239,6 @@ const PlaygroundPage = () => {
               versionHash={versionHash}
               runSingle={runSingle}
               stopSingle={stopSingle}
-              headerMaxWidth={headerMaxWidth}
             />
           </>
         ) : (
@@ -249,6 +246,7 @@ const PlaygroundPage = () => {
             <div
               className="flex flex-1 shrink-0 flex-col"
               style={{
+                minWidth: `calc(${promptCount} * var(--min-prompt-width))`,
                 maxWidth: `calc(${promptCount} * var(--max-prompt-width))`,
               }}
             >
@@ -270,10 +268,7 @@ const PlaygroundPage = () => {
               </div>
             </div>
 
-            <PlaygroundAddVariant
-              providerKeys={providerKeys}
-              containerRef={ref}
-            />
+            <PlaygroundAddVariant providerKeys={providerKeys} />
           </div>
         )}
       </div>

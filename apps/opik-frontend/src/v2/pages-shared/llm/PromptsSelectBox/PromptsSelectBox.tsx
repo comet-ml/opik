@@ -148,7 +148,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         "Loaded prompt";
 
       return (
-        <div className="flex max-w-44 items-center px-2">
+        <div className="flex min-w-0 items-center px-1">
           <TooltipWrapper
             content={hasUnsavedChanges ? "Unsaved changes" : displayName}
           >

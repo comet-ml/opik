@@ -271,19 +271,21 @@ const PlaygroundPrompt = ({
     PLAYGROUND_PROMPT_COLORS[index % PLAYGROUND_PROMPT_COLORS.length];
 
   return (
-    <div className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col border-r">
-      <div className="flex h-10 items-center justify-between gap-2 border-b px-4">
-        <div className="flex items-center gap-1">
-          <p className="comet-body-s-accented whitespace-nowrap">{name}</p>
-          <span
-            className="comet-body-s flex size-6 items-center justify-center rounded-md"
-            style={{
-              backgroundColor: promptColor.bg,
-              color: promptColor.text,
-            }}
-          >
-            {getAlphabetLetter(index)}
-          </span>
+    <div className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r">
+      <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1 pr-2">
+            <p className="comet-body-s-accented whitespace-nowrap">{name}</p>
+            <span
+              className="comet-body-s flex size-6 items-center justify-center rounded-md"
+              style={{
+                backgroundColor: promptColor.bg,
+                color: promptColor.text,
+              }}
+            >
+              {getAlphabetLetter(index)}
+            </span>
+          </div>
           <PromptModelSelect
             compact
             value={model}
@@ -304,7 +306,7 @@ const PlaygroundPrompt = ({
           />
         </div>
 
-        <div className="flex items-center transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/prompt:opacity-100">
+        <div className="flex min-w-0 items-center overflow-hidden pl-4 [@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4">
           <PromptsSelectBox
             compact
             projectId={activeProjectId!}
@@ -316,32 +318,34 @@ const PlaygroundPrompt = ({
             promptName={chatPromptData?.name}
           />
 
-          {hasMessageContent && (
-            <TooltipWrapper content="Save to prompt library">
-              <Button
-                variant="minimal"
-                size="icon-sm"
-                onClick={handleSaveChatPrompt}
-              >
-                <Save />
-              </Button>
-            </TooltipWrapper>
-          )}
-
-          {promptCount > 1 && (
-            <>
-              <Separator orientation="vertical" className="mx-1 h-4" />
-              <TooltipWrapper content="Remove prompt">
+          <div className="flex shrink-0 items-center">
+            {hasMessageContent && (
+              <TooltipWrapper content="Save to prompt library">
                 <Button
                   variant="minimal"
                   size="icon-sm"
-                  onClick={() => deletePrompt(promptId)}
+                  onClick={handleSaveChatPrompt}
                 >
-                  <Trash />
+                  <Save />
                 </Button>
               </TooltipWrapper>
-            </>
-          )}
+            )}
+
+            {promptCount > 1 && (
+              <>
+                <Separator orientation="vertical" className="mx-1 h-4" />
+                <TooltipWrapper content="Remove prompt">
+                  <Button
+                    variant="minimal"
+                    size="icon-sm"
+                    onClick={() => deletePrompt(promptId)}
+                  >
+                    <Trash />
+                  </Button>
+                </TooltipWrapper>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

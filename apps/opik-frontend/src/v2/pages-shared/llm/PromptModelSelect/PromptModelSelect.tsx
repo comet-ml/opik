@@ -286,7 +286,7 @@ const PromptModelSelect = ({
           className={cn(
             "size-full data-[placeholder]:text-light-slate",
             compact &&
-              "w-auto gap-1 border-0 bg-transparent hover:shadow-none hover:text-primary-hover [&>svg]:text-current [&>svg]:opacity-100",
+              "w-auto min-w-0 gap-1 border-0 bg-transparent px-0 text-left hover:shadow-none hover:text-primary-hover [&>span]:truncate [&>svg]:text-current [&>svg]:opacity-100",
             hasError && (compact ? "text-destructive" : "border-destructive"),
           )}
         >

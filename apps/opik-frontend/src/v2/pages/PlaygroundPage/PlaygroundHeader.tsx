@@ -28,7 +28,6 @@ import {
   useResetOutputMap,
   useSetDatasetVariables,
   useSetDatasetFilters,
-  useExperimentNamePrefix,
   useSetExperimentNamePrefix,
   useDatasetFilters,
 } from "@/store/PlaygroundStore";
@@ -76,7 +75,6 @@ const PlaygroundHeader = ({
   const resetOutputMap = useResetOutputMap();
   const setDatasetVariables = useSetDatasetVariables();
   const setDatasetFilters = useSetDatasetFilters();
-  const experimentNamePrefix = useExperimentNamePrefix();
   const setExperimentNamePrefix = useSetExperimentNamePrefix();
   const isRunning = useIsRunning();
   const filters = useDatasetFilters();
@@ -250,7 +248,7 @@ const PlaygroundHeader = ({
         : datasetName;
 
       return (
-        <div className="flex h-7 items-center rounded-md bg-background">
+        <div className="flex h-7 items-center rounded-md border bg-background">
           <button
             className="flex items-center gap-1.5 px-2 text-muted-slate hover:text-primary-hover"
             onClick={() => setRunOnDatasetOpen(true)}
@@ -276,14 +274,18 @@ const PlaygroundHeader = ({
     }
 
     return (
-      <Button
-        variant="outline"
-        size="xs"
-        onClick={() => setRunOnDatasetOpen(true)}
-      >
-        <Database className="mr-1 size-4" />
-        Test on dataset
-      </Button>
+      <TooltipWrapper content={isRunDisabled ? runDisabledReason : undefined}>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => setRunOnDatasetOpen(true)}
+          disabled={isRunDisabled}
+          style={isRunDisabled ? { pointerEvents: "auto" } : {}}
+        >
+          <Database className="mr-1 size-4" />
+          Test on dataset
+        </Button>
+      </TooltipWrapper>
     );
   };
 
@@ -351,7 +353,6 @@ const PlaygroundHeader = ({
         <div className="flex items-center gap-2">
           {renderExperimentChipOrButton()}
           {renderRunButton()}
-          <Separator orientation="vertical" className="mx-1 h-7" />
           <Button
             variant="ghost"
             size="xs"
@@ -394,8 +395,6 @@ const PlaygroundHeader = ({
         initialDatasetId={datasetId}
         initialSelectedRuleIds={selectedRuleIds}
         initialFilters={filters}
-        initialExperimentPrefix={experimentNamePrefix}
-        runDisabledReason={runDisabledReason}
       />
     </>
   );

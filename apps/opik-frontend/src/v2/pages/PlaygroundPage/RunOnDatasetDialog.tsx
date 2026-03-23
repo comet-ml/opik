@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/ui/dialog";
-import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { DatasetVersionSelectBox } from "@/v2/pages-shared/DatasetVersionSelectBox";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
@@ -58,8 +57,6 @@ interface RunOnDatasetDialogProps {
   initialDatasetId?: string | null;
   initialSelectedRuleIds?: string[] | null;
   initialFilters?: Filters;
-  initialExperimentPrefix?: string | null;
-  runDisabledReason?: string | null;
 }
 
 const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
@@ -70,8 +67,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   initialDatasetId = null,
   initialSelectedRuleIds = null,
   initialFilters = [],
-  initialExperimentPrefix,
-  runDisabledReason,
 }) => {
   const [datasetId, setDatasetId] = useState<string | null>(initialDatasetId);
   const [selectedRuleIds, setSelectedRuleIds] = useState<string[] | null>(
@@ -97,15 +92,9 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
       setDatasetId(initialDatasetId);
       setSelectedRuleIds(initialSelectedRuleIds);
       setFilters(initialFilters);
-      setExperimentPrefix(initialExperimentPrefix ?? "");
+      setExperimentPrefix("");
     }
-  }, [
-    open,
-    initialDatasetId,
-    initialSelectedRuleIds,
-    initialFilters,
-    initialExperimentPrefix,
-  ]);
+  }, [open, initialDatasetId, initialSelectedRuleIds, initialFilters]);
 
   const { data: datasetsData } = useDatasetsList(
     { workspaceName, page: 1, size: DEFAULT_LOADED_DATASETS },
@@ -251,11 +240,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   ]);
 
   const isRunDisabled =
-    !datasetId ||
-    isDatasetEmpty ||
-    isLoadingDatasetItems ||
-    isRunning ||
-    !!runDisabledReason;
+    !datasetId || isDatasetEmpty || isLoadingDatasetItems || isRunning;
 
   return (
     <>
@@ -305,19 +290,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 canUsePlayground={canUsePlayground}
               />
             </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Experiment name prefix</Label>
-              <Input
-                value={experimentPrefix}
-                dimension="sm"
-                onChange={(e) => setExperimentPrefix(e.target.value)}
-                placeholder="Define experiment name prefix"
-              />
-              <p className="comet-body-xs text-muted-slate">
-                One experiment will be created per prompt using this prefix.
-              </p>
-            </div>
           </div>
 
           <DialogFooter>
@@ -326,9 +298,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
             </DialogClose>
             <TooltipWrapper
               content={
-                isRunning
-                  ? "An experiment is already running"
-                  : runDisabledReason
+                isRunning ? "An experiment is already running" : undefined
               }
             >
               <Button

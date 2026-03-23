@@ -4,11 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/ui/button";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import PlaygroundProgressIndicator from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
-import {
-  useCreatedExperiments,
-  useExperimentNamePrefix,
-  useIsRunning,
-} from "@/store/PlaygroundStore";
+import { useCreatedExperiments, useIsRunning } from "@/store/PlaygroundStore";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
@@ -20,7 +16,6 @@ interface PlaygroundExperimentOutputActionsProps {
   onChangeSize: (size: number) => void;
   total: number;
   isLoadingTotal?: boolean;
-  maxWidth?: string;
 }
 
 const PlaygroundExperimentOutputActions = ({
@@ -31,7 +26,6 @@ const PlaygroundExperimentOutputActions = ({
   onChangeSize,
   total,
   isLoadingTotal,
-  maxWidth,
 }: PlaygroundExperimentOutputActionsProps) => {
   const isRunning = useIsRunning();
   const createdExperiments = useCreatedExperiments();
@@ -39,8 +33,6 @@ const PlaygroundExperimentOutputActions = ({
 
   const parsedDatasetId = parseDatasetVersionKey(datasetId);
   const plainDatasetId = parsedDatasetId?.datasetId || datasetId;
-
-  const experimentNamePrefix = useExperimentNamePrefix();
 
   const isExperimentMode = !!datasetId;
   const hasExperiments = createdExperiments.length > 0;
@@ -57,10 +49,7 @@ const PlaygroundExperimentOutputActions = ({
   if (!isExperimentMode) return null;
 
   return (
-    <div
-      className="border-y border-r"
-      style={maxWidth ? { maxWidth } : undefined}
-    >
+    <div className="border-y">
       {isRunning ? (
         <div className="px-4 pb-3 pt-2">
           <PlaygroundProgressIndicator />
@@ -70,14 +59,10 @@ const PlaygroundExperimentOutputActions = ({
           <Button
             variant="ghost"
             size="sm"
-            className="text-muted-slate"
+            className="text-sm text-muted-slate"
             onClick={handleNavigateToExperiments}
           >
             <span>Experiment results</span>
-            <span className="mx-1">·</span>
-            <span className="max-w-[250px] truncate">
-              {experimentNamePrefix}
-            </span>
             <ExternalLink className="ml-1 size-3.5 shrink-0" />
           </Button>
           <DataTablePagination

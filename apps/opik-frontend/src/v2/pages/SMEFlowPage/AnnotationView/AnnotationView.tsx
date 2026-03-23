@@ -133,7 +133,6 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                   Previous
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.PREVIOUS].display}
-                    variant="outline"
                     size="sm"
                     className="ml-2"
                   />
@@ -150,7 +149,6 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
                 >
                   <HotkeyDisplay
                     hotkey={SME_HOTKEYS[SME_ACTION.NEXT].display}
-                    variant="outline"
                     size="sm"
                     className="mr-2"
                   />

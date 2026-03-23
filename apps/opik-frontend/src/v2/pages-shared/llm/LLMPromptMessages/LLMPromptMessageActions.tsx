@@ -267,33 +267,37 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
   return (
     <>
-      <div className="flex cursor-default flex-nowrap items-center">
-        {showGenerateButton && (
-          <TooltipWrapper content={promptButtonTooltip}>
-            <Button
-              variant="minimal"
-              size="icon-sm"
-              onClick={handleOpenWizard}
-              type="button"
-              disabled={isPromptButtonDisabled}
-            >
-              <Sparkles />
-            </Button>
-          </TooltipWrapper>
-        )}
-        {showImproveButton && (
-          <TooltipWrapper content={promptButtonTooltip}>
-            <Button
-              variant="minimal"
-              size="icon-sm"
-              onClick={handleOpenWizard}
-              type="button"
-              disabled={isPromptButtonDisabled}
-            >
-              <Wand2 />
-            </Button>
-          </TooltipWrapper>
-        )}
+      <div className="flex min-w-0 cursor-default flex-nowrap items-center">
+        <div className="shrink-0">
+          {showGenerateButton && (
+            <div className="shrink-0">
+              <TooltipWrapper content={promptButtonTooltip}>
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleOpenWizard}
+                  type="button"
+                  disabled={isPromptButtonDisabled}
+                >
+                  <Sparkles />
+                </Button>
+              </TooltipWrapper>
+            </div>
+          )}
+          {showImproveButton && (
+            <TooltipWrapper content={promptButtonTooltip}>
+              <Button
+                variant="minimal"
+                size="icon-sm"
+                onClick={handleOpenWizard}
+                type="button"
+                disabled={isPromptButtonDisabled}
+              >
+                <Wand2 />
+              </Button>
+            </TooltipWrapper>
+          )}
+        </div>
 
         <PromptsSelectBox
           compact
@@ -318,18 +322,20 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         />
 
         {!saveDisabled && (
-          <TooltipWrapper content={saveTooltip}>
-            <Button
-              variant="minimal"
-              size="icon-sm"
-              onClick={() => {
-                resetKeyRef.current = resetKeyRef.current + 1;
-                setOpen("save");
-              }}
-            >
-              <Save />
-            </Button>
-          </TooltipWrapper>
+          <div className="shrink-0">
+            <TooltipWrapper content={saveTooltip}>
+              <Button
+                variant="minimal"
+                size="icon-sm"
+                onClick={() => {
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                  setOpen("save");
+                }}
+              >
+                <Save />
+              </Button>
+            </TooltipWrapper>
+          </div>
         )}
 
         <ConfirmDialog

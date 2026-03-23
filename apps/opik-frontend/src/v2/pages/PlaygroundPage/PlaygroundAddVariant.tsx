@@ -1,6 +1,7 @@
-import { RefObject, useState } from "react";
+import { useRef, useState } from "react";
 import { Copy, File, Plus } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { generateDefaultPrompt } from "@/lib/playground";
@@ -16,13 +17,9 @@ import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 
 interface PlaygroundAddVariantProps {
   providerKeys: COMPOSED_PROVIDER_TYPE[];
-  containerRef: RefObject<HTMLDivElement | null>;
 }
 
-const PlaygroundAddVariant = ({
-  providerKeys,
-  containerRef,
-}: PlaygroundAddVariantProps) => {
+const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
   const promptMap = usePromptMap();
   const addPrompt = useAddPrompt();
   const promptIds = usePromptIds();
@@ -33,12 +30,14 @@ const PlaygroundAddVariant = ({
     useLLMProviderModelsData();
 
   const [addVariantOpen, setAddVariantOpen] = useState(false);
+  const stripRef = useRef<HTMLDivElement>(null);
 
   const scrollToEnd = () => {
     requestAnimationFrame(() => {
-      containerRef.current?.parentElement?.scrollTo({
-        left: containerRef.current.scrollWidth,
+      stripRef.current?.scrollIntoView({
         behavior: "smooth",
+        inline: "end",
+        block: "nearest",
       });
     });
   };
@@ -61,7 +60,9 @@ const PlaygroundAddVariant = ({
     if (!lastPrompt) return;
 
     const newPrompt = generateDefaultPrompt({
-      initPrompt: lastPrompt,
+      // Clear library link so useLoadChatPrompt doesn't overwrite
+      // the duplicated messages with the saved library version
+      initPrompt: { ...lastPrompt, loadedChatPromptId: undefined },
       setupProviders: providerKeys,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,
@@ -72,11 +73,18 @@ const PlaygroundAddVariant = ({
   };
 
   return (
-    <div className="flex w-[var(--add-variant-width)] shrink-0 items-start justify-center self-stretch border-r bg-background">
+    <div
+      ref={stripRef}
+      className={cn(
+        "group/variant flex w-[var(--add-variant-width)] shrink-0 cursor-pointer items-start justify-center self-stretch border-r bg-background hover:bg-primary-100",
+        addVariantOpen && "bg-primary-100",
+      )}
+      onClick={() => setAddVariantOpen(true)}
+    >
       <div className="flex h-[50vh] items-center">
         <Popover open={addVariantOpen} onOpenChange={setAddVariantOpen}>
           <PopoverTrigger asChild>
-            <div className="group/variant flex cursor-pointer flex-col items-center gap-3">
+            <div className="flex cursor-pointer flex-col items-center gap-3">
               <Button
                 variant="secondary"
                 size="icon-xs"
@@ -89,7 +97,12 @@ const PlaygroundAddVariant = ({
               </span>
             </div>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-48 p-1" side="left">
+          <PopoverContent
+            align="start"
+            className="w-48 p-1"
+            side="left"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Button
               variant="ghost"
               size="sm"

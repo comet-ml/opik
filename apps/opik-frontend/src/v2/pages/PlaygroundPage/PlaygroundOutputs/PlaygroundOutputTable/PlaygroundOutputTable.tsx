@@ -198,8 +198,8 @@ const PlaygroundOutputTable = ({
           onResizeStop={handleResizeStop}
           handleComponent={{
             right: (
-              <div className="flex h-full w-[13px] items-start justify-center border-x border-b pt-4 hover:bg-gray-100">
-                <GripVertical className="size-3 text-light-slate" />
+              <div className="flex h-full w-[13px] justify-center border-x border-b hover:bg-gray-100">
+                <GripVertical className="sticky top-4 z-10 mt-4 size-3 text-light-slate" />
               </div>
             ),
           }}

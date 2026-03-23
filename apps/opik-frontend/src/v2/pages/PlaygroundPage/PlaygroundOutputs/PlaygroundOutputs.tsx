@@ -32,7 +32,6 @@ interface PlaygroundOutputsProps {
   versionHash?: string;
   runSingle: (promptId: string) => void;
   stopSingle: (promptId: string) => void;
-  headerMaxWidth?: string;
 }
 
 const EMPTY_ITEMS: DatasetItem[] = [];
@@ -44,7 +43,6 @@ const PlaygroundOutputs = ({
   versionHash,
   runSingle,
   stopSingle,
-  headerMaxWidth,
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
@@ -126,7 +124,6 @@ const PlaygroundOutputs = ({
             onChangeSize={setSize}
             total={total}
             isLoadingTotal={isProcessing}
-            maxWidth={headerMaxWidth}
           />
           <div className="flex w-full flex-col pb-4 pt-0">
             {isProcessing && (
