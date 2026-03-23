@@ -586,6 +586,16 @@ optimizationLogs:
   # Description: Maximum number of concurrent S3 uploads during sync
   syncConcurrency: ${OPTIMIZATION_LOGS_SYNC_CONCURRENCY:-5}
 
+# Data retention policy enforcement
+# The job splits the workspace UUID space into N=executionsPerDay fractions and processes one fraction per tick.
+# Use a value that divides 1440 evenly for consistent interval spacing (e.g., 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 32, 36, 48, 60, 80, 96, 120, 144, 160, 180, 240, 288).
+retention:
+  enabled: ${RETENTION_ENABLED:-false}
+  executionsPerDay: ${RETENTION_EXECUTIONS_PER_DAY:-48}
+  workspaceBatchSize: ${RETENTION_WORKSPACE_BATCH_SIZE:-1000}
+  slidingWindowDays: ${RETENTION_SLIDING_WINDOW_DAYS:-3}
+  lockTimeoutSeconds: ${RETENTION_LOCK_TIMEOUT_SECONDS:-1800}
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 3

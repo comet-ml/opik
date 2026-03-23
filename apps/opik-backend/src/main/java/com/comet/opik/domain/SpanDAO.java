@@ -59,6 +59,7 @@ import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -71,7 +72,7 @@ import static java.util.function.Predicate.not;
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
-class SpanDAO {
+public class SpanDAO {
 
     private static final String SPAN_SEARCH_CLAUSE = """
             (ilike(id, :search_text)
@@ -1174,6 +1175,21 @@ class SpanDAO {
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
             SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String DELETE_FOR_RETENTION = """
+            DELETE FROM spans
+            WHERE workspace_id IN :workspace_ids
+            AND trace_id >= :lower_bound
+            AND trace_id \\< :cutoff_id
+            AND trace_id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids
+                AND trace_id >= :lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
             ;
             """;
 
@@ -2715,6 +2731,80 @@ class SpanDAO {
         // Inject provider as first field in metadata
         return JsonUtils.prependField(
                 baseMetadata, SpanField.PROVIDER.getValue(), provider);
+    }
+
+    /**
+     * Bulk delete spans for data retention enforcement (applyToPast=true).
+     * Deletes spans whose trace_id is in [lowerBound, cutoffId) and not linked to experiments.
+     */
+    public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+            @NonNull UUID lowerBound) {
+        Preconditions.checkArgument(
+                CollectionUtils.isNotEmpty(workspaceIds), "Argument 'workspaceIds' must not be empty");
+
+        log.info("Retention delete spans: workspaces='{}', cutoffId='{}', lowerBound='{}'",
+                workspaceIds.size(), cutoffId, lowerBound);
+
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null,
+                workspaceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("cutoff_id", cutoffId)
+                            .bind("lower_bound", lowerBound);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    /**
+     * Bulk delete spans for data retention enforcement (applyToPast=false).
+     * Each workspace has its own lower bound.
+     */
+    public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds,
+            @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
+        Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
+
+        log.info("Retention delete spans (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
+
+        var logComment = getLogComment("retention_delete_spans_bounded", null, workspaceMinIds.size());
+        var entries = List.copyOf(workspaceMinIds.entrySet());
+
+        var sb = new StringBuilder("DELETE FROM spans WHERE (");
+        for (int i = 0; i < entries.size(); i++) {
+            if (i > 0) sb.append(" OR ");
+            sb.append("(workspace_id = :ws_").append(i)
+                    .append(" AND trace_id >= :lb_").append(i)
+                    .append(" AND trace_id < :cutoff_id)");
+        }
+        sb.append(") AND trace_id NOT IN (")
+                .append("SELECT trace_id FROM experiment_items")
+                .append(" WHERE workspace_id IN :workspace_ids_flat")
+                .append(" AND trace_id >= :min_lower_bound")
+                .append(" AND trace_id < :cutoff_id")
+                .append(") SETTINGS log_comment = '").append(logComment)
+                .append("', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1");
+
+        var sql = sb.toString();
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(sql)
+                            .bind("cutoff_id", cutoffId)
+                            .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
+                            .bind("min_lower_bound", lowerBound);
+
+                    for (int i = 0; i < entries.size(); i++) {
+                        statement.bind("ws_" + i, entries.get(i).getKey());
+                        statement.bind("lb_" + i, entries.get(i).getValue());
+                    }
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
     }
 
 }
