@@ -102,6 +102,7 @@ export type PlaygroundStore = {
   providerValidationTrigger: number;
   selectedRuleIds: string[] | null;
   createdExperiments: LogExperiment[];
+  isRunning: boolean; // v1 playground compatibility
   isRunningMap: Record<string, boolean>;
   datasetFilters: Filters;
   datasetPage: number;
@@ -137,6 +138,7 @@ export type PlaygroundStore = {
   setSelectedRuleIds: (ruleIds: string[] | null) => void;
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
   clearCreatedExperiments: () => void;
+  setIsRunning: (isRunning: boolean) => void;
   setPromptRunning: (promptId: string, running: boolean) => void;
   setAllRunning: (running: boolean) => void;
   clearRunningMap: () => void;
@@ -160,6 +162,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       providerValidationTrigger: 0,
       selectedRuleIds: null,
       createdExperiments: [],
+      isRunning: false,
       isRunningMap: {},
       datasetFilters: [],
       datasetPage: 1,
@@ -328,6 +331,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             createdExperiments: [],
           };
         });
+      },
+      setIsRunning: (isRunning) => {
+        set((state) => ({ ...state, isRunning }));
       },
       setPromptRunning: (promptId, running) => {
         set((state) => ({
@@ -552,10 +558,16 @@ export const useSetCreatedExperiments = () =>
 export const useClearCreatedExperiments = () =>
   usePlaygroundStore((state) => state.clearCreatedExperiments);
 
+// Reads both v1 (boolean) and v2 (per-prompt map) running state
+// for compatibility with v1 playground
 export const useIsRunning = () =>
-  usePlaygroundStore((state) =>
-    Object.values(state.isRunningMap).some(Boolean),
+  usePlaygroundStore(
+    (state) =>
+      state.isRunning || Object.values(state.isRunningMap).some(Boolean),
   );
+
+export const useSetIsRunning = () =>
+  usePlaygroundStore((state) => state.setIsRunning);
 
 export const useIsPromptRunning = (promptId: string) =>
   usePlaygroundStore((state) => !!state.isRunningMap[promptId]);

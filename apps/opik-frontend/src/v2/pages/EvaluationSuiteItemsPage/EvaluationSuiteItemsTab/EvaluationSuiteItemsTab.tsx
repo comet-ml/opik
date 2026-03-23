@@ -32,7 +32,6 @@ import {
   COLUMN_DATA_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
-  COLUMN_TYPE,
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
