@@ -13,6 +13,7 @@ import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import Loader from "@/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import VersionChangeSummaryCell from "./VersionChangeSummaryCell";
 import VersionRowActionsCell from "./VersionRowActionsCell";
 
@@ -71,6 +72,10 @@ const COLUMNS: ColumnData<DatasetVersion>[] = [
 ];
 
 const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
+  const {
+    permissions: { canEditDatasets },
+  } = usePermissions();
+
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
 
@@ -96,14 +101,17 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
       DatasetVersion
     >(COLUMNS, {});
 
-    return [
-      ...baseColumns,
-      generateActionsColumDef<DatasetVersion>({
-        cell: VersionRowActionsCell,
-        customMeta: { datasetId },
-      }),
-    ];
-  }, [datasetId]);
+    if (canEditDatasets) {
+      baseColumns.push(
+        generateActionsColumDef<DatasetVersion>({
+          cell: VersionRowActionsCell,
+          customMeta: { datasetId },
+        }),
+      );
+    }
+
+    return baseColumns;
+  }, [datasetId, canEditDatasets]);
 
   const data = versionsData?.content || [];
   const total = versionsData?.total ?? 0;
