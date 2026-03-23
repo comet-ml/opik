@@ -4,7 +4,7 @@ import TextareaAutosize from "react-textarea-autosize";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
-import { Settings2 } from "lucide-react";
+import { RotateCcw, Settings2 } from "lucide-react";
 
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Description } from "@/ui/description";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/evaluation-suites";
@@ -133,12 +134,14 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
   });
 
   const runsPerItem = form.watch("runsPerItem");
+  const useGlobalPolicy = form.watch("useGlobalPolicy");
 
   const runsInput = useClampedIntegerInput({
     value: runsPerItem,
     min: 1,
     max: MAX_RUNS_PER_ITEM,
     onCommit: (v) => {
+      form.setValue("useGlobalPolicy", false);
       form.setValue("runsPerItem", v, { shouldDirty: true });
       const currentThreshold = form.getValues("passThreshold");
       if (currentThreshold > v) {
@@ -151,8 +154,17 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
     value: form.watch("passThreshold"),
     min: 1,
     max: runsPerItem,
-    onCommit: (v) => form.setValue("passThreshold", v, { shouldDirty: true }),
+    onCommit: (v) => {
+      form.setValue("useGlobalPolicy", false);
+      form.setValue("passThreshold", v, { shouldDirty: true });
+    },
   });
+
+  const handleRevertPolicy = () => {
+    form.setValue("useGlobalPolicy", true, { shouldDirty: true });
+    form.setValue("runsPerItem", suitePolicy.runs_per_item);
+    form.setValue("passThreshold", suitePolicy.pass_threshold);
+  };
 
   return (
     <div>
@@ -161,47 +173,68 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
         Define the conditions required for the evaluation to pass.
       </p>
 
-      <div className="mb-4 flex gap-4">
-        <div className="flex flex-1 flex-col gap-1">
-          <Label>Runs for this item</Label>
-          <Input
-            dimension="sm"
-            className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
-              "border-destructive": runsInput.isInvalid,
-            })}
-            type="number"
-            min={1}
-            max={MAX_RUNS_PER_ITEM}
-            value={runsInput.displayValue}
-            onChange={runsInput.onChange}
-            onFocus={runsInput.onFocus}
-            onBlur={runsInput.onBlur}
-            onKeyDown={runsInput.onKeyDown}
-          />
-          <span className="comet-body-xs text-light-slate">
-            Global default is {suitePolicy.runs_per_item}
-          </span>
+      <div className="mb-4 flex items-start overflow-hidden rounded-md border">
+        <div className="flex flex-1 gap-4 p-3">
+          <div className="flex flex-1 flex-col gap-1">
+            <Label>Runs for this item</Label>
+            <Input
+              dimension="sm"
+              className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
+                "border-destructive": runsInput.isInvalid,
+              })}
+              type="number"
+              min={1}
+              max={MAX_RUNS_PER_ITEM}
+              value={runsInput.displayValue}
+              onChange={runsInput.onChange}
+              onFocus={runsInput.onFocus}
+              onBlur={runsInput.onBlur}
+              onKeyDown={runsInput.onKeyDown}
+            />
+            <span className="comet-body-xs text-light-slate">
+              Sets how many times this item runs.
+            </span>
+          </div>
+          <div className="flex flex-1 flex-col gap-1">
+            <Label>Pass threshold</Label>
+            <Input
+              dimension="sm"
+              className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
+                "border-destructive": thresholdInput.isInvalid,
+              })}
+              type="number"
+              min={1}
+              max={runsPerItem}
+              value={thresholdInput.displayValue}
+              onChange={thresholdInput.onChange}
+              onFocus={thresholdInput.onFocus}
+              onBlur={thresholdInput.onBlur}
+              onKeyDown={thresholdInput.onKeyDown}
+            />
+            <span className="comet-body-xs text-light-slate">
+              Define how many runs must succeed.
+            </span>
+          </div>
         </div>
-        <div className="flex flex-1 flex-col gap-1">
-          <Label>Pass threshold</Label>
-          <Input
-            dimension="sm"
-            className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
-              "border-destructive": thresholdInput.isInvalid,
-            })}
-            type="number"
-            min={1}
-            max={runsPerItem}
-            value={thresholdInput.displayValue}
-            onChange={thresholdInput.onChange}
-            onFocus={thresholdInput.onFocus}
-            onBlur={thresholdInput.onBlur}
-            onKeyDown={thresholdInput.onKeyDown}
-          />
-          <span className="comet-body-xs text-light-slate">
-            Global default is {suitePolicy.pass_threshold}
-          </span>
-        </div>
+        <TooltipWrapper
+          content={
+            useGlobalPolicy
+              ? "Already using the suite's defaults"
+              : "Revert to the default values for this evaluation suite"
+          }
+        >
+          <button
+            type="button"
+            className={cn(
+              "flex items-center justify-center self-stretch border-l px-2",
+              useGlobalPolicy && "cursor-default opacity-50",
+            )}
+            onClick={useGlobalPolicy ? undefined : handleRevertPolicy}
+            aria-disabled={useGlobalPolicy}
+          >
+            <RotateCcw className="size-3.5 text-muted-slate" />
+          </button>
+        </TooltipWrapper>
       </div>
 
       <div className="flex flex-col gap-1">

@@ -54,11 +54,6 @@ interface EvaluationSuiteItemPanelProps {
   onOpenSettings: () => void;
 }
 
-function truncateId(id: string): string {
-  if (id.length <= 12) return id;
-  return `${id.slice(0, 4)}...${id.slice(-4)}`;
-}
-
 interface EvaluationSuiteItemPanelLayoutProps {
   datasetItemId: string;
   isOpen: boolean;
@@ -118,6 +113,7 @@ const EvaluationSuiteItemPanelLayout: React.FC<
     data,
     itemAssertions,
     currentPolicy,
+    itemPolicy === null,
   );
 
   const handleFormChange = useCallback(
@@ -211,18 +207,7 @@ const EvaluationSuiteItemPanelLayout: React.FC<
         <div className="relative size-full overflow-y-auto">
           <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
             <div className="comet-body-accented">
-              {isNewItem ? (
-                "Add suite item"
-              ) : (
-                <>
-                  Suite item{" "}
-                  <TooltipWrapper content={datasetItemId}>
-                    <span className="comet-body-s text-muted-slate">
-                      {truncateId(datasetItemId)}
-                    </span>
-                  </TooltipWrapper>
-                </>
-              )}
+              {isNewItem ? "Add suite item" : "Edit evaluation item"}
             </div>
             <TagListRenderer
               tags={tags}
