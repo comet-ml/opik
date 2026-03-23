@@ -32,7 +32,7 @@ public record Optimization(
         @JsonView({
                 Optimization.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
         @JsonView({Optimization.View.Public.class,
-                Optimization.View.Write.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
+                Optimization.View.Write.class}) UUID projectId,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotBlank String objectiveName,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotNull OptimizationStatus status,
         @Schema(implementation = JsonListString.class) @JsonView({Optimization.View.Public.class,
