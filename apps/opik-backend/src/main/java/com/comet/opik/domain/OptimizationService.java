@@ -135,14 +135,10 @@ class OptimizationServiceImpl implements OptimizationService {
             return Mono.just(Optional.empty());
         }
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
-            return Mono.fromCallable(
-                    () -> Optional.of(
-                            projectService.getOrCreate(workspaceId, optimization.projectName(), userName).id()))
-                    .subscribeOn(Schedulers.boundedElastic());
-        });
+        return Mono.deferContextual(ctx -> Mono.fromCallable(
+                () -> Optional.of(projectService.getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
+                        optimization.projectName(), ctx.get(RequestContext.USER_NAME)).id()))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     /**
