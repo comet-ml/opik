@@ -5943,9 +5943,9 @@ class ExperimentsResourceTest {
         }
 
         private UUID createDatasetItem(String workspaceName, String apiKey) {
-            var item = podamFactory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(podamFactory);
 
-            var batch = podamFactory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(podamFactory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
