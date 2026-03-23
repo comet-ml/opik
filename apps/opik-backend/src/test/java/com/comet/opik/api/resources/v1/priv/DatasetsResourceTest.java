@@ -2110,7 +2110,7 @@ class DatasetsResourceTest {
                     sorting.field(), null);
         }
 
-        private Stream<Arguments> getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields() {
+        static Stream<Arguments> getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields() {
             // Comparators for all sortable fields
             Comparator<Dataset> idComparator = Comparator.comparing(Dataset::id);
             Comparator<Dataset> nameComparator = Comparator.comparing(Dataset::name, String.CASE_INSENSITIVE_ORDER);
@@ -2349,7 +2349,7 @@ class DatasetsResourceTest {
                     null, List.of(filter));
         }
 
-        private Stream<Arguments> getValidFilters() {
+        static Stream<Arguments> getValidFilters() {
             return Stream.of(
                     // TAGS field tests (existing)
                     Arguments.of(
@@ -10525,6 +10525,253 @@ class DatasetsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringFields(DATASET_IGNORED_FIELDS)
                     .isEqualTo(expected);
+        }
+    }
+
+    @Nested
+    @DisplayName("Find Project Datasets")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindProjectDatasets {
+
+        @Test
+        @DisplayName("Success")
+        void getProjectDatasets() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+            var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            List<Dataset> expected1 = buildDatasets().stream()
+                    .map(d -> d.toBuilder().projectId(projectId).build())
+                    .toList();
+            List<Dataset> expected2 = buildDatasets().stream()
+                    .map(d -> d.toBuilder().projectId(projectId).build())
+                    .toList();
+
+            expected1.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+            expected2.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+
+            // Datasets in another project — must not appear in results
+            buildDatasets().stream()
+                    .map(d -> d.toBuilder().projectId(otherProjectId).build())
+                    .forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+
+            Dataset dataset = buildDataset().toBuilder()
+                    .name("The most expressive LLM: " + UUID.randomUUID()
+                            + " \uD83D\uDE05\uD83E\uDD23\uD83D\uDE02\uD83D\uDE42\uD83D\uDE43\uD83E\uDEE0")
+                    .description("Emoji Test \uD83E\uDD13\uD83E\uDDD0")
+                    .projectId(projectId)
+                    .build();
+
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            int defaultPageSize = 10;
+            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, defaultPageSize,
+                    workspaceName, apiKey);
+
+            var expectedContent = new ArrayList<Dataset>();
+            expectedContent.add(dataset);
+
+            expected2.reversed()
+                    .stream()
+                    .filter(__ -> expectedContent.size() < defaultPageSize)
+                    .forEach(expectedContent::add);
+
+            expected1.reversed()
+                    .stream()
+                    .filter(__ -> expectedContent.size() < defaultPageSize)
+                    .forEach(expectedContent::add);
+
+            findAndAssertPage(actualPage, defaultPageSize, expectedContent.size() + 1, 1, expectedContent);
+        }
+
+        @Test
+        @DisplayName("when limit is 5 but there are N datasets, then return 5 datasets and total N")
+        void getProjectDatasets__whenLimitIs5ButThereAre10Datasets__thenReturn5DatasetsAndTotal10() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            List<Dataset> expected1 = buildDatasets().stream()
+                    .map(d -> d.toBuilder().projectId(projectId).build())
+                    .toList();
+            List<Dataset> expected2 = buildDatasets().stream()
+                    .map(d -> d.toBuilder().projectId(projectId).build())
+                    .toList();
+
+            expected1.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+            expected2.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+
+            int pageSize = 5;
+            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, pageSize, workspaceName,
+                    apiKey);
+            var expectedContent = new ArrayList<>(expected2.reversed().subList(0, pageSize));
+
+            findAndAssertPage(actualPage, pageSize, expected1.size() + expected2.size(), 1, expectedContent);
+        }
+
+        @Test
+        @DisplayName("when fetching all datasets, then return datasets sorted by created date")
+        void getProjectDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByCreatedDate() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            List<Dataset> expected = buildDatasets().stream()
+                    .map(d -> d.toBuilder().projectId(projectId).build())
+                    .toList();
+            expected.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+
+            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, expected.size(), workspaceName,
+                    apiKey);
+
+            findAndAssertPage(actualPage, expected.size(), expected.size(), 1, expected.reversed());
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest$FindDatasets#getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields")
+        @DisplayName("when fetching all datasets, then return datasets sorted by valid fields")
+        void getProjectDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByValidFields(
+                Comparator<Dataset> comparator,
+                SortingField sorting) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            List<Dataset> datasets = buildDatasets().stream()
+                    .map(d -> d.toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .projectId(projectId)
+                            .build())
+                    .toList();
+
+            datasets.forEach(dataset -> {
+                var id = createAndAssert(dataset, apiKey, workspaceName);
+                saveDatasetsLastOptimizationCreated(
+                        Set.of(new DatasetLastOptimizationCreated(id, Instant.now())), workspaceId);
+                saveDatasetsLastExperimentCreated(
+                        Set.of(new DatasetLastExperimentCreated(id, Instant.now())), workspaceId);
+            });
+
+            datasets = datasets.stream().sorted(comparator).toList();
+
+            var actualPage = datasetResourceClient.getProjectDatasetsWithSortingField(
+                    projectId, datasets.size(), List.of(sorting), null, workspaceName, apiKey);
+
+            findAndAssertPage(actualPage, datasets.size(), datasets.size(), 1, datasets);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest$FindDatasets#getValidFilters")
+        @DisplayName("when fetching all datasets, then return datasets filtered")
+        void whenFilterProjectDatasets__thenReturnDatasetsFiltered(
+                Function<List<Dataset>, DatasetFilter> getFilter,
+                Function<List<Dataset>, List<Dataset>> getExpectedDatasets) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            List<Dataset> datasets = buildDatasets().stream()
+                    .map(d -> d.toBuilder().projectId(projectId).build())
+                    .toList();
+
+            Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated = new HashSet<>();
+            Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated = new HashSet<>();
+
+            datasets.forEach(dataset -> {
+                var id = createAndAssert(dataset, apiKey, workspaceName);
+                datasetsLastOptimizationCreated.add(new DatasetLastOptimizationCreated(id, Instant.now()));
+                datasetsLastExperimentCreated.add(new DatasetLastExperimentCreated(id, Instant.now()));
+            });
+
+            saveDatasetsLastOptimizationCreated(datasetsLastOptimizationCreated, workspaceId);
+            saveDatasetsLastExperimentCreated(datasetsLastExperimentCreated, workspaceId);
+
+            List<Dataset> expectedDatasets = getExpectedDatasets.apply(datasets).reversed();
+            DatasetFilter filter = getFilter.apply(datasets);
+
+            var actualPage = datasetResourceClient.getProjectDatasetsWithSortingField(
+                    projectId, Math.max(1, expectedDatasets.size()), null, List.of(filter),
+                    workspaceName, apiKey);
+
+            findAndAssertPage(actualPage, expectedDatasets.size(), expectedDatasets.size(), 1, expectedDatasets);
+        }
+
+        @Test
+        @DisplayName("when searching by dataset name, then return matching datasets")
+        void getProjectDatasets__whenSearchingByDatasetName__thenReturnMatchingDatasets() {
+            UUID datasetSuffix = UUID.randomUUID();
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            List<Dataset> datasets = List.of(
+                    buildDataset().toBuilder()
+                            .name("MySQL, realtime chatboot: " + datasetSuffix).projectId(projectId).build(),
+                    buildDataset().toBuilder()
+                            .name("Chatboot using mysql: " + datasetSuffix).projectId(projectId).build(),
+                    buildDataset().toBuilder()
+                            .name("Chatboot MYSQL expert: " + datasetSuffix).projectId(projectId).build(),
+                    buildDataset().toBuilder()
+                            .name("Chatboot expert (my SQL): " + datasetSuffix).projectId(projectId).build(),
+                    buildDataset().toBuilder()
+                            .name("Chatboot expert: " + datasetSuffix).projectId(projectId).build());
+
+            datasets.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
+
+            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, 100, "MySql", null, null,
+                    workspaceName, apiKey);
+
+            assertThat(actualPage.total()).isEqualTo(3);
+            assertThat(actualPage.size()).isEqualTo(3);
+            assertThat(actualPage.content().stream().map(Dataset::name).toList()).contains(
+                    "MySQL, realtime chatboot: " + datasetSuffix,
+                    "Chatboot using mysql: " + datasetSuffix,
+                    "Chatboot MYSQL expert: " + datasetSuffix);
+        }
+
+        private void saveDatasetsLastOptimizationCreated(
+                Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated, String workspaceId) {
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetDAO.class);
+                dao.recordOptimizations(workspaceId, datasetsLastOptimizationCreated);
+                return null;
+            });
+        }
+
+        private void saveDatasetsLastExperimentCreated(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated,
+                String workspaceId) {
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(DatasetDAO.class);
+                dao.recordExperiments(workspaceId, datasetsLastExperimentCreated);
+                return null;
+            });
         }
     }
 }
