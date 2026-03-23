@@ -30,9 +30,9 @@ public record Optimization(
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) String name,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotBlank String datasetName,
         @JsonView({
-                Optimization.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
+                Optimization.View.Write.class}) @Schema(description = "Project name. Creates project if it doesn't exist. Ignored when project_id is provided.") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
         @JsonView({Optimization.View.Public.class,
-                Optimization.View.Write.class}) UUID projectId,
+                Optimization.View.Write.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") UUID projectId,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotBlank String objectiveName,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotNull OptimizationStatus status,
         @Schema(implementation = JsonListString.class) @JsonView({Optimization.View.Public.class,
