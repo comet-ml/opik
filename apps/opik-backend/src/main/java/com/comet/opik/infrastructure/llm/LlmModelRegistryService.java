@@ -62,17 +62,23 @@ public class LlmModelRegistryService {
         var overridePath = config.getLocalOverridePath();
 
         if (overridePath == null || overridePath.isBlank()) {
-            return Map.copyOf(defaults);
+            return immutable(defaults);
         }
 
         var path = Path.of(overridePath);
         if (!Files.exists(path)) {
             log.debug("Local override file not found at '{}', using defaults only", overridePath);
-            return Map.copyOf(defaults);
+            return immutable(defaults);
         }
 
         var overrides = loadFileResource(path);
         return Map.copyOf(merge(defaults, overrides));
+    }
+
+    private static Map<String, List<LlmModelDefinition>> immutable(Map<String, List<LlmModelDefinition>> raw) {
+        var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(raw.size());
+        raw.forEach((provider, models) -> copy.put(provider, List.copyOf(models)));
+        return Map.copyOf(copy);
     }
 
     private Map<String, List<LlmModelDefinition>> loadClasspathResource(String resourceName) {
