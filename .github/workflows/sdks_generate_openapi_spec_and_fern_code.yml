@@ -6,12 +6,9 @@ on:
   push:
     branches: ['main']
     paths:
-      - 'apps/opik-backend/src/main/java/**'
+      - 'apps/opik-backend/src/main/java/**/*.java'
       - 'apps/opik-backend/src/main/resources/openapi_template.yml'
       - 'apps/opik-backend/pom.xml'
-  pull_request:
-    paths:
-      - '.github/workflows/sdks_generate_openapi_spec_and_fern_code.yml'
   workflow_dispatch: # Allows manual trigger
 
 concurrency:
@@ -153,7 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: update-open-api-spec-and-fern-code
     if: >-
-      (github.event_name == 'push' || github.event_name == 'pull_request') &&
+      github.event_name == 'push' &&
       needs.update-open-api-spec-and-fern-code.outputs.pr_url != ''
 
     steps:
