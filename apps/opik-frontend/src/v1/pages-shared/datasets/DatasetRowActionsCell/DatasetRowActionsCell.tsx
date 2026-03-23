@@ -31,13 +31,11 @@ type CreateDatasetRowActionsCellConfig = {
     setOpen: (open: boolean) => void;
     dataset?: Dataset;
   }>;
-  showDownload?: boolean;
 };
 
 export const createDatasetRowActionsCell = ({
   entityName,
   EditDialog,
-  showDownload = false,
 }: CreateDatasetRowActionsCellConfig): React.FunctionComponent<
   CellContext<Dataset, unknown>
 > => {
@@ -59,7 +57,7 @@ export const createDatasetRowActionsCell = ({
     );
 
     const {
-      permissions: { canDeleteDatasets },
+      permissions: { canEditDatasets, canDeleteDatasets },
     } = usePermissions();
 
     const deleteDatasetHandler = useCallback(() => {
@@ -128,16 +126,18 @@ export const createDatasetRowActionsCell = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(2);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-            >
-              <Pencil className="mr-2 size-4" />
-              Edit
-            </DropdownMenuItem>
-            {showDownload && isDatasetExportEnabled && (
+            {canEditDatasets && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(2);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+              >
+                <Pencil className="mr-2 size-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {isDatasetExportEnabled && (
               <DropdownMenuItem
                 onClick={downloadDatasetHandler}
                 disabled={isExportStarting}
@@ -146,20 +146,21 @@ export const createDatasetRowActionsCell = ({
                 Download
               </DropdownMenuItem>
             )}
-            {canDeleteDatasets && (
-              <>
+            {canDeleteDatasets &&
+              (canEditDatasets || isDatasetExportEnabled) && (
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    setOpen(1);
-                    resetKeyRef.current = resetKeyRef.current + 1;
-                  }}
-                  variant="destructive"
-                >
-                  <Trash className="mr-2 size-4" />
-                  Delete
-                </DropdownMenuItem>
-              </>
+              )}
+            {canDeleteDatasets && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(1);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+                variant="destructive"
+              >
+                <Trash className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
