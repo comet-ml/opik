@@ -216,26 +216,30 @@ jobs:
             --arg pr_num "$PR_NUMBER" \
             --arg trigger "$TRIGGER_TEXT" \
             --arg mention "$MENTION_TEXT" \
-            '{
-              attachments: [{
-                color: "#36a64f",
-                blocks: [
-                  {type: "header", text: {type: "plain_text", text: "FERN Update PR \u2014 Review Needed", emoji: true}},
-                  {type: "section", text: {type: "mrkdwn", text: "A BE merge to main changed the OpenAPI spec. FERN SDK code has been regenerated."}},
-                  {type: "section", fields: [
-                    {type: "mrkdwn", text: ("*FERN PR:*\n<" + $pr_url + "|#" + $pr_num + ">")},
-                    {type: "mrkdwn", text: $trigger}
+            '
+            {
+              "attachments": [{
+                "color": "#36a64f",
+                "blocks": [
+                  {"type": "header", "text": {"type": "plain_text", "text": "FERN Update PR \u2014 Review Needed", "emoji": true}},
+                  {"type": "section", "text": {"type": "mrkdwn", "text": "A BE merge to main changed the OpenAPI spec. FERN SDK code has been regenerated."}},
+                  {"type": "section", "fields": [
+                    {"type": "mrkdwn", "text": ("*FERN PR:*\n<" + $pr_url + "|#" + $pr_num + ">")},
+                    {"type": "mrkdwn", "text": $trigger}
                   ]}
-                ] + (if $mention != "" then [{type: "section", text: {type: "mrkdwn", text: $mention}}] else [] end) + [
-                  {type: "actions", elements: [{
-                    type: "button",
-                    text: {type: "plain_text", text: "Review FERN PR", emoji: true},
-                    url: $pr_url,
-                    style: "primary"
+                ]
+                + (if $mention != "" then [{"type": "section", "text": {"type": "mrkdwn", "text": $mention}}] else [] end)
+                + [
+                  {"type": "actions", "elements": [{
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Review FERN PR", "emoji": true},
+                    "url": $pr_url,
+                    "style": "primary"
                   }]}
                 ]
               }]
-            }' > payload.json
+            }
+            ' > payload.json
 
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST \
