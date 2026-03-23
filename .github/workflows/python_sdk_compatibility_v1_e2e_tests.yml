@@ -1,5 +1,5 @@
-name: Python SDK E2E Tests
-run-name: "Python SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+name: Python SDK Compatibility V1.x E2E Tests
+run-name: "Python SDK Compatibility V1 E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
   checks: write
@@ -10,14 +10,14 @@ on:
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
-          - '.github/workflows/python_sdk_e2e_tests.yml'
+          - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
-          - '.github/workflows/python_sdk_e2e_tests.yml'
+          - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -27,10 +27,10 @@ env:
   OPIK_GUARDRAILS_URL_OVERRIDE: http://localhost:5000
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
-    run-e2e:
-        name: Python SDK E2E Tests ${{matrix.python_version}}
+    run-compatibility-v1-e2e:
+        name: Python SDK Compatibility V1.x E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest-m
-        timeout-minutes: 30   
+        timeout-minutes: 30
         strategy:
             fail-fast: false
             matrix:
@@ -45,12 +45,12 @@ jobs:
         steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
-            
+
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
-      
+
         - name: Run latest Opik server
           env:
             OPIK_USAGE_REPORT_ENABLED: false
@@ -61,7 +61,7 @@ jobs:
           run: |
             cd ${{ github.workspace }}
             ./opik.sh --backend --port-mapping --guardrails --build
-        
+
         - name: Check Opik server availability
           shell: bash
           run: |
@@ -77,21 +77,16 @@ jobs:
             cd ${{ github.workspace }}/sdks/python
             pip install .
 
-        - name: Run smoke tests
-          run: |
-            cd ${{ github.workspace }}/sdks/python/tests/e2e_smoke
-            ./smoke_tests_runner.sh
-
         - name: Install test requirements
           run: |
             cd ${{ github.workspace }}/sdks/python
             pip install -r tests/test_requirements.txt
             pip list
 
-        - name: Run tests
+        - name: Run compatibility v1 tests
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pytest tests/e2e -vv --durations=20 --ignore=tests/e2e/compatibility_v1 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            pytest tests/e2e/compatibility_v1 -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_compatibility_v1_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2
@@ -99,24 +94,23 @@ jobs:
           with:
             action_fail: true
             comment_mode: failures
-            check_name: Python SDK E2E Tests Results (Python ${{matrix.python_version}})
-            files: ${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            check_name: Python SDK Compatibility V1 E2E Tests Results (Python ${{matrix.python_version}})
+            files: ${{ github.workspace }}/test_results_compatibility_v1_${{matrix.python_version}}.xml
 
         - name: Keep BE log in case of failure
           if: failure()
           run: |
-            docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
+            docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_compat_v1_p${{matrix.python_version}}.log
 
         - name: Attach BE log
           if: failure()
           uses: actions/upload-artifact@v4
           with:
-              name: opik-backend-log-p${{matrix.python_version}}
-              path: ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
+              name: opik-backend-log-compat-v1-p${{matrix.python_version}}
+              path: ${{ github.workspace }}/opik-backend_compat_v1_p${{matrix.python_version}}.log
 
         - name: Stop opik server
           if: always()
           run: |
             cd ${{ github.workspace }}
             ./opik.sh --stop --guardrails
-
