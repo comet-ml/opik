@@ -9,6 +9,9 @@ on:
       - 'apps/opik-backend/src/main/java/**'
       - 'apps/opik-backend/src/main/resources/openapi_template.yml'
       - 'apps/opik-backend/pom.xml'
+  pull_request:
+    paths:
+      - '.github/workflows/sdks_generate_openapi_spec_and_fern_code.yml'
   workflow_dispatch: # Allows manual trigger
 
 concurrency:
