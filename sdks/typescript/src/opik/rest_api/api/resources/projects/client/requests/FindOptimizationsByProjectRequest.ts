@@ -4,13 +4,12 @@
  * @example
  *     {}
  */
-export interface FindOptimizationsRequest {
+export interface FindOptimizationsByProjectRequest {
     page?: number;
     size?: number;
     datasetId?: string;
-    name?: string;
     datasetName?: string;
+    name?: string;
     datasetDeleted?: boolean;
-    projectId?: string;
     filters?: string;
 }

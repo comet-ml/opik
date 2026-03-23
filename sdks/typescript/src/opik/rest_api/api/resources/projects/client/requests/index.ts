@@ -3,6 +3,7 @@ export type { FindDashboardsByProjectRequest } from "./FindDashboardsByProjectRe
 export type { FindDatasetsByProjectRequest } from "./FindDatasetsByProjectRequest.js";
 export type { FindExperimentsByProjectRequest } from "./FindExperimentsByProjectRequest.js";
 export type { FindFeedbackScoreNamesByProjectIdsRequest } from "./FindFeedbackScoreNamesByProjectIdsRequest.js";
+export type { FindOptimizationsByProjectRequest } from "./FindOptimizationsByProjectRequest.js";
 export type { FindProjectsRequest } from "./FindProjectsRequest.js";
 export type { FindTokenUsageNamesRequest } from "./FindTokenUsageNamesRequest.js";
 export type { GetProjectByIdRequest } from "./GetProjectByIdRequest.js";

@@ -13,6 +13,8 @@ export const Optimization: core.serialization.ObjectSchema<serializers.Optimizat
         id: core.serialization.string().optional(),
         name: core.serialization.string().optional(),
         datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         objectiveName: core.serialization.property("objective_name", core.serialization.string()),
         status: OptimizationStatus,
         metadata: JsonListString.optional(),
@@ -51,6 +53,8 @@ export declare namespace Optimization {
         id?: string | null;
         name?: string | null;
         dataset_name: string;
+        project_name?: string | null;
+        project_id?: string | null;
         objective_name: string;
         status: OptimizationStatus.Raw;
         metadata?: JsonListString.Raw | null;

@@ -4269,6 +4269,11 @@ paths:
         in: query
         schema:
           type: boolean
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: filters
         in: query
         schema:
@@ -4600,6 +4605,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/projects/{projectId}/optimizations:
+    get:
+      tags:
+      - Projects
+      summary: Find optimizations by project
+      description: Find optimizations scoped to a project
+      operationId: findOptimizationsByProject
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: dataset_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: dataset_name
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter optimizations by name (partial match, case insensitive)"
+      - name: dataset_deleted
+        in: query
+        schema:
+          type: boolean
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Optimizations page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationPage_Public"
         "400":
           description: Bad Request
           content:
@@ -11108,6 +11176,16 @@ components:
           type: string
           description: "If null, dataset_name must be provided"
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Optional. Associates the batch with a project by name. Ignored
+            if project_id is provided.
+        project_id:
+          type: string
+          description: Optional. Associates the batch with a project by ID. Takes
+            precedence over project_name.
+          format: uuid
         items:
           maxItems: 1000
           minItems: 1
@@ -11311,6 +11389,16 @@ components:
         dataset_id:
           type: string
           description: "If null, dataset_name must be provided"
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Optional. Associates the batch with a project by name. Ignored
+            if project_id is provided.
+        project_id:
+          type: string
+          description: Optional. Associates the batch with a project by ID. Takes
+            precedence over project_name.
           format: uuid
         items:
           maxItems: 1000
@@ -15244,6 +15332,16 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
         objective_name:
           minLength: 1
           type: string
@@ -15428,6 +15526,16 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Project name. Creates project if it doesn't exist. Ignored
+            when project_id is provided.
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
         objective_name:
           minLength: 1
           type: string
@@ -15563,6 +15671,11 @@ components:
         dataset_name:
           minLength: 1
           type: string
+        project_id:
+          type: string
+          description: Project ID. Takes precedence over project_name when both are
+            provided.
+          format: uuid
         objective_name:
           minLength: 1
           type: string
