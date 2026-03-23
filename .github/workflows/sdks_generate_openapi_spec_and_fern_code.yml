@@ -197,84 +197,45 @@ jobs:
           COMMIT_SHA="${{ github.sha }}"
           SHORT_SHA="${COMMIT_SHA:0:7}"
 
-          # Build mention block
-          if [ -n "$MENTION" ]; then
-            MENTION_BLOCK=',
-                  {
-                    "type": "section",
-                    "text": {
-                      "type": "mrkdwn",
-                      "text": "'"$MENTION"' Your BE merge triggered FERN changes. Please review."
-                    }
-                  }'
-          else
-            MENTION_BLOCK=""
-          fi
-
-          # Build trigger field
+          # Build trigger text
           if [ -n "$ORIGINATING_PR" ]; then
-            TRIGGER_FIELD="{\"type\": \"mrkdwn\", \"text\": \"*Triggered by:*\n<$ORIGINATING_PR|BE PR> by $AUTHOR\"}"
+            TRIGGER_TEXT="*Triggered by:*\n<$ORIGINATING_PR|BE PR> by $AUTHOR"
           else
-            TRIGGER_FIELD="{\"type\": \"mrkdwn\", \"text\": \"*Triggered by:*\nCommit <https://github.com/${{ github.repository }}/commit/$COMMIT_SHA|\`$SHORT_SHA\`> by $AUTHOR\"}"
+            TRIGGER_TEXT="*Triggered by:*\nCommit <https://github.com/${{ github.repository }}/commit/$COMMIT_SHA|\`$SHORT_SHA\`> by $AUTHOR"
           fi
 
-          cat << 'SLACKEOF' > payload.json
-          {
-            "attachments": [
-              {
-                "color": "#36a64f",
-                "blocks": [
-                  {
-                    "type": "header",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "FERN Update PR — Review Needed",
-                      "emoji": true
-                    }
-                  },
-                  {
-                    "type": "section",
-                    "text": {
-                      "type": "mrkdwn",
-                      "text": "A BE merge to main changed the OpenAPI spec. FERN SDK code has been regenerated."
-                    }
-                  },
-                  {
-                    "type": "section",
-                    "fields": [
-                      {
-                        "type": "mrkdwn",
-                        "text": "*FERN PR:*\n<PLACEHOLDER_PR_URL|#PLACEHOLDER_PR_NUMBER>"
-                      },
-                      PLACEHOLDER_TRIGGER_FIELD
-                    ]
-                  }PLACEHOLDER_MENTION_BLOCK,
-                  {
-                    "type": "actions",
-                    "elements": [
-                      {
-                        "type": "button",
-                        "text": {
-                          "type": "plain_text",
-                          "text": "Review FERN PR",
-                          "emoji": true
-                        },
-                        "url": "PLACEHOLDER_PR_URL",
-                        "style": "primary"
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-          SLACKEOF
+          # Build mention text
+          MENTION_TEXT=""
+          if [ -n "$MENTION" ]; then
+            MENTION_TEXT="$MENTION Your BE merge triggered FERN changes. Please review."
+          fi
 
-          # Replace placeholders with actual values
-          sed -i "s|PLACEHOLDER_PR_URL|$PR_URL|g" payload.json
-          sed -i "s|PLACEHOLDER_PR_NUMBER|$PR_NUMBER|g" payload.json
-          sed -i "s|PLACEHOLDER_TRIGGER_FIELD|$TRIGGER_FIELD|g" payload.json
-          sed -i "s|PLACEHOLDER_MENTION_BLOCK|$MENTION_BLOCK|g" payload.json
+          # Build JSON payload with jq to handle special characters safely
+          jq -n \
+            --arg pr_url "$PR_URL" \
+            --arg pr_num "$PR_NUMBER" \
+            --arg trigger "$TRIGGER_TEXT" \
+            --arg mention "$MENTION_TEXT" \
+            '{
+              attachments: [{
+                color: "#36a64f",
+                blocks: [
+                  {type: "header", text: {type: "plain_text", text: "FERN Update PR \u2014 Review Needed", emoji: true}},
+                  {type: "section", text: {type: "mrkdwn", text: "A BE merge to main changed the OpenAPI spec. FERN SDK code has been regenerated."}},
+                  {type: "section", fields: [
+                    {type: "mrkdwn", text: ("*FERN PR:*\n<" + $pr_url + "|#" + $pr_num + ">")},
+                    {type: "mrkdwn", text: $trigger}
+                  ]}
+                ] + (if $mention != "" then [{type: "section", text: {type: "mrkdwn", text: $mention}}] else [] end) + [
+                  {type: "actions", elements: [{
+                    type: "button",
+                    text: {type: "plain_text", text: "Review FERN PR", emoji: true},
+                    url: $pr_url,
+                    style: "primary"
+                  }]}
+                ]
+              }]
+            }' > payload.json
 
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST \
