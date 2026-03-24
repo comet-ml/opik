@@ -23,7 +23,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
   const dashboard = context.row.original;
 
   const {
-    permissions: { canCreateDashboards },
+    permissions: { canCreateDashboards, canEditDashboards },
   } = usePermissions();
 
   const { mutate: deleteDashboardMutate } = useDashboardBatchDeleteMutation();
@@ -69,17 +69,21 @@ export const DashboardRowActionsCell: React.FunctionComponent<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={handleEdit}>
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
+          {canEditDashboards && (
+            <DropdownMenuItem onClick={handleEdit}>
+              <Pencil className="mr-2 size-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
           {canCreateDashboards && (
             <DropdownMenuItem onClick={handleClone}>
               <Copy className="mr-2 size-4" />
               Clone
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator />
+          {(canEditDashboards || canCreateDashboards) && (
+            <DropdownMenuSeparator />
+          )}
           <DropdownMenuItem onClick={handleDelete} variant="destructive">
             <Trash className="mr-2 size-4" />
             Delete
