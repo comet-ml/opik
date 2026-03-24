@@ -18,7 +18,16 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterRowMapper(AutomationRuleRowMapper.class)
-interface AutomationRuleDAO {
+public interface AutomationRuleDAO {
+
+    @SqlQuery("""
+            SELECT EXISTS(
+                SELECT 1 FROM automation_rule_projects
+                WHERE workspace_id = :workspaceId
+                GROUP BY rule_id
+                HAVING COUNT(project_id) > 1
+            )""")
+    boolean hasVersion1AutomationRules(@Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("INSERT INTO automation_rules(id, workspace_id, `action`, name, sampling_rate, enabled, filters) "
             +

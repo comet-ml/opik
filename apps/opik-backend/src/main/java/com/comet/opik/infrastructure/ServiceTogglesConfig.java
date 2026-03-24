@@ -2,11 +2,15 @@ package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
 public class ServiceTogglesConfig {
+
+    public static final String FORCE_WORKSPACE_VERSION_DISABLED = "disabled";
+
     @Valid @JsonProperty
     @NotNull boolean pythonEvaluatorEnabled;
     @JsonProperty
@@ -54,4 +58,5 @@ public class ServiceTogglesConfig {
     @NotNull boolean collaboratorsTabEnabled;
     @JsonProperty
     @NotNull boolean assistantSidebarEnabled;
+    @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
 }
