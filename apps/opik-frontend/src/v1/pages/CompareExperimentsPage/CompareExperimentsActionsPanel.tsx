@@ -6,7 +6,7 @@ import first from "lodash/first";
 
 import CompareExperimentsButton from "@/v1/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
   Experiment,

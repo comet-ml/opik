@@ -15,7 +15,7 @@ import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
 import AddTagDialog, {
   TAG_ENTITY_TYPE,
 } from "@/v1/pages-shared/traces/AddTagDialog/AddTagDialog";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
 

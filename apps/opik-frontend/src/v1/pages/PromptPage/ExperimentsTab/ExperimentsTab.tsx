@@ -29,7 +29,7 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import TraceCountCell from "@/shared/DataTableCells/TraceCountCell";
+import TraceCountCell from "@/v1/pages-shared/traces/TraceCountCell/TraceCountCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import useAppStore from "@/store/AppStore";
@@ -65,7 +65,7 @@ import {
 import { useExperimentsFeedbackScores } from "@/v1/pages-shared/experiments/useExperimentsFeedbackScores";
 import { useExperimentsAutoExpandingLogic } from "@/v1/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/v1/pages-shared/experiments/useExpandingConfig";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 

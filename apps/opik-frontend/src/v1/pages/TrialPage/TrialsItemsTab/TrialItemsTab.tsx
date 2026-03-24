@@ -43,7 +43,7 @@ import {
   ExecutionPolicy,
   ExperimentsCompare,
 } from "@/types/datasets";
-import { useTruncationEnabled } from "@/v1/server-sync-provider";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import { convertColumnDataToColumn, hasAnyVisibleColumns } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
@@ -53,7 +53,7 @@ import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import ExperimentsFeedbackScoresSelect from "@/v1/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import { calculateHeightStyle } from "@/shared/DataTable/utils";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { generateDistinctColorMap } from "@/v1/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";

@@ -51,7 +51,7 @@ jobs:
           COMPOSE_BAKE: false
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --backend --port-mapping --guardrails --build
+          ./opik.sh --backend --port-mapping --build
 
       - name: Check Opik server availability
         shell: bash
@@ -104,4 +104,4 @@ jobs:
         if: always()
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --stop --guardrails
+          ./opik.sh --stop

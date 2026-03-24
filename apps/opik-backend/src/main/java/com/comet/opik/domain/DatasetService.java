@@ -64,9 +64,7 @@ public interface DatasetService {
 
     Dataset save(Dataset dataset);
 
-    UUID getOrCreate(String workspaceId, String name, String userName);
-
-    Mono<UUID> getOrCreateDataset(String datasetName);
+    Mono<UUID> getOrCreateDataset(String datasetName, UUID projectId);
 
     Optional<Dataset> getById(UUID id, String workspaceId);
 
@@ -180,10 +178,16 @@ class DatasetServiceImpl implements DatasetService {
         });
     }
 
-    @Override
-    public UUID getOrCreate(@NonNull String workspaceId, @NonNull String name, @NonNull String userName) {
-        var dataset = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(DatasetDAO.class).findByName(workspaceId, name, null));
+    private UUID getOrCreate(@NonNull String workspaceId, @NonNull String name, @NonNull String userName,
+            UUID projectId) {
+        var dataset = template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            var result = dao.findByName(workspaceId, name, projectId);
+            if (result.isEmpty() && projectId != null) {
+                result = dao.findByName(workspaceId, name, null);
+            }
+            return result;
+        });
 
         if (dataset.isEmpty()) {
 
@@ -195,6 +199,7 @@ class DatasetServiceImpl implements DatasetService {
                                 Dataset.builder()
                                         .id(id)
                                         .name(name)
+                                        .projectId(projectId)
                                         .visibility(Visibility.PRIVATE)
                                         .createdBy(userName)
                                         .lastUpdatedBy(userName)
@@ -212,12 +217,12 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Mono<UUID> getOrCreateDataset(String datasetName) {
+    public Mono<UUID> getOrCreateDataset(String datasetName, UUID projectId) {
         return Mono.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromCallable(() -> getOrCreate(workspaceId, datasetName, userName))
+            return Mono.fromCallable(() -> getOrCreate(workspaceId, datasetName, userName, projectId))
                     .subscribeOn(Schedulers.boundedElastic());
         })
                 .onErrorResume(throwable -> handleDatasetCreationError(throwable, datasetName)

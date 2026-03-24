@@ -24,4 +24,5 @@ public class LlmModule extends AbstractModule {
             OpikConfiguration configuration) {
         return new LlmProviderFactoryImpl(llmProviderApiKeyService, configuration);
     }
+
 }

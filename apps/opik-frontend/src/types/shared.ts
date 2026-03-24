@@ -200,3 +200,9 @@ export interface AggregatedDuration {
   p90: number;
   p99: number;
 }
+
+export type ConfigurationType = Record<string, unknown>;
+
+export type GoogleColabCardCoreProps = {
+  link: string;
+};
