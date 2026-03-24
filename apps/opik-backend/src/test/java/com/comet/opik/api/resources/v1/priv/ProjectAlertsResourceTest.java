@@ -98,14 +98,17 @@ class ProjectAlertsResourceTest {
                 .build();
 
         var triggers = alert.triggers().stream()
-                .map(trigger -> trigger.toBuilder()
-                        .triggerConfigs(trigger.triggerConfigs().stream()
-                                .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
-                                .map(c -> c.toBuilder().createdBy(null).createdAt(null).build())
-                                .toList())
-                        .createdBy(null)
-                        .createdAt(null)
-                        .build())
+                .map(trigger -> {
+                    var filteredConfigs = trigger.triggerConfigs().stream()
+                            .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
+                            .map(c -> c.toBuilder().createdBy(null).createdAt(null).build())
+                            .toList();
+                    return trigger.toBuilder()
+                            .triggerConfigs(filteredConfigs.isEmpty() ? null : filteredConfigs)
+                            .createdBy(null)
+                            .createdAt(null)
+                            .build();
+                })
                 .toList();
 
         return alert.toBuilder()
@@ -231,7 +234,8 @@ class ProjectAlertsResourceTest {
 
             var scopeConfig = AlertTriggerConfig.builder()
                     .type(AlertTriggerConfigType.SCOPE_PROJECT)
-                    .configValue(Map.of(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY, JsonUtils.writeValueAsString(Set.of(projectId))))
+                    .configValue(Map.of(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY,
+                            JsonUtils.writeValueAsString(Set.of(projectId))))
                     .build();
 
             var trigger = factory.manufacturePojo(AlertTrigger.class).toBuilder()

@@ -362,8 +362,8 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             return List.of();
         }
 
-        List<UUID> collected = AlertScopeUtils.collectProjectIds(projectId, trigger.triggerConfigs());
-        List<UUID> projectIds = collected.isEmpty() ? null : collected;
+        Set<UUID> collected = AlertScopeUtils.collectProjectIds(projectId, trigger.triggerConfigs());
+        List<UUID> projectIds = collected.isEmpty() ? null : List.copyOf(collected);
 
         // Determine which threshold config type to use based on event type
         AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {

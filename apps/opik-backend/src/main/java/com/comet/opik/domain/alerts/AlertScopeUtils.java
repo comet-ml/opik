@@ -7,6 +7,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
@@ -26,9 +27,9 @@ public final class AlertScopeUtils {
      * @param triggerConfigs the trigger configs to inspect for the legacy scope
      * @return project IDs restricting the scope, or an empty list when the alert is workspace-wide
      */
-    public static List<UUID> collectProjectIds(UUID alertProjectId, List<AlertTriggerConfig> triggerConfigs) {
+    public static Set<UUID> collectProjectIds(UUID alertProjectId, List<AlertTriggerConfig> triggerConfigs) {
         if (alertProjectId != null) {
-            return List.of(alertProjectId);
+            return Set.of(alertProjectId);
         }
         var projectIdsString = Optional.ofNullable(triggerConfigs)
                 .stream()
@@ -39,8 +40,8 @@ public final class AlertScopeUtils {
                 .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
                 .orElse(null);
         if (StringUtils.isNotBlank(projectIdsString)) {
-            return JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class);
+            return JsonUtils.readCollectionValue(projectIdsString, Set.class, UUID.class);
         }
-        return List.of();
+        return Set.of();
     }
 }
