@@ -186,7 +186,7 @@ const DashboardsPage: React.FunctionComponent = () => {
   }, []);
 
   const {
-    permissions: { canCreateDashboards },
+    permissions: { canCreateDashboards, canDeleteDashboards },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -295,7 +295,7 @@ const DashboardsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Dashboard>(),
+      ...(canDeleteDashboards ? [generateSelectColumDef<Dashboard>()] : []),
       ...convertColumnDataToColumn<Dashboard, Dashboard>(columnsDef, {
         columnsOrder,
         selectedColumns,
@@ -305,7 +305,13 @@ const DashboardsPage: React.FunctionComponent = () => {
         cell: DashboardRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef, sortableBy]);
+  }, [
+    selectedColumns,
+    columnsOrder,
+    columnsDef,
+    sortableBy,
+    canDeleteDashboards,
+  ]);
 
   const sortConfig = useMemo(
     () => ({
@@ -375,8 +381,12 @@ const DashboardsPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <DashboardsActionsPanel dashboards={selectedDashboards} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteDashboards && (
+            <>
+              <DashboardsActionsPanel dashboards={selectedDashboards} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}
