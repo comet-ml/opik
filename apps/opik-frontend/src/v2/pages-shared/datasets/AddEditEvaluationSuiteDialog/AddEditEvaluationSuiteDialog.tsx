@@ -9,7 +9,6 @@ import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutat
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
-import { useFetchDataset } from "@/api/datasets/useDatasetById";
 import { Button } from "@/ui/button";
 import { Description } from "@/ui/description";
 import {
@@ -77,8 +76,6 @@ const AddEditEvaluationSuiteDialog = ({
   const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
   const { mutate: changesMutate } = useDatasetItemChangesMutation();
-  const fetchDataset = useFetchDataset();
-
   const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
@@ -257,22 +254,7 @@ const AddEditEvaluationSuiteDialog = ({
               })),
             },
             {
-              onSuccess: () => {
-                // Fetch dataset to get latest_version populated by backend
-                fetchDataset({ datasetId: newDataset.id })
-                  .then((enrichedDataset) => {
-                    applyThenNavigate();
-                    onDatasetCreated?.(enrichedDataset);
-                  })
-                  .catch((error) => {
-                    console.error(
-                      "Failed to fetch evaluation suite after item creation:",
-                      error,
-                    );
-                    applyThenNavigate();
-                  });
-              },
-              onError: applyThenNavigate,
+              onSettled: applyThenNavigate,
             },
           );
         }
@@ -293,7 +275,6 @@ const AddEditEvaluationSuiteDialog = ({
       onDatasetCreated,
       setOpen,
       toast,
-      fetchDataset,
     ],
   );
 

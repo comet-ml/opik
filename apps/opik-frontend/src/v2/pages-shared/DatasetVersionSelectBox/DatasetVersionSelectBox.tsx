@@ -29,6 +29,7 @@ import useDatasetVersionSelect, {
   DEFAULT_LOADED_DATASETS,
 } from "./useDatasetVersionSelect";
 import VersionOption from "./VersionOption";
+import { useFetchDataset } from "@/api/datasets/useDatasetById";
 import { Dataset } from "@/types/datasets";
 import {
   parseDatasetVersionKey,
@@ -80,6 +81,8 @@ function DatasetVersionSelectBox({
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  const fetchDataset = useFetchDataset();
+
   const parsed = parseDatasetVersionKey(value);
   const datasetId = parsed?.datasetId ?? null;
   const selectedVersionId = parsed?.versionId ?? null;
@@ -108,13 +111,18 @@ function DatasetVersionSelectBox({
     : null;
 
   const handleDatasetCreated = (newDataset: Dataset) => {
-    const latestVersion = newDataset.latest_version!;
-    const formattedValue = formatDatasetVersionKey(
-      newDataset.id,
-      latestVersion.id,
-    );
-    onChange(formattedValue);
     setIsDialogOpen(false);
+    fetchDataset({ datasetId: newDataset.id })
+      .then((enriched) => {
+        if (enriched.latest_version) {
+          onChange(
+            formatDatasetVersionKey(enriched.id, enriched.latest_version.id),
+          );
+        }
+      })
+      .catch(() => {
+        // Dataset was created; the select list will refresh via query cache invalidation
+      });
   };
 
   const handleSelectLatestVersion = (dataset: Dataset) => {
