@@ -5,8 +5,8 @@ import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import Loader from "@/shared/Loader/Loader";
 import { Card } from "@/ui/card";
-import ChangeStagePopover from "./ChangeStagePopover";
-import BlueprintValuesList from "@/v1/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
+import DeployToPopover from "./DeployToPopover";
+import BlueprintValuesList from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
 import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
 import { generateBlueprintDescription } from "@/utils/agent-configurations";
 import { Button } from "@/ui/button";
@@ -18,21 +18,18 @@ import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Separator } from "@/ui/separator";
 import DiffVersionPopover from "./DiffVersionPopover";
-import ConfigTagList from "./ConfigTagList";
+import AgentConfigTagList from "./AgentConfigTagList";
 
-type ConfigurationDetailViewProps = {
+type AgentConfigurationDetailViewProps = {
   item: ConfigHistoryItem;
   projectId: string;
   versions: ConfigHistoryItem[];
   onEdit: () => void;
 };
 
-const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
-  item,
-  projectId,
-  versions,
-  onEdit,
-}) => {
+const AgentConfigurationDetailView: React.FC<
+  AgentConfigurationDetailViewProps
+> = ({ item, projectId, versions, onEdit }) => {
   const { data: agentConfig, isPending } = useAgentConfigById({
     blueprintId: item.id,
   });
@@ -78,7 +75,7 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="comet-title-m">{item.name}</h2>
-            <ConfigTagList tags={item.tags} maxWidth={200} />
+            <AgentConfigTagList tags={item.tags} maxWidth={200} />
             {versions.length > 1 && (
               <DiffVersionPopover
                 currentItemId={item.id}
@@ -88,7 +85,11 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <ChangeStagePopover item={item} projectId={projectId} />
+            <DeployToPopover
+              item={item}
+              projectId={projectId}
+              versions={versions}
+            />
             {hasTraces && (
               <NavigationTag
                 id={projectId}
@@ -164,4 +165,4 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
   );
 };
 
-export default ConfigurationDetailView;
+export default AgentConfigurationDetailView;

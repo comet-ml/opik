@@ -8,9 +8,9 @@ import { formatDate, getTimeFromNow } from "@/lib/date";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { generateBlueprintDescription } from "@/utils/agent-configurations";
-import ConfigTagList from "./ConfigTagList";
+import AgentConfigTagList from "./AgentConfigTagList";
 
-type ConfigurationHistoryTimelineProps = {
+type AgentConfigurationHistoryTimelineProps = {
   items: ConfigHistoryItem[];
   selectedIndex: number | null;
   onSelect: (index: number) => void;
@@ -19,8 +19,8 @@ type ConfigurationHistoryTimelineProps = {
   onLoadMore: () => void;
 };
 
-const ConfigurationHistoryTimeline: React.FC<
-  ConfigurationHistoryTimelineProps
+const AgentConfigurationHistoryTimeline: React.FC<
+  AgentConfigurationHistoryTimelineProps
 > = ({
   items,
   selectedIndex,
@@ -89,7 +89,7 @@ const ConfigurationHistoryTimeline: React.FC<
                 <span className="comet-body-s-accented shrink-0">
                   {item.name}
                 </span>
-                <ConfigTagList tags={item.tags} size="sm" maxWidth={200} />
+                <AgentConfigTagList tags={item.tags} size="sm" maxWidth={200} />
               </div>
               {(() => {
                 const desc =
@@ -134,4 +134,4 @@ const ConfigurationHistoryTimeline: React.FC<
   );
 };
 
-export default ConfigurationHistoryTimeline;
+export default AgentConfigurationHistoryTimeline;

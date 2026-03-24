@@ -7,7 +7,7 @@ import {
   BlueprintValueType,
 } from "@/types/agent-configs";
 import useAgentConfigCreateMutation from "@/api/agent-configs/useAgentConfigCreateMutation";
-import { BlueprintValuePromptHandle } from "@/v1/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
+import { BlueprintValuePromptHandle } from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
 import { useToast } from "@/ui/use-toast";
 
 import type useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
@@ -33,7 +33,7 @@ const validateField = (type: string, value: string): string => {
   return result.success ? "" : result.error.issues[0].message;
 };
 
-type UseConfigurationSaveParams = {
+type UseAgentConfigurationSaveParams = {
   agentConfig: AgentConfig | undefined;
   draftValues: Record<string, string>;
   originalValues: React.RefObject<Record<string, string>>;
@@ -42,14 +42,14 @@ type UseConfigurationSaveParams = {
   onSaved: () => void;
 };
 
-export const useConfigurationSave = ({
+export const useAgentConfigurationSave = ({
   agentConfig,
   draftValues,
   originalValues,
   description,
   projectId,
   onSaved,
-}: UseConfigurationSaveParams) => {
+}: UseAgentConfigurationSaveParams) => {
   const { toast } = useToast();
   const { mutate: createConfig, isPending: isSaving } =
     useAgentConfigCreateMutation();
