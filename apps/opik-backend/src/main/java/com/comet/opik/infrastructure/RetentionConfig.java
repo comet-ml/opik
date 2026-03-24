@@ -74,7 +74,7 @@ public class RetentionConfig {
 
         /** Chunk size in days for large workspaces. */
         @JsonProperty
-        @Min(1) @Max(7) private int largeChunkDays = 2;
+        @Min(1) @Max(7) private int largeChunkDays = 1;
 
         /** Default velocity assumed when the estimation query fails (TOO_MANY_ROWS). */
         @JsonProperty
