@@ -5,7 +5,7 @@ import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import Loader from "@/shared/Loader/Loader";
 import { Card } from "@/ui/card";
-import ChangeStagePopover from "./ChangeStagePopover";
+import DeployToPopover from "./DeployToPopover";
 import BlueprintValuesList from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
 import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
 import { generateBlueprintDescription } from "@/utils/agent-configurations";
@@ -27,12 +27,9 @@ type AgentConfigurationDetailViewProps = {
   onEdit: () => void;
 };
 
-const AgentConfigurationDetailView: React.FC<AgentConfigurationDetailViewProps> = ({
-  item,
-  projectId,
-  versions,
-  onEdit,
-}) => {
+const AgentConfigurationDetailView: React.FC<
+  AgentConfigurationDetailViewProps
+> = ({ item, projectId, versions, onEdit }) => {
   const { data: agentConfig, isPending } = useAgentConfigById({
     blueprintId: item.id,
   });
@@ -88,7 +85,11 @@ const AgentConfigurationDetailView: React.FC<AgentConfigurationDetailViewProps> 
             )}
           </div>
           <div className="flex items-center gap-2">
-            <ChangeStagePopover item={item} projectId={projectId} />
+            <DeployToPopover
+              item={item}
+              projectId={projectId}
+              versions={versions}
+            />
             {hasTraces && (
               <NavigationTag
                 id={projectId}
