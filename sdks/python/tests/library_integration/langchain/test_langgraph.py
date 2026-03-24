@@ -699,7 +699,7 @@ def test_langgraph__distributed_headers__langgraph_span_is_kept(
     span_data.init_end_time().update(
         output={"output": "custom-distributed-headers--output"},
     )
-    client.span(**span_data.as_parameters)
+    client.__internal_api__span__(**span_data.as_parameters)
 
     distributed_headers = DistributedTraceHeadersDict(
         opik_trace_id=span_data.trace_id,
@@ -877,7 +877,7 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
         },
     )
     trace_data.init_end_time()
-    client.trace(**trace_data.as_parameters)
+    client.__internal_api__trace__(**trace_data.as_parameters)
 
     span_data = span.SpanData(
         trace_id=trace_data.id,
@@ -901,7 +901,7 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.__internal_api__span__(**span_data.__dict__)
 
     callback.flush()
 
