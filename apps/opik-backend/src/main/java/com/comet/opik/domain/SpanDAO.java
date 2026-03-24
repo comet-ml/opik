@@ -1197,7 +1197,8 @@ public class SpanDAO {
             SELECT
                 toUInt64(if(count() = 0, 0,
                     uniq(id) / greatest(dateDiff('week', UUIDv7ToDateTime(toUUID(min(id))), now()), 1)
-                )) AS spans_per_week
+                )) AS spans_per_week,
+                UUIDv7ToDateTime(toUUID(min(id))) AS oldest_span_time
             FROM spans
             WHERE workspace_id = :workspace_id
             AND trace_id \\< :cutoff_id
@@ -2820,13 +2821,19 @@ public class SpanDAO {
     }
 
     /**
+     * Result of the velocity estimation query: spans/week and the oldest span timestamp.
+     */
+    public record VelocityEstimate(long spansPerWeek, Instant oldestSpanTime) {
+    }
+
+    /**
      * Estimate the span velocity (spans/week) for a workspace in the catch-up range.
-     * Uses ClickHouse UUIDv7ToDateTime to derive the time range from the oldest span.
+     * Also returns the oldest span ID to use as the catch-up cursor start.
      *
-     * @return estimated spans/week, or empty Mono if no data exists
+     * @return velocity estimate with oldest span ID, or empty Mono if no data exists
      * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
      */
-    public Mono<Long> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
+    public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
         log.info("Estimating retention velocity for workspace '{}'", workspaceId);
 
         var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
@@ -2839,8 +2846,9 @@ public class SpanDAO {
                             .bind("cutoff_id", cutoffId);
 
                     return Mono.from(statement.execute())
-                            .flatMap(result -> Mono
-                                    .from(result.map((row, metadata) -> row.get("spans_per_week", Long.class))));
+                            .flatMap(result -> Mono.from(result.map((row, metadata) -> new VelocityEstimate(
+                                    row.get("spans_per_week", Long.class),
+                                    row.get("oldest_span_time", Instant.class)))));
                 });
     }
 

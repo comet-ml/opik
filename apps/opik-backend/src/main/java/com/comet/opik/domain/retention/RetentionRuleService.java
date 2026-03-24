@@ -7,6 +7,7 @@ import com.comet.opik.api.retention.RetentionRule;
 import com.comet.opik.api.retention.RetentionRule.RetentionRulePage;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanDAO;
+import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
@@ -55,6 +56,7 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
     private final Provider<RequestContext> requestContext;
     private final IdGenerator idGenerator;
     private final SpanDAO spanDAO;
+    private final TraceDAO traceDAO;
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
 
@@ -64,12 +66,14 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
             @NonNull Provider<RequestContext> requestContext,
             @NonNull IdGenerator idGenerator,
             @NonNull SpanDAO spanDAO,
+            @NonNull TraceDAO traceDAO,
             @NonNull InstantToUUIDMapper uuidMapper,
             @NonNull @Config("retention") RetentionConfig config) {
         this.template = template;
         this.requestContext = requestContext;
         this.idGenerator = idGenerator;
         this.spanDAO = spanDAO;
+        this.traceDAO = traceDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
     }
@@ -203,7 +207,8 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
 
     /**
      * Estimate the span velocity for a workspace and compute the catch-up start cursor.
-     * If the estimation query fails with TOO_MANY_ROWS, uses a configurable default velocity.
+     * On success, uses the oldest span timestamp as cursor start.
+     * If the estimation query fails with TOO_MANY_ROWS, falls back to service start date.
      */
     private VelocityEstimation estimateVelocity(String workspaceId, RetentionPeriod period, Instant now) {
         var catchUpConfig = config.getCatchUp();
@@ -215,23 +220,90 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
                 .toInstant();
         UUID cutoffId = uuidMapper.toLowerBound(cutoff);
 
-        // Start cursor at service launch date
-        UUID startCursor = uuidMapper.toLowerBound(
+        // Fallback cursor: service launch date (used only when query fails)
+        UUID fallbackCursor = uuidMapper.toLowerBound(
                 catchUpConfig.getServiceStartDate().atStartOfDay(ZoneOffset.UTC).toInstant());
 
         try {
-            Long velocity = spanDAO.estimateVelocityForRetention(workspaceId, cutoffId).block();
-            long vel = velocity != null ? velocity : 0L;
-            log.info("Retention velocity estimated for workspace '{}': '{}' spans/week", workspaceId, vel);
-            return new VelocityEstimation(vel, startCursor);
+            var estimate = spanDAO.estimateVelocityForRetention(workspaceId, cutoffId).block();
+            if (estimate == null || estimate.spansPerWeek() == 0) {
+                log.info("Retention velocity estimated for workspace '{}': no data found", workspaceId);
+                return new VelocityEstimation(0L, fallbackCursor);
+            }
+
+            // Use the actual oldest span time as cursor start
+            UUID startCursor = estimate.oldestSpanTime() != null
+                    ? uuidMapper.toLowerBound(estimate.oldestSpanTime())
+                    : fallbackCursor;
+
+            log.info("Retention velocity estimated for workspace '{}': '{}' spans/week, oldest='{}'",
+                    workspaceId, estimate.spansPerWeek(), estimate.oldestSpanTime());
+            return new VelocityEstimation(estimate.spansPerWeek(), startCursor);
         } catch (Exception e) {
             if (isTooManyRowsException(e)) {
-                log.info("Retention velocity estimation hit row limit for workspace '{}', using default '{}'",
-                        workspaceId, catchUpConfig.getDefaultVelocity());
-                return new VelocityEstimation(catchUpConfig.getDefaultVelocity(), startCursor);
+                log.info("Retention velocity estimation hit row limit for workspace '{}', scouting for first data",
+                        workspaceId);
+                UUID scoutedCursor = scoutFirstDataCursor(workspaceId, fallbackCursor, cutoffId);
+                return new VelocityEstimation(catchUpConfig.getDefaultVelocity(), scoutedCursor);
             }
             throw e;
         }
+    }
+
+    /**
+     * For huge workspaces where the full estimation query failed, scan month by month
+     * from the service start date to find the first day with actual trace data.
+     * If a monthly scan also hits TOO_MANY_ROWS, the start of that month is the cursor
+     * (there's clearly data there).
+     */
+    private UUID scoutFirstDataCursor(String workspaceId, UUID serviceStartCursor, UUID cutoffId) {
+        Instant serviceStart = extractInstant(serviceStartCursor);
+        Instant cutoff = extractInstant(cutoffId);
+        Instant monthStart = serviceStart;
+
+        while (monthStart.isBefore(cutoff)) {
+            Instant monthEnd = monthStart.plus(30, java.time.temporal.ChronoUnit.DAYS);
+            if (monthEnd.isAfter(cutoff)) {
+                monthEnd = cutoff;
+            }
+
+            UUID rangeStart = uuidMapper.toLowerBound(monthStart);
+            UUID rangeEnd = uuidMapper.toLowerBound(monthEnd);
+
+            try {
+                Instant firstDay = traceDAO.scoutFirstDayWithData(workspaceId, rangeStart, rangeEnd).block();
+                if (firstDay != null && !firstDay.equals(Instant.MAX)) {
+                    log.info("Scouting found first data for workspace '{}' at '{}'", workspaceId, firstDay);
+                    return uuidMapper.toLowerBound(firstDay);
+                }
+                // Empty month, skip ahead
+                log.debug("Scouting: no data in range ['{}', '{}') for workspace '{}'",
+                        monthStart, monthEnd, workspaceId);
+            } catch (Exception ex) {
+                if (isTooManyRowsException(ex)) {
+                    // Even the month scan hit the row limit — data clearly exists here
+                    log.info("Scouting hit row limit for workspace '{}' at month '{}', using as cursor start",
+                            workspaceId, monthStart);
+                    return uuidMapper.toLowerBound(monthStart);
+                }
+                throw ex;
+            }
+
+            monthStart = monthEnd;
+        }
+
+        // No data found anywhere — use service start as fallback
+        log.info("Scouting found no data for workspace '{}', using service start date", workspaceId);
+        return serviceStartCursor;
+    }
+
+    /**
+     * Extract the timestamp from a UUID v7's MSB.
+     */
+    private static Instant extractInstant(UUID uuid) {
+        long msb = uuid.getMostSignificantBits();
+        long epochMilli = msb >>> 16;
+        return Instant.ofEpochMilli(epochMilli);
     }
 
     /**
