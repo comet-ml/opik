@@ -42,7 +42,14 @@ const V1CompatRedirect = ({ toPath }: V1CompatRedirectProps) => {
     }, FALLBACK_TIMEOUT_MS);
 
     return () => clearTimeout(timer);
-  }, [activeProjectId, workspaceName, toPath, splat, navigate, location.search]);
+  }, [
+    activeProjectId,
+    workspaceName,
+    toPath,
+    splat,
+    navigate,
+    location.search,
+  ]);
 
   return <Loader />;
 };
