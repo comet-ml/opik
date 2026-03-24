@@ -79,7 +79,7 @@ class TraceThreadsClosingJobStreamAddParamsTest {
         when(traceThreadService.getProjectsWithPendingClosureThreads(any(), any(), any(), anyInt()))
                 .thenReturn(Flux.just(message));
         when(traceThreadService.addToPendingQueue(any())).thenReturn(Mono.just(true));
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
+        when(lockService.bestEffortLock(any(), any(), any(), any(), any(), any(Boolean.class)))
                 .thenAnswer(invocation -> invocation.<Mono<?>>getArgument(1));
 
         var job = new TraceThreadsClosingJob(
