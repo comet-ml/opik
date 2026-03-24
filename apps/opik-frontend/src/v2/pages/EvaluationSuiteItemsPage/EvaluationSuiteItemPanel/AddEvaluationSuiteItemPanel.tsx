@@ -78,10 +78,7 @@ const AddEvaluationSuiteItemPanelContent: React.FC<{
     const now = new Date().toISOString();
     const saveData = data ?? initialData;
 
-    const policyChanged =
-      policy != null &&
-      (policy.runs_per_item !== suitePolicy.runs_per_item ||
-        policy.pass_threshold !== suitePolicy.pass_threshold);
+    const policyChanged = policy != null;
 
     const tempId = addItem({
       data: saveData,

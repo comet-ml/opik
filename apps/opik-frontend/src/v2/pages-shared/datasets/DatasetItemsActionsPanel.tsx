@@ -146,7 +146,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         } else if (column === "assertions") {
           const itemAssertions = extractAssertions(item.evaluators ?? []);
           value =
-            itemAssertions.length > 0 ? itemAssertions : (suiteAssertions ?? []);
+            itemAssertions.length > 0 ? itemAssertions : suiteAssertions ?? [];
         } else {
           value = get(item, column, "");
         }
