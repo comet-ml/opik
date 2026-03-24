@@ -1,5 +1,7 @@
 import pytest
 
+pytestmark = pytest.mark.requires_litellm
+
 import litellm
 import litellm.litellm_core_utils.streaming_handler
 

@@ -336,6 +336,27 @@ def ensure_groq_configured():
         raise Exception("Groq is not configured!")
 
 
+def _litellm_available() -> bool:
+    try:
+        import litellm  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+_HAS_LITELLM = _litellm_available()
+
+
+def pytest_collection_modifyitems(config, items):  # type: ignore
+    if _HAS_LITELLM:
+        return
+    skip_marker = pytest.mark.skip(reason="litellm is not installed (quarantined)")
+    for item in items:
+        if "requires_litellm" in item.keywords:
+            item.add_marker(skip_marker)
+
+
 warnings.filterwarnings(
     "ignore",
     message=".*PydanticDeprecatedSince20.*",

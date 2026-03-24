@@ -44,6 +44,7 @@ class TestEvaluatorValidation:
         )
         assert "Equals" in str(exc_info.value)
 
+    @pytest.mark.requires_litellm
     def test_validate_evaluators__with_llm_judge__succeeds(self):
         """Test that LLMJudge evaluators pass validation."""
         llm_judge = suite_evaluators.LLMJudge(
@@ -81,6 +82,7 @@ class TestEvaluatorValidation:
             exc_info.value
         )
 
+    @pytest.mark.requires_litellm
     def test_add_item__with_assertions__succeeds(self):
         """Test that assertions shorthand is accepted in add_item."""
         mock_dataset = _create_mock_dataset()
@@ -106,6 +108,7 @@ class TestEvaluatorValidation:
         # Should not raise
         suite.add_item(data={"input": "test"})
 
+    @pytest.mark.requires_litellm
     def test_validate_evaluators__with_mixed_evaluators__raises_type_error(self):
         """Test that mixing LLMJudge with other evaluators raises TypeError."""
         llm_judge = suite_evaluators.LLMJudge(assertions=["Test"], track=False)
@@ -120,6 +123,7 @@ class TestEvaluatorValidation:
             exc_info.value
         )
 
+    @pytest.mark.requires_litellm
     def test_add_item__with_assertions_shorthand__creates_evaluator_items(self):
         """Test that assertions shorthand builds LLMJudge and creates evaluator items."""
         mock_dataset = _create_mock_dataset()
@@ -143,6 +147,7 @@ class TestEvaluatorValidation:
         assert len(item.evaluators) == 1
         assert item.evaluators[0].type == "llm_judge"
 
+    @pytest.mark.requires_litellm
     def test_resolve_evaluators__with_both_assertions_and_evaluators__raises_value_error(
         self,
     ):
@@ -159,6 +164,7 @@ class TestEvaluatorValidation:
                 context="item-level assertions",
             )
 
+    @pytest.mark.requires_litellm
     def test_resolve_evaluators__with_assertions__returns_llm_judge(self):
         """Test that resolve_evaluators builds LLMJudge from assertions."""
         result = validators.resolve_evaluators(
