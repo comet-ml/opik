@@ -21,7 +21,6 @@ import {
   useClearRunningMap,
   useSetPromptMap,
   useClearCreatedExperiments,
-  useCreatedExperiments,
   useIsRunning,
   useSelectedRuleIds,
   useSetSelectedRuleIds,
@@ -77,7 +76,6 @@ const PlaygroundHeader = ({
   const setDatasetFilters = useSetDatasetFilters();
   const setExperimentNamePrefix = useSetExperimentNamePrefix();
   const isRunning = useIsRunning();
-  const createdExperiments = useCreatedExperiments();
   const filters = useDatasetFilters();
 
   const resetKeyRef = useRef(0);
@@ -264,25 +262,27 @@ const PlaygroundHeader = ({
     if (!canViewDatasets) return null;
 
     if (isExperimentMode) {
-      const chipLabel = versionName
-        ? `${datasetName} ${versionName}`
-        : datasetName;
+      const chipLabel = datasetName
+        ? versionName
+          ? `${datasetName} ${versionName}`
+          : datasetName
+        : "Loading...";
 
       return (
-        <div className="flex h-7 items-center rounded-md border bg-background">
+        <div className="flex h-6 items-center rounded-md border bg-background">
           <button
             className="flex items-center gap-1.5 px-2 text-muted-slate hover:text-primary-hover"
             onClick={() => setRunOnDatasetOpen(true)}
           >
-            <Database className="size-4 shrink-0 text-[#b8e54a]" />
-            <span className="comet-body-s max-w-[200px] truncate">
+            <Database className="size-3.5 shrink-0 text-[#b8e54a]" />
+            <span className="comet-body-xs max-w-[200px] truncate">
               {chipLabel}
             </span>
-            <Pencil className="size-3.5 shrink-0" />
+            <Pencil className="size-3 shrink-0" />
           </button>
           <Separator orientation="vertical" className="h-full" />
           <button
-            className="flex items-center p-1.5 text-muted-slate hover:text-primary-hover"
+            className="flex items-center p-1 text-muted-slate hover:text-primary-hover"
             onClick={() => {
               leaveKeyRef.current += 1;
               setLeaveDialogOpen(true);
@@ -298,12 +298,12 @@ const PlaygroundHeader = ({
       <TooltipWrapper content={isRunDisabled ? runDisabledReason : undefined}>
         <Button
           variant="outline"
-          size="xs"
+          size="2xs"
           onClick={() => setRunOnDatasetOpen(true)}
           disabled={isRunDisabled}
           style={isRunDisabled ? { pointerEvents: "auto" } : {}}
         >
-          <Database className="mr-1 size-4" />
+          <Database className="mr-1 size-3.5" />
           Test on dataset
         </Button>
       </TooltipWrapper>
@@ -314,40 +314,31 @@ const PlaygroundHeader = ({
     if (isRunning) {
       return (
         <TooltipWrapper content="Stop running prompts">
-          <Button size="xs" variant="outline" onClick={onStopAll}>
-            <Pause className="mr-1 size-4" />
+          <Button size="2xs" variant="outline" onClick={onStopAll}>
+            <Pause className="mr-1 size-3.5" />
             Stop all
           </Button>
         </TooltipWrapper>
       );
     }
 
-    const hasExperiments = createdExperiments.length > 0;
-    const label = isExperimentMode
-      ? hasExperiments
-        ? "Re-run"
-        : "Run experiment"
-      : "Run all";
+    const label = isExperimentMode ? "Run experiment" : "Run all";
     const tooltip =
       runDisabledReason ??
-      (isExperimentMode
-        ? hasExperiments
-          ? "Re-run experiment with same dataset and metrics"
-          : "Run experiment on dataset"
-        : "Run your prompts");
+      (isExperimentMode ? "Run experiment on dataset" : "Run your prompts");
 
     return (
       <TooltipWrapper content={tooltip}>
         <Button
-          size="xs"
+          size="2xs"
           onClick={() => onRunAll()}
           disabled={isRunDisabled}
           style={isRunDisabled ? { pointerEvents: "auto" } : {}}
         >
-          <Play className="mr-1 size-4" />
+          <Play className="mr-1 size-3.5" />
           {label}
-          <HotkeyDisplay hotkey="⇧" size="xs" className="ml-1.5" />
-          <HotkeyDisplay hotkey="⏎" size="xs" className="ml-1" />
+          <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+          <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
         </Button>
       </TooltipWrapper>
     );
@@ -383,13 +374,13 @@ const PlaygroundHeader = ({
           {renderRunButton()}
           <Button
             variant="ghost"
-            size="xs"
+            size="2xs"
             onClick={() => {
               resetKeyRef.current += 1;
               setResetDialogOpen(true);
             }}
           >
-            <RotateCcw className="mr-2 size-4" />
+            <RotateCcw className="mr-2 size-3.5" />
             Reset
           </Button>
         </div>

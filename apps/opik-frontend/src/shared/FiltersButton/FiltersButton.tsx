@@ -24,6 +24,7 @@ type FiltersButtonProps<TColumnData> = {
   variant?: ButtonProps["variant"];
   align?: "start" | "end";
   disabled?: boolean;
+  deferOnChange?: boolean;
 };
 
 const FiltersButton = <TColumnData,>({
@@ -35,6 +36,7 @@ const FiltersButton = <TColumnData,>({
   variant = "outline",
   align = "start",
   disabled,
+  deferOnChange = false,
 }: FiltersButtonProps<TColumnData>) => {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
@@ -63,11 +65,23 @@ const FiltersButton = <TColumnData,>({
   }, [initialFilters, open]);
 
   useEffect(() => {
-    onChange(validFilters);
-  }, [validFilters, onChange]);
+    if (!deferOnChange) {
+      onChange(validFilters);
+    }
+  }, [validFilters, onChange, deferOnChange]);
+
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      if (deferOnChange && !isOpen) {
+        onChange(filters.filter(isFilterValid));
+      }
+      setOpen(isOpen);
+    },
+    [deferOnChange, onChange, filters],
+  );
 
   return (
-    <Popover onOpenChange={setOpen} open={open}>
+    <Popover onOpenChange={handleOpenChange} open={open}>
       <TooltipWrapper content={isIconLayout ? "Filters" : undefined}>
         <PopoverTrigger asChild>
           <Button

@@ -83,8 +83,8 @@ const PlaygroundPromptOutput = ({
     return (
       <div className="flex items-center justify-end border-b px-4 py-2">
         {isPromptRunning ? (
-          <Button size="xs" variant="outline" onClick={onStop}>
-            <Pause className="mr-1 size-4" />
+          <Button size="2xs" variant="outline" onClick={onStop}>
+            <Pause className="mr-1 size-3.5" />
             Stop
           </Button>
         ) : (
@@ -92,13 +92,13 @@ const PlaygroundPromptOutput = ({
             content={promptRunDisabledReason ?? "Run this prompt"}
           >
             <Button
-              size="xs"
+              size="2xs"
               variant="outline"
               onClick={onRun}
               disabled={isPromptRunDisabled}
               style={isPromptRunDisabled ? { pointerEvents: "auto" } : {}}
             >
-              <Play className="mr-1 size-4" />
+              <Play className="mr-1 size-3.5" />
               Run
             </Button>
           </TooltipWrapper>

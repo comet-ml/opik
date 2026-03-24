@@ -302,6 +302,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         <PromptsSelectBox
           compact
           projectId={activeProjectId!}
+          refetchOnMount
           value={promptId}
           onValueChange={(id) => {
             if (id !== promptId) {

@@ -269,7 +269,11 @@ const LLMPromptMessage = forwardRef<
                 </span>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="minimal" size="sm" className="min-w-4 p-0">
+                    <Button
+                      variant="minimal"
+                      size="sm"
+                      className="min-w-4 p-0 text-muted-slate"
+                    >
                       {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
                       <ChevronDown className="ml-1 w-4" />
                     </Button>

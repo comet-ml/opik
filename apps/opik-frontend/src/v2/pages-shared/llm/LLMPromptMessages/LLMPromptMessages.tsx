@@ -195,7 +195,7 @@ const LLMPromptMessages = ({
       {!hideAddButton && (
         <Button
           variant="ghost"
-          size="sm"
+          size="2xs"
           className="mt-2 self-start"
           onClick={() => {
             onAddMessage();

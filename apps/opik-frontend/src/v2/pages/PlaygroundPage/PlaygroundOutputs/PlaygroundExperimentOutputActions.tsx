@@ -5,7 +5,7 @@ import { Button } from "@/ui/button";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import PlaygroundProgressIndicator from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
 import { useCreatedExperiments, useIsRunning } from "@/store/PlaygroundStore";
-import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface PlaygroundExperimentOutputActionsProps {
@@ -54,17 +54,23 @@ const PlaygroundExperimentOutputActions = ({
         <div className="px-4 pb-3 pt-2">
           <PlaygroundProgressIndicator />
         </div>
-      ) : hasExperiments ? (
+      ) : (
         <div className="flex items-center justify-between bg-gray-100 px-4 py-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-sm text-muted-slate"
-            onClick={handleNavigateToExperiments}
-          >
-            <span>Experiment results</span>
-            <ExternalLink className="ml-1 size-3.5 shrink-0" />
-          </Button>
+          {hasExperiments ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-sm text-muted-slate"
+              onClick={handleNavigateToExperiments}
+            >
+              <span>Experiment results</span>
+              <ExternalLink className="ml-1 size-3.5 shrink-0" />
+            </Button>
+          ) : (
+            <span className="py-[6px] pl-3 text-sm text-muted-slate">
+              Experiment results
+            </span>
+          )}
           <DataTablePagination
             page={page}
             pageChange={onChangePage}
@@ -77,7 +83,7 @@ const PlaygroundExperimentOutputActions = ({
             isLoadingTotal={isLoadingTotal}
           />
         </div>
-      ) : null}
+      )}
     </div>
   );
 };

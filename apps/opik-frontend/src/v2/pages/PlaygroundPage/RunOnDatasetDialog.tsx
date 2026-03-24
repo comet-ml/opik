@@ -126,7 +126,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   }, [datasetName, experimentPrefix]);
 
   const transformedFilters = useMemo(
-    () => (filters ? transformDataColumnFilters(filters) : filters),
+    () => (filters.length ? transformDataColumnFilters(filters) : undefined),
     [filters],
   );
 
@@ -147,6 +147,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     () => datasetItemsData?.columns || [],
     [datasetItemsData?.columns],
   );
+
   const isDatasetEmpty =
     !isLoadingDatasetItems && !!plainDatasetId && datasetItemsData?.total === 0;
 
@@ -249,7 +250,10 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="max-w-lg sm:max-w-[560px]">
+        <DialogContent
+          className="max-w-lg sm:max-w-[560px]"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader className="pb-0">
             <DialogTitle>Run on dataset</DialogTitle>
             <DialogDescription>
@@ -258,7 +262,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 pb-2">
+          <div className="flex flex-col gap-4 overflow-y-auto pb-2">
             <div className="flex flex-col gap-1.5">
               <Label>Dataset</Label>
               <div className="flex items-center gap-2">
@@ -277,6 +281,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                     filters={filters}
                     onChange={setFilters}
                     layout="icon"
+                    deferOnChange
                   />
                 )}
               </div>
@@ -302,7 +307,13 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
             </DialogClose>
             <TooltipWrapper
               content={
-                isRunning ? "An experiment is already running" : undefined
+                isRunning
+                  ? "An experiment is already running"
+                  : isDatasetEmpty && filters.length > 0
+                    ? "No items match the current filters"
+                    : isDatasetEmpty
+                      ? "Selected dataset is empty"
+                      : undefined
               }
             >
               <Button
