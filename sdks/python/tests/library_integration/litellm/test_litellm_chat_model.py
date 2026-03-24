@@ -1,8 +1,6 @@
 import pytest
 import pydantic
 
-pytestmark = pytest.mark.requires_litellm
-
 import opik
 from opik.evaluation.models.litellm import litellm_chat_model
 from ...testlib import (

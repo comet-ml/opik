@@ -1,7 +1,3 @@
-import pytest
-
-pytestmark = pytest.mark.requires_litellm
-
 import opik
 from opik.integrations.crewai import track_crewai
 

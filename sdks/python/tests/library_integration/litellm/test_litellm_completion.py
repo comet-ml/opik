@@ -17,7 +17,7 @@ from ...testlib import (
 
 from . import constants
 
-pytestmark = [pytest.mark.requires_litellm, pytest.mark.usefixtures("ensure_openai_configured")]
+pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 
