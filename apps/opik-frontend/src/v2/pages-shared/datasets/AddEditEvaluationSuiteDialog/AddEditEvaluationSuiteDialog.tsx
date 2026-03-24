@@ -8,7 +8,7 @@ import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
-import { useFetchDataset } from "@/api/datasets/useDatasetById";
+import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
 import { Button } from "@/ui/button";
 import { Description } from "@/ui/description";
 import {
@@ -23,16 +23,21 @@ import {
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
+import { Separator } from "@/ui/separator";
 import { Card } from "@/ui/card";
 import { useToast } from "@/ui/use-toast";
+import { cn, buildDocsUrl } from "@/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
+import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import Loader from "@/shared/Loader/Loader";
-import { buildDocsUrl } from "@/lib/utils";
 import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
+import { packAssertions } from "@/lib/assertion-converters";
 import { Dataset, DATASET_TYPE, DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { MAX_RUNS_PER_ITEM } from "@/types/evaluation-suites";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 
 const ACCEPTED_TYPE = ".csv";
 
@@ -70,8 +75,7 @@ const AddEditEvaluationSuiteDialog = ({
   const { mutate: updateMutate } = useDatasetUpdateMutation();
   const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
   const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
-  const fetchDataset = useFetchDataset();
-
+  const { mutate: changesMutate } = useDatasetItemChangesMutation();
   const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
@@ -80,12 +84,34 @@ const AddEditEvaluationSuiteDialog = ({
   );
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
-  const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.DATASET);
+  const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.EVALUATION_SUITE);
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string>(
     dataset ? dataset.description || "" : "",
   );
+  const [runsPerItem, setRunsPerItem] = useState<number>(1);
+  const [passThreshold, setPassThreshold] = useState<number>(1);
+  const [assertions, setAssertions] = useState<string[]>([]);
+
+  const runsInput = useClampedIntegerInput({
+    value: runsPerItem,
+    min: 1,
+    max: MAX_RUNS_PER_ITEM,
+    onCommit: (v) => {
+      setRunsPerItem(v);
+      if (passThreshold > v) {
+        setPassThreshold(v);
+      }
+    },
+  });
+
+  const thresholdInput = useClampedIntegerInput({
+    value: passThreshold,
+    min: 1,
+    max: runsPerItem,
+    onCommit: (v) => setPassThreshold(v),
+  });
 
   useEffect(() => {
     setIsOverlayShown(false);
@@ -96,7 +122,10 @@ const AddEditEvaluationSuiteDialog = ({
       setCsvFile(undefined);
       setCsvError(undefined);
       setCsvData(undefined);
-      setType(DATASET_TYPE.DATASET);
+      setType(DATASET_TYPE.EVALUATION_SUITE);
+      setRunsPerItem(1);
+      setPassThreshold(1);
+      setAssertions([]);
       if (!dataset) {
         setName("");
         setDescription("");
@@ -124,13 +153,63 @@ const AddEditEvaluationSuiteDialog = ({
     ? CSV_MODE_FILE_SIZE_LIMIT_IN_MB
     : JSON_MODE_FILE_SIZE_LIMIT_IN_MB;
 
+  const applyEvaluationCriteria = useCallback(
+    (datasetId: string, onDone?: () => void) => {
+      const filteredAssertions = assertions
+        .map((a) => a.trim())
+        .filter(Boolean);
+      const hasCustomPolicy = runsPerItem !== 1 || passThreshold !== 1;
+      const hasAssertions = filteredAssertions.length > 0;
+
+      if (!hasCustomPolicy && !hasAssertions) {
+        onDone?.();
+        return;
+      }
+
+      changesMutate(
+        {
+          datasetId,
+          payload: {
+            added_items: [],
+            edited_items: [],
+            deleted_ids: [],
+            base_version: null,
+            ...(hasAssertions && {
+              evaluators: [packAssertions(filteredAssertions)],
+            }),
+            ...(hasCustomPolicy && {
+              execution_policy: {
+                runs_per_item: runsPerItem,
+                pass_threshold: passThreshold,
+              },
+            }),
+          },
+          override: true,
+        },
+        {
+          onSettled: onDone,
+        },
+      );
+    },
+    [assertions, runsPerItem, passThreshold, changesMutate],
+  );
+
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
+      const navigateToDataset = () => {
+        setOpen(false);
+        onDatasetCreated?.(newDataset);
+      };
+
       if (hasValidCsvFile) {
         setIsOverlayShown(true);
       }
 
       if (hasValidCsvFile && newDataset.id) {
+        const applyThenNavigate = () => {
+          applyEvaluationCriteria(newDataset.id, navigateToDataset);
+        };
+
         if (isCsvUploadEnabled && csvFile) {
           // CSV mode: Upload CSV file directly to backend
           createItemsFromCsvMutate(
@@ -160,12 +239,7 @@ const AddEditEvaluationSuiteDialog = ({
                   variant: "destructive",
                 });
               },
-              onSettled: () => {
-                setOpen(false);
-                if (onDatasetCreated) {
-                  onDatasetCreated(newDataset);
-                }
-              },
+              onSettled: applyThenNavigate,
             },
           );
         } else if (!isCsvUploadEnabled && csvData) {
@@ -180,39 +254,17 @@ const AddEditEvaluationSuiteDialog = ({
               })),
             },
             {
-              onSuccess: () => {
-                // Fetch dataset to get latest_version populated by backend
-                fetchDataset({ datasetId: newDataset.id })
-                  .then((enrichedDataset) => {
-                    if (onDatasetCreated) {
-                      onDatasetCreated(enrichedDataset);
-                    }
-                  })
-                  .catch((error) => {
-                    console.error(
-                      "Failed to fetch evaluation suite after item creation:",
-                      error,
-                    );
-
-                    if (onDatasetCreated) {
-                      onDatasetCreated(newDataset);
-                    }
-                  });
-              },
-              onError: () => {
-                setOpen(false);
-              },
+              onSettled: applyThenNavigate,
             },
           );
         }
       } else {
-        setOpen(false);
-        if (onDatasetCreated) {
-          onDatasetCreated(newDataset);
-        }
+        // No CSV — wait for evaluation criteria before navigating
+        applyEvaluationCriteria(newDataset.id, navigateToDataset);
       }
     },
     [
+      applyEvaluationCriteria,
       hasValidCsvFile,
       isCsvUploadEnabled,
       csvFile,
@@ -223,7 +275,6 @@ const AddEditEvaluationSuiteDialog = ({
       onDatasetCreated,
       setOpen,
       toast,
-      fetchDataset,
     ],
   );
 
@@ -424,6 +475,83 @@ const AddEditEvaluationSuiteDialog = ({
               maxLength={255}
             />
           </div>
+          {!isEdit && (
+            <>
+              <Separator className="mb-4" />
+              <div className="mb-4">
+                <h3 className="comet-body-accented">Evaluation criteria</h3>
+                <p className="comet-body-s text-light-slate">
+                  Define the conditions required for the evaluation to pass
+                </p>
+              </div>
+              <div className="mb-4 flex gap-4">
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label htmlFor="runsPerItem">Default runs per item</Label>
+                  <Input
+                    id="runsPerItem"
+                    dimension="sm"
+                    className={cn({
+                      "border-destructive": runsInput.isInvalid,
+                    })}
+                    type="number"
+                    min={1}
+                    max={MAX_RUNS_PER_ITEM}
+                    value={runsInput.displayValue}
+                    onChange={runsInput.onChange}
+                    onFocus={runsInput.onFocus}
+                    onBlur={runsInput.onBlur}
+                    onKeyDown={runsInput.onKeyDown}
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label htmlFor="passThreshold">Default pass threshold</Label>
+                  <Input
+                    id="passThreshold"
+                    dimension="sm"
+                    className={cn({
+                      "border-destructive": thresholdInput.isInvalid,
+                    })}
+                    type="number"
+                    min={1}
+                    max={runsPerItem}
+                    value={thresholdInput.displayValue}
+                    onChange={thresholdInput.onChange}
+                    onFocus={thresholdInput.onFocus}
+                    onBlur={thresholdInput.onBlur}
+                    onKeyDown={thresholdInput.onKeyDown}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 pb-4">
+                <div className="mb-1">
+                  <Label>Global assertions</Label>
+                  <p className="comet-body-s text-light-slate">
+                    Define the global conditions all items in this evaluation
+                    suite must pass.
+                  </p>
+                </div>
+                <div className="pt-1.5">
+                  <AssertionsField
+                    editableAssertions={assertions}
+                    onChangeEditable={(index, value) => {
+                      setAssertions((prev) => {
+                        const next = [...prev];
+                        next[index] = value;
+                        return next;
+                      });
+                    }}
+                    onRemoveEditable={(index) => {
+                      setAssertions((prev) =>
+                        prev.filter((_, i) => i !== index),
+                      );
+                    }}
+                    onAdd={() => setAssertions((prev) => [...prev, ""])}
+                    placeholder="e.g. Response should be factually accurate and cite sources"
+                  />
+                </div>
+              </div>
+            </>
+          )}
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Upload a CSV</Label>

@@ -193,9 +193,23 @@ const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
   value: secondsToMilliseconds(Number(filter.value)).toString(),
 });
 
+const CONFIGURATION_VERSION_FIELD = "configuration_version";
+
+const processConfigurationVersionFilter: (filter: Filter) => Filter = (
+  filter,
+) => ({
+  ...filter,
+  field: "metadata",
+  type: COLUMN_TYPE.dictionary,
+  key: "agent_configuration.blueprint_version",
+});
+
 export const processFiltersArray = (filters: Filter[]) => {
   return flatten(
     filters.map((filter) => {
+      if (filter.field === CONFIGURATION_VERSION_FIELD) {
+        return processConfigurationVersionFilter(filter);
+      }
       switch (filter.type) {
         case COLUMN_TYPE.time:
           return processTimeFilter(filter);
