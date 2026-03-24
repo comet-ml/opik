@@ -12,12 +12,13 @@ export async function getDatasetItems<
   opik: OpikClient,
   options: {
     datasetName: string;
+    projectName?: string;
     datasetVersion?: string;
     nbSamples?: number;
     lastRetrievedId?: string;
   }
 ): Promise<DatasetItem<T>[]> {
-  const { datasetName, datasetVersion, nbSamples, lastRetrievedId } = options;
+  const { datasetName, projectName, datasetVersion, nbSamples, lastRetrievedId } = options;
 
   // Handle edge case: nbSamples = 0 means no items requested
   if (nbSamples === 0) {
@@ -36,6 +37,7 @@ export async function getDatasetItems<
 
     const streamResponse = await opik.api.datasets.streamDatasetItems({
       datasetName,
+      projectName,
       lastRetrievedId: currentLastId,
       steamLimit: streamLimit,
       datasetVersion,

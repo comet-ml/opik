@@ -45,6 +45,7 @@ export interface CreateEvaluationSuiteOptions {
   assertions?: string[];
   executionPolicy?: ExecutionPolicy;
   tags?: string[];
+  projectName?: string;
 }
 
 function validateSuiteName(name: string): void {
@@ -153,10 +154,11 @@ export class EvaluationSuite {
       description: options.description,
       type: DatasetWriteType.EvaluationSuite,
       tags: options.tags,
+      projectName: options.projectName,
     });
 
     const dataset = new Dataset(
-      { id: datasetId, name: options.name, description: options.description },
+      { id: datasetId, name: options.name, description: options.description, projectName: options.projectName },
       client
     );
 
@@ -184,9 +186,10 @@ export class EvaluationSuite {
 
   static async get(
     client: OpikClient,
-    name: string
+    name: string,
+    projectName?: string
   ): Promise<EvaluationSuite> {
-    const dataset = await client.getDataset(name);
+    const dataset = await client.getDataset(name, projectName);
     await dataset.syncHashes();
     return new EvaluationSuite(dataset, client);
   }
@@ -198,7 +201,7 @@ export class EvaluationSuite {
     validateSuiteName(options.name);
 
     try {
-      const suite = await EvaluationSuite.get(client, options.name);
+      const suite = await EvaluationSuite.get(client, options.name, options.projectName);
 
       const hasUpdates =
         options.assertions !== undefined ||
