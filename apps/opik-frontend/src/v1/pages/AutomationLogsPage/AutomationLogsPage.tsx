@@ -9,7 +9,7 @@ import NoData from "@/shared/NoData/NoData";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";

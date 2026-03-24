@@ -129,40 +129,60 @@ def test_publish_version_and_retrieve__happyflow(
 
     # latest=True returns v2; hint is now a real value.
     get_global_registry().clear()
-    latest = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
-        project_name=project_name,
-        latest=True,
-    )
+
+    @opik.track(project_name=project_name)
+    def fetch_latest():
+        return opik_client.get_agent_config(
+            fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
+            project_name=project_name,
+            latest=True,
+        )
+
+    latest = fetch_latest()
     assert latest.temperature == pytest.approx(0.8)
     assert latest.model == "gpt-4"
     assert latest.hint == "use chain-of-thought"
 
     # version= by name returns v1; hint must be None as originally published.
     get_global_registry().clear()
-    by_name = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
-        project_name=project_name,
-        version=v1_name,
-    )
+
+    @opik.track(project_name=project_name)
+    def fetch_by_name():
+        return opik_client.get_agent_config(
+            fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
+            project_name=project_name,
+            version=v1_name,
+        )
+
+    by_name = fetch_by_name()
     assert by_name.temperature == pytest.approx(0.5)
     assert by_name.hint is None
 
     # Deploy v1 to prod; env= fetch returns v1 despite v2 being latest.
     get_global_registry().clear()
-    v1_cfg = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
-        project_name=project_name,
-        version=v1_name,
-    )
+
+    @opik.track(project_name=project_name)
+    def fetch_v1_for_deploy():
+        return opik_client.get_agent_config(
+            fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
+            project_name=project_name,
+            version=v1_name,
+        )
+
+    v1_cfg = fetch_v1_for_deploy()
     v1_cfg.deploy_to("prod")
 
     get_global_registry().clear()
-    by_env = opik_client.get_agent_config(
-        fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
-        project_name=project_name,
-        env="prod",
-    )
+
+    @opik.track(project_name=project_name)
+    def fetch_by_env():
+        return opik_client.get_agent_config(
+            fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
+            project_name=project_name,
+            env="prod",
+        )
+
+    by_env = fetch_by_env()
     assert by_env.temperature == pytest.approx(0.5)
     assert by_env.hint is None
 
@@ -188,27 +208,28 @@ def test_prompt_field_and_trace_metadata__happyflow(
 
     get_global_registry().clear()
 
-    result = opik_client.get_agent_config(
-        fallback=PromptConfig(system_prompt=prompt_v1, temperature=0.0),
-        project_name=project_name,
-        latest=True,
-    )
-
-    # Prompt field roundtrip.
-    assert isinstance(result.system_prompt, Prompt)
-    assert result.system_prompt.version_id == prompt_v1.version_id
-
-    # Field access inside @opik.track must inject agent_configuration metadata.
     id_storage = {}
 
     @opik.track(project_name=project_name)
     def run():
+        cfg = opik_client.get_agent_config(
+            fallback=PromptConfig(system_prompt=prompt_v1, temperature=0.0),
+            project_name=project_name,
+            latest=True,
+        )
         id_storage["trace_id"] = opik_context.get_current_trace_data().id
         id_storage["span_id"] = opik_context.get_current_span_data().id
-        _ = result.temperature
+        id_storage["system_prompt"] = cfg.system_prompt
+        id_storage["system_prompt_version_id"] = cfg.system_prompt.version_id
+        _ = cfg.temperature
+        return cfg
 
     run()
     opik.flush_tracker()
+
+    # Prompt field roundtrip.
+    assert isinstance(id_storage["system_prompt"], Prompt)
+    assert id_storage["system_prompt_version_id"] == prompt_v1.version_id
 
     expected_meta = {
         "_blueprint_id": ANY_BUT_NONE,
@@ -254,10 +275,15 @@ def test_mask_overrides_config__happyflow(
     get_global_registry().clear()
 
     with agent_config_context(mask_id):
-        result = opik_client.get_agent_config(
-            fallback=MyConfig(temperature=0.0, model="fallback"),
-            project_name=project_name,
-            latest=True,
-        )
+
+        @opik.track(project_name=project_name)
+        def fetch_with_mask():
+            return opik_client.get_agent_config(
+                fallback=MyConfig(temperature=0.0, model="fallback"),
+                project_name=project_name,
+                latest=True,
+            )
+
+        result = fetch_with_mask()
         assert result.temperature == pytest.approx(0.9)
         assert result.model == "gpt-4"

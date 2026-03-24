@@ -1,7 +1,6 @@
 import dataclasses
 import logging
 import typing
-import warnings
 
 from opik.exceptions import AgentConfigNotFound
 from . import type_helpers
@@ -31,7 +30,6 @@ class _OpikState:
     blueprint_version: typing.Optional[str] = None
     envs: typing.Optional[typing.List[str]] = None
     is_fallback: bool = True
-    mask_mismatch_warned: bool = False
 
 
 def _build_field_info(
@@ -128,20 +126,6 @@ class AgentConfig:
     def _resolve_field(self, attr: str) -> typing.Any:
         state = self._state
         project = typing.cast(str, state.project)  # guarded by __getattribute__
-        active_mask = get_active_config_mask()
-        if (
-            active_mask is not None
-            and state.mask_id != active_mask
-            and not state.mask_mismatch_warned
-        ):
-            state.mask_mismatch_warned = True
-            warnings.warn(
-                f"{type(self).__name__} was instantiated outside of an agent entrypoint "
-                f"and will not receive config overrides. "
-                f"Ensure get_agent_config() is called inside a function decorated with "
-                f"@opik.track(entrypoint=True) to enable agent optimization.",
-                stacklevel=2,
-            )
         instance_cache = cache_mod.get_cached_config(project, state.env, state.mask_id)
         state.blueprint_id = instance_cache.blueprint_id
         state.blueprint_version = instance_cache.blueprint_version
@@ -244,6 +228,18 @@ class AgentConfig:
         version: typing.Optional[str],
         timeout_in_seconds: typing.Optional[int] = None,
     ) -> T:
+        from opik import opik_context  # avoid circular import
+
+        if (
+            opik_context.get_current_trace_data() is None
+            and opik_context.get_current_span_data() is None
+        ):
+            raise RuntimeError(
+                "get_agent_config() must be called inside a function decorated with "
+                "@opik.track. Call create_agent_config_version() or get_agent_config() "
+                "from within a @opik.track-decorated function."
+            )
+
         field_types = cls._prefixed_field_types()
         mask_id = get_active_config_mask()
         resolved_env = None if (latest or version is not None) else env

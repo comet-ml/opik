@@ -24,6 +24,9 @@ target/
 # Python BE related
 /apps/opik-python-backend/images/
 
+# Evaluation suite reports
+opik_evaluation_suite_reports/
+
 # Opik opimizer related
 /sdks/opik_optimizer/artifacts
 /sdks/opik_optimizer/benchmark_results/

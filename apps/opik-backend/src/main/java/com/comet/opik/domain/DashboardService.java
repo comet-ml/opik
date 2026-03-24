@@ -154,7 +154,12 @@ class DashboardServiceImpl implements DashboardService {
             var dao = handle.attach(DashboardDAO.class);
 
             return dao.findByName(workspaceId, name, projectId)
-                    .or(() -> projectId != null ? dao.findByName(workspaceId, name, null) : Optional.empty())
+                    .or(() -> {
+                        if (projectId == null) {
+                            return Optional.empty();
+                        }
+                        return dao.findByName(workspaceId, name, null);
+                    })
                     .orElseThrow(() -> {
                         log.info("Dashboard not found with name '{}' in workspace '{}'", name, workspaceId);
                         return new NotFoundException(DASHBOARD_NOT_FOUND);

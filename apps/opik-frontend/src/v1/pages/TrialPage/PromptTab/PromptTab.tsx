@@ -21,7 +21,7 @@ import ComparePromptCell, {
   ComparePromptConfig,
   ComparePromptData,
 } from "./ComparePromptCell";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";

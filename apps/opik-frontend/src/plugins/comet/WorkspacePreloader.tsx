@@ -7,7 +7,6 @@ import {
 import { MoveLeft } from "lucide-react";
 import React, { useEffect } from "react";
 
-import PartialPageLayout from "@/v1/layout/PartialPageLayout/PartialPageLayout";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
@@ -211,18 +210,16 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 
   if (user.orgReachedTraceLimit) {
     return (
-      <PartialPageLayout>
-        <div className="flex flex-col items-center gap-4 px-10 py-24">
-          <div className="comet-body py-4">
-            Opik traces limit has reached, to continue please purchase
-            additional traces via AWS
-          </div>
-
-          <Button variant="secondary" onClick={() => window.location.reload()}>
-            Refresh page
-          </Button>
+      <div className="flex h-screen w-screen flex-col items-center justify-center gap-4">
+        <div className="comet-body py-4">
+          Opik traces limit has reached, to continue please purchase additional
+          traces via AWS
         </div>
-      </PartialPageLayout>
+
+        <Button variant="secondary" onClick={() => window.location.reload()}>
+          Refresh page
+        </Button>
+      </div>
     );
   }
 

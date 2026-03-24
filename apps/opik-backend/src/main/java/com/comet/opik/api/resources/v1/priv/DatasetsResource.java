@@ -285,7 +285,12 @@ public class DatasetsResource {
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
                 workspaceId);
 
-        return Response.ok(dataset).build();
+        var responseBuilder = Response.ok(dataset);
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+        return responseBuilder.build();
     }
 
     @POST
@@ -447,7 +452,10 @@ public class DatasetsResource {
 
     @PUT
     @Path("/items")
-    @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = "Create/update dataset items based on dataset item id", responses = {
+    @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = """
+            Create/update dataset items based on dataset item id.
+            Each item's 'id' field is the stable identifier and upsert key.
+            Provide it to update an existing item, or omit it to create a new one.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited

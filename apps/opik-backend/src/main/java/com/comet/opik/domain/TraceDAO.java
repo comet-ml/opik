@@ -78,7 +78,7 @@ import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.*;
 
 @ImplementedBy(TraceDAOImpl.class)
-interface TraceDAO {
+public interface TraceDAO {
 
     Mono<UUID> insert(Trace trace, Connection connection);
 
@@ -127,6 +127,26 @@ interface TraceDAO {
     Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
 
     Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags);
+
+    /**
+     * Bulk delete traces for data retention enforcement (applyToPast=true).
+     * Deletes traces in [lowerBound, cutoffId) that are not linked to experiments.
+     *
+     * @param workspaceIds workspaces whose traces should be purged
+     * @param cutoffId     UUID v7 upper bound (exclusive)
+     * @param lowerBound   UUID v7 lower bound (inclusive) — typically cutoff minus buffer days
+     */
+    Mono<Long> deleteForRetention(List<String> workspaceIds, UUID cutoffId, UUID lowerBound);
+
+    /**
+     * Bulk delete traces for data retention enforcement (applyToPast=false).
+     * Each workspace has its own lower bound (max of rule minId and cutoff-buffer).
+     *
+     * @param workspaceMinIds map of workspace_id to its effective lower bound
+     * @param cutoffId        UUID v7 upper bound (exclusive)
+     * @param lowerBound      global lower bound for experiment_items subquery
+     */
+    Mono<Long> deleteForRetentionBounded(Map<String, UUID> workspaceMinIds, UUID cutoffId, UUID lowerBound);
 }
 
 @Slf4j
@@ -642,7 +662,7 @@ class TraceDAOImpl implements TraceDAO {
             ), experiments_agg AS (
                 SELECT DISTINCT
                     ei.trace_id,
-                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
                     e.name AS experiment_name,
                     e.dataset_id AS experiment_dataset_id
@@ -652,6 +672,15 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN :ids
                 ) ei
+                LEFT JOIN (
+                    SELECT id, dataset_item_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (
+                        SELECT dataset_item_id FROM experiment_items
+                        WHERE workspace_id = :workspace_id AND trace_id IN :ids
+                    )
+                ) div ON div.id = ei.dataset_item_id
                 INNER JOIN (
                     SELECT id, name, dataset_id
                     FROM experiments
@@ -1169,7 +1198,7 @@ class TraceDAOImpl implements TraceDAO {
             , experiments_agg AS (
                 SELECT DISTINCT
                     ei.trace_id,
-                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
                     e.name AS experiment_name,
                     e.dataset_id AS experiment_dataset_id
@@ -1180,6 +1209,17 @@ class TraceDAOImpl implements TraceDAO {
                     <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 ) ei
+                LEFT JOIN (
+                    SELECT id, dataset_item_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (
+                        SELECT dataset_item_id FROM experiment_items
+                        WHERE workspace_id = :workspace_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                    )
+                ) div ON div.id = ei.dataset_item_id
                 INNER JOIN (
                     SELECT id, name, dataset_id
                     FROM experiments
@@ -1724,6 +1764,21 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
             SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String DELETE_FOR_RETENTION = """
+            DELETE FROM traces
+            WHERE workspace_id IN :workspace_ids
+            AND id >= :lower_bound
+            AND id \\< :cutoff_id
+            AND id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids
+                AND trace_id >= :lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
             ;
             """;
 
@@ -3746,5 +3801,73 @@ class TraceDAOImpl implements TraceDAO {
         // Inject providers as first field in metadata
         return JsonUtils.prependField(
                 baseMetadata, Trace.TraceField.PROVIDERS.getValue(), providers);
+    }
+
+    @Override
+    public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+            @NonNull UUID lowerBound) {
+        Preconditions.checkArgument(
+                CollectionUtils.isNotEmpty(workspaceIds), "Argument 'workspaceIds' must not be empty");
+
+        log.info("Retention delete traces: workspaces='{}', cutoffId='{}', lowerBound='{}'",
+                workspaceIds.size(), cutoffId, lowerBound);
+
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null,
+                workspaceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("cutoff_id", cutoffId)
+                            .bind("lower_bound", lowerBound);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    @Override
+    public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds,
+            @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
+        Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
+
+        log.info("Retention delete traces (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
+
+        var logComment = getLogComment("retention_delete_traces_bounded", null, workspaceMinIds.size());
+        var entries = List.copyOf(workspaceMinIds.entrySet());
+
+        var sb = new StringBuilder("DELETE FROM traces WHERE (");
+        for (int i = 0; i < entries.size(); i++) {
+            if (i > 0) sb.append(" OR ");
+            sb.append("(workspace_id = :ws_").append(i)
+                    .append(" AND id >= :lb_").append(i)
+                    .append(" AND id < :cutoff_id)");
+        }
+        sb.append(") AND id NOT IN (")
+                .append("SELECT trace_id FROM experiment_items")
+                .append(" WHERE workspace_id IN :workspace_ids_flat")
+                .append(" AND trace_id >= :min_lower_bound")
+                .append(" AND trace_id < :cutoff_id")
+                .append(") SETTINGS log_comment = '").append(logComment)
+                .append("', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1");
+
+        var sql = sb.toString();
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(sql)
+                            .bind("cutoff_id", cutoffId)
+                            .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
+                            .bind("min_lower_bound", lowerBound);
+
+                    for (int i = 0; i < entries.size(); i++) {
+                        statement.bind("ws_" + i, entries.get(i).getKey());
+                        statement.bind("lb_" + i, entries.get(i).getValue());
+                    }
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
     }
 }

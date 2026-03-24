@@ -10,7 +10,7 @@ import {
   selectSetReadOnly,
   selectSetWidgetResolver,
 } from "@/store/DashboardStore";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { EXPERIMENT_COMPARISON_TEMPLATE } from "@/lib/dashboard/templates";
 import { DASHBOARD_TYPE } from "@/types/dashboard";
 import CompareExperimentsButton from "@/v1/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";

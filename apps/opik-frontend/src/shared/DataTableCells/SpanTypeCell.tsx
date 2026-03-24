@@ -2,7 +2,7 @@ import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { SPAN_TYPE } from "@/types/traces";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
-import BaseTraceDataTypeIcon from "@/v1/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 
 const SpanTypeCell = (context: CellContext<unknown, string>) => {
   const value = context.getValue() as SPAN_TYPE;

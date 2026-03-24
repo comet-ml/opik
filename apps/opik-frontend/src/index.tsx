@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react";
 
 import "tailwindcss/tailwind.css";
 
-import App from "@/v1/App";
+import WorkspaceVersionGate from "@/WorkspaceVersionGate";
 import usePluginsStore from "@/store/PluginsStore";
 import { APP_VERSION } from "@/constants/app";
 import { runLocalStorageMigrations } from "@/lib/ls-migrations";
@@ -28,6 +28,10 @@ if (IS_SENTRY_ENABLED) {
   });
 }
 
-usePluginsStore.getState().setupPlugins(import.meta.env.MODE);
-runLocalStorageMigrations();
-root.render(<App />);
+async function bootstrap() {
+  await usePluginsStore.getState().setupPlugins(import.meta.env.MODE);
+  runLocalStorageMigrations();
+  root.render(<WorkspaceVersionGate />);
+}
+
+bootstrap();

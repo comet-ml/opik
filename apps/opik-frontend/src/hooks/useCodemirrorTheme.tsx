@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { tags as t } from "@lezer/highlight";
 import { githubDarkInit, githubLightInit } from "@uiw/codemirror-theme-github";
-import { useTheme } from "@/v1/theme-provider";
+import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 
 type CodemirrorThemeProps = {

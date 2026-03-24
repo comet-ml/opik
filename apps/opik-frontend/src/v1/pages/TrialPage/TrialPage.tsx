@@ -8,7 +8,7 @@ import TrialConfigurationSection from "@/v1/pages-shared/experiments/TrialConfig
 import TrialKPICards from "@/v1/pages/TrialPage/TrialKPICards";
 import TrialDetails from "@/v1/pages/TrialPage/TrialDetails/TrialDetails";
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useDeepMemo from "@/hooks/useDeepMemo";

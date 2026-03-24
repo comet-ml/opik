@@ -15,7 +15,7 @@ const DatasetTypeCell = (context: CellContext<unknown, unknown>) => {
   const value = (context.getValue() as string) ?? DATASET_TYPE.DATASET;
 
   const variant = VARIANT_MAP[value] ?? "yellow";
-  const label = TYPE_LABELS[value] ?? "Legacy dataset";
+  const label = TYPE_LABELS[value] ?? "Dataset";
 
   return (
     <CellWrapper

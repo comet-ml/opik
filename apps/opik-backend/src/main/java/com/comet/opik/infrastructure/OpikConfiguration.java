@@ -111,6 +111,9 @@ public class OpikConfiguration extends JobConfiguration {
     private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
 
     @Valid @NotNull @JsonProperty
+    private RetentionConfig retention = new RetentionConfig();
+
+    @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -121,6 +124,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ExperimentDenormalizationConfig experimentDenormalization = new ExperimentDenormalizationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private LlmModelRegistryConfig llmModelRegistry = new LlmModelRegistryConfig();
 
     @Valid @NotNull @JsonProperty
     private OllieStateConfig ollieStateConfig = new OllieStateConfig();

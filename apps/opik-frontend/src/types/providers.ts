@@ -14,6 +14,15 @@ export enum PROVIDER_TYPE {
 
 export type COMPOSED_PROVIDER_TYPE = PROVIDER_TYPE | string;
 
+export interface ProviderGridOption {
+  value: COMPOSED_PROVIDER_TYPE;
+  label: string;
+  providerType: PROVIDER_TYPE;
+  configuredId?: string;
+  isConfigured?: boolean;
+  description?: string;
+}
+
 export enum PROVIDER_MODEL_TYPE {
   // <------ opik free model
   OPIK_FREE_MODEL = "opik-free-model",

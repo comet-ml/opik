@@ -11,7 +11,7 @@ import {
 import get from "lodash/get";
 import { FileTerminal, GitCommitVertical } from "lucide-react";
 import useAppStore from "@/store/AppStore";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import TryInPlaygroundButton from "@/v1/pages/PromptPage/TryInPlaygroundButton";
 import PromptContentView, {

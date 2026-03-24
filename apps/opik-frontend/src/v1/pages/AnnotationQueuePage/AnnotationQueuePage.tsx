@@ -13,7 +13,7 @@ import FeedbackScoresList from "@/v1/pages-shared/FeedbackScoresList/FeedbackSco
 import ConfigurationTab from "@/v1/pages/AnnotationQueuePage/ConfigurationTab/ConfigurationTab";
 import QueueItemsTab from "@/v1/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import CopySMELinkButton from "@/v1/pages/AnnotationQueuePage/CopySMELinkButton";
 import OpenSMELinkButton from "@/v1/pages/AnnotationQueuePage/OpenSMELinkButton";
 import EditAnnotationQueueButton from "@/v1/pages/AnnotationQueuePage/EditAnnotationQueueButton";
