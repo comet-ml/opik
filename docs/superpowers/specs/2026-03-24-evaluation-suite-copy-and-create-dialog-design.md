@@ -4,6 +4,8 @@
 
 Rename "Datasets" copy to "Evaluation suites" across sidebar, list page, and create dialog. Add execution policy and assertions UI to the create dialog. Fix assertions empty state button placement in the edit settings dialog.
 
+**Scope: v2 pages only.** No v1 files are touched. All file paths below are relative to `apps/opik-frontend/src/` and refer to v2 components unless otherwise noted. The `AssertionsField` component is in `src/shared/` but is only used by v2 pages.
+
 ---
 
 ## 1. Sidebar Label Rename
@@ -73,6 +75,35 @@ The route's `staticData.title` for the evaluation suites list page is `"Datasets
 ```diff
 - placeholder="Dataset description"
 + placeholder="Evaluation suite description"
+```
+
+### 2h. Add DatasetsPageGuard to evaluation suites route
+
+**File:** `src/v2/router.tsx`
+
+The `/evaluation-suites` route is currently **unguarded**. The `DatasetsPageGuard` (which checks `canViewDatasets` permission) is only applied to the legacy `/datasets` redirect route. Users without permission can access the evaluation suites page directly.
+
+Add the guard as the component for the `evaluationSuitesRoute`:
+
+```diff
+ const evaluationSuitesRoute = createRoute({
+   path: "/evaluation-suites",
++  component: DatasetsPageGuard,
+   getParentRoute: () => workspaceRoute,
+   staticData: {
+-    title: "Datasets",
++    title: "Evaluation suites",
+   },
+ });
+```
+
+Also update the `resourceName` in the guard itself:
+
+**File:** `src/v2/layout/DatasetsPageGuard/index.tsx`
+
+```diff
+- <NoAccessPageGuard resourceName="datasets" canViewPage={canViewDatasets} />
++ <NoAccessPageGuard resourceName="evaluation suites" canViewPage={canViewDatasets} />
 ```
 
 ---
@@ -237,7 +268,8 @@ Conditionally hide the bottom button when empty:
 |------|--------|
 | `src/v2/layout/SideBar/helpers/getMenuItems.ts` | Sidebar label: "Datasets" → "Evaluation suites" |
 | `src/v2/pages/EvaluationSuitesPage/EvaluationSuitesPage.tsx` | Page title, description, no-data text, entity names |
-| `src/v2/router.tsx` | Route page title: "Datasets" → "Evaluation suites" |
+| `src/v2/router.tsx` | Route page title + add DatasetsPageGuard to evaluation suites route |
+| `src/v2/layout/DatasetsPageGuard/index.tsx` | resourceName: "datasets" → "evaluation suites" |
 | `src/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog.tsx` | Add execution policy + assertions UI for create mode, default type change, state reset |
 | `src/api/datasets/useDatasetItemChangesMutation.ts` | Widen `base_version` type to `string \| null` |
 | `src/v2/pages/EvaluationSuiteItemsPage/EditEvaluationSuiteSettingsDialog.tsx` | Placeholder: "Dataset description" → "Evaluation suite description" |
