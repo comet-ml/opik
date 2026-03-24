@@ -159,7 +159,15 @@ Currently `type` defaults to `DATASET_TYPE.DATASET`. Since the create dialog now
 + const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.EVALUATION_SUITE);
 ```
 
-**Note:** The dialog is also used in `AddToDatasetDialog` (add traces to a dataset) and `DatasetVersionSelectBox`. These callers don't pass a `type` prop — they rely on the internal default. Changing the default to `EVALUATION_SUITE` means datasets created from those flows will also default to evaluation suite type. This is the desired behavior since we are moving toward evaluation suites as the primary entity.
+**All creation flows affected:** The `AddEditEvaluationSuiteDialog` is the single component used for dataset creation across all v2 flows. Changing the internal default means **every** creation flow will now produce an evaluation suite instead of a legacy dataset:
+
+| Caller | Location | Effect |
+|--------|----------|--------|
+| **Evaluation suites list page** | `EvaluationSuitesPage.tsx` — "Create new" button | Now creates evaluation suite |
+| **Add traces to dataset** | `AddToDatasetDialog.tsx` — "Create new evaluation suite" inline | Now creates evaluation suite (dialog opened with `hideUpload={true}`) |
+| **Playground dataset selector** | `DatasetVersionSelectBox.tsx` — "Add new" dropdown option | Now creates evaluation suite |
+
+None of these callers pass a `type` prop — they all rely on the internal default. This is the desired behavior: all new entities should be evaluation suites, not legacy datasets.
 
 ---
 
