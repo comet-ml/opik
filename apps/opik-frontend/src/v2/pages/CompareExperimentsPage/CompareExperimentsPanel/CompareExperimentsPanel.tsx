@@ -17,7 +17,7 @@ import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
-import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import { useDatasetIdFromCompareExperimentsURL } from "@/v2/pages/CompareExperimentsPage/useDatasetIdFromCompareExperimentsURL";
 import DataTab from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
 
 type CompareExperimentsPanelProps = {

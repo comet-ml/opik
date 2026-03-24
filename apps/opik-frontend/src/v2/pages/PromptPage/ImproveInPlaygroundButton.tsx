@@ -5,7 +5,7 @@ import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useLoadPlayground from "@/hooks/useLoadPlayground";
+import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
 
 type ImproveInPlaygroundButtonProps = {

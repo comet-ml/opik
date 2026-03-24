@@ -3,7 +3,7 @@ import { StringParam, useQueryParam } from "use-query-params";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import { usePromptIdFromURL } from "@/hooks/usePromptIdFromURL";
+import { usePromptIdFromURL } from "@/v2/pages/PromptPage/usePromptIdFromURL";
 import usePromptById from "@/api/prompts/usePromptById";
 import DateTag from "@/shared/DateTag/DateTag";
 import PromptTab from "@/v2/pages/PromptPage/PromptTab/PromptTab";

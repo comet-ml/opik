@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useActiveProjectId } from "@/store/AppStore";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import Loader from "@/shared/Loader/Loader";
@@ -22,6 +23,7 @@ enum OPTIMIZATION_TAB {
 
 const OptimizationPage: React.FC = () => {
   const navigate = useNavigate();
+  const activeProjectId = useActiveProjectId();
 
   const {
     workspaceName,
@@ -90,10 +92,11 @@ const OptimizationPage: React.FC = () => {
       const candidate = candidates.find((c) => c.candidateId === candidateId);
       if (!candidate) return;
       navigate({
-        to: "/$workspaceName/optimizations/$optimizationId/trials",
+        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
         params: {
           optimizationId,
           workspaceName,
+          projectId: activeProjectId!,
         },
         search: {
           trials: candidate.experimentIds,
@@ -101,7 +104,7 @@ const OptimizationPage: React.FC = () => {
         },
       });
     },
-    [candidates, navigate, optimizationId, workspaceName],
+    [candidates, navigate, optimizationId, workspaceName, activeProjectId],
   );
 
   const isInProgress =

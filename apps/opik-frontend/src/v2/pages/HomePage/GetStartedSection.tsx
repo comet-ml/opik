@@ -6,7 +6,7 @@ import {
   MousePointer,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SideDialog from "@/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/v2/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
@@ -18,6 +18,7 @@ import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [isNewExperimentDialogOpened, setIsNewExperimentDialogOpened] =
     useState<boolean>(false);
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
@@ -74,8 +75,8 @@ const GetStartedSection = () => {
         )}
         <Link
           className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:shadow-action-card dark:hover:bg-primary-foreground dark:hover:shadow-none"
-          to={"/$workspaceName/playground"}
-          params={{ workspaceName }}
+          to={"/$workspaceName/projects/$projectId/playground"}
+          params={{ workspaceName, projectId: activeProjectId! }}
         >
           <div className="flex size-[24px] items-center justify-center rounded bg-action-playground-background">
             <FlaskConical className="size-3.5 text-action-playground-text" />

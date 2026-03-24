@@ -2,12 +2,13 @@ import React, { useMemo } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/ui/button";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { useSMEFlow } from "./SMEFlowContext";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 const ReturnToAnnotationQueueButton: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const { annotationQueue, hasAnyUnsavedChanges } = useSMEFlow();
 
   const queueId = annotationQueue?.id || "";
@@ -29,8 +30,12 @@ const ReturnToAnnotationQueueButton: React.FC = () => {
   return (
     <>
       <Link
-        to="/$workspaceName/annotation-queues/$annotationQueueId"
-        params={{ workspaceName, annotationQueueId: queueId }}
+        to="/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId"
+        params={{
+          workspaceName,
+          projectId: activeProjectId!,
+          annotationQueueId: queueId,
+        }}
       >
         <Button variant="ghost" aria-label="Return to annotation queue">
           <ArrowLeft className="mr-2 size-4" />

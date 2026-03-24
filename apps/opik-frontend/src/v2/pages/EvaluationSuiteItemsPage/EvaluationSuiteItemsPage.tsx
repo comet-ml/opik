@@ -40,11 +40,11 @@ import {
 } from "@/ui/tooltip";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
-import useLoadPlayground from "@/hooks/useLoadPlayground";
+import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
-import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 import { useEvaluationSuiteSavePayload } from "@/hooks/useEvaluationSuiteSavePayload";
-import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
+import { useSuiteIdFromURL } from "@/v2/pages-shared/evaluation-suites/useSuiteIdFromURL";
 import { useClearDraft, useHasDraft } from "@/store/EvaluationSuiteDraftStore";
 import { DATASET_STATUS, DATASET_TYPE } from "@/types/datasets";
 import { useEffectiveSuiteAssertions } from "@/hooks/useEffectiveSuiteAssertions";

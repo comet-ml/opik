@@ -5,6 +5,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import { COLUMN_ID_ID, COLUMN_NAME_ID, ROW_HEIGHT } from "@/types/shared";
+import { useActiveProjectId } from "@/store/AppStore";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { sortCandidates } from "@/lib/optimizations";
 
@@ -51,6 +52,7 @@ export const useOptimizationTableState = ({
   optimizationId,
 }: UseOptimizationTableStateParams) => {
   const navigate = useNavigate();
+  const activeProjectId = useActiveProjectId();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -100,10 +102,11 @@ export const useOptimizationTableState = ({
   const handleRowClick = useCallback(
     (row: AggregatedCandidate) => {
       navigate({
-        to: "/$workspaceName/optimizations/$optimizationId/trials",
+        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
         params: {
           optimizationId,
           workspaceName,
+          projectId: activeProjectId!,
         },
         search: {
           trials: row.experimentIds,
@@ -111,7 +114,7 @@ export const useOptimizationTableState = ({
         },
       });
     },
-    [navigate, workspaceName, optimizationId],
+    [navigate, workspaceName, activeProjectId, optimizationId],
   );
 
   return {

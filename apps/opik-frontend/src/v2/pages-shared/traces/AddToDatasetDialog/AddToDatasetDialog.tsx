@@ -37,7 +37,7 @@ import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEval
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/ui/toast";
-import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 
 const DEFAULT_SIZE = 100;
 

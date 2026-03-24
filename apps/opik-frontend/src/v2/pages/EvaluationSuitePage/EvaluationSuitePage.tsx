@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-router";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
+import { useSuiteIdFromURL } from "@/v2/pages-shared/evaluation-suites/useSuiteIdFromURL";
 
 const EvaluationSuitePage = () => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
@@ -21,7 +21,7 @@ const EvaluationSuitePage = () => {
   });
 
   const isSuiteRoot = matchRoute({
-    to: "/$workspaceName/evaluation-suites/$suiteId",
+    to: "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId",
   });
 
   // Evaluation suites are datasets under the hood — reuse the existing hook

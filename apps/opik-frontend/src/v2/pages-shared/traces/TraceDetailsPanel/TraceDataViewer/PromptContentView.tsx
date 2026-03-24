@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/ui/button";
 import PromptTemplateView from "@/v2/pages-shared/llm/PromptTemplateView/PromptTemplateView";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { useActiveProjectId } from "@/store/AppStore";
 
 export const CustomUseInPlaygroundButton: React.FC<{
   variant?: string;
@@ -48,6 +49,8 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
   templateStructure,
   playgroundButton,
 }) => {
+  const activeProjectId = useActiveProjectId();
+
   return (
     <PromptTemplateView
       template={template}
@@ -58,8 +61,8 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
         {promptId && (
           <Button variant="ghost" size="sm" asChild>
             <Link
-              to="/$workspaceName/prompts/$promptId"
-              params={{ workspaceName, promptId }}
+              to="/$workspaceName/projects/$projectId/prompts/$promptId"
+              params={{ workspaceName, projectId: activeProjectId!, promptId }}
               search={{ activeVersionId }}
               className="inline-flex items-center"
             >

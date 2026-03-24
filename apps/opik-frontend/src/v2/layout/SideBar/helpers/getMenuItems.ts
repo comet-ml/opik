@@ -1,15 +1,16 @@
 import {
   Bell,
-  FlaskConical,
-  LayoutGrid,
-  FileTerminal,
-  ListChecks,
-  LucideHome,
   Blocks,
-  Brain,
   ChartLine,
-  SparklesIcon,
+  FileTerminal,
+  FlaskConical,
+  ListChecks,
+  Rows3,
+  Settings2,
+  Sparkles,
   UserPen,
+  Brain,
+  Workflow,
 } from "lucide-react";
 import {
   MENU_ITEM_TYPE,
@@ -18,50 +19,40 @@ import {
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const getMenuItems = ({
+  projectId,
   canViewExperiments,
-  canViewDashboards,
   canViewDatasets,
 }: {
+  projectId: string | null;
   canViewExperiments: boolean;
-  canViewDashboards: boolean;
   canViewDatasets: boolean;
 }): MenuItemGroup[] => {
+  const projectPrefix = projectId
+    ? "/$workspaceName/projects/$projectId"
+    : null;
+
+  const projectPath = (suffix: string) =>
+    projectPrefix ? `${projectPrefix}${suffix}` : undefined;
+
   return [
-    {
-      id: "home",
-      items: [
-        {
-          id: "home",
-          path: "/$workspaceName/home",
-          type: MENU_ITEM_TYPE.router,
-          icon: LucideHome,
-          label: "Home",
-        },
-        ...(canViewDashboards
-          ? [
-              {
-                id: "dashboards",
-                path: "/$workspaceName/dashboards",
-                type: MENU_ITEM_TYPE.router,
-                icon: ChartLine,
-                label: "Dashboards",
-                count: "dashboards",
-              },
-            ]
-          : []),
-      ],
-    },
     {
       id: "observability",
       label: "Observability",
       items: [
         {
-          id: "projects",
-          path: "/$workspaceName/projects",
+          id: "logs",
+          path: projectPath("/traces"),
           type: MENU_ITEM_TYPE.router,
-          icon: LayoutGrid,
-          label: "Projects",
-          count: "projects",
+          icon: Rows3,
+          label: "Logs",
+          disabled: !projectPrefix,
+        },
+        {
+          id: "insights",
+          type: MENU_ITEM_TYPE.router,
+          icon: ChartLine,
+          label: "Insights",
+          disabled: true,
         },
       ],
     },
@@ -72,12 +63,12 @@ const getMenuItems = ({
         ...(canViewExperiments
           ? [
               {
-                id: "experiments" as const,
-                path: "/$workspaceName/experiments" as const,
-                type: MENU_ITEM_TYPE.router,
+                id: "experiments",
+                path: projectPath("/experiments"),
+                type: MENU_ITEM_TYPE.router as const,
                 icon: FlaskConical,
-                label: "Experiments" as const,
-                count: "experiments" as const,
+                label: "Experiments",
+                disabled: !projectPrefix,
               },
             ]
           : []),
@@ -85,21 +76,21 @@ const getMenuItems = ({
           ? [
               {
                 id: "evaluation_suites",
-                path: "/$workspaceName/evaluation-suites",
-                type: MENU_ITEM_TYPE.router,
+                path: projectPath("/evaluation-suites"),
+                type: MENU_ITEM_TYPE.router as const,
                 icon: ListChecks,
-                label: "Datasets",
-                count: "evaluation_suites",
+                label: "Evaluation suites",
+                disabled: !projectPrefix,
               },
             ]
           : []),
         {
           id: "annotation_queues",
-          path: "/$workspaceName/annotation-queues",
+          path: projectPath("/annotation-queues"),
           type: MENU_ITEM_TYPE.router,
           icon: UserPen,
           label: "Annotation queues",
-          count: "annotation_queues",
+          disabled: !projectPrefix,
         },
       ],
     },
@@ -109,18 +100,19 @@ const getMenuItems = ({
       items: [
         {
           id: "prompts",
-          path: "/$workspaceName/prompts",
+          path: projectPath("/prompts"),
           type: MENU_ITEM_TYPE.router,
           icon: FileTerminal,
           label: "Prompt library",
-          count: "prompts",
+          disabled: !projectPrefix,
         },
         {
           id: "playground",
-          path: "/$workspaceName/playground",
+          path: projectPath("/playground"),
           type: MENU_ITEM_TYPE.router,
           icon: Blocks,
           label: "Playground",
+          disabled: !projectPrefix,
         },
       ],
     },
@@ -130,12 +122,18 @@ const getMenuItems = ({
       items: [
         {
           id: "optimizations",
-          path: "/$workspaceName/optimizations",
+          path: projectPath("/optimizations"),
           type: MENU_ITEM_TYPE.router,
-          icon: SparklesIcon,
+          icon: Sparkles,
           label: "Optimization studio",
-          count: "optimizations",
-          showIndicator: "optimizations_running",
+          disabled: !projectPrefix,
+        },
+        {
+          id: "agent_configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Workflow,
+          label: "Agent configuration",
+          disabled: true,
         },
       ],
     },
@@ -145,20 +143,53 @@ const getMenuItems = ({
       items: [
         {
           id: "online_evaluation",
-          path: "/$workspaceName/online-evaluation",
+          path: projectPath("/online-evaluation"),
           type: MENU_ITEM_TYPE.router,
           icon: Brain,
           label: "Online evaluation",
-          count: "rules",
+          disabled: !projectPrefix,
         },
         {
           id: "alerts",
-          path: "/$workspaceName/alerts",
+          path: projectPath("/alerts"),
           type: MENU_ITEM_TYPE.router,
           icon: Bell,
           label: "Alerts",
-          count: "alerts",
+          disabled: !projectPrefix,
           featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
+        },
+      ],
+    },
+  ];
+};
+
+export const getWorkspaceMenuItems = ({
+  canViewDashboards,
+}: {
+  canViewDashboards: boolean;
+}): MenuItemGroup[] => {
+  return [
+    {
+      id: "workspace",
+      label: "Workspace",
+      items: [
+        ...(canViewDashboards
+          ? [
+              {
+                id: "dashboards",
+                path: "/$workspaceName/dashboards",
+                type: MENU_ITEM_TYPE.router as const,
+                icon: ChartLine,
+                label: "Dashboards",
+              },
+            ]
+          : []),
+        {
+          id: "configuration",
+          path: "/$workspaceName/configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Settings2,
+          label: "Configuration",
         },
       ],
     },

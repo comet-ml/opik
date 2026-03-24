@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/ui/dialog";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
@@ -27,6 +27,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
 > = ({ experiments, open, setOpen }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [selectedExperiments, setSelectedExperiments] = useState(experiments);
   const isValid = selectedExperiments.every(
     (e) => e.dataset_id === selectedExperiments[0].dataset_id,
@@ -36,10 +37,11 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
     if (!isValid) return;
 
     navigate({
-      to: "/$workspaceName/experiments/$datasetId/compare",
+      to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
       params: {
         datasetId: selectedExperiments[0].dataset_id,
         workspaceName,
+        projectId: activeProjectId!,
       },
       search: {
         experiments: selectedExperiments.map((e) => e.id),

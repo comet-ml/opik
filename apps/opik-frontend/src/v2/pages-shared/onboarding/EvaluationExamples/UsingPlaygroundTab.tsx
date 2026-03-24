@@ -1,12 +1,13 @@
 import { Button } from "@/ui/button";
 import { SheetClose } from "@/ui/sheet";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Link } from "@tanstack/react-router";
 import evaluationGifUrl from "/images/playground_evaluation.gif";
 import { buildDocsUrl } from "@/lib/utils";
 
 const UsingPlaygroundTab = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
 
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-background p-6">
@@ -47,7 +48,10 @@ const UsingPlaygroundTab = () => {
               className="inline-flex h-auto px-0"
               asChild
             >
-              <Link to="/$workspaceName/playground" params={{ workspaceName }}>
+              <Link
+                to="/$workspaceName/projects/$projectId/playground"
+                params={{ workspaceName, projectId: activeProjectId! }}
+              >
                 Playground.
               </Link>
             </Button>
