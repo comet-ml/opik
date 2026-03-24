@@ -23,6 +23,7 @@ import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
 interface UseDashboardLifecycleParams {
   dashboardId: string | null;
   enabled?: boolean;
+  readOnly?: boolean;
 }
 
 interface UseDashboardLifecycleReturn {
@@ -34,6 +35,7 @@ interface UseDashboardLifecycleReturn {
 export const useDashboardLifecycle = ({
   dashboardId,
   enabled = true,
+  readOnly = false,
 }: UseDashboardLifecycleParams): UseDashboardLifecycleReturn => {
   const isTemplate = isTemplateId(dashboardId);
 
@@ -82,7 +84,7 @@ export const useDashboardLifecycle = ({
       setReadOnly(true);
     } else if (resolvedConfig) {
       loadDashboardFromBackend(resolvedConfig);
-      setReadOnly(false);
+      setReadOnly(readOnly);
     } else {
       return;
     }
@@ -95,6 +97,7 @@ export const useDashboardLifecycle = ({
     templateDashboard?.id,
     templateDashboard?.config,
     resolvedConfig,
+    readOnly,
     loadDashboardFromBackend,
     setReadOnly,
     clearDashboard,
