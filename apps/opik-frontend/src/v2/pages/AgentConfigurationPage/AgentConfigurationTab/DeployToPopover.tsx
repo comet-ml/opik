@@ -211,7 +211,12 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
                 className="group flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 hover:bg-muted"
                 onClick={() => toggleStage(stage)}
               >
-                <ColoredTag label={stage} size="md" variant="gray" className="max-w-[170px]" />
+                <ColoredTag
+                  label={stage}
+                  size="md"
+                  variant="gray"
+                  className="max-w-[170px]"
+                />
                 <div className="flex items-center">
                   {selected &&
                     (isNew ? (
