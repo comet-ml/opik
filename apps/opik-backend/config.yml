@@ -229,9 +229,9 @@ experimentAggregates:
 
 # Configuration for experiment denormalization (debounced re-computation of experiment aggregates)
 experimentDenormalization:
-  # Default: false
+  # Default: true
   # Description: Whether the experiment denormalization job and subscriber are enabled
-  enabled: ${EXPERIMENT_DENORMALIZATION_ENABLED:-false}
+  enabled: ${EXPERIMENT_DENORMALIZATION_ENABLED:-true}
   # Default: experiment_denormalization_stream
   # Description: The name of the Redis Stream used for experiment aggregates recomputation
   streamName: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_NAME:-'experiment_denormalization_stream'}
