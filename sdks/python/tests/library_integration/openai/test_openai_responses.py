@@ -166,6 +166,7 @@ def test_openai_responses_create__async_call_made_in_another_tracked_async_funct
                 source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

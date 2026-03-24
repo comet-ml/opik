@@ -479,6 +479,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
         trace_id="some-trace-id",
         name="manually-created-span",
         input={"input": "input-of-manually-created-span"},
+        source="sdk",
     )
     context_storage.add_span_data(span_data)
 
@@ -488,7 +489,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.__internal_api__span__(**span_data.__dict__)
     opik.flush_tracker()
 
     EXPECTED_SPANS_TREE = SpanModel(
