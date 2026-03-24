@@ -85,7 +85,11 @@ interface RetentionRuleDAO {
 
     // -- Catch-up queries --
 
-    /** Find small workspaces needing catch-up (velocity below threshold), ordered by cursor (most outdated first). */
+    /**
+     * Find small workspaces needing catch-up (velocity below threshold), ordered by cursor (most outdated first).
+     * Note: catch_up_cursor is NULL only when catch_up_done=true, so the catch_up_done=false filter
+     * guarantees non-null cursors in results. The service also filters nulls defensively.
+     */
     @SqlQuery("SELECT * FROM retention_rules" +
             " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
             " AND catch_up_velocity \\< :smallThreshold" +

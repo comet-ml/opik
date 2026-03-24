@@ -148,22 +148,23 @@ public class RetentionCatchUpService {
                     RetentionPeriod period = entry.getKey();
                     List<RetentionRule> rulesForPeriod = entry.getValue();
 
-                    UUID upperBound = computeSlidingWindowLowerBound(period, now);
+                    // cutoffId = where catch-up ends (sliding window boundary)
+                    // fromId   = where catch-up starts (oldest cursor across the batch)
+                    UUID cutoffId = computeSlidingWindowLowerBound(period, now);
                     var workspaceIds = rulesForPeriod.stream().map(RetentionRule::workspaceId).toList();
 
-                    // Use the oldest cursor as the lower bound for the batch
-                    UUID lowerBound = rulesForPeriod.stream()
+                    UUID fromId = rulesForPeriod.stream()
                             .map(RetentionRule::catchUpCursor)
                             .filter(Objects::nonNull)
                             .min(RetentionCatchUpService::compareUUID)
-                            .orElse(upperBound); // no valid cursors → empty range, no-op
+                            .orElse(cutoffId); // no valid cursors → empty range, no-op
 
                     log.info("Catch-up small batch: '{}' workspaces, period='{}', range=['{}', '{}')",
-                            workspaceIds.size(), period, lowerBound, upperBound);
+                            workspaceIds.size(), period, fromId, cutoffId);
 
                     return Flux.concat(
-                            spanDAO.deleteForRetention(workspaceIds, upperBound, lowerBound),
-                            traceDAO.deleteForRetention(workspaceIds, upperBound, lowerBound));
+                            spanDAO.deleteForRetention(workspaceIds, cutoffId, fromId),
+                            traceDAO.deleteForRetention(workspaceIds, cutoffId, fromId));
                 })
                 .reduce(0L, Long::sum)
                 .flatMap(totalDeleted -> markBatchDoneAsync(rules)
