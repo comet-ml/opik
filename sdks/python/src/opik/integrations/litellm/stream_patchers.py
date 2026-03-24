@@ -4,7 +4,6 @@ from typing import Any, List, Optional, Callable, TypeVar
 
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers, error_info_collector
-import litellm.litellm_core_utils.streaming_handler
 
 
 LOGGER = logging.getLogger(__name__)
@@ -12,12 +11,22 @@ LOGGER = logging.getLogger(__name__)
 StreamItem = TypeVar("StreamItem")
 AggregatedResult = TypeVar("AggregatedResult")
 
-_original_next = (
-    litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper.__next__
-)
-_original_anext = (
-    litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper.__anext__
-)
+_original_next: Optional[Callable] = None
+_original_anext: Optional[Callable] = None
+
+
+def _get_originals() -> tuple:
+    global _original_next, _original_anext
+    if _original_next is None:
+        import litellm.litellm_core_utils.streaming_handler
+
+        _original_next = (
+            litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper.__next__
+        )
+        _original_anext = (
+            litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper.__anext__
+        )
+    return _original_next, _original_anext
 
 
 def _create_sync_next_wrapper(
@@ -27,7 +36,7 @@ def _create_sync_next_wrapper(
 ) -> Callable:
     @functools.wraps(original_next)
     def wrapper(
-        self: litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper,
+        self: Any,
     ) -> Any:
         if not hasattr(self, "_opik_accumulated_items"):
             if hasattr(self, "opik_tracked_instance"):
@@ -78,7 +87,7 @@ def _create_async_next_wrapper(
 ) -> Callable:
     @functools.wraps(original_anext)
     async def wrapper(
-        self: litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper,
+        self: Any,
     ) -> Any:
         if not hasattr(self, "_opik_accumulated_items_async"):
             if hasattr(self, "opik_tracked_instance_async"):
@@ -123,20 +132,24 @@ def _create_async_next_wrapper(
 
 
 def patch_stream(
-    stream: litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper,
+    stream: Any,
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
-) -> litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper:
+) -> Any:
+    import litellm.litellm_core_utils.streaming_handler
+
+    original_next, original_anext = _get_originals()
+
     litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper.__next__ = (
         _create_sync_next_wrapper(
-            _original_next, generations_aggregator, finally_callback
+            original_next, generations_aggregator, finally_callback
         )
     )
     litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper.__anext__ = (
         _create_async_next_wrapper(
-            _original_anext, generations_aggregator, finally_callback
+            original_anext, generations_aggregator, finally_callback
         )
     )
 

@@ -8,8 +8,6 @@ CrewAI v0.x uses LiteLLM internally for LLM calls.
 import logging
 from typing import Optional
 
-import litellm
-
 import opik.integrations.litellm
 
 LOGGER = logging.getLogger(__name__)
@@ -22,6 +20,8 @@ def patch_litellm_completion(project_name: Optional[str] = None) -> None:
     Args:
         project_name: The name of the project to associate with tracking.
     """
+    import litellm
+
     litellm.completion = opik.integrations.litellm.track_completion(
         project_name=project_name
     )(litellm.completion)
