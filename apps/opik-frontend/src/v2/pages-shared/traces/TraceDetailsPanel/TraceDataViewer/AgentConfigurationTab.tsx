@@ -90,9 +90,9 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
         </div>
         {blueprintId && !maskId && (
           <Link
-            to="/$workspaceName/projects/$projectId/traces"
+            to="/$workspaceName/projects/$projectId/agent-configuration"
             params={{ workspaceName, projectId }}
-            search={{ tab: "configuration", configId: blueprintId }}
+            search={{ configId: blueprintId }}
           >
             <Button variant="outline" size="2xs">
               <FileSliders className="mr-1 size-3 shrink-0 text-[var(--color-fuchsia)]" />

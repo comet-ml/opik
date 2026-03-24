@@ -1,8 +1,6 @@
 from opik import logging_messages, exceptions
 from opik.evaluation.metrics.llm_judges.usefulness import parser
 import pytest
-
-pytestmark = pytest.mark.requires_litellm
 from opik.evaluation.metrics.llm_judges.usefulness.metric import Usefulness
 
 

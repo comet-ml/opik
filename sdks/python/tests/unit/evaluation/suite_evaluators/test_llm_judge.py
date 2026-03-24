@@ -1,7 +1,3 @@
-import pytest
-
-pytestmark = pytest.mark.requires_litellm
-
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 

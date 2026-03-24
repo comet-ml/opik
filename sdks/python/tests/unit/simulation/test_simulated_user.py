@@ -1,7 +1,3 @@
-import pytest
-
-pytestmark = pytest.mark.requires_litellm
-
 """Tests for SimulatedUser class."""
 
 from unittest.mock import Mock, patch
