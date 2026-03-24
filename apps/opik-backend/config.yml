@@ -229,7 +229,7 @@ experimentAggregates:
 
 # Configuration for experiment denormalization (debounced re-computation of experiment aggregates)
 experimentDenormalization:
-  # Default: false
+  # Default: true
   # Description: Whether the experiment denormalization job and subscriber are enabled
   enabled: ${EXPERIMENT_DENORMALIZATION_ENABLED:-true}
   # Default: experiment_denormalization_stream
