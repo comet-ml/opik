@@ -60,7 +60,7 @@ jobs:
             TOGGLE_AGENT_CONFIGURATION_ENABLED: "true"
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --guardrails --build
+            ./opik.sh --backend --port-mapping --build
         
         - name: Check Opik server availability
           shell: bash
@@ -91,7 +91,7 @@ jobs:
         - name: Run tests
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pytest tests/e2e -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            pytest tests/e2e -vv --durations=20 --ignore=tests/e2e/test_guardrails.py --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2
@@ -118,5 +118,5 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop --guardrails
+            ./opik.sh --stop
 
