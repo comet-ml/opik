@@ -164,10 +164,6 @@ class RedissonLockService implements LockService {
         return redisClient.getBucket(lock.key()).delete().then();
     }
 
-    private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance) {
-        return runAction(lock, action, lockInstance, false);
-    }
-
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance, boolean holdUntilExpiry) {
         return runAction(lock, action, lockInstance.locked())
                 .subscribeOn(Schedulers.boundedElastic())
