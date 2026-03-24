@@ -177,13 +177,15 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
 
         <div className="mb-1 flex items-center justify-between">
           <p className="comet-body-xs-accented">Other environments</p>
-          <Button
-            size="icon-xs"
-            variant="minimal"
-            onClick={() => setShowCustomInput((prev) => !prev)}
-          >
-            <Plus className="size-3.5" />
-          </Button>
+          <TooltipWrapper content="Create a custom environment">
+            <Button
+              size="icon-xs"
+              variant="minimal"
+              onClick={() => setShowCustomInput((prev) => !prev)}
+            >
+              <Plus className="size-3.5" />
+            </Button>
+          </TooltipWrapper>
         </div>
         <div className="flex max-h-[176px] flex-col gap-1 overflow-y-auto">
           {otherBasicStages.map((stage) => {
@@ -209,7 +211,7 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
                 className="group flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 hover:bg-muted"
                 onClick={() => toggleStage(stage)}
               >
-                <ColoredTag label={stage} size="md" variant="gray" />
+                <ColoredTag label={stage} size="md" variant="gray" className="max-w-[170px]" />
                 <div className="flex items-center">
                   {selected &&
                     (isNew ? (
@@ -237,7 +239,7 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
             <div className="relative mt-1">
               <Input
                 dimension="sm"
-                placeholder="Add custom environment"
+                placeholder="Add environment"
                 value={customValue}
                 onChange={(e) => setCustomValue(e.target.value)}
                 onKeyDown={(e) => {
