@@ -1549,6 +1549,180 @@ class AlertResourceTest {
         }
 
         @Test
+        @DisplayName("when alert is scoped via projectId column and guardrail fires from matching project, then webhook is called; from different project, webhook is not called")
+        void whenGuardrailScopedByProjectIdColumn__thenWebhookFiresOnlyForMatchingProject() {
+            var mock = prepareMockWorkspace();
+
+            String projectAName = RandomStringUtils.randomAlphabetic(10);
+            String projectBName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectAId = projectResourceClient.createProject(projectAName, mock.getLeft(), mock.getRight());
+            projectResourceClient.createProject(projectBName, mock.getLeft(), mock.getRight());
+
+            // Create alert scoped to projectA via the new projectId column (not scope:project trigger config)
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                    .build()).toBuilder()
+                    .projectId(projectAId)
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Trigger guardrail in projectA — webhook SHOULD fire
+            Trace traceA = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectAName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(traceA, mock.getLeft(), mock.getRight());
+
+            Guardrail guardrailA = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(traceA.id())
+                    .secondaryId(UUID.randomUUID())
+                    .projectName(projectAName)
+                    .result(GuardrailResult.FAILED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrailA), mock.getLeft(), mock.getRight());
+
+            verifyWebhookCalledAndGetPayload(alert);
+
+            // Reset server and trigger guardrail in projectB — webhook should NOT fire
+            externalWebhookServer.resetAll();
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            Trace traceB = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectBName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(traceB, mock.getLeft(), mock.getRight());
+
+            Guardrail guardrailB = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(traceB.id())
+                    .secondaryId(UUID.randomUUID())
+                    .projectName(projectBName)
+                    .result(GuardrailResult.FAILED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrailB), mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+        }
+
+        @Test
+        @DisplayName("when alert is scoped via projectId column and prompt is created in matching project, then webhook is called; from different project, webhook is not called")
+        void whenPromptCreatedScopedByProjectIdColumn__thenWebhookFiresOnlyForMatchingProject() {
+            var mock = prepareMockWorkspace();
+
+            String projectAName = RandomStringUtils.randomAlphabetic(10);
+            String projectBName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectAId = projectResourceClient.createProject(projectAName, mock.getLeft(), mock.getRight());
+            projectResourceClient.createProject(projectBName, mock.getLeft(), mock.getRight());
+
+            // Create alert scoped to projectA via the new projectId column
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_CREATED)
+                    .build()).toBuilder()
+                    .projectId(projectAId)
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a prompt scoped to projectA — webhook SHOULD fire
+            var promptInProjectA = buildPrompt().toBuilder()
+                    .projectId(projectAId)
+                    .build();
+            promptResourceClient.createPrompt(promptInProjectA, mock.getLeft(), mock.getRight());
+
+            verifyWebhookCalledAndGetPayload(alert);
+
+            // Reset server and create a prompt in projectB — webhook should NOT fire
+            externalWebhookServer.resetAll();
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            var promptInProjectB = buildPrompt().toBuilder()
+                    .projectName(projectBName)
+                    .build();
+            promptResourceClient.createPrompt(promptInProjectB, mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+        }
+
+        @Test
+        @DisplayName("when alert is scoped via projectId column and experiment finishes in matching project, then webhook is called; from different project, webhook is not called")
+        void whenExperimentFinishedScopedByProjectIdColumn__thenWebhookFiresOnlyForMatchingProject() {
+            var mock = prepareMockWorkspace();
+
+            String projectAName = RandomStringUtils.randomAlphabetic(10);
+            String projectBName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectAId = projectResourceClient.createProject(projectAName, mock.getLeft(), mock.getRight());
+            projectResourceClient.createProject(projectBName, mock.getLeft(), mock.getRight());
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, mock.getLeft(), mock.getRight());
+
+            // Create alert scoped to projectA via the new projectId column
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.EXPERIMENT_FINISHED)
+                    .build()).toBuilder()
+                    .projectId(projectAId)
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Finish experiment in projectA — webhook SHOULD fire
+            var experimentA = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .projectName(projectAName)
+                    .build();
+            UUID experimentAId = experimentResourceClient.create(experimentA, mock.getLeft(), mock.getRight());
+            experimentResourceClient.finishExperiments(Set.of(experimentAId), mock.getLeft(), mock.getRight());
+
+            verifyWebhookCalledAndGetPayload(alert);
+
+            // Reset server and finish experiment in projectB — webhook should NOT fire
+            externalWebhookServer.resetAll();
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            var experimentB = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .projectName(projectBName)
+                    .build();
+            UUID experimentBId = experimentResourceClient.create(experimentB, mock.getLeft(), mock.getRight());
+            experimentResourceClient.finishExperiments(Set.of(experimentBId), mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+        }
+
+        @Test
         @DisplayName("when spans with total cost exceed threshold, then cost alert webhook is called")
         void whenSpansWithCostExceedThreshold_thenCostAlertWebhookIsCalled() {
             var mock = prepareMockWorkspace();
@@ -2652,6 +2826,7 @@ class AlertResourceTest {
                 .webhook(webhook)
                 .createdBy(null)
                 .createdAt(null)
+                .projectId(null)
                 .triggers(triggers)
                 .build();
     }

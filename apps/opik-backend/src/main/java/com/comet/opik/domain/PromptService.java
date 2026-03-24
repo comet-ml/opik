@@ -158,6 +158,7 @@ class PromptServiceImpl implements PromptService {
                 .userName(userName)
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
+                .projectId(newPrompt.projectId())
                 .payload(newPrompt)
                 .build());
 
@@ -336,7 +337,7 @@ class PromptServiceImpl implements PromptService {
                     .build();
 
             var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
-            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
+            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId,
                     createPromptVersion.excludeBlueprintUpdateForProjects());
 
             return savedPromptVersion;
@@ -348,7 +349,7 @@ class PromptServiceImpl implements PromptService {
             // only retry if commit is not provided
             return handler.onErrorDo(() -> {
                 var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
-                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
+                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId,
                         createPromptVersion.excludeBlueprintUpdateForProjects());
 
                 return savedPromptVersion;
@@ -792,12 +793,13 @@ class PromptServiceImpl implements PromptService {
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
-            String userName, Set<UUID> excludeProjectIds) {
+            String userName, UUID projectId, Set<UUID> excludeProjectIds) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
                 .userName(userName)
+                .projectId(projectId)
                 .payload(promptVersion)
                 .build());
 
@@ -812,13 +814,16 @@ class PromptServiceImpl implements PromptService {
 
     private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String workspaceName,
             String userName) {
-        eventBus.post(AlertEvent.builder()
-                .eventType(PROMPT_DELETED)
-                .userName(userName)
-                .workspaceId(workspaceId)
-                .workspaceName(workspaceName)
-                .payload(prompts)
-                .build());
+        prompts.stream()
+                .collect(java.util.stream.Collectors.groupingBy(p -> Optional.ofNullable(p.projectId())))
+                .forEach((projectId, projectPrompts) -> eventBus.post(AlertEvent.builder()
+                        .eventType(PROMPT_DELETED)
+                        .userName(userName)
+                        .workspaceId(workspaceId)
+                        .workspaceName(workspaceName)
+                        .projectId(projectId.orElse(null))
+                        .payload(projectPrompts)
+                        .build()));
     }
 
 }

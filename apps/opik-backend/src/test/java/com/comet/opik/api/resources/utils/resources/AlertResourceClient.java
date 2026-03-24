@@ -158,6 +158,31 @@ public class AlertResourceClient {
         }
     }
 
+    public Alert.AlertPage findAlertsByProject(UUID projectId, String apiKey, String workspaceName,
+            int page, int size, int expectedStatus) {
+        WebTarget target = client.target(baseURI + "/v1/private/projects/" + projectId + "/alerts")
+                .queryParam("size", size);
+
+        if (page > 1) {
+            target = target.queryParam("page", page);
+        }
+
+        try (var response = target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Alert.AlertPage.class);
+            }
+
+            return null;
+        }
+    }
+
     public WebhookTestResult testWebhook(Alert alert, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("webhooks")

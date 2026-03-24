@@ -1,7 +1,8 @@
 package com.comet.opik.domain.alerts;
 
-import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
@@ -14,12 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
-import static com.comet.opik.api.AlertTriggerConfigType.SCOPE_PROJECT;
 
 @Slf4j
 @Singleton
@@ -34,7 +35,7 @@ public class AlertEventEvaluationService {
         log.debug("Evaluating alert event {}", alertEvent);
         alertService.findAllByWorkspaceAndEventTypes(alertEvent.workspaceId(), Set.of(alertEvent.eventType()))
                 .forEach(alert -> {
-                    if (isValidForAlert(alertEvent, alert.triggers())) {
+                    if (isValidForAlert(alertEvent, alert)) {
                         log.debug("Alert {} matches event {}", alert.id(), alertEvent);
 
                         String eventId = idGenerator.generateId().toString();
@@ -49,54 +50,45 @@ public class AlertEventEvaluationService {
 
     }
 
-    private boolean isValidForAlert(AlertEvent alertEvent, List<AlertTrigger> triggers) {
+    private boolean isValidForAlert(AlertEvent alertEvent, Alert alert) {
         return switch (alertEvent.eventType()) {
-            case PROMPT_CREATED, PROMPT_COMMITTED, PROMPT_DELETED, EXPERIMENT_FINISHED -> true;
-            case TRACE_GUARDRAILS_TRIGGERED ->
-                isWithinProjectScope(alertEvent, triggers);
+            case PROMPT_CREATED, PROMPT_COMMITTED, PROMPT_DELETED, EXPERIMENT_FINISHED,
+                    TRACE_GUARDRAILS_TRIGGERED ->
+                isWithinProjectScope(alertEvent, alert);
             default -> false;
         };
     }
 
-    private boolean isWithinProjectScope(AlertEvent alertEvent, List<AlertTrigger> triggers) {
-        // Find relevant trigger, at this point Alert must have at least one trigger matching event type
-        // According to current design, there should be max one trigger per event type
-        var trigger = triggers.stream()
-                .filter(t -> t.eventType() == alertEvent.eventType())
-                .findFirst().orElse(null);
-
-        if (trigger == null) {
-            log.warn("Could not find trigger for event type {} in triggers {}", alertEvent.eventType(), triggers);
-            return false;
-        }
-
-        if (CollectionUtils.isEmpty(trigger.triggerConfigs())) {
-            // No project scope defined, all projects are in scope
+    private boolean isWithinProjectScope(AlertEvent alertEvent, Alert alert) {
+        // Events without a project ID are workspace-wide (e.g. prompt events) — bypass project scope
+        if (alertEvent.projectId() == null) {
             return true;
         }
 
-        var projectIdsString = trigger.triggerConfigs().stream()
-                .filter(c -> c.type() == SCOPE_PROJECT)
-                .findFirst()
-                .map(AlertTriggerConfig::configValue)
-                .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
-                .orElse(null);
+        // Collect project IDs from both the alert's project_id column and the scope:project trigger config
+        Set<UUID> projectIdSet = new HashSet<>();
+        if (alert.projectId() != null) {
+            projectIdSet.add(alert.projectId());
+        }
 
-        if (projectIdsString == null) {
-            // No project scope defined, all projects are in scope
+        if (CollectionUtils.isNotEmpty(alert.triggers())) {
+            alert.triggers().stream()
+                    .filter(t -> CollectionUtils.isNotEmpty(t.triggerConfigs()))
+                    .flatMap(t -> t.triggerConfigs().stream())
+                    .filter(c -> c.type() == AlertTriggerConfigType.SCOPE_PROJECT)
+                    .findFirst()
+                    .map(AlertTriggerConfig::configValue)
+                    .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(projectIdsString -> projectIdSet
+                            .addAll(JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class)));
+        }
+
+        if (projectIdSet.isEmpty()) {
+            // No project scope defined — alert applies to all projects
             return true;
         }
 
-        return parseProjectIds(projectIdsString).contains(alertEvent.projectId());
-    }
-
-    // Project IDs are passed as a comma-separated string
-    // Ex.: "01993e30-0fd9-79bf-8d94-a813302e2185,01993e25-9ec2-7fb1-bd7c-b394920c27ff"
-    private Set<UUID> parseProjectIds(String projectIdsString) {
-        if (StringUtils.isEmpty(projectIdsString)) {
-            return Set.of();
-        }
-
-        return JsonUtils.readCollectionValue(projectIdsString, Set.class, UUID.class);
+        return projectIdSet.contains(alertEvent.projectId());
     }
 }

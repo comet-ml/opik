@@ -48,6 +48,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -211,7 +212,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             return Mono.empty();
         }
         // Extract all configurations from trigger
-        List<TriggerConfig> configs = extractTriggerConfig(trigger);
+        List<TriggerConfig> configs = extractTriggerConfig(trigger, alert.projectId());
         if (configs.isEmpty()) {
             log.warn(
                     "Skipping alert: no trigger configs found for alert '{}' (id: '{}'), trigger: '{}', trigger id: '{}'",
@@ -356,25 +357,28 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         };
     }
 
-    private List<TriggerConfig> extractTriggerConfig(AlertTrigger trigger) {
+    private List<TriggerConfig> extractTriggerConfig(AlertTrigger trigger, UUID projectId) {
         if (CollectionUtils.isEmpty(trigger.triggerConfigs())) {
             log.warn("Trigger has no configuration for metrics alert: event type: '{}', trigger id: '{}'",
                     trigger.eventType(), trigger.id());
             return List.of();
         }
 
-        // Extract project IDs from SCOPE_PROJECT config type (same for all configs)
+        // Collect project IDs from both the alert's project_id column and the scope:project trigger config
+        Set<UUID> projectIdSet = new HashSet<>();
+        if (projectId != null) {
+            projectIdSet.add(projectId);
+        }
         var projectIdsString = trigger.triggerConfigs().stream()
                 .filter(c -> c.type() == AlertTriggerConfigType.SCOPE_PROJECT)
                 .findFirst()
                 .map(AlertTriggerConfig::configValue)
                 .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
                 .orElse(null);
-
-        List<UUID> projectIds = null;
         if (StringUtils.isNotBlank(projectIdsString)) {
-            projectIds = JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class);
+            projectIdSet.addAll(JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class));
         }
+        List<UUID> projectIds = projectIdSet.isEmpty() ? null : List.copyOf(projectIdSet);
 
         // Determine which threshold config type to use based on event type
         AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {
