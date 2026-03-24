@@ -147,6 +147,8 @@ export class EvaluationSuite {
       validateExecutionPolicy(options.executionPolicy, "suite creation");
     }
 
+    const resolvedProjectName = client.resolveProjectName(options.projectName);
+
     const datasetId = generateId();
     await client.api.datasets.createDataset({
       id: datasetId,
@@ -154,11 +156,11 @@ export class EvaluationSuite {
       description: options.description,
       type: DatasetWriteType.EvaluationSuite,
       tags: options.tags,
-      projectName: options.projectName,
+      projectName: resolvedProjectName,
     });
 
     const dataset = new Dataset(
-      { id: datasetId, name: options.name, description: options.description, projectName: options.projectName },
+      { id: datasetId, name: options.name, description: options.description, projectName: resolvedProjectName },
       client
     );
 

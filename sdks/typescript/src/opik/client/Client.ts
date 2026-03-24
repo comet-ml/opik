@@ -125,7 +125,7 @@ export class OpikClient {
   /**
    * Resolves the project name, falling back to the client's configured project name.
    */
-  private resolveProjectName(projectName?: string): string {
+  public resolveProjectName(projectName?: string): string {
     return projectName ?? this.config.projectName;
   }
 
@@ -281,11 +281,16 @@ export class OpikClient {
       // Flush the queue first to ensure all pending datasets are created
       await this.datasetBatchQueue.flush();
 
-      const projectId = await this.getProjectIdByName(resolvedProjectName);
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — list without project filter
+      }
 
       const response = await this.api.datasets.findDatasets({
         size: maxResults,
-        projectId,
+        ...(projectId && { projectId }),
       });
 
       const datasets: Dataset<T>[] = [];
@@ -1084,6 +1089,13 @@ export class OpikClient {
       const resolvedProjectName = this.resolveProjectName(options.projectName);
       const resolvedOptions = { ...options, projectName: resolvedProjectName };
 
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — search without project filter
+      }
+
       // Step 1: Search for the prompt by name to get tags and description
       const searchResponse = await this.api.prompts.getPrompts(
         {
@@ -1091,6 +1103,7 @@ export class OpikClient {
             { field: "name", operator: "=", value: options.name },
           ]),
           size: 1,
+          ...(projectId && { projectId }),
         },
         this.api.requestOptions
       );
@@ -1154,6 +1167,13 @@ export class OpikClient {
       const resolvedProjectName = this.resolveProjectName(options.projectName);
       const resolvedOptions = { ...options, projectName: resolvedProjectName };
 
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — search without project filter
+      }
+
       // Step 1: Search for the prompt by name to get tags and description
       const searchResponse = await this.api.prompts.getPrompts(
         {
@@ -1161,6 +1181,7 @@ export class OpikClient {
             { field: "name", operator: "=", value: options.name },
           ]),
           size: 1,
+          ...(projectId && { projectId }),
         },
         this.api.requestOptions
       );
