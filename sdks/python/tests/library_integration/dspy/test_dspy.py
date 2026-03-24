@@ -105,10 +105,13 @@ def test_dspy__happyflow(
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -198,6 +201,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                             "message": ANY_STRING,
                             "traceback": ANY_STRING,
                         },
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_STRING,
@@ -217,10 +221,13 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                             "message": ANY_STRING,
                             "traceback": ANY_STRING,
                         },
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     if (
@@ -246,6 +253,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                     "message": ANY_STRING,
                     "traceback": ANY_STRING,
                 },
+                source="sdk",
             ),
         )
 
@@ -345,14 +353,19 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         spans=[],
+                                        source="sdk",
                                     ),
                                 ],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -526,12 +539,16 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.span_trees) == 1

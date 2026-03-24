@@ -78,8 +78,10 @@ def test_litellm_completion_create__happyflow(fake_backend, model, expected_prov
                 spans=[],
                 model=ANY_STRING,
                 provider=expected_provider,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -142,8 +144,10 @@ async def test_litellm_acompletion_create__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",  # Actual LLM provider, not "litellm"
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -197,8 +201,10 @@ def test_litellm_completion_error_handling__exception_logged(fake_backend):
                 spans=[],
                 model="invalid-model-name",
                 provider=None,  # Provider is None for invalid model
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -274,8 +280,10 @@ def test_litellm_completion_with_tools__tools_logged(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -346,8 +354,10 @@ def test_litellm_completion_create__opik_args__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",  # Actual LLM provider, not "litellm"
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -419,8 +429,10 @@ async def test_litellm_acompletion_create__opik_args__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",  # Actual LLM provider, not "litellm"
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

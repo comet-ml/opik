@@ -125,8 +125,10 @@ def test_openai_audio_speech_create__happyflow(fake_backend):
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])
@@ -223,8 +225,10 @@ def test_openai_audio_speech_with_streaming_response__happyflow(fake_backend):
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])
