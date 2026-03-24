@@ -1,13 +1,11 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-import litellm.types.utils
-
 LOGGER = logging.getLogger(__name__)
 
 
 def _initialize_aggregated_response(
-    first_chunk: litellm.types.utils.ModelResponse,
+    first_chunk: Any,
 ) -> Dict[str, Any]:
     return {
         "choices": [{"index": 0, "message": {"role": "", "content": ""}}],
@@ -39,7 +37,7 @@ def _extract_finish_reason_from_choice(choice: Any) -> Optional[str]:
 
 
 def _extract_usage_from_chunk(
-    chunk: litellm.types.utils.ModelResponse,
+    chunk: Any,
 ) -> Optional[Dict[str, Any]]:
     if not hasattr(chunk, "usage") or chunk.usage is None:
         return None
@@ -68,8 +66,8 @@ def _extract_usage_from_chunk(
 
 
 def aggregate(
-    items: List[litellm.types.utils.ModelResponse],
-) -> Optional[litellm.types.utils.ModelResponse]:
+    items: List[Any],
+) -> Optional[Any]:
     try:
         if not items:
             return None
@@ -104,6 +102,9 @@ def aggregate(
                 aggregated_response["usage"] = chunk_usage
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
+
+        import litellm.types.utils
+
         return litellm.types.utils.ModelResponse(**aggregated_response)
 
     except Exception as exception:

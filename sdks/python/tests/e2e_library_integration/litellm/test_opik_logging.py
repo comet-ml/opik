@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.requires_litellm
+
 import litellm
 
 from opik import Opik, synchronization
