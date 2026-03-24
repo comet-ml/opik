@@ -308,6 +308,101 @@ export class ProjectsClient {
     }
 
     /**
+     * Find optimizations scoped to a project
+     *
+     * @param {string} projectId
+     * @param {OpikApi.FindOptimizationsByProjectRequest} request
+     * @param {ProjectsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     *
+     * @example
+     *     await client.projects.findOptimizationsByProject("projectId")
+     */
+    public findOptimizationsByProject(
+        projectId: string,
+        request: OpikApi.FindOptimizationsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.OptimizationPagePublic> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__findOptimizationsByProject(projectId, request, requestOptions),
+        );
+    }
+
+    private async __findOptimizationsByProject(
+        projectId: string,
+        request: OpikApi.FindOptimizationsByProjectRequest = {},
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.OptimizationPagePublic>> {
+        const { page, size, datasetId, datasetName, name, datasetDeleted, filters } = request;
+        const _queryParams: Record<string, unknown> = {
+            page,
+            size,
+            dataset_id: datasetId,
+            dataset_name: datasetName,
+            name,
+            dataset_deleted: datasetDeleted,
+            filters,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${core.url.encodePathParam(projectId)}/optimizations`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.OptimizationPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/projects/{projectId}/optimizations",
+        );
+    }
+
+    /**
      * Get prompts scoped to a project
      *
      * @param {string} projectId

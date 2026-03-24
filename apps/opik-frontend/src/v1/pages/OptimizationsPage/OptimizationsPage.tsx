@@ -377,6 +377,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         <DataTable
           columns={columns as never}
           data={optimizations as never}
+          getRowId={(row: Optimization) => row.id}
           onRowClick={handleRowClick}
           resizeConfig={resizeConfig}
           selectionConfig={{

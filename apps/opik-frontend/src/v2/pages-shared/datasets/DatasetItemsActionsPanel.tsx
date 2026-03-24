@@ -144,7 +144,9 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
           key = columnName;
           value = get(item.data, columnName, "");
         } else if (column === "assertions") {
-          value = extractAssertions(item.evaluators ?? []);
+          const itemAssertions = extractAssertions(item.evaluators ?? []);
+          value =
+            itemAssertions.length > 0 ? itemAssertions : suiteAssertions ?? [];
         } else {
           value = get(item, column, "");
         }
@@ -153,7 +155,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         return acc;
       }, {});
     });
-  }, [getDataForExport, columnsToExport, dynamicColumns]);
+  }, [getDataForExport, columnsToExport, dynamicColumns, suiteAssertions]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {

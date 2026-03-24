@@ -533,9 +533,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         c === COLUMN_SELECT_ID
           ? false
           : selectedColumns.includes(c) ||
-            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+            (DEFAULT_COLUMN_PINNING.left || []).includes(c) ||
+            (columnPinning.right || []).includes(c),
       );
-  }, [columns, selectedColumns]);
+  }, [columns, selectedColumns, columnPinning]);
 
   const filterColumns = useMemo(() => {
     return [

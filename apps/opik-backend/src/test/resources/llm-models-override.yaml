@@ -1,0 +1,8 @@
+openai:
+  - id: "gpt-4o"
+    structuredOutput: false
+  - id: "custom-openai-model"
+
+gemini:
+  - id: "gemini-custom"
+    structuredOutput: true
