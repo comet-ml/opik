@@ -1,10 +1,10 @@
 import { useCallback, useMemo } from "react";
 import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
+import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useUserPermissions from "./useUserPermissions";
 import { ManagementPermissionsNames, ORGANIZATION_ROLE_TYPE } from "./types";
-import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 
 const useUserPermission = (config?: { enabled?: boolean }) => {
   const configEnabled = config?.enabled ?? true;
@@ -108,6 +108,16 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_CREATE),
+    [checkNullablePermission],
+  );
+
+  const canEditDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_EDIT),
+    [checkNullablePermission],
+  );
+
   const canDeleteProjects = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.PROJECT_DELETE),
     [checkNullablePermission],
@@ -197,20 +207,18 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
-  const canCreateDashboards = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_CREATE),
-    [checkNullablePermission],
-  );
-
   return {
     canInviteMembers,
     isWorkspaceOwner,
     canViewExperiments,
     canCreateExperiments,
     canViewDashboards,
+    canCreateDashboards,
+    canEditDashboards,
     canViewDatasets,
     canEditDatasets,
     canDeleteDatasets,
+    canCreateProjects,
     canDeleteProjects,
     canCreateAnnotationQueues,
     canDeleteAnnotationQueues,
@@ -219,12 +227,10 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
-    canCreateProjects,
     canWriteComments,
     canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
-    canCreateDashboards,
     canTagTrace,
     isPending: isEnabled && isPending,
   };
