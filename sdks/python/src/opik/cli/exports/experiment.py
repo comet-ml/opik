@@ -321,6 +321,7 @@ def export_traces_by_ids(
                         )
                         fetch_futures[fetch_future] = trace_id
 
+                    batch_filter_skipped = 0
                     for fetch_future in as_completed(fetch_futures):
                         trace_id = fetch_futures[fetch_future]
                         try:
@@ -331,6 +332,7 @@ def export_traces_by_ids(
                                     trace_data.get("trace", {}), filter_string
                                 ):
                                     skipped_count += 1
+                                    batch_filter_skipped += 1
                                     continue
                                 fetched_traces[fetched_trace_id] = (
                                     trace_data,
@@ -342,8 +344,10 @@ def export_traces_by_ids(
                                     f"[red]Error fetching trace {trace_id}: {e}[/red]"
                                 )
 
-                # Count fetch failures for this batch
-                batch_fetch_failures = len(batch_trace_ids) - len(fetched_traces)
+                # Count only true fetch failures (not filter-skipped traces)
+                batch_fetch_failures = (
+                    len(batch_trace_ids) - len(fetched_traces) - batch_filter_skipped
+                )
                 failed_count += batch_fetch_failures
 
                 # Write files in parallel
