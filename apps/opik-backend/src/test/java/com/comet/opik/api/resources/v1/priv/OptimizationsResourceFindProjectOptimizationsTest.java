@@ -2,36 +2,22 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
-import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
-import com.comet.opik.api.resources.utils.MigrationUtils;
-import com.comet.opik.api.resources.utils.MinIOContainerUtils;
-import com.comet.opik.api.resources.utils.MySQLContainerUtils;
-import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestContainersSetupWithMinIO;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.google.common.eventbus.EventBus;
-import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
-import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -40,8 +26,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -57,16 +41,10 @@ class OptimizationsResourceFindProjectOptimizationsTest {
             "baselineCost", "bestCost", "totalOptimizationCost", "experimentScores",
             "projectName"};
 
-    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
-    private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
-
-    private final WireMockUtils.WireMockRuntime wireMock;
+    private final TestContainersSetupWithMinIO setup = new TestContainersSetupWithMinIO();
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension APP = setup.APP;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -74,33 +52,6 @@ class OptimizationsResourceFindProjectOptimizationsTest {
     private OptimizationResourceClient optimizationResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ProjectResourceClient projectResourceClient;
-
-    {
-        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE, ZOOKEEPER_CONTAINER, MINIO).join();
-
-        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
-
-        wireMock = WireMockUtils.startWireMock();
-
-        DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
-                .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
-
-        MigrationUtils.runMysqlDbMigration(MYSQL);
-        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
-        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
-
-        APP = newTestDropwizardAppExtension(
-                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
-                        .jdbcUrl(MYSQL.getJdbcUrl())
-                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
-                        .runtimeInfo(wireMock.runtimeInfo())
-                        .redisUrl(REDIS.getRedisURI())
-                        .authCacheTtlInSeconds(null)
-                        .mockEventBus(Mockito.mock(EventBus.class))
-                        .minioUrl(minioUrl)
-                        .isMinIO(true)
-                        .build());
-    }
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -114,11 +65,11 @@ class OptimizationsResourceFindProjectOptimizationsTest {
 
     @AfterAll
     void tearDownAll() {
-        wireMock.server().stop();
+        setup.wireMock.server().stop();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+        AuthTestUtils.mockTargetWorkspace(setup.wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
     private Dataset buildDataset() {

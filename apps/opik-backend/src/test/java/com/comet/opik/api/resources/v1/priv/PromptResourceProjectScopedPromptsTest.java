@@ -4,23 +4,16 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.filter.PromptFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
-import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
-import com.comet.opik.api.resources.utils.MigrationUtils;
-import com.comet.opik.api.resources.utils.MySQLContainerUtils;
-import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestContainersSetup;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.hc.core5.http.HttpStatus;
@@ -32,10 +25,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -46,7 +35,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
@@ -69,31 +57,10 @@ class PromptResourceProjectScopedPromptsTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
-    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
-    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
-    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final TestContainersSetup setup = new TestContainersSetup();
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
-
-    private final WireMockUtils.WireMockRuntime wireMock;
-
-    {
-        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
-
-        wireMock = WireMockUtils.startWireMock();
-
-        DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
-                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
-
-        MigrationUtils.runMysqlDbMigration(MYSQL);
-        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
-
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
-    }
+    private final TestDropwizardAppExtension APP = setup.APP;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -114,11 +81,11 @@ class PromptResourceProjectScopedPromptsTest {
 
     @AfterAll
     void tearDownAll() {
-        wireMock.server().stop();
+        setup.wireMock.server().stop();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+        AuthTestUtils.mockTargetWorkspace(setup.wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
     private Prompt.PromptBuilder buildPrompt() {
