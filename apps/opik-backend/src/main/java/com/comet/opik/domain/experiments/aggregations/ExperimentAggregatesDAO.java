@@ -446,31 +446,27 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND id = :experiment_id
                 AND evaluation_method = 'evaluation_suite'
-            ), feedback_scores_combined AS (
+            ), assertion_results_final AS (
                 SELECT
                     entity_id,
                     name,
-                    value
-                FROM feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                AND project_id = :project_id
-                UNION ALL
-                SELECT
-                    entity_id,
-                    name,
-                    value
-                FROM authored_feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                AND project_id = :project_id
-            ), feedback_scores_final AS (
-                SELECT
-                    entity_id,
-                    name,
-                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
-                FROM feedback_scores_combined fc
-                INNER JOIN experiment_items_scope ei ON fc.entity_id = ei.trace_id
+                    if(count() = 1, any(toFloat64(passed = 'passed')), avg(toFloat64(passed = 'passed'))) AS value
+                FROM (
+                    SELECT
+                        entity_id,
+                        name,
+                        passed,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY workspace_id, project_id, entity_id, name, author
+                            ORDER BY last_updated_at DESC
+                        ) as rn
+                    FROM assertion_results
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                )
+                WHERE rn = 1
                 GROUP BY entity_id, name
             ), runs AS (
                 SELECT
@@ -479,13 +475,13 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     JSONExtractUInt(ei.execution_policy, 'pass_threshold') AS item_pass_threshold,
                     JSONExtractUInt(ed.execution_policy, 'pass_threshold') AS suite_pass_threshold,
                     if(
-                        countIf(fs.name != '') = 0,
+                        countIf(ar.name != '') = 0,
                         1,
-                        if(minIf(fs.value, fs.name != '') >= 1.0, 1, 0)
+                        if(minIf(ar.value, ar.name != '') >= 1.0, 1, 0)
                     ) AS run_passed
                 FROM experiment_items_scope ei
                 INNER JOIN experiment_data ed ON ei.experiment_id = ed.id
-                LEFT JOIN feedback_scores_final fs ON fs.entity_id = ei.trace_id
+                LEFT JOIN assertion_results_final ar ON ar.entity_id = ei.trace_id
                 GROUP BY ei.dataset_item_id, ei.trace_id,
                          item_pass_threshold, suite_pass_threshold
             ), items AS (
