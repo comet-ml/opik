@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -126,5 +127,5 @@ interface RetentionRuleDAO {
     @SqlUpdate("UPDATE retention_rules SET catch_up_done = true, catch_up_cursor = NULL" +
             " WHERE id IN (<ids>)")
     @UseStringTemplateEngine
-    void markCatchUpDoneBatch(@Define("ids") String ids);
+    void markCatchUpDoneBatch(@BindList("ids") List<UUID> ids);
 }

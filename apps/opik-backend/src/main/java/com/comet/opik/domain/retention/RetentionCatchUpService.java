@@ -260,9 +260,7 @@ public class RetentionCatchUpService {
 
     private Mono<Void> markBatchDoneAsync(List<RetentionRule> rules) {
         if (rules.isEmpty()) return Mono.empty();
-        var ids = rules.stream()
-                .map(r -> "'" + r.id().toString() + "'")
-                .collect(Collectors.joining(","));
+        var ids = rules.stream().map(RetentionRule::id).toList();
         return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
             handle.attach(RetentionRuleDAO.class).markCatchUpDoneBatch(ids);
             return null;
