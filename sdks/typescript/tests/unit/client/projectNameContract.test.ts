@@ -207,7 +207,7 @@ describe("projectName contract tests", () => {
   });
 
   describe("Dataset item insert passes projectName to API", () => {
-    it("insert passes projectName to createOrUpdateDatasetItems", async () => {
+    function setupInsertMocks() {
       vi.spyOn(
         client.api.datasets,
         "getDatasetByIdentifier"
@@ -223,12 +223,20 @@ describe("projectName contract tests", () => {
         "createOrUpdateDatasetItems"
       ).mockImplementation(() => createMockHttpResponsePromise(undefined));
 
+      // syncHashes calls getDatasetItems which uses streamDatasetItems
+      const emptyStream = new ReadableStream<Uint8Array>({
+        start(controller) { controller.close(); },
+      });
       vi.spyOn(
         client.api.datasets,
-        "getDatasetItems"
+        "streamDatasetItems"
       ).mockImplementation(() =>
-        createMockHttpResponsePromise({ content: [] })
+        createMockHttpResponsePromise(emptyStream)
       );
+    }
+
+    it("insert passes projectName to createOrUpdateDatasetItems", async () => {
+      setupInsertMocks();
 
       const dataset = await client.getDataset("ds-name", EXPLICIT_PROJECT);
       await dataset.insert([{ input: "hello", output: "world" }]);
@@ -241,27 +249,7 @@ describe("projectName contract tests", () => {
     });
 
     it("insert uses client default projectName when dataset has no explicit project", async () => {
-      vi.spyOn(
-        client.api.datasets,
-        "getDatasetByIdentifier"
-      ).mockImplementation(() =>
-        createMockHttpResponsePromise({
-          id: "ds-id",
-          name: "ds-name",
-        })
-      );
-
-      vi.spyOn(
-        client.api.datasets,
-        "createOrUpdateDatasetItems"
-      ).mockImplementation(() => createMockHttpResponsePromise(undefined));
-
-      vi.spyOn(
-        client.api.datasets,
-        "getDatasetItems"
-      ).mockImplementation(() =>
-        createMockHttpResponsePromise({ content: [] })
-      );
+      setupInsertMocks();
 
       const dataset = await client.getDataset("ds-name");
       await dataset.insert([{ input: "hello", output: "world" }]);
