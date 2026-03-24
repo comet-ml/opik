@@ -1,7 +1,3 @@
-import pytest
-
-pytestmark = pytest.mark.requires_litellm
-
 """Tests for run_simulation function."""
 
 from unittest.mock import patch

@@ -46,8 +46,20 @@ def test_evaluate_suite__creates_experiment_with_evaluation_method_evaluation_su
         evaluator_module.evaluate_suite(
             dataset=mock_dataset,
             task=lambda item: {"input": item, "output": "response"},
+            client=None,
+            dataset_item_ids=None,
+            dataset_filter_string=None,
+            experiment_name_prefix=None,
             experiment_name="test-experiment",
+            project_name=None,
+            experiment_config=None,
+            prompts=None,
+            experiment_tags=None,
             verbose=0,
+            task_threads=1,
+            evaluator_model=None,
+            optimization_id=None,
+            experiment_type=None,
         )
 
     mock_client.create_experiment.assert_called_once()
@@ -80,8 +92,20 @@ def test_evaluate_suite__passes_evaluation_method_not_dataset():
         evaluator_module.evaluate_suite(
             dataset=mock_dataset,
             task=lambda item: {"input": item, "output": "response"},
+            client=None,
+            dataset_item_ids=None,
+            dataset_filter_string=None,
+            experiment_name_prefix=None,
             experiment_name="test-experiment-2",
+            project_name=None,
+            experiment_config=None,
+            prompts=None,
+            experiment_tags=None,
             verbose=0,
+            task_threads=1,
+            evaluator_model=None,
+            optimization_id=None,
+            experiment_type=None,
         )
 
     call_kwargs = mock_client.create_experiment.call_args[1]

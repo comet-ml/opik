@@ -7,7 +7,6 @@ import LogsTab from "@/v2/pages/TracesPage/LogsTab/LogsTab";
 import InsightsTab from "@/v2/pages/TracesPage/InsightsTab/InsightsTab";
 import RulesTab from "@/v2/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/v2/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
-import ConfigurationTab from "@/v2/pages/TracesPage/ConfigurationTab/ConfigurationTab";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { Construction } from "lucide-react";
@@ -25,10 +24,6 @@ const TracesPage = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const isAgentConfigurationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
-  );
-
   const { data: project } = useProjectById(
     {
       projectId,
@@ -68,14 +63,6 @@ const TracesPage = () => {
             <TabsTrigger variant="underline" value={PROJECT_TAB.insights}>
               Insights
             </TabsTrigger>
-            {isAgentConfigurationEnabled && (
-              <TabsTrigger
-                variant="underline"
-                value={PROJECT_TAB.configuration}
-              >
-                Configuration
-              </TabsTrigger>
-            )}
             <TabsTrigger variant="underline" value={PROJECT_TAB.evaluators}>
               Online evaluation
             </TabsTrigger>
@@ -98,11 +85,6 @@ const TracesPage = () => {
         <TabsContent value={PROJECT_TAB.insights}>
           <InsightsTab projectId={projectId} />
         </TabsContent>
-        {isAgentConfigurationEnabled && (
-          <TabsContent value={PROJECT_TAB.configuration}>
-            <ConfigurationTab projectId={projectId} />
-          </TabsContent>
-        )}
         <TabsContent value={PROJECT_TAB.evaluators}>
           <RulesTab projectId={projectId} />
         </TabsContent>
