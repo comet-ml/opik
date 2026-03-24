@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -153,26 +154,23 @@ public class RetentionCatchUpService {
                     // Use the oldest cursor as the lower bound for the batch
                     UUID lowerBound = rulesForPeriod.stream()
                             .map(RetentionRule::catchUpCursor)
+                            .filter(Objects::nonNull)
                             .min(RetentionCatchUpService::compareUUID)
-                            .orElseThrow();
+                            .orElse(upperBound); // no valid cursors → empty range, no-op
 
                     log.info("Catch-up small batch: '{}' workspaces, period='{}', range=['{}', '{}')",
                             workspaceIds.size(), period, lowerBound, upperBound);
 
                     return Flux.concat(
-                            spanDAO.deleteForRetention(workspaceIds, upperBound, lowerBound)
-                                    .onErrorResume(e -> logAndSkip("spans", workspaceIds.size(), e)),
-                            traceDAO.deleteForRetention(workspaceIds, upperBound, lowerBound)
-                                    .onErrorResume(e -> logAndSkip("traces", workspaceIds.size(), e)));
+                            spanDAO.deleteForRetention(workspaceIds, upperBound, lowerBound),
+                            traceDAO.deleteForRetention(workspaceIds, upperBound, lowerBound));
                 })
                 .reduce(0L, Long::sum)
-                .flatMap(totalDeleted -> {
-                    // Mark all as done
-                    markBatchDone(rules);
-                    log.info("Catch-up small batch completed: '{}' rows deleted, '{}' rules done",
-                            totalDeleted, rules.size());
-                    return Mono.just(totalDeleted);
-                });
+                .flatMap(totalDeleted -> markBatchDoneAsync(rules)
+                        .thenReturn(totalDeleted)
+                        .doOnSuccess(d -> log.info(
+                                "Catch-up small batch completed: '{}' rows deleted, '{}' rules done",
+                                d, rules.size())));
     }
 
     /**
@@ -210,20 +208,16 @@ public class RetentionCatchUpService {
         var workspaceIds = List.of(rule.workspaceId());
 
         return Flux.concat(
-                spanDAO.deleteForRetention(workspaceIds, chunkEnd, cursor)
-                        .onErrorResume(e -> logAndSkip("spans", 1, e)),
-                traceDAO.deleteForRetention(workspaceIds, chunkEnd, cursor)
-                        .onErrorResume(e -> logAndSkip("traces", 1, e)))
+                spanDAO.deleteForRetention(workspaceIds, chunkEnd, cursor),
+                traceDAO.deleteForRetention(workspaceIds, chunkEnd, cursor))
                 .reduce(0L, Long::sum)
                 .flatMap(deleted -> {
-                    // Update cursor in MySQL
-                    if (isLastChunk) {
-                        markDone(rule.id());
-                        log.info("Catch-up completed for workspace '{}'", rule.workspaceId());
-                    } else {
-                        updateCursor(rule.id(), chunkEnd);
-                    }
-                    return Mono.just(deleted);
+                    Mono<Void> cursorUpdate = isLastChunk
+                            ? markDoneAsync(rule.id())
+                                    .doOnSuccess(__ -> log.info("Catch-up completed for workspace '{}'",
+                                            rule.workspaceId()))
+                            : updateCursorAsync(rule.id(), chunkEnd);
+                    return cursorUpdate.thenReturn(deleted);
                 });
     }
 
@@ -257,33 +251,28 @@ public class RetentionCatchUpService {
         return Long.compareUnsigned(a.getMostSignificantBits(), b.getMostSignificantBits());
     }
 
-    private void markDone(UUID ruleId) {
-        template.inTransaction(WRITE, handle -> {
+    private Mono<Void> markDoneAsync(UUID ruleId) {
+        return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
             handle.attach(RetentionRuleDAO.class).markCatchUpDone(ruleId);
             return null;
-        });
+        })).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
-    private void markBatchDone(List<RetentionRule> rules) {
-        if (rules.isEmpty()) return;
+    private Mono<Void> markBatchDoneAsync(List<RetentionRule> rules) {
+        if (rules.isEmpty()) return Mono.empty();
         var ids = rules.stream()
                 .map(r -> "'" + r.id().toString() + "'")
                 .collect(Collectors.joining(","));
-        template.inTransaction(WRITE, handle -> {
+        return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
             handle.attach(RetentionRuleDAO.class).markCatchUpDoneBatch(ids);
             return null;
-        });
+        })).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
-    private void updateCursor(UUID ruleId, UUID newCursor) {
-        template.inTransaction(WRITE, handle -> {
+    private Mono<Void> updateCursorAsync(UUID ruleId, UUID newCursor) {
+        return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
             handle.attach(RetentionRuleDAO.class).updateCatchUpCursor(ruleId, newCursor);
             return null;
-        });
-    }
-
-    private Mono<Long> logAndSkip(String table, int batchSize, Throwable error) {
-        log.error("Catch-up delete failed: table='{}', batchSize='{}'", table, batchSize, error);
-        return Mono.just(0L);
+        })).subscribeOn(Schedulers.boundedElastic()).then();
     }
 }

@@ -1195,9 +1195,9 @@ public class SpanDAO {
 
     private static final String ESTIMATE_VELOCITY_FOR_RETENTION = """
             SELECT
-                if(count() = 0, 0,
+                toUInt64(if(count() = 0, 0,
                     uniq(id) / greatest(dateDiff('week', UUIDv7ToDateTime(toUUID(min(id))), now()), 1)
-                ) AS spans_per_week
+                )) AS spans_per_week
             FROM spans
             WHERE workspace_id = :workspace_id
             AND trace_id \\< :cutoff_id
