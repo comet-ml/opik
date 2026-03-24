@@ -5,6 +5,7 @@ import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.utils.JsonUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,7 +40,15 @@ public final class AlertScopeUtils {
                 .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
                 .orElse(null);
         if (StringUtils.isNotBlank(projectIdsString)) {
-            return JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class);
+            if (projectIdsString.startsWith("[")) {
+                return JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class);
+            }
+            // Legacy fallback: bare UUID or comma-separated UUIDs stored before JSON array format was adopted
+            return Arrays.stream(projectIdsString.split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::isNotBlank)
+                    .map(UUID::fromString)
+                    .toList();
         }
         return List.of();
     }
