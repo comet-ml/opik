@@ -46,7 +46,6 @@ class TraceThreadsClosingJobStreamAddParamsTest {
             .streamTrimLimit(STREAM_TRIM_LIMIT)
             .timeoutToMarkThreadAsInactive(Duration.seconds(30))
             .closeTraceThreadJobInterval(Duration.seconds(15))
-            .closeTraceThreadJobLockTime(Duration.seconds(4))
             .closeTraceThreadJobLockWaitTime(Duration.milliseconds(300))
             .coldStartLookback(Duration.days(7))
             .maxBackoffExponent(5)
