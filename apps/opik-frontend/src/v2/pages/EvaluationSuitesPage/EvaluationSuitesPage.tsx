@@ -242,7 +242,9 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no evaluation suites yet" : "No search results";
+  const noDataText = noData
+    ? "There are no evaluation suites yet"
+    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY_V3,
@@ -355,7 +357,9 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Evaluation suites</h1>
+        <h1 className="comet-title-l truncate break-words">
+          Evaluation suites
+        </h1>
       </div>
       <div className="comet-body-s mb-4 text-muted-slate">
         An evaluation suite is a collection of inputs, expected outputs, and
