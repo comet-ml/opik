@@ -130,10 +130,11 @@ const getMenuItems = ({
         },
         {
           id: "agent_configuration",
+          path: projectPath("/agent-configuration"),
           type: MENU_ITEM_TYPE.router,
           icon: Workflow,
           label: "Agent configuration",
-          disabled: true,
+          disabled: !projectPrefix,
         },
       ],
     },

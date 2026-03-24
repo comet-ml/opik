@@ -432,10 +432,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const isAgentConfigurationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
-  );
-
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
@@ -986,38 +982,32 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
-      ...(isAgentConfigurationEnabled
-        ? [
-            {
-              id: COLUMN_CONFIGURATION_VERSION_ID,
-              label: "Configuration",
-              type: COLUMN_TYPE.string,
-              sortable: false,
-              cell: ConfigurationVersionCell as never,
-              accessorFn: (row: BaseTraceData) => {
-                const agentConfig = (row.metadata as Record<string, unknown>)?.[
-                  AGENT_CONFIGURATION_METADATA_KEY
-                ];
+      {
+        id: COLUMN_CONFIGURATION_VERSION_ID,
+        label: "Configuration",
+        type: COLUMN_TYPE.string,
+        sortable: false,
+        cell: ConfigurationVersionCell as never,
+        accessorFn: (row: BaseTraceData) => {
+          const agentConfig = (row.metadata as Record<string, unknown>)?.[
+            AGENT_CONFIGURATION_METADATA_KEY
+          ];
 
-                if (!isAgentConfigurationMetadata(agentConfig))
-                  return undefined;
-                const version = agentConfig.blueprint_version;
-                if (!version) return undefined;
-                return {
-                  version,
-                  maskId: agentConfig._mask_id,
-                };
-              },
-            },
-          ]
-        : []),
+          if (!isAgentConfigurationMetadata(agentConfig)) return undefined;
+          const version = agentConfig.blueprint_version;
+          if (!version) return undefined;
+          return {
+            version,
+            maskId: agentConfig._mask_id,
+          };
+        },
+      },
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
   }, [
     type,
     handleThreadIdClick,
     isGuardrailsEnabled,
-    isAgentConfigurationEnabled,
   ]);
 
   const filtersColumnData = useMemo(() => {

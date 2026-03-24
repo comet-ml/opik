@@ -78,7 +78,6 @@ import DurationCell from "@/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
-import ConfigurationVersionCell from "@/shared/DataTableCells/ConfigurationVersionCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
@@ -98,8 +97,6 @@ import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { isAgentConfigurationMetadata } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
-import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import GuardrailsCell from "@/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -136,7 +133,6 @@ const parseSpanScoreName = (label: string): string => {
   return label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
 };
 
-const COLUMN_CONFIGURATION_VERSION_ID = "configuration_version";
 
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -308,7 +304,6 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   COLUMN_EXPERIMENT_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
-  COLUMN_CONFIGURATION_VERSION_ID,
 ];
 
 const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
@@ -329,7 +324,6 @@ const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
   COLUMN_COMMENTS_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
-  COLUMN_CONFIGURATION_VERSION_ID,
 ];
 
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
@@ -432,10 +426,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const isAgentConfigurationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
-  );
-
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
@@ -986,38 +976,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
-      ...(isAgentConfigurationEnabled
-        ? [
-            {
-              id: COLUMN_CONFIGURATION_VERSION_ID,
-              label: "Configuration",
-              type: COLUMN_TYPE.string,
-              sortable: false,
-              cell: ConfigurationVersionCell as never,
-              accessorFn: (row: BaseTraceData) => {
-                const agentConfig = (row.metadata as Record<string, unknown>)?.[
-                  AGENT_CONFIGURATION_METADATA_KEY
-                ];
-
-                if (!isAgentConfigurationMetadata(agentConfig))
-                  return undefined;
-                const version = agentConfig.blueprint_version;
-                if (!version) return undefined;
-                return {
-                  version,
-                  maskId: agentConfig._mask_id,
-                };
-              },
-            },
-          ]
-        : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
   }, [
     type,
     handleThreadIdClick,
     isGuardrailsEnabled,
-    isAgentConfigurationEnabled,
   ]);
 
   const filtersColumnData = useMemo(() => {
