@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Loader } from "lucide-react";
+import Loader from "@/shared/Loader/Loader";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Separator } from "@/ui/separator";
@@ -180,7 +180,7 @@ const PlaygroundPage = () => {
           <>
             <div className="flex h-[50vh] shrink-0 overflow-x-auto">
               <div
-                className="flex flex-1 shrink-0"
+                className="flex flex-1 shrink-0 bg-soft-background"
                 style={{
                   minWidth: `calc(${promptCount} * var(--min-prompt-width))`,
                   maxWidth: `calc(${promptCount} * var(--max-prompt-width))`,
@@ -212,7 +212,7 @@ const PlaygroundPage = () => {
                 maxWidth: `calc(${promptCount} * var(--max-prompt-width))`,
               }}
             >
-              <div className="flex h-[50vh] shrink-0">
+              <div className="flex h-[50vh] shrink-0 bg-soft-background">
                 <PlaygroundPrompts
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}

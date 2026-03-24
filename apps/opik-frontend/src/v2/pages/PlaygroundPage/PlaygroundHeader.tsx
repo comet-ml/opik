@@ -377,7 +377,7 @@ const PlaygroundHeader = ({
         className="flex items-center justify-between px-4 py-3"
         style={maxWidth ? { maxWidth } : undefined}
       >
-        <h1 className="comet-title-s">Playground</h1>
+        <h1 className="comet-title-xs">Playground</h1>
         <div className="flex items-center gap-2">
           {renderExperimentChipOrButton()}
           {renderRunButton()}

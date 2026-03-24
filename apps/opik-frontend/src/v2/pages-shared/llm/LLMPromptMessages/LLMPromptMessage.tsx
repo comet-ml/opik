@@ -246,7 +246,7 @@ const LLMPromptMessage = forwardRef<
             editorViewRef.current?.focus();
           }}
           className={cn(
-            "group p-2 shadow-none [&:focus-within]:border-primary",
+            "group p-2 pb-3 shadow-none [&:focus-within]:border-primary",
             {
               "pb-0": showMediaActions || hasJsonData,
               "z-10 shadow-sm": id === active?.id,
