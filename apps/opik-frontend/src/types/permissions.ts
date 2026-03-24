@@ -4,6 +4,7 @@ export interface Permissions {
   canViewDashboards: boolean;
   canCreateDashboards: boolean;
   canEditDashboards: boolean;
+  canDeleteDashboards: boolean;
   canViewDatasets: boolean;
   canEditDatasets: boolean;
   canDeleteDatasets: boolean;
@@ -35,6 +36,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canViewDashboards: true,
     canCreateDashboards: true,
     canEditDashboards: true,
+    canDeleteDashboards: true,
     canViewDatasets: true,
     canEditDatasets: true,
     canDeleteDatasets: true,
