@@ -11,12 +11,15 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.KpiCardService;
 import com.comet.opik.domain.ProjectCriteria;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.ProjectService;
@@ -82,6 +85,7 @@ public class ProjectsResource {
     private final @NonNull ProjectMetricsService projectMetricsService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull KpiCardService kpiCardService;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
@@ -251,6 +255,30 @@ public class ProjectsResource {
                 .block();
         log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/{id}/kpi-cards")
+    @Operation(operationId = "getProjectKpiCards", summary = "Get Project KPI Cards", description = "Gets KPI card metrics for a project", responses = {
+            @ApiResponse(responseCode = "200", description = "KPI Card Metrics", content = @Content(schema = @Schema(implementation = KpiCardResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getProjectKpiCards(
+            @PathParam("id") UUID projectId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = KpiCardRequest.class))) @Valid KpiCardRequest request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve KPI cards for projectId '{}', on workspace_id '{}', entity type '{}'", projectId,
+                workspaceId, request.entityType());
+
+        KpiCardResponse response = kpiCardService.getKpiCards(projectId, request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Retrieved KPI cards for projectId '{}', on workspace_id '{}', entity type '{}'", projectId,
+                workspaceId, request.entityType());
 
         return Response.ok().entity(response).build();
     }
