@@ -186,7 +186,11 @@ const DashboardsPage: React.FunctionComponent = () => {
   }, []);
 
   const {
-    permissions: { canCreateDashboards, canDeleteDashboards },
+    permissions: {
+      canCreateDashboards,
+      canEditDashboards,
+      canDeleteDashboards,
+    },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -293,6 +297,9 @@ const DashboardsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  const hasActions =
+    canEditDashboards || canCreateDashboards || canDeleteDashboards;
+
   const columns = useMemo(() => {
     return [
       ...(canDeleteDashboards ? [generateSelectColumDef<Dashboard>()] : []),
@@ -301,9 +308,13 @@ const DashboardsPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: DashboardRowActionsCell,
-      }),
+      ...(hasActions
+        ? [
+            generateActionsColumDef({
+              cell: DashboardRowActionsCell,
+            }),
+          ]
+        : []),
     ];
   }, [
     selectedColumns,
@@ -311,6 +322,7 @@ const DashboardsPage: React.FunctionComponent = () => {
     columnsDef,
     sortableBy,
     canDeleteDashboards,
+    hasActions,
   ]);
 
   const sortConfig = useMemo(

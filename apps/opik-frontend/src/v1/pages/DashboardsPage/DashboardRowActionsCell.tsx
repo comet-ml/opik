@@ -23,7 +23,11 @@ export const DashboardRowActionsCell: React.FunctionComponent<
   const dashboard = context.row.original;
 
   const {
-    permissions: { canCreateDashboards, canEditDashboards },
+    permissions: {
+      canCreateDashboards,
+      canEditDashboards,
+      canDeleteDashboards,
+    },
   } = usePermissions();
 
   const { mutate: deleteDashboardMutate } = useDashboardBatchDeleteMutation();
@@ -56,6 +60,10 @@ export const DashboardRowActionsCell: React.FunctionComponent<
     setOpen(false);
   }, []);
 
+  if (!canEditDashboards && !canCreateDashboards && !canDeleteDashboards) {
+    return null;
+  }
+
   return (
     <div
       className="flex items-center justify-end gap-2"
@@ -81,13 +89,14 @@ export const DashboardRowActionsCell: React.FunctionComponent<
               Clone
             </DropdownMenuItem>
           )}
-          {(canEditDashboards || canCreateDashboards) && (
-            <DropdownMenuSeparator />
+          {(canEditDashboards || canCreateDashboards) &&
+            canDeleteDashboards && <DropdownMenuSeparator />}
+          {canDeleteDashboards && (
+            <DropdownMenuItem onClick={handleDelete} variant="destructive">
+              <Trash className="mr-2 size-4" />
+              Delete
+            </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={handleDelete} variant="destructive">
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <AddEditCloneDashboardDialog
