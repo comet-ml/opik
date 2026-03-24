@@ -6,7 +6,7 @@ import isObject from "lodash/isObject";
 import get from "lodash/get";
 
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
 import { Optimization, OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
@@ -57,6 +57,7 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
   status,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [diffOpen, setDiffOpen] = useState(false);
@@ -181,8 +182,12 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
               className="px-0"
               onClick={() =>
                 navigate({
-                  to: "/$workspaceName/prompts/$promptId",
-                  params: { workspaceName, promptId },
+                  to: "/$workspaceName/projects/$projectId/prompts/$promptId",
+                  params: {
+                    workspaceName,
+                    projectId: activeProjectId!,
+                    promptId,
+                  },
                 })
               }
             >
@@ -192,7 +197,14 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
         });
       }
     },
-    [closeSaveDialog, toast, workspaceName, navigate, existingPrompt?.id],
+    [
+      closeSaveDialog,
+      toast,
+      workspaceName,
+      navigate,
+      existingPrompt?.id,
+      activeProjectId,
+    ],
   );
 
   return (
@@ -272,9 +284,10 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
       <CardContent className="flex min-h-0 flex-1 flex-col px-5 pb-4">
         <div className="flex shrink-0 items-center justify-between">
           <Link
-            to="/$workspaceName/optimizations/$optimizationId/trials"
+            to="/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials"
             params={{
               workspaceName,
+              projectId: activeProjectId!,
               optimizationId: optimization.id,
             }}
             search={{ trials: [experiment.id] }}

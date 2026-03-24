@@ -48,8 +48,10 @@ vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector) =>
     selector({
       activeWorkspaceName: "test-workspace",
+      activeProjectId: "test-project-id",
     }),
   ),
+  useActiveProjectId: () => "test-project-id",
 }));
 
 // Mock the toast hook
@@ -60,7 +62,7 @@ vi.mock("@/ui/use-toast", () => ({
 }));
 
 // Mock the navigate hook
-vi.mock("@/hooks/useNavigateToExperiment", () => ({
+vi.mock("@/v2/pages-shared/experiments/useNavigateToExperiment", () => ({
   useNavigateToExperiment: () => ({
     navigate: vi.fn(),
   }),

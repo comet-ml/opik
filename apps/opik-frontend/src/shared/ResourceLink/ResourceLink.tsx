@@ -15,7 +15,7 @@ import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Tag, TagProps } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import { Filter } from "@/types/filters";
@@ -48,6 +48,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/evaluation-suites/$suiteId/items",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
     deleted: "Deleted evaluation suite",
@@ -56,6 +58,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.datasetItem]: {
     url: "/$workspaceName/evaluation-suites/$suiteId/items",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
     deleted: "Deleted evaluation suite item",
@@ -64,6 +68,7 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.prompt]: {
     url: "/$workspaceName/prompts/$promptId",
+    projectUrl: "/$workspaceName/projects/$projectId/prompts/$promptId",
     icon: FileTerminal,
     param: "promptId",
     deleted: "Deleted prompt",
@@ -72,6 +77,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.experiment]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
     icon: FlaskConical,
     param: "datasetId",
     deleted: "Deleted experiment",
@@ -80,6 +87,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.experimentItem]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
     icon: FlaskConical,
     param: "datasetId",
     deleted: "Deleted experiment item",
@@ -88,6 +97,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$optimizationId",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
     icon: SparklesIcon,
     param: "optimizationId",
     deleted: "Deleted optimization",
@@ -96,6 +107,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$optimizationId/trials",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
     icon: SparklesIcon,
     param: "optimizationId",
     deleted: "Deleted optimization",
@@ -104,6 +117,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.annotationQueue]: {
     url: "/$workspaceName/annotation-queues/$annotationQueueId",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId",
     icon: UserPen,
     param: "annotationQueueId",
     deleted: "Deleted annotation queue",
@@ -129,6 +144,8 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.evaluationSuite]: {
     url: "/$workspaceName/evaluation-suites/$suiteId/items",
+    projectUrl:
+      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
     deleted: "Deleted evaluation suite",
@@ -180,11 +197,20 @@ function ResourceLink({
   className,
 }: ResourceLinkProps): React.ReactElement {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const props = RESOURCE_MAP[resource];
+
+  const useProjectUrl =
+    activeProjectId && "projectUrl" in props && props.projectUrl;
+  const url = useProjectUrl ? props.projectUrl : props.url;
+
   const linkParams: Record<string, string> = {
     workspaceName,
     ...params,
   };
+  if (useProjectUrl) {
+    linkParams.projectId = activeProjectId;
+  }
   linkParams[props.param] = id;
 
   const deleted = isUndefined(name) || isDeleted;
@@ -192,7 +218,7 @@ function ResourceLink({
 
   return (
     <Link
-      to={props.url}
+      to={url}
       params={linkParams}
       search={{ ...("search" in props ? props.search : {}), ...search }}
       onClick={(event) => event.stopPropagation()}

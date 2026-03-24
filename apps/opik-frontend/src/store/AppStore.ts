@@ -13,6 +13,8 @@ type AppStore = {
   setUser: (user: AppUser) => void;
   activeWorkspaceName: string;
   setActiveWorkspaceName: (workspaceName: string) => void;
+  activeProjectId: string | null;
+  setActiveProjectId: (projectId: string | null) => void;
   workspaceVersion: WorkspaceVersion | null;
   setWorkspaceVersion: (version: WorkspaceVersion) => void;
 };
@@ -31,6 +33,9 @@ const useAppStore = create<AppStore>((set) => ({
       activeWorkspaceName: workspaceName,
     }));
   },
+  activeProjectId: null,
+  setActiveProjectId: (projectId: string | null) =>
+    set({ activeProjectId: projectId }),
   workspaceVersion: null,
   setWorkspaceVersion: (version: WorkspaceVersion) =>
     set({ workspaceVersion: version }),
@@ -38,6 +43,9 @@ const useAppStore = create<AppStore>((set) => ({
 
 export const useActiveWorkspaceName = () =>
   useAppStore((state) => state.activeWorkspaceName);
+
+export const useActiveProjectId = () =>
+  useAppStore((state) => state.activeProjectId);
 
 export const useWorkspaceVersion = () =>
   useAppStore((state) => state.workspaceVersion);

@@ -49,7 +49,7 @@ import {
   getRowId,
 } from "@/shared/DataTable/utils";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 import {
@@ -217,6 +217,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   projectId,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -316,14 +317,15 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   const handleRowClick = useCallback(
     (queue: AnnotationQueue) => {
       navigate({
-        to: "/$workspaceName/annotation-queues/$annotationQueueId",
+        to: "/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId",
         params: {
           workspaceName,
+          projectId: activeProjectId!,
           annotationQueueId: queue.id,
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const columns = useMemo(() => {

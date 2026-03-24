@@ -36,7 +36,7 @@ import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { useMessageContent } from "@/hooks/useMessageContent";
@@ -55,6 +55,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   prompt: defaultPrompt,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
   const [name, setName] = useState(defaultPrompt?.name || "");
   const [template, setTemplate] = useState("");
@@ -111,14 +112,15 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
       if (!prompt.id) return;
 
       navigate({
-        to: "/$workspaceName/prompts/$promptId",
+        to: "/$workspaceName/projects/$projectId/prompts/$promptId",
         params: {
           promptId: prompt.id,
           workspaceName,
+          projectId: activeProjectId!,
         },
       });
     },
-    [workspaceName, navigate],
+    [workspaceName, activeProjectId, navigate],
   );
 
   const createPrompt = () => {

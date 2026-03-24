@@ -9,7 +9,7 @@ import {
 } from "@/ui/dropdown-menu";
 import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import useLoadPlayground from "@/hooks/useLoadPlayground";
+import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 export interface UseEvaluationSuiteDropdownProps {

@@ -22,7 +22,7 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
   }, [data?.stargazers_count]);
 
   const itemElement = (
-    <li className="mb-2">
+    <li>
       <Button
         variant="outline"
         size="sm"

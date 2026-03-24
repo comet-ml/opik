@@ -37,7 +37,7 @@ const TrialPage: React.FunctionComponent = () => {
 
   const { optimizationId } = useParams({
     select: (params) => params,
-    from: "/workspaceGuard/$workspaceName/optimizations/$optimizationId/trials",
+    from: "/workspaceGuard/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
   });
 
   const response = useExperimentsByIds({

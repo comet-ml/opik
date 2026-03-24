@@ -25,7 +25,7 @@ export const useOptimizationExperiments = () => {
 
   const { optimizationId } = useParams({
     select: (params) => params,
-    from: "/workspaceGuard/$workspaceName/optimizations/$optimizationId",
+    from: "/workspaceGuard/$workspaceName/projects/$projectId/optimizations/$optimizationId",
   });
 
   const {
