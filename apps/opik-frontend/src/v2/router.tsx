@@ -217,7 +217,7 @@ const evaluationSuitesRoute = createRoute({
   path: "/evaluation-suites",
   getParentRoute: () => projectScopedRoute,
   staticData: {
-    title: "Datasets",
+    title: "Evaluation suites",
   },
 });
 
