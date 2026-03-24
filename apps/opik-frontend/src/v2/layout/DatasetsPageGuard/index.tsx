@@ -7,7 +7,7 @@ const DatasetsPageGuard = () => {
   } = usePermissions();
 
   return (
-    <NoAccessPageGuard resourceName="datasets" canViewPage={canViewDatasets} />
+    <NoAccessPageGuard resourceName="evaluation suites" canViewPage={canViewDatasets} />
   );
 };
 

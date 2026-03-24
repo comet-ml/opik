@@ -128,7 +128,7 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
                   <Label>Description</Label>
                   <FormControl>
                     <TextareaAutosize
-                      placeholder="Dataset description"
+                      placeholder="Evaluation suite description"
                       className={cn(TEXT_AREA_CLASSES, "min-h-0 resize-none")}
                       minRows={2}
                       maxRows={6}
