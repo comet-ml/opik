@@ -44,7 +44,7 @@ jobs:
 
         steps:
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v6
             
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
@@ -109,7 +109,7 @@ jobs:
 
         - name: Attach BE log
           if: failure()
-          uses: actions/upload-artifact@v4
+          uses: actions/upload-artifact@v7
           with:
               name: opik-backend-log-p${{matrix.python_version}}
               path: ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
