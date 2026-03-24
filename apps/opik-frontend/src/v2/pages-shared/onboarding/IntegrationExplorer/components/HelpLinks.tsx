@@ -2,7 +2,7 @@ import React, { createContext, useContext } from "react";
 import { Button } from "@/ui/button";
 import { cn } from "@/lib/utils";
 import { Blocks, MonitorPlay, MousePointerClick } from "lucide-react";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import Slack from "@/icons/slack.svg?react";
 import { Link } from "@tanstack/react-router";
 import usePluginsStore from "@/store/PluginsStore";
@@ -107,6 +107,7 @@ SlackButton.displayName = "HelpLinks.Slack";
 
 const PlaygroundButton: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
 
   return (
     <Button
@@ -116,7 +117,10 @@ const PlaygroundButton: React.FC = () => {
       id="help-links-playground"
       data-fs-element="HelpLinksPlayground"
     >
-      <Link to={"/$workspaceName/playground"} params={{ workspaceName }}>
+      <Link
+        to={"/$workspaceName/projects/$projectId/playground"}
+        params={{ workspaceName, projectId: activeProjectId! }}
+      >
         <Blocks className="mr-2 size-4" />
         Try our Playground
       </Link>

@@ -7,7 +7,7 @@ import { MessagesList } from "@/v2/pages-shared/prompts/PromptMessageDisplay";
 import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 import { getOptimizerLabel } from "@/lib/optimizations";
 import { extractDisplayMessages } from "@/lib/llm";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import ResizableSection from "@/shared/ResizableSection/ResizableSection";
 
 interface OptimizationConfigurationProps {
@@ -44,6 +44,7 @@ const OptimizationConfiguration: React.FC<OptimizationConfigurationProps> = ({
   bestExperiment,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const { prompt, optimizer, evaluation, dataset_name, llm_model } =
     studioConfig;
   const metric = evaluation?.metrics?.[0];
@@ -65,8 +66,12 @@ const OptimizationConfiguration: React.FC<OptimizationConfigurationProps> = ({
               label="Evaluation suite"
               value={
                 <Link
-                  to="/$workspaceName/evaluation-suites/$suiteId"
-                  params={{ workspaceName, suiteId: datasetId }}
+                  to="/$workspaceName/projects/$projectId/evaluation-suites/$suiteId"
+                  params={{
+                    workspaceName,
+                    projectId: activeProjectId!,
+                    suiteId: datasetId,
+                  }}
                   className="text-primary hover:underline"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -101,9 +106,10 @@ const OptimizationConfiguration: React.FC<OptimizationConfigurationProps> = ({
                 label="Best trial configuration"
                 value={
                   <Link
-                    to="/$workspaceName/optimizations/$optimizationId/trials"
+                    to="/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials"
                     params={{
                       workspaceName,
+                      projectId: activeProjectId!,
                       optimizationId,
                     }}
                     target="_blank"

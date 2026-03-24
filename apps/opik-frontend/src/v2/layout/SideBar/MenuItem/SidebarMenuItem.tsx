@@ -1,11 +1,10 @@
 import React, { MouseEventHandler } from "react";
-import isNumber from "lodash/isNumber";
 import { Link } from "@tanstack/react-router";
 import { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useAppStore from "@/store/AppStore";
+import { useActiveWorkspaceName, useActiveProjectId } from "@/store/AppStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 
@@ -21,8 +20,7 @@ export type MenuItem = {
   type: MENU_ITEM_TYPE;
   icon: LucideIcon;
   label: string;
-  count?: string;
-  showIndicator?: string;
+  disabled?: boolean;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
@@ -36,37 +34,77 @@ export type MenuItemGroup = {
 interface SidebarMenuItemProps {
   item: MenuItem;
   expanded: boolean;
-  count?: number;
-  hasIndicator?: boolean;
-  compact?: boolean;
 }
 
-interface GetItemElementProps {
-  item: MenuItem;
-  content: React.ReactElement;
-  workspaceName: string;
-  linkClasses: string;
-}
-
-const getItemElementByType = ({
+const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   item,
-  content,
-  workspaceName,
-  linkClasses,
-}: GetItemElementProps): React.ReactElement | null => {
-  if (item.type === MENU_ITEM_TYPE.router) {
-    return (
-      <li key={item.id} className="flex">
-        <Link to={item.path} params={{ workspaceName }} className={linkClasses}>
+  expanded,
+}) => {
+  const workspaceName = useActiveWorkspaceName();
+  const activeProjectId = useActiveProjectId();
+  const isFeatureEnabled = useIsFeatureEnabled(item.featureFlag!);
+
+  if (item.featureFlag && !isFeatureEnabled) {
+    return null;
+  }
+
+  const content = (
+    <>
+      <item.icon className="size-3.5 shrink-0" />
+      {expanded && <div className="grow truncate">{item.label}</div>}
+    </>
+  );
+
+  const baseClasses = cn(
+    "comet-body-s relative flex w-full items-center gap-2 rounded-md",
+    expanded ? "px-2 py-1" : "w-9 justify-center py-1",
+  );
+
+  if (item.disabled) {
+    const disabledElement = (
+      <li className="flex">
+        <span
+          className={cn(baseClasses, "cursor-not-allowed opacity-50")}
+          aria-disabled="true"
+        >
+          {content}
+        </span>
+      </li>
+    );
+
+    if (!expanded) {
+      return (
+        <TooltipWrapper content={item.label} side="right">
+          {disabledElement}
+        </TooltipWrapper>
+      );
+    }
+
+    return disabledElement;
+  }
+
+  const linkClasses = cn(
+    baseClasses,
+    "hover:bg-primary-foreground data-[status=active]:bg-muted data-[status=active]:font-medium",
+  );
+
+  let itemElement: React.ReactElement | null = null;
+
+  if (item.type === MENU_ITEM_TYPE.router && item.path) {
+    const params: Record<string, string> = { workspaceName };
+    if (activeProjectId) {
+      params.projectId = activeProjectId;
+    }
+    itemElement = (
+      <li className="flex">
+        <Link to={item.path} params={params} className={linkClasses}>
           {content}
         </Link>
       </li>
     );
-  }
-
-  if (item.type === MENU_ITEM_TYPE.link) {
-    return (
-      <li key={item.id} className="flex">
+  } else if (item.type === MENU_ITEM_TYPE.link && item.path) {
+    itemElement = (
+      <li className="flex">
         <a
           href={item.path}
           target="_blank"
@@ -77,11 +115,9 @@ const getItemElementByType = ({
         </a>
       </li>
     );
-  }
-
-  if (item.type === MENU_ITEM_TYPE.button) {
-    return (
-      <li key={item.id} className="flex">
+  } else if (item.type === MENU_ITEM_TYPE.button) {
+    itemElement = (
+      <li className="flex">
         <button onClick={item.onClick} className={cn(linkClasses, "text-left")}>
           {content}
         </button>
@@ -89,74 +125,17 @@ const getItemElementByType = ({
     );
   }
 
-  return null;
-};
+  if (!itemElement) return null;
 
-const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
-  item,
-  expanded,
-  count,
-  hasIndicator,
-  compact = false,
-}) => {
-  const { activeWorkspaceName: workspaceName } = useAppStore();
-  const hasCount = item.count && isNumber(count);
-  const showIndicatorBadge = item.showIndicator && hasIndicator;
-  const isFeatureEnabled = useIsFeatureEnabled(item.featureFlag!);
-
-  if (item.featureFlag && !isFeatureEnabled) {
-    return null;
+  if (!expanded) {
+    return (
+      <TooltipWrapper content={item.label} side="right">
+        {itemElement}
+      </TooltipWrapper>
+    );
   }
 
-  const content = (
-    <>
-      <item.icon className="size-4 shrink-0" />
-      {expanded && (
-        <>
-          <div className="grow truncate">{item.label}</div>
-          {showIndicatorBadge ? (
-            <div className="size-2 shrink-0 rounded-full bg-[var(--color-green)]" />
-          ) : (
-            hasCount && <div className="h-6 shrink-0 leading-6">{count}</div>
-          )}
-        </>
-      )}
-      {!expanded && showIndicatorBadge && (
-        <div className="absolute right-1 top-1 size-2 rounded-full bg-[var(--color-green)]" />
-      )}
-    </>
-  );
-
-  const linkClasses = cn(
-    "comet-body-s relative flex w-full items-center gap-2 rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
-    compact
-      ? "h-8 text-muted-slate data-[status=active]:text-muted-slate data-[status=active]:bg-muted"
-      : "h-9 text-foreground",
-    compact
-      ? expanded
-        ? "px-2.5"
-        : "w-8 justify-center"
-      : expanded
-        ? "pl-[10px] pr-3"
-        : "w-9 justify-center",
-  );
-
-  const itemElement = getItemElementByType({
-    item,
-    content,
-    workspaceName,
-    linkClasses,
-  });
-
-  if (expanded || !itemElement) {
-    return itemElement;
-  }
-
-  return (
-    <TooltipWrapper content={item.label} side="right">
-      {itemElement}
-    </TooltipWrapper>
-  );
+  return itemElement;
 };
 
 export default SidebarMenuItem;

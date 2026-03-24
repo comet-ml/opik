@@ -12,7 +12,7 @@ import ListCell from "@/shared/DataTableCells/ListCell";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import {
@@ -196,6 +196,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 const PromptsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -315,14 +316,15 @@ const PromptsPage: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (row: Prompt) => {
       navigate({
-        to: "/$workspaceName/prompts/$promptId",
+        to: "/$workspaceName/projects/$projectId/prompts/$promptId",
         params: {
           promptId: row.id,
           workspaceName,
+          projectId: activeProjectId!,
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const handleNewPromptClick = useCallback(() => {

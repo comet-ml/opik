@@ -11,7 +11,7 @@ import useEvaluationSuiteDraftStore, {
 } from "@/store/EvaluationSuiteDraftStore";
 import { useEffectiveSuiteAssertions } from "@/hooks/useEffectiveSuiteAssertions";
 import { useEffectiveExecutionPolicy } from "@/hooks/useEffectiveExecutionPolicy";
-import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
+import { useSuiteIdFromURL } from "@/v2/pages-shared/evaluation-suites/useSuiteIdFromURL";
 import EvaluationSuiteItemFormContainer from "./EvaluationSuiteItemFormContainer";
 import {
   EvaluationSuiteItemFormValues,

@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import OnboardingStep from "@/v2/pages-shared/OnboardingOverlay/OnboardingStep";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -17,6 +17,7 @@ const FEATURE_FLAG_KEY = "onboarding-start-exploring-test";
 
 const StartPreference: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const variant = useFeatureFlagVariantKey(FEATURE_FLAG_KEY);
 
   const {
@@ -47,8 +48,8 @@ const StartPreference: React.FC = () => {
         )}
 
         <Link
-          to="/$workspaceName/playground"
-          params={{ workspaceName }}
+          to="/$workspaceName/projects/$projectId/playground"
+          params={{ workspaceName, projectId: activeProjectId! }}
           className="w-full"
         >
           <OnboardingStep.AnswerCard option={OPTIONS.TEST_PROMPTS} />
@@ -56,8 +57,8 @@ const StartPreference: React.FC = () => {
 
         {canViewExperiments && (
           <Link
-            to="/$workspaceName/experiments"
-            params={{ workspaceName }}
+            to="/$workspaceName/projects/$projectId/experiments"
+            params={{ workspaceName, projectId: activeProjectId! }}
             search={
               showEnhancedOnboarding
                 ? {

@@ -4,7 +4,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Thread, Trace } from "@/types/traces";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";
 import { useToast } from "@/ui/use-toast";
 import { ToastAction } from "@/ui/toast";
@@ -46,6 +46,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   } = usePermissions();
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -110,9 +111,10 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
             key="Go to annotation queue"
             onClick={() =>
               navigate({
-                to: "/$workspaceName/annotation-queues/$annotationQueueId",
+                to: "/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId",
                 params: {
                   workspaceName,
+                  projectId: activeProjectId!,
                   annotationQueueId: queue.id,
                 },
               })
@@ -123,7 +125,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
         ],
       });
     },
-    [toast, navigate, workspaceName],
+    [toast, navigate, workspaceName, activeProjectId],
   );
 
   const addToQueueHandler = useCallback(

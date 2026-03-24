@@ -3,7 +3,7 @@ import { CellContext, ColumnMeta, TableMeta } from "@tanstack/react-table";
 import { DatasetItem } from "@/types/datasets";
 import { useEffectiveItemExecutionPolicy } from "@/hooks/useEffectiveItemExecutionPolicy";
 import { useEffectiveExecutionPolicy } from "@/hooks/useEffectiveExecutionPolicy";
-import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
+import { useSuiteIdFromURL } from "@/v2/pages-shared/evaluation-suites/useSuiteIdFromURL";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 
 interface ExecutionPolicyCellInnerProps {

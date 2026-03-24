@@ -16,7 +16,7 @@ import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import Loader from "@/shared/Loader/Loader";
 import AddOptimizationDialog from "@/v2/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
 import { Button } from "@/ui/button";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Optimization } from "@/types/optimizations";
@@ -114,6 +114,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const OptimizationRunsSection: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -141,14 +142,15 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (row: Optimization) => {
       navigate({
-        to: "/$workspaceName/optimizations/$optimizationId",
+        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
         params: {
           optimizationId: row.id,
           workspaceName,
+          projectId: activeProjectId!,
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const resizeConfig = useMemo(
@@ -189,7 +191,10 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
         }
       />
       <div className="flex justify-end pt-1">
-        <Link to="/$workspaceName/optimizations" params={{ workspaceName }}>
+        <Link
+          to="/$workspaceName/projects/$projectId/optimizations"
+          params={{ workspaceName, projectId: activeProjectId! }}
+        >
           <Button variant="ghost" className="flex items-center gap-1 pr-0">
             All optimization runs <ArrowRight className="size-4" />
           </Button>

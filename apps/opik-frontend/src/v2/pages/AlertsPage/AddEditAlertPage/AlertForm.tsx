@@ -17,7 +17,7 @@ import Loader from "@/shared/Loader/Loader";
 import { Alert, ALERT_TYPE } from "@/types/alerts";
 import useAlertCreateMutation from "@/api/alerts/useAlertCreateMutation";
 import useAlertUpdateMutation from "@/api/alerts/useAlertUpdateMutation";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 import { AlertFormType, AlertFormSchema } from "./schema";
@@ -40,6 +40,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const alertCreateMutation = useAlertCreateMutation();
   const alertUpdateMutation = useAlertUpdateMutation();
 
@@ -104,10 +105,10 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 
   const handleNavigateBack = useCallback(() => {
     navigate({
-      to: "/$workspaceName/alerts",
-      params: { workspaceName },
+      to: "/$workspaceName/projects/$projectId/alerts",
+      params: { workspaceName, projectId: activeProjectId! },
     });
-  }, [navigate, workspaceName]);
+  }, [navigate, workspaceName, activeProjectId]);
 
   const canLeavePage = form.formState.isSubmitted || !form.formState.isDirty;
 

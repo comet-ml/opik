@@ -7,7 +7,7 @@ import { OPTIMIZATION_STATUS, Optimization } from "@/types/optimizations";
 import { STATUS_TO_VARIANT_MAP } from "@/constants/experiments";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import useOptimizationStopMutation from "@/api/optimizations/useOptimizationStopMutation";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { formatDate } from "@/lib/date";
@@ -28,6 +28,7 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
   canRerun,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
   const { mutate: stopOptimization, isPending: isStoppingOptimization } =
     useOptimizationStopMutation();
@@ -45,8 +46,8 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
   const handleRerun = () => {
     if (!optimizationId) return;
     navigate({
-      to: "/$workspaceName/optimizations/new",
-      params: { workspaceName },
+      to: "/$workspaceName/projects/$projectId/optimizations/new",
+      params: { workspaceName, projectId: activeProjectId! },
       search: { rerun: optimizationId },
     });
   };

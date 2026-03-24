@@ -21,7 +21,7 @@ import { createDatasetRowActionsCell } from "@/v2/pages-shared/datasets/DatasetR
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { buildDocsUrl } from "@/lib/utils";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import {
@@ -183,6 +183,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const EvaluationSuitesPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
 
   const isDatasetExportEnabled = useIsFeatureEnabled(
@@ -336,14 +337,15 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
       if (!row.id) return;
 
       navigate({
-        to: "/$workspaceName/evaluation-suites/$suiteId",
+        to: "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId",
         params: {
           suiteId: row.id,
           workspaceName,
+          projectId: activeProjectId!,
         },
       });
     },
-    [workspaceName, navigate],
+    [workspaceName, activeProjectId, navigate],
   );
 
   if (isPending) {

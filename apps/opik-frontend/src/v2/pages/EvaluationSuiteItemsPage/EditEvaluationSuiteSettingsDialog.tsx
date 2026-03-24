@@ -24,7 +24,7 @@ import { Separator } from "@/ui/separator";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
-import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
+import { useSuiteIdFromURL } from "@/v2/pages-shared/evaluation-suites/useSuiteIdFromURL";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import {
   useSuiteAssertions,
