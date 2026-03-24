@@ -59,6 +59,7 @@ const AddEvaluationSuiteItemPanelContent: React.FC<{
     assertions: [],
     runsPerItem: suitePolicy.runs_per_item,
     passThreshold: suitePolicy.pass_threshold,
+    useGlobalPolicy: true,
   };
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -77,9 +78,7 @@ const AddEvaluationSuiteItemPanelContent: React.FC<{
     const now = new Date().toISOString();
     const saveData = data ?? initialData;
 
-    const policyChanged =
-      policy.runs_per_item !== suitePolicy.runs_per_item ||
-      policy.pass_threshold !== suitePolicy.pass_threshold;
+    const policyChanged = policy != null;
 
     const tempId = addItem({
       data: saveData,

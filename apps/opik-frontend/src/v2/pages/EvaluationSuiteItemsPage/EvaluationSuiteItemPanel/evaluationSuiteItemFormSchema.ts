@@ -8,6 +8,7 @@ export const evaluationSuiteItemFormSchema = z
     assertions: z.array(z.object({ value: z.string() })),
     runsPerItem: z.number().min(1).max(MAX_RUNS_PER_ITEM),
     passThreshold: z.number().min(1),
+    useGlobalPolicy: z.boolean().default(false),
   })
   .refine((data) => data.passThreshold <= data.runsPerItem, {
     message: "Pass threshold cannot exceed runs per item",
@@ -23,6 +24,7 @@ export function toFormValues(
   data: Record<string, unknown>,
   assertions: string[],
   policy: ExecutionPolicy,
+  useGlobalPolicy: boolean,
 ): EvaluationSuiteItemFormValues {
   return {
     description,
@@ -30,6 +32,7 @@ export function toFormValues(
     assertions: assertions.map((a) => ({ value: a })),
     runsPerItem: policy.runs_per_item,
     passThreshold: policy.pass_threshold,
+    useGlobalPolicy,
   };
 }
 
@@ -37,7 +40,7 @@ export function fromFormValues(values: EvaluationSuiteItemFormValues): {
   description: string;
   data: Record<string, unknown> | null;
   assertions: string[];
-  policy: ExecutionPolicy;
+  policy: ExecutionPolicy | undefined;
 } {
   let data: Record<string, unknown> | null = null;
   try {
@@ -53,9 +56,11 @@ export function fromFormValues(values: EvaluationSuiteItemFormValues): {
     description: values.description,
     data,
     assertions: values.assertions.map((a) => a.value.trim()).filter(Boolean),
-    policy: {
-      runs_per_item: values.runsPerItem,
-      pass_threshold: values.passThreshold,
-    },
+    policy: values.useGlobalPolicy
+      ? undefined
+      : {
+          runs_per_item: values.runsPerItem,
+          pass_threshold: values.passThreshold,
+        },
   };
 }
