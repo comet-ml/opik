@@ -157,7 +157,7 @@ const AddEditEvaluationSuiteDialog = ({
     : JSON_MODE_FILE_SIZE_LIMIT_IN_MB;
 
   const applyEvaluationCriteria = useCallback(
-    (datasetId: string, onDone: () => void) => {
+    (datasetId: string, onDone?: () => void) => {
       const filteredAssertions = assertions
         .map((a) => a.trim())
         .filter(Boolean);
@@ -165,7 +165,7 @@ const AddEditEvaluationSuiteDialog = ({
       const hasAssertions = filteredAssertions.length > 0;
 
       if (!hasCustomPolicy && !hasAssertions) {
-        onDone();
+        onDone?.();
         return;
       }
 
@@ -209,8 +209,9 @@ const AddEditEvaluationSuiteDialog = ({
       }
 
       if (hasValidCsvFile && newDataset.id) {
-        // Apply evaluation criteria in parallel with CSV upload
-        applyEvaluationCriteria(newDataset.id, () => {});
+        const applyThenNavigate = () => {
+          applyEvaluationCriteria(newDataset.id, navigateToDataset);
+        };
 
         if (isCsvUploadEnabled && csvFile) {
           // CSV mode: Upload CSV file directly to backend
@@ -241,9 +242,7 @@ const AddEditEvaluationSuiteDialog = ({
                   variant: "destructive",
                 });
               },
-              onSettled: () => {
-                navigateToDataset();
-              },
+              onSettled: applyThenNavigate,
             },
           );
         } else if (!isCsvUploadEnabled && csvData) {
@@ -262,7 +261,7 @@ const AddEditEvaluationSuiteDialog = ({
                 // Fetch dataset to get latest_version populated by backend
                 fetchDataset({ datasetId: newDataset.id })
                   .then((enrichedDataset) => {
-                    navigateToDataset();
+                    applyThenNavigate();
                     onDatasetCreated?.(enrichedDataset);
                   })
                   .catch((error) => {
@@ -270,12 +269,10 @@ const AddEditEvaluationSuiteDialog = ({
                       "Failed to fetch evaluation suite after item creation:",
                       error,
                     );
-                    navigateToDataset();
+                    applyThenNavigate();
                   });
               },
-              onError: () => {
-                navigateToDataset();
-              },
+              onError: applyThenNavigate,
             },
           );
         }
