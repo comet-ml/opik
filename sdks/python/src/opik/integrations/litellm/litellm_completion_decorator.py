@@ -6,7 +6,6 @@ from typing import (
     List,
     Optional,
     Tuple,
-    Union,
 )
 from typing_extensions import override
 
@@ -15,10 +14,6 @@ import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import LLMProvider
-
-import litellm
-import litellm.types.utils
-import litellm.litellm_core_utils.streaming_handler
 
 from . import stream_patchers, completion_chunks_aggregator
 
@@ -74,6 +69,8 @@ PROVIDER_MAPPING: Dict[str, LLMProvider] = {
 
 def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
     try:
+        import litellm
+
         provider_info = litellm.get_llm_provider(model_name)
         provider_name = provider_info[1] if len(provider_info) > 1 else None
         if provider_name is None:
@@ -84,10 +81,7 @@ def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
 
 
 def _convert_response_to_dict(
-    output: Union[
-        litellm.types.utils.ModelResponse,
-        Dict[str, Any],
-    ],
+    output: Any,
 ) -> Dict[str, Any]:
     if hasattr(output, "model_dump"):
         return output.model_dump(mode="json")
@@ -122,12 +116,11 @@ def _extract_usage_from_response(
 
 
 def _calculate_completion_cost(
-    output: Union[
-        litellm.types.utils.ModelResponse,
-        Dict[str, Any],
-    ],
+    output: Any,
 ) -> Optional[float]:
     try:
+        import litellm
+
         return litellm.completion_cost(completion_response=output)
     except Exception as exception:
         LOGGER.debug(
@@ -185,13 +178,7 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         if not (
-            isinstance(
-                output,
-                (
-                    litellm.types.utils.ModelResponse,
-                    dict,
-                ),
-            )
+            isinstance(output, dict)
             or hasattr(output, "model_dump")
             or hasattr(output, "__dict__")
         ):
@@ -223,16 +210,13 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[
-            Callable[
-                [List[litellm.types.utils.ModelResponse]],
-                Optional[litellm.types.utils.ModelResponse],
-            ]
-        ],
-    ) -> Optional[litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper]:
+        generations_aggregator: Optional[Callable[..., Any]],
+    ) -> Any:
         assert generations_aggregator is not None, (
             "LiteLLM decorator will always get aggregator function as input"
         )
+
+        import litellm.litellm_core_utils.streaming_handler
 
         is_litellm_stream = isinstance(
             output, litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper

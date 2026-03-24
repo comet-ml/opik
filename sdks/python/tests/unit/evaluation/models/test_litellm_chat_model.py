@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.requires_litellm
+
 from opik.evaluation.metrics.llm_judges import g_eval
 from opik.evaluation.models import models_factory
 from opik.evaluation.models.litellm import litellm_chat_model

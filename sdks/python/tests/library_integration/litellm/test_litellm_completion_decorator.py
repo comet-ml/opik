@@ -7,7 +7,7 @@ import pytest
 
 from opik.api_objects.span import SpanData
 
-pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
+pytestmark = [pytest.mark.requires_litellm, pytest.mark.usefixtures("ensure_openai_configured")]
 
 
 def _install_litellm_stub(monkeypatch: pytest.MonkeyPatch) -> None:

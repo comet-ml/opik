@@ -1,6 +1,8 @@
 from opik import exceptions
 from opik.evaluation.metrics.llm_judges.syc_eval import parser
 import pytest
+
+pytestmark = pytest.mark.requires_litellm
 from opik.evaluation.metrics.llm_judges.syc_eval.metric import SycEval
 
 

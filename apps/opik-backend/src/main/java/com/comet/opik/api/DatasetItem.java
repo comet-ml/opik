@@ -27,8 +27,19 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @SourceValidation
 public record DatasetItem(
         @JsonView( {
-                DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
-        @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetItemId,
+                DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Schema(description = """
+                        Stable item identifier.
+                        On write, used as the upsert key.
+                        If omitted, a new ID is generated.
+                        Remains the same across dataset versions
+                        """) UUID id,
+        @JsonView({
+                DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = """
+                        Deprecated.
+                        Always equals 'id'.
+                        Retained for backward compatibility and will be removed in a future version
+                        """) UUID datasetItemId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,

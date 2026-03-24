@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.requires_litellm
+
 from unittest.mock import MagicMock
 
 from opik.evaluation.engine.metrics_evaluator import build_metrics_evaluator
