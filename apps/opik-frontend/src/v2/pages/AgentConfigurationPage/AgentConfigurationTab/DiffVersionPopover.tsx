@@ -5,7 +5,7 @@ import { ConfigHistoryItem } from "@/types/agent-configs";
 import { getTimeFromNow } from "@/lib/date";
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
-import ConfigTagList from "./ConfigTagList";
+import AgentConfigTagList from "./AgentConfigTagList";
 
 type DiffVersionItemProps = {
   version: ConfigHistoryItem;
@@ -23,7 +23,7 @@ const DiffVersionItem: React.FC<DiffVersionItemProps> = ({
     >
       <div className="flex items-center gap-1.5">
         <span className="comet-body-s-accented shrink-0">{version.name}</span>
-        <ConfigTagList
+        <AgentConfigTagList
           tags={version.tags}
           size="sm"
           className="min-w-0 flex-1"

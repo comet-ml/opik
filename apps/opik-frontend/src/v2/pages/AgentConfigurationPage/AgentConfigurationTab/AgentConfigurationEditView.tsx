@@ -12,17 +12,17 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
 import BlueprintValuePrompt from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
 import { Separator } from "@/ui/separator";
-import { useConfigurationSave } from "./useConfigurationSave";
+import { useAgentConfigurationSave } from "./useAgentConfigurationSave";
 import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
 
-type ConfigurationEditViewProps = {
+type AgentConfigurationEditViewProps = {
   item: ConfigHistoryItem;
   projectId: string;
   onCancel: () => void;
   onSaved: () => void;
 };
 
-const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
+const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
   item,
   projectId,
   onCancel,
@@ -41,7 +41,7 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
   const initialized = useRef(false);
 
   const { handleSave, isSaving, errors, clearError, promptRefs } =
-    useConfigurationSave({
+    useAgentConfigurationSave({
       agentConfig,
       draftValues,
       originalValues,
@@ -269,4 +269,4 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
   );
 };
 
-export default ConfigurationEditView;
+export default AgentConfigurationEditView;

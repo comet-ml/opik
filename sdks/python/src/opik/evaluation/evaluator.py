@@ -316,20 +316,20 @@ def evaluate_suite(
     dataset: dataset.Dataset,
     task: LLMTask,
     *,
-    client: Optional[opik_client.Opik] = None,
-    dataset_item_ids: Optional[List[str]] = None,
-    dataset_filter_string: Optional[str] = None,
-    experiment_name_prefix: Optional[str] = None,
-    experiment_name: Optional[str] = None,
-    project_name: Optional[str] = None,
-    experiment_config: Optional[Dict[str, Any]] = None,
-    prompts: Optional[List[base_prompt.BasePrompt]] = None,
-    experiment_tags: Optional[List[str]] = None,
-    verbose: int = 1,
-    task_threads: int = 16,
-    evaluator_model: Optional[str] = None,
-    optimization_id: Optional[str] = None,
-    experiment_type: Optional[str] = None,
+    client: Optional[opik_client.Opik],
+    dataset_item_ids: Optional[List[str]],
+    dataset_filter_string: Optional[str],
+    experiment_name_prefix: Optional[str],
+    experiment_name: Optional[str],
+    project_name: Optional[str],
+    experiment_config: Optional[Dict[str, Any]],
+    prompts: Optional[List[base_prompt.BasePrompt]],
+    experiment_tags: Optional[List[str]],
+    verbose: int,
+    task_threads: int,
+    evaluator_model: Optional[str],
+    optimization_id: Optional[str],
+    experiment_type: Optional[str],
 ) -> "suite_types.EvaluationSuiteResult":
     """
     Run evaluation on a dataset configured as an evaluation suite.
@@ -388,18 +388,11 @@ def evaluate_suite(
         dataset_filter_string=dataset_filter_string,
     )
 
-    suite_result = suite_result_constructor.build_suite_result(eval_result)
-
-    if verbose >= 1:
-        report.display_suite_results(
-            dataset.name,
-            total_time,
-            suite_result,
-            verbose=verbose,
-            experiment_url=suite_result.experiment_url,
-        )
-
-    return suite_result
+    return suite_result_constructor.build_suite_result(
+        eval_result,
+        suite_name=dataset.name,
+        total_time=total_time,
+    )
 
 
 def _evaluate_task(

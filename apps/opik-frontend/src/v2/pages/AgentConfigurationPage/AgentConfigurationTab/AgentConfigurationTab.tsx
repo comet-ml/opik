@@ -6,15 +6,17 @@ import Loader from "@/shared/Loader/Loader";
 import { buildDocsUrl } from "@/lib/utils";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import { ConfigHistoryItem } from "@/types/agent-configs";
-import ConfigurationHistoryTimeline from "./ConfigurationHistoryTimeline";
-import ConfigurationDetailView from "./ConfigurationDetailView";
-import ConfigurationEditView from "./ConfigurationEditView";
+import AgentConfigurationHistoryTimeline from "./AgentConfigurationHistoryTimeline";
+import AgentConfigurationDetailView from "./AgentConfigurationDetailView";
+import AgentConfigurationEditView from "./AgentConfigurationEditView";
 
-type ConfigurationTabProps = {
+type AgentConfigurationTabProps = {
   projectId: string;
 };
 
-const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
+const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
+  projectId,
+}) => {
   const [selectedId, setSelectedId] = useQueryParam("configId", StringParam, {
     updateType: "replaceIn",
   });
@@ -68,7 +70,7 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
   if (editItem) {
     return (
       <div className="w-[70vw]">
-        <ConfigurationEditView
+        <AgentConfigurationEditView
           item={editItem}
           projectId={projectId}
           onCancel={() => setEditItem(null)}
@@ -89,7 +91,7 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
         </div>
 
         {selectedItem ? (
-          <ConfigurationDetailView
+          <AgentConfigurationDetailView
             item={selectedItem}
             projectId={projectId}
             versions={allRows}
@@ -105,7 +107,7 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
       <div className="w-[25vw] shrink-0 pr-2">
         <p className="comet-body-s-accented ml-3 mt-6">Version history</p>
 
-        <ConfigurationHistoryTimeline
+        <AgentConfigurationHistoryTimeline
           items={allRows}
           selectedIndex={selectedIndex}
           onSelect={(index) => setSelectedId(allRows[index]?.id ?? undefined)}
@@ -118,4 +120,4 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
   );
 };
 
-export default ConfigurationTab;
+export default AgentConfigurationTab;

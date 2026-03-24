@@ -35,6 +35,7 @@ import AutomationLogsPage from "@/v2/pages/AutomationLogsPage/AutomationLogsPage
 import OnlineEvaluationPage from "@/v2/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueuesPage";
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
+import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -217,7 +218,7 @@ const evaluationSuitesRoute = createRoute({
   path: "/evaluation-suites",
   getParentRoute: () => projectScopedRoute,
   staticData: {
-    title: "Datasets",
+    title: "Evaluation suites",
   },
 });
 
@@ -329,6 +330,16 @@ const trialRoute = createRoute({
     param: "trial",
     paramValue: "trials",
   },
+});
+
+// ----------- agent configuration (project-scoped)
+const agentConfigurationRoute = createRoute({
+  path: "/agent-configuration",
+  getParentRoute: () => projectScopedRoute,
+  staticData: {
+    title: "Agent configuration",
+  },
+  component: AgentConfigurationPage,
 });
 
 // ----------- online evaluation (project-scoped)
@@ -516,6 +527,7 @@ const routeTree = rootRoute.addChildren([
             optimizationCompareRedirectRoute,
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),
+          agentConfigurationRoute,
           onlineEvaluationRoute,
           annotationQueuesRoute.addChildren([
             annotationQueuesListRoute,
