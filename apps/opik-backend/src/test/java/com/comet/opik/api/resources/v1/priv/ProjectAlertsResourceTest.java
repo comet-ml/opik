@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -28,6 +29,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -229,7 +231,7 @@ class ProjectAlertsResourceTest {
 
             var scopeConfig = AlertTriggerConfig.builder()
                     .type(AlertTriggerConfigType.SCOPE_PROJECT)
-                    .configValue(Map.of(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY, projectId.toString()))
+                    .configValue(Map.of(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY, JsonUtils.writeValueAsString(Set.of(projectId))))
                     .build();
 
             var trigger = factory.manufacturePojo(AlertTrigger.class).toBuilder()
