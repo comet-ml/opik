@@ -150,7 +150,7 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-3">
-        <p className="comet-body-xs-accented mb-1">Select environments</p>
+        <p className="comet-body-s-accented mb-1">Select environments</p>
         <p className="comet-body-xs mb-1 text-light-slate">
           This version will be deployed to the selected environment and used by
           your agent
