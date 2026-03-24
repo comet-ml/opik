@@ -30,6 +30,7 @@ import useDatasetVersionSelect, {
 } from "./useDatasetVersionSelect";
 import VersionOption from "./VersionOption";
 import { Dataset } from "@/types/datasets";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   parseDatasetVersionKey,
   formatDatasetVersionKey,
@@ -79,6 +80,10 @@ function DatasetVersionSelectBox({
   const [openDatasetId, setOpenDatasetId] = useState<string | null>(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const {
+    permissions: { canCreateDatasets },
+  } = usePermissions();
 
   const parsed = parseDatasetVersionKey(value);
   const datasetId = parsed?.datasetId ?? null;
@@ -347,17 +352,20 @@ function DatasetVersionSelectBox({
               </div>
               <SelectSeparator />
               {renderOptions()}
-
-              <Separator className="my-1" />
-              <ListAction
-                onClick={() => {
-                  setIsSelectOpen(false);
-                  setIsDialogOpen(true);
-                }}
-              >
-                <Plus className="size-3.5 shrink-0" />
-                Add new
-              </ListAction>
+              {canCreateDatasets && (
+                <>
+                  <Separator className="my-1" />
+                  <ListAction
+                    onClick={() => {
+                      setIsSelectOpen(false);
+                      setIsDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="size-3.5 shrink-0" />
+                    Add new
+                  </ListAction>
+                </>
+              )}
             </div>
           </SelectContent>
         </Select>

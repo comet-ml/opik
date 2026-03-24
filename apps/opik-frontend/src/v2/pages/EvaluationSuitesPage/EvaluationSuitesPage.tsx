@@ -191,7 +191,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canEditDatasets, canDeleteDatasets },
+    permissions: { canCreateDatasets, canEditDatasets, canDeleteDatasets },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -403,9 +403,11 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
-            Create new
-          </Button>
+          {canCreateDatasets && (
+            <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
+              Create new
+            </Button>
+          )}
         </div>
       </div>
       <DataTable
@@ -422,7 +424,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateDatasets && (
               <Button variant="link" onClick={handleNewSuiteClick}>
                 Create new
               </Button>
