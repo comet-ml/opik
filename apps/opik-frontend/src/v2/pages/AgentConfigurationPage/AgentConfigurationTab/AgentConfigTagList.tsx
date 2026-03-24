@@ -35,7 +35,12 @@ const renderTag = (tag: string, size: AgentConfigTagListSize) =>
   isBasicStage(tag) ? (
     <BasicStageTag key={tag} value={tag} size={TAG_SIZE_MAP[size].basic} />
   ) : (
-    <ColoredTag key={tag} label={tag} size={TAG_SIZE_MAP[size].colored} variant="gray" />
+    <ColoredTag
+      key={tag}
+      label={tag}
+      size={TAG_SIZE_MAP[size].colored}
+      variant="gray"
+    />
   );
 
 const AgentConfigTagList: React.FC<AgentConfigTagListProps> = ({

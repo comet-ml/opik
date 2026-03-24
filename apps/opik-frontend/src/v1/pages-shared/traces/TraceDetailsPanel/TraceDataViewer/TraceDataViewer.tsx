@@ -133,13 +133,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     if (normalizedTab === "configuration") return defaultTab;
 
     return normalizedTab;
-  }, [
-    tab,
-    defaultTab,
-    canShowMessagesTab,
-    hasSpanAgentGraph,
-    hasPrompts,
-  ]);
+  }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph, hasPrompts]);
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;

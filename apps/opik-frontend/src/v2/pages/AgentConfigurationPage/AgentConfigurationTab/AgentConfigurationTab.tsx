@@ -14,7 +14,9 @@ type AgentConfigurationTabProps = {
   projectId: string;
 };
 
-const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({ projectId }) => {
+const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
+  projectId,
+}) => {
   const [selectedId, setSelectedId] = useQueryParam("configId", StringParam, {
     updateType: "replaceIn",
   });

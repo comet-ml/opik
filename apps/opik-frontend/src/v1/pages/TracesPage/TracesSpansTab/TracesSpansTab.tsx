@@ -133,7 +133,6 @@ const parseSpanScoreName = (label: string): string => {
   return label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
 };
 
-
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
     id: "name",
@@ -978,11 +977,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
-  }, [
-    type,
-    handleThreadIdClick,
-    isGuardrailsEnabled,
-  ]);
+  }, [type, handleThreadIdClick, isGuardrailsEnabled]);
 
   const filtersColumnData = useMemo(() => {
     return [
