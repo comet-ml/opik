@@ -154,6 +154,9 @@ def test_runner_with_mask(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         rest_client_=opik_client.rest_client,
     )
+    manager.create_blueprint(
+        parameters={"EchoConfig.greeting": "default-greeting"},
+    )
     mask_id = manager.create_mask(
         parameters={"EchoConfig.greeting": custom_greeting},
     )
