@@ -75,6 +75,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
           datasetId: this.id,
           items: batch,
           batchGroupId,
+          projectName: this.projectName,
         });
         totalInserted += batch.length;
         logger.info(
