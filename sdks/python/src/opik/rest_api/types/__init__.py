@@ -513,6 +513,10 @@ from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
 from .results_number_public import ResultsNumberPublic
+from .retention_rule_page_public import RetentionRulePagePublic
+from .retention_rule_public import RetentionRulePublic
+from .retention_rule_public_level import RetentionRulePublicLevel
+from .retention_rule_public_retention import RetentionRulePublicRetention
 from .score_name import ScoreName
 from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
@@ -1100,6 +1104,10 @@ __all__ = [
     "ResponseFormatType",
     "Result",
     "ResultsNumberPublic",
+    "RetentionRulePagePublic",
+    "RetentionRulePublic",
+    "RetentionRulePublicLevel",
+    "RetentionRulePublicRetention",
     "ScoreName",
     "ScoreNamePublic",
     "ServiceTogglesConfig",

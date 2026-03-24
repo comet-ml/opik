@@ -60,6 +60,8 @@ tags:
   description: Feedback definitions related resources
 - name: Guardrails
   description: Guardrails related resources
+- name: LLM Models
+  description: LLM model registry resources
 - name: LlmProviderKey
   description: LLM Provider Key
 - name: Runners
@@ -79,6 +81,8 @@ tags:
   description: Project related resources
 - name: Prompts
   description: Prompt resources
+- name: Retention Rules
+  description: Data retention rule management
 - name: Service Toggles
   description: Service Toggles resources
 - name: Spans
@@ -3349,6 +3353,20 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/llm/models:
+    get:
+      tags:
+      - LLM Models
+      summary: Get LLM models
+      description: Get the list of supported LLM models grouped by provider
+      operationId: getLlmModels
+      responses:
+        "200":
+          description: LLM models by provider
+          content:
+            application/json:
+              schema:
+                type: string
   /v1/private/llm-provider-key/delete:
     post:
       tags:
@@ -5505,6 +5523,109 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/retention/rules:
+    get:
+      tags:
+      - Retention Rules
+      summary: Find retention rules
+      description: List retention rules for the caller's workspace. Defaults to active
+        only.
+      operationId: findRetentionRules
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: include_inactive
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        "200":
+          description: Retention rules page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionRulePage_Public"
+    post:
+      tags:
+      - Retention Rules
+      summary: Create retention rule
+      description: Create a new retention rule. Auto-deactivates any existing active
+        rule for the same scope.
+      operationId: createRetentionRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetentionRule_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/retention/rules/{ruleId}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionRule_Public"
+  /v1/private/retention/rules/{ruleId}:
+    get:
+      tags:
+      - Retention Rules
+      summary: Get retention rule by id
+      description: Get a specific retention rule by id
+      operationId: getRetentionRuleById
+      parameters:
+      - name: ruleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Retention rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionRule_Public"
+        "404":
+          description: Retention rule not found
+    delete:
+      tags:
+      - Retention Rules
+      summary: Deactivate retention rule
+      description: Soft-deactivate a retention rule (sets enabled=false). Rules are
+        never hard-deleted for audit trail.
+      operationId: deactivateRetentionRule
+      parameters:
+      - name: ruleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Retention rule not found
   /v1/private/toggles:
     get:
       tags:
@@ -16904,6 +17025,92 @@ components:
         Note: Prompt versions are immutable by design.
         Only organizational properties (such as tags etc.) can be updated.
         Core properties like template, metadata etc. cannot be modified after creation.
+    RetentionRule_Public:
+      required:
+      - retention
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        workspace_id:
+          type: string
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+        level:
+          type: string
+          description: Computed from projectId and organizationLevel
+          readOnly: true
+          enum:
+          - organization
+          - workspace
+          - project
+        retention:
+          type: string
+          enum:
+          - short_14d
+          - base_60d
+          - extended_400d
+          - unlimited
+        apply_to_past:
+          type: boolean
+        enabled:
+          type: boolean
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    RetentionRule_Write:
+      required:
+      - retention
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        organization_level:
+          type: boolean
+          description: Set to true to create an organization-level rule
+          writeOnly: true
+        retention:
+          type: string
+          enum:
+          - short_14d
+          - base_60d
+          - extended_400d
+          - unlimited
+        apply_to_past:
+          type: boolean
+    RetentionRulePage_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetentionRule_Public"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
     ServiceTogglesConfig:
       required:
       - agentConfigurationEnabled
