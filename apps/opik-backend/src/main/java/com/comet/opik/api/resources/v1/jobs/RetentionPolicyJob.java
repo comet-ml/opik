@@ -100,7 +100,11 @@ public class RetentionPolicyJob implements Managed {
                     // Phase 1: Regular sliding-window retention
                     // Phase 2: Catch-up for historical data (applyToPast rules)
                     return retentionPolicyService.executeRetentionCycle(fraction, now)
-                            .then(catchUpService.executeCatchUpCycle(now))
+                            .then(catchUpService.executeCatchUpCycle(now)
+                                    .onErrorResume(e -> {
+                                        log.warn("Catch-up cycle failed, will retry next interval", e);
+                                        return Mono.empty();
+                                    }))
                             .doFinally(__ -> lockService.unlockUsingToken(RUN_LOCK).subscribe());
                 });
     }

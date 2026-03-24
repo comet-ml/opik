@@ -195,6 +195,11 @@ public class RetentionCatchUpService {
 
         UUID upperBound = computeSlidingWindowLowerBound(rule.retention(), now);
 
+        // Cursor already past the boundary (e.g., retention period shortened) — just mark done
+        if (compareUUID(cursor, upperBound) >= 0) {
+            return markDoneAsync(rule.id()).thenReturn(0L);
+        }
+
         // Advance cursor by chunkDays, but don't exceed the sliding window boundary
         Instant cursorInstant = extractInstant(cursor);
         Instant chunkEndInstant = cursorInstant.plus(chunkDays, ChronoUnit.DAYS);

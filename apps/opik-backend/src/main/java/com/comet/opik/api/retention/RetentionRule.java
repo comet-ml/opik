@@ -34,7 +34,8 @@ public record RetentionRule(
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({}) @Schema(hidden = true) Long catchUpVelocity,
-        @JsonView({}) @Schema(hidden = true) UUID catchUpCursor,
+        @JsonView({
+                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Current position of historical data cleanup") UUID catchUpCursor,
         @JsonView({
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Whether historical catch-up is complete") Boolean catchUpDone){
 
