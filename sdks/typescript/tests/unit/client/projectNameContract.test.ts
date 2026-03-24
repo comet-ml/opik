@@ -206,6 +206,74 @@ describe("projectName contract tests", () => {
     });
   });
 
+  describe("Dataset item insert passes projectName to API", () => {
+    it("insert passes projectName to createOrUpdateDatasetItems", async () => {
+      vi.spyOn(
+        client.api.datasets,
+        "getDatasetByIdentifier"
+      ).mockImplementation(() =>
+        createMockHttpResponsePromise({
+          id: "ds-id",
+          name: "ds-name",
+        })
+      );
+
+      vi.spyOn(
+        client.api.datasets,
+        "createOrUpdateDatasetItems"
+      ).mockImplementation(() => createMockHttpResponsePromise(undefined));
+
+      vi.spyOn(
+        client.api.datasets,
+        "getDatasetItems"
+      ).mockImplementation(() =>
+        createMockHttpResponsePromise({ content: [] })
+      );
+
+      const dataset = await client.getDataset("ds-name", EXPLICIT_PROJECT);
+      await dataset.insert([{ input: "hello", output: "world" }]);
+
+      expect(
+        client.api.datasets.createOrUpdateDatasetItems
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ projectName: EXPLICIT_PROJECT })
+      );
+    });
+
+    it("insert uses client default projectName when dataset has no explicit project", async () => {
+      vi.spyOn(
+        client.api.datasets,
+        "getDatasetByIdentifier"
+      ).mockImplementation(() =>
+        createMockHttpResponsePromise({
+          id: "ds-id",
+          name: "ds-name",
+        })
+      );
+
+      vi.spyOn(
+        client.api.datasets,
+        "createOrUpdateDatasetItems"
+      ).mockImplementation(() => createMockHttpResponsePromise(undefined));
+
+      vi.spyOn(
+        client.api.datasets,
+        "getDatasetItems"
+      ).mockImplementation(() =>
+        createMockHttpResponsePromise({ content: [] })
+      );
+
+      const dataset = await client.getDataset("ds-name");
+      await dataset.insert([{ input: "hello", output: "world" }]);
+
+      expect(
+        client.api.datasets.createOrUpdateDatasetItems
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ projectName: DEFAULT_PROJECT })
+      );
+    });
+  });
+
   describe("Experiment methods pass projectName to API", () => {
     let streamExperimentsSpy: MockInstance;
 
