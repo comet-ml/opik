@@ -24,6 +24,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -255,6 +256,8 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
      * from the service start date to find the first day with actual trace data.
      * If a monthly scan also hits TOO_MANY_ROWS, the start of that month is the cursor
      * (there's clearly data there).
+     *
+     * This is a blocking loop, acceptable because rule creation is a rare admin operation.
      */
     private UUID scoutFirstDataCursor(String workspaceId, UUID serviceStartCursor, UUID cutoffId) {
         Instant serviceStart = extractInstant(serviceStartCursor);
@@ -262,7 +265,7 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
         Instant monthStart = serviceStart;
 
         while (monthStart.isBefore(cutoff)) {
-            Instant monthEnd = monthStart.plus(30, java.time.temporal.ChronoUnit.DAYS);
+            Instant monthEnd = monthStart.plus(30, ChronoUnit.DAYS);
             if (monthEnd.isAfter(cutoff)) {
                 monthEnd = cutoff;
             }
@@ -276,13 +279,11 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
                     log.info("Scouting found first data for workspace '{}' at '{}'", workspaceId, firstDay);
                     return uuidMapper.toLowerBound(firstDay);
                 }
-                // Empty month, skip ahead
                 log.debug("Scouting: no data in range ['{}', '{}') for workspace '{}'",
                         monthStart, monthEnd, workspaceId);
             } catch (Exception ex) {
                 if (isTooManyRowsException(ex)) {
-                    // Even the month scan hit the row limit — data clearly exists here
-                    log.info("Scouting hit row limit for workspace '{}' at month '{}', using as cursor start",
+                    log.info("Scouting hit row limit for workspace '{}' at '{}', using as cursor",
                             workspaceId, monthStart);
                     return uuidMapper.toLowerBound(monthStart);
                 }
@@ -292,7 +293,6 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
             monthStart = monthEnd;
         }
 
-        // No data found anywhere — use service start as fallback
         log.info("Scouting found no data for workspace '{}', using service start date", workspaceId);
         return serviceStartCursor;
     }

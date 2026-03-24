@@ -4,8 +4,8 @@
 
 ALTER TABLE retention_rules
     ADD COLUMN catch_up_velocity    BIGINT          NULL COMMENT 'Estimated spans/week at rule creation time',
-    ADD COLUMN catch_up_cursor      CHAR(36)        NULL COMMENT 'UUID v7 tracking catch-up progress (oldest to newest)',
-    ADD COLUMN catch_up_done        BOOLEAN         NOT NULL DEFAULT TRUE COMMENT 'TRUE when catch-up is complete';
+    ADD COLUMN catch_up_cursor      CHAR(36)        NULL COMMENT 'UUID v7 catch-up cursor: data before this point has been deleted. Advances oldest to newest. NULL when catch-up is complete.',
+    ADD COLUMN catch_up_done        BOOLEAN         NOT NULL DEFAULT TRUE COMMENT 'TRUE when historical catch-up is complete. Only FALSE for apply_to_past rules with pending backfill.';
 
 -- Index for catch-up queries: filters on (done, enabled, apply_to_past), range on velocity, sort by cursor
 CREATE INDEX idx_catch_up_pending
