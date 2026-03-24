@@ -250,17 +250,13 @@ class DatasetVersionResourceTest {
         return versions.content().getFirst();
     }
 
-    private void deleteDatasetItem(UUID datasetId, UUID itemId) {
+    private void deleteDatasetItem(UUID itemId) {
         // Create a delete request with a unique batchGroupId to create a new version
         var deleteRequest = DatasetItemsDelete.builder()
                 .itemIds(Set.of(itemId))
                 .batchGroupId(UUID.randomUUID())
                 .build();
         datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
-    }
-
-    private void deleteDatasetItemsByFilters(UUID datasetId, List<DatasetItemFilter> filters) {
-        datasetResourceClient.deleteDatasetItemsByFilters(datasetId, filters, API_KEY, TEST_WORKSPACE);
     }
 
     @Nested
@@ -804,8 +800,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Same item in multiple versions should have different IDs")
-        void putItems__whenSameItemInMultipleVersions__thenGenerateNewIdsPerVersion() {
+        @DisplayName("Success: Same item in multiple versions should have stable IDs")
+        void putItems__whenSameItemInMultipleVersions__thenStableIdsAcrossVersions() {
             // Given - Create dataset with items (creates version 1)
             var datasetId = createDataset(UUID.randomUUID().toString());
             var items = generateDatasetItems(2);
@@ -827,7 +823,6 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE);
             var v1Items = v1ItemsPage.content();
             var v1ItemIds = v1Items.stream().map(DatasetItem::id).toList();
-            var v1DatasetItemIds = v1Items.stream().map(DatasetItem::datasetItemId).toList();
 
             // When - Add more items (creates version 2 on top of version 1)
             createDatasetItems(datasetId, 1);
@@ -842,20 +837,15 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE);
             var v2Items = v2ItemsPage.content();
             var v2ItemIds = v2Items.stream().map(DatasetItem::id).toList();
-            var v2DatasetItemIds = v2Items.stream().map(DatasetItem::datasetItemId).toList();
 
             // Then - Verify that:
             // 1. Each version has the expected number of items
             assertThat(v1Items).hasSize(2);
             assertThat(v2Items).hasSize(3); // 2 original + 1 new
 
-            // 2. Each version snapshot gets unique IDs
-            assertThat(v1ItemIds).doesNotContainAnyElementsOf(v2ItemIds)
-                    .as("Version 1 and version 2 should have different item IDs (unique per snapshot)");
-
-            // 3. The datasetItemId field maintains the link between versions
-            assertThat(v2DatasetItemIds).containsAll(v1DatasetItemIds)
-                    .as("Version 2 should contain all datasetItemIds from version 1 (plus new ones)");
+            // 2. Items carried over from v1 to v2 have stable IDs (not regenerated per version)
+            assertThat(v2ItemIds).containsAll(v1ItemIds)
+                    .as("Version 2 should contain all item IDs from version 1 (stable across versions)");
         }
     }
 
@@ -1001,7 +991,7 @@ class DatasetVersionResourceTest {
             // Prepare changes: add 1 new item, edit 1 item, delete 1 item
             var newItem = generateDatasetItems(1).getFirst();
             var editedItem = DatasetItemEdit.builder()
-                    .id(itemToEdit.id()) // Row ID from API response
+                    .id(itemToEdit.id())
                     .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
                             "description", JsonUtils.getJsonNodeFromString("\"Modified item data\"")))
                     .build();
@@ -1207,7 +1197,7 @@ class DatasetVersionResourceTest {
             var newItem = generateDatasetItems(1).getFirst();
 
             var editedItem = DatasetItemEdit.builder()
-                    .id(itemToEdit.id()) // Row ID from API response
+                    .id(itemToEdit.id())
                     .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
                             "description", JsonUtils.getJsonNodeFromString("\"Modified item data\"")))
                     .build();
@@ -1299,7 +1289,7 @@ class DatasetVersionResourceTest {
             var itemToDelete = v1Items.getFirst();
 
             // When - Delete one item
-            deleteDatasetItem(datasetId, itemToDelete.id());
+            deleteDatasetItem(itemToDelete.id());
 
             // Then - Verify a new version was created
             var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
@@ -1339,7 +1329,7 @@ class DatasetVersionResourceTest {
 
             // When - Delete all items
             for (var item : v1Items) {
-                deleteDatasetItem(datasetId, item.id());
+                deleteDatasetItem(item.id());
             }
 
             // Then - Verify latest version has 0 items
@@ -1418,6 +1408,33 @@ class DatasetVersionResourceTest {
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1ItemsAfter).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("Error: Delete with item IDs from different datasets returns 400")
+        void deleteItems__whenItemIdsSpanMultipleDatasets__thenReturn400() {
+            var dataset1Id = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(dataset1Id, 2);
+            var dataset1Items = datasetResourceClient.getDatasetItems(
+                    dataset1Id, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            var dataset2Id = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(dataset2Id, 2);
+            var dataset2Items = datasetResourceClient.getDatasetItems(
+                    dataset2Id, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            var mixedIds = Set.of(dataset1Items.getFirst().id(), dataset2Items.getFirst().id());
+
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(mixedIds)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            try (var response = datasetResourceClient.callDeleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                "Cannot operate on items across multiple datasets"));
+            }
         }
     }
 
@@ -1683,14 +1700,14 @@ class DatasetVersionResourceTest {
 
             // Verify expected column names are present
             var columnNames = itemPage.columns().stream()
-                    .map(col -> col.name())
+                    .map(Column::name)
                     .toList();
             assertThat(columnNames).contains("input", "output");
         }
 
         @Test
-        @DisplayName("Success: GET single item by row ID (id field) works with versioning")
-        void getItemById__whenUsingRowIdFromApiResponse__thenReturnsItem() {
+        @DisplayName("Success: GET single item by stable id works with versioning")
+        void getItemById__whenUsingIdFromApiResponse__thenReturnsItem() {
             // Given - Create dataset with items (auto-creates version 1)
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 3);
@@ -1701,15 +1718,15 @@ class DatasetVersionResourceTest {
             assertThat(items).hasSize(3);
 
             var itemFromList = items.getFirst();
-            var rowId = itemFromList.id();
+            var itemId = itemFromList.id();
 
-            // When - Get single item by row ID (what the frontend does)
-            var fetchedItem = datasetResourceClient.getDatasetItem(rowId, API_KEY, TEST_WORKSPACE);
+            // When - Get single item by id (stable dataset_item_id)
+            var fetchedItem = datasetResourceClient.getDatasetItem(itemId, API_KEY, TEST_WORKSPACE);
 
             // Then - Verify item is returned correctly
             assertThat(fetchedItem).isNotNull();
-            assertThat(fetchedItem.id()).isEqualTo(rowId);
-            assertThat(fetchedItem.datasetItemId()).isEqualTo(itemFromList.datasetItemId());
+            assertThat(fetchedItem.id()).isEqualTo(itemId);
+            assertThat(fetchedItem.datasetItemId()).isEqualTo(fetchedItem.id());
             assertThat(fetchedItem.datasetId()).isEqualTo(datasetId);
         }
 
@@ -1970,7 +1987,6 @@ class DatasetVersionResourceTest {
             var v1Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
 
-            // Select 3 items to batch update (using row IDs as frontend would)
             var itemsToUpdate = Set.of(
                     v1Items.get(0).id(),
                     v1Items.get(1).id(),
@@ -2219,6 +2235,34 @@ class DatasetVersionResourceTest {
 
             assertThat(itemsWithTag3).hasSize(1);
             assertThat(itemsWithTag3.get(0).tags()).containsExactlyInAnyOrder("tag3", newTag);
+        }
+
+        @Test
+        @DisplayName("Error: Batch update with item IDs from different datasets returns 400")
+        void batchUpdate__whenItemIdsSpanMultipleDatasets__thenReturn400() {
+            var dataset1Id = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(dataset1Id, 2);
+            var dataset1Items = datasetResourceClient.getDatasetItems(
+                    dataset1Id, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            var dataset2Id = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(dataset2Id, 2);
+            var dataset2Items = datasetResourceClient.getDatasetItems(
+                    dataset2Id, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            var mixedIds = Set.of(dataset1Items.getFirst().id(), dataset2Items.getFirst().id());
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(mixedIds)
+                    .update(DatasetItemUpdate.builder().tags(Set.of("test")).build())
+                    .build();
+            try (var response = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                "Cannot operate on items across multiple datasets"));
+            }
         }
     }
 

@@ -662,7 +662,7 @@ class TraceDAOImpl implements TraceDAO {
             ), experiments_agg AS (
                 SELECT DISTINCT
                     ei.trace_id,
-                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
                     e.name AS experiment_name,
                     e.dataset_id AS experiment_dataset_id
@@ -672,6 +672,15 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN :ids
                 ) ei
+                LEFT JOIN (
+                    SELECT id, dataset_item_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (
+                        SELECT dataset_item_id FROM experiment_items
+                        WHERE workspace_id = :workspace_id AND trace_id IN :ids
+                    )
+                ) div ON div.id = ei.dataset_item_id
                 INNER JOIN (
                     SELECT id, name, dataset_id
                     FROM experiments
@@ -1189,7 +1198,7 @@ class TraceDAOImpl implements TraceDAO {
             , experiments_agg AS (
                 SELECT DISTINCT
                     ei.trace_id,
-                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
                     e.name AS experiment_name,
                     e.dataset_id AS experiment_dataset_id
@@ -1200,6 +1209,17 @@ class TraceDAOImpl implements TraceDAO {
                     <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 ) ei
+                LEFT JOIN (
+                    SELECT id, dataset_item_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (
+                        SELECT dataset_item_id FROM experiment_items
+                        WHERE workspace_id = :workspace_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                    )
+                ) div ON div.id = ei.dataset_item_id
                 INNER JOIN (
                     SELECT id, name, dataset_id
                     FROM experiments
