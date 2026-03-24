@@ -2,7 +2,6 @@ package com.comet.opik.domain.alerts;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertTriggerConfig;
-import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
@@ -13,14 +12,9 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
-
-import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
 
 @Slf4j
 @Singleton
@@ -65,30 +59,22 @@ public class AlertEventEvaluationService {
             return true;
         }
 
-        // Collect project IDs from both the alert's project_id column and the scope:project trigger config
-        Set<UUID> projectIdSet = new HashSet<>();
-        if (alert.projectId() != null) {
-            projectIdSet.add(alert.projectId());
-        }
+        // Only inspect the trigger whose eventType matches the incoming event
+        var matchingTriggerConfigs = CollectionUtils.isNotEmpty(alert.triggers())
+                ? alert.triggers().stream()
+                        .filter(t -> t.eventType() == alertEvent.eventType())
+                        .filter(t -> CollectionUtils.isNotEmpty(t.triggerConfigs()))
+                        .flatMap(t -> t.triggerConfigs().stream())
+                        .toList()
+                : List.<AlertTriggerConfig>of();
 
-        if (CollectionUtils.isNotEmpty(alert.triggers())) {
-            alert.triggers().stream()
-                    .filter(t -> CollectionUtils.isNotEmpty(t.triggerConfigs()))
-                    .flatMap(t -> t.triggerConfigs().stream())
-                    .filter(c -> c.type() == AlertTriggerConfigType.SCOPE_PROJECT)
-                    .findFirst()
-                    .map(AlertTriggerConfig::configValue)
-                    .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
-                    .filter(StringUtils::isNotBlank)
-                    .ifPresent(projectIdsString -> projectIdSet
-                            .addAll(JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class)));
-        }
+        var projectIds = AlertScopeUtils.collectProjectIds(alert.projectId(), matchingTriggerConfigs);
 
-        if (projectIdSet.isEmpty()) {
+        if (projectIds.isEmpty()) {
             // No project scope defined — alert applies to all projects
             return true;
         }
 
-        return projectIdSet.contains(alertEvent.projectId());
+        return projectIds.contains(alertEvent.projectId());
     }
 }

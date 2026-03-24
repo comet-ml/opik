@@ -1,9 +1,8 @@
-package com.comet.opik.domain.alerts;
+package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
-import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
@@ -12,6 +11,8 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.alerts.AlertScopeUtils;
+import com.comet.opik.domain.alerts.AlertWebhookSender;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -31,7 +32,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
@@ -48,7 +48,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -56,7 +55,6 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
-import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 
@@ -364,21 +362,8 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             return List.of();
         }
 
-        // Collect project IDs from both the alert's project_id column and the scope:project trigger config
-        Set<UUID> projectIdSet = new HashSet<>();
-        if (projectId != null) {
-            projectIdSet.add(projectId);
-        }
-        var projectIdsString = trigger.triggerConfigs().stream()
-                .filter(c -> c.type() == AlertTriggerConfigType.SCOPE_PROJECT)
-                .findFirst()
-                .map(AlertTriggerConfig::configValue)
-                .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
-                .orElse(null);
-        if (StringUtils.isNotBlank(projectIdsString)) {
-            projectIdSet.addAll(JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class));
-        }
-        List<UUID> projectIds = projectIdSet.isEmpty() ? null : List.copyOf(projectIdSet);
+        List<UUID> collected = AlertScopeUtils.collectProjectIds(projectId, trigger.triggerConfigs());
+        List<UUID> projectIds = collected.isEmpty() ? null : collected;
 
         // Determine which threshold config type to use based on event type
         AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {

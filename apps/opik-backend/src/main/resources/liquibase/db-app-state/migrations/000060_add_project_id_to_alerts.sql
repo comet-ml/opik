@@ -1,5 +1,6 @@
 --liquibase formatted sql
 --changeset thiagohora:000060_add_project_id_to_alerts
+--comment: Add project_id column to alerts table for project-scoped alerts
 
 ALTER TABLE alerts ADD COLUMN project_id CHAR(36) NULL;
 

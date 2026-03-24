@@ -34,9 +34,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
-import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
-
 @Path("/v1/private/projects/{projectId}/alerts")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -76,18 +73,6 @@ public class ProjectAlertsResource {
         log.info("Found alerts by project '{}', count '{}', workspaceId '{}'", projectId, alertPage.size(),
                 workspaceId);
 
-        return Response.ok(alertPage.toBuilder()
-                .content(alertPage.content().stream()
-                        .map(this::maskSecretToken)
-                        .toList())
-                .build()).build();
-    }
-
-    private Alert maskSecretToken(Alert alert) {
-        return alert.toBuilder().webhook(alert.webhook().toBuilder()
-                .secretToken(alert.webhook().secretToken() != null
-                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
-                        : null)
-                .build()).build();
+        return Response.ok(alertPage).build();
     }
 }

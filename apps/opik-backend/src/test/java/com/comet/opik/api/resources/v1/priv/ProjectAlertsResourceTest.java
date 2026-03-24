@@ -31,7 +31,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
-import static com.comet.opik.api.resources.utils.alerts.AlertAssertions.compareAlerts;
+import static com.comet.opik.api.resources.utils.alerts.AlertAssertions.assertAlerts;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -139,7 +139,7 @@ class ProjectAlertsResourceTest {
             var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            compareAlerts(expectedAlert, stored, true);
+            assertAlerts(expectedAlert, stored, true);
         }
 
         @Test
@@ -155,7 +155,7 @@ class ProjectAlertsResourceTest {
             var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            compareAlerts(expectedAlert, stored, true);
+            assertAlerts(expectedAlert, stored, true);
         }
 
         @Test
@@ -196,7 +196,7 @@ class ProjectAlertsResourceTest {
                         .filter(a -> a.id().equals(expected.id()))
                         .findFirst()
                         .orElseThrow(() -> new AssertionError("Expected alert not found in page: " + expected.id()));
-                compareAlerts(expected, actual, true);
+                assertAlerts(expected, actual, true);
             }
         }
 
@@ -273,13 +273,13 @@ class ProjectAlertsResourceTest {
                     .filter(a -> a.id().equals(scopedId))
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Scoped alert not found in global list"));
-            compareAlerts(expectedScoped, actualScoped, true);
+            assertAlerts(expectedScoped, actualScoped, true);
 
             var actualUnscoped = page.content().stream()
                     .filter(a -> a.id().equals(unscopedId))
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Unscoped alert not found in global list"));
-            compareAlerts(expectedUnscoped, actualUnscoped, true);
+            assertAlerts(expectedUnscoped, actualUnscoped, true);
         }
     }
 }

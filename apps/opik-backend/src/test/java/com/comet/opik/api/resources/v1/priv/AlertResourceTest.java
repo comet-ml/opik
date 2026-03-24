@@ -46,11 +46,11 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackBlock;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayload;
+import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
-import com.comet.opik.domain.alerts.MetricsAlertJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -93,6 +93,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -2721,7 +2722,7 @@ class AlertResourceTest {
     }
 
     private void compareAlerts(Alert expected, Alert actual, boolean decryptSecretToken) {
-        AlertAssertions.compareAlerts(expected, actual, decryptSecretToken);
+        AlertAssertions.assertAlerts(expected, actual, decryptSecretToken);
     }
 
     private Alert generateAlert() {
@@ -2735,12 +2736,11 @@ class AlertResourceTest {
 
         var triggers = alert.triggers().stream()
                 .map(trigger -> {
-                    var configs = trigger.triggerConfigs().stream()
-                            .map(config -> config.toBuilder()
-                                    .createdBy(null)
-                                    .createdAt(null)
-                                    .build())
-                            .toList();
+                    var configs = Optional.ofNullable(trigger.triggerConfigs())
+                            .map(list -> list.stream()
+                                    .map(this::sanitizeTriggerConfig)
+                                    .toList())
+                            .orElse(null);
                     // Replace TRACE_COST and TRACE_LATENCY with TRACE_ERRORS for test assertion purposes
                     // This is needed because metrics-based alerts (cost/latency) are processed by MetricsAlertJob
                     // rather than AlertJob, so we normalize them to TRACE_ERRORS for consistent test validation
@@ -2762,6 +2762,22 @@ class AlertResourceTest {
                 .projectId(null)
                 .triggers(triggers)
                 .build();
+    }
+
+    private AlertTriggerConfig sanitizeTriggerConfig(AlertTriggerConfig config) {
+        var builder = config.toBuilder()
+                .createdBy(null)
+                .createdAt(null);
+        if (config.type() == AlertTriggerConfigType.SCOPE_PROJECT
+                && config.configValue() != null
+                && config.configValue().containsKey(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY)) {
+            var fixedConfigValue = new HashMap<>(config.configValue());
+            fixedConfigValue.put(
+                    AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY,
+                    JsonUtils.writeValueAsString(List.of(factory.manufacturePojo(UUID.class))));
+            builder.configValue(fixedConfigValue);
+        }
+        return builder.build();
     }
 
     private Alert generateAlertUpdate(Alert existingAlert) {
