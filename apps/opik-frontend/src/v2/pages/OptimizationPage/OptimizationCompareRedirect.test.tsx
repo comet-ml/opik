@@ -17,8 +17,9 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector: (state: Record<string, unknown>) => unknown) =>
-    selector({ activeWorkspaceName: "default" }),
+    selector({ activeWorkspaceName: "default", activeProjectId: "proj-123" }),
   ),
+  useActiveProjectId: () => "proj-123",
 }));
 
 describe("OptimizationCompareRedirect", () => {
@@ -35,8 +36,12 @@ describe("OptimizationCompareRedirect", () => {
     render(<OptimizationCompareRedirect />);
 
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/$workspaceName/optimizations/$optimizationId",
-      params: { workspaceName: "default", optimizationId: "opt-123-abc" },
+      to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
+      params: {
+        workspaceName: "default",
+        projectId: "proj-123",
+        optimizationId: "opt-123-abc",
+      },
       replace: true,
     });
   });
@@ -61,8 +66,8 @@ describe("OptimizationCompareRedirect", () => {
     render(<OptimizationCompareRedirect />);
 
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/$workspaceName/optimizations",
-      params: { workspaceName: "default" },
+      to: "/$workspaceName/projects/$projectId/optimizations",
+      params: { workspaceName: "default", projectId: "proj-123" },
       replace: true,
     });
   });
@@ -73,8 +78,8 @@ describe("OptimizationCompareRedirect", () => {
     render(<OptimizationCompareRedirect />);
 
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/$workspaceName/optimizations",
-      params: { workspaceName: "default" },
+      to: "/$workspaceName/projects/$projectId/optimizations",
+      params: { workspaceName: "default", projectId: "proj-123" },
       replace: true,
     });
   });

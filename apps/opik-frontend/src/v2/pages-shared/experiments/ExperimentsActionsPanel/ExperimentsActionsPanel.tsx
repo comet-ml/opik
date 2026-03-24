@@ -4,7 +4,7 @@ import { Split, Trash, Tag } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Experiment } from "@/types/datasets";
 import { useNavigate } from "@tanstack/react-router";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import FilterExperimentsToCompareDialog from "@/v2/pages-shared/experiments/ExperimentsActionsPanel/FilterExperimentsToCompareDialog";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -26,6 +26,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
   const [open, setOpen] = useState<boolean | number>(false);
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const disabled = !experiments?.length;
 
   const handleCompareClick = () => {
@@ -37,10 +38,11 @@ const ExperimentsActionsPanel: React.FunctionComponent<
 
     if (hasTheSameDataset) {
       navigate({
-        to: "/$workspaceName/experiments/$datasetId/compare",
+        to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
         params: {
           datasetId: experiments[0].dataset_id,
           workspaceName,
+          projectId: activeProjectId!,
         },
         search: {
           experiments: experiments.map((e) => e.id),

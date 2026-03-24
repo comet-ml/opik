@@ -5,7 +5,7 @@ import AlertsPage from "@/v2/pages/AlertsPage/AlertsPage";
 const AlertsRouteWrapper: React.FunctionComponent = () => {
   const matchRoute = useMatchRoute();
   const isAlertsRootRoute = matchRoute({
-    to: "/$workspaceName/alerts",
+    to: "/$workspaceName/projects/$projectId/alerts",
   });
 
   if (isAlertsRootRoute) {

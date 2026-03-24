@@ -26,11 +26,16 @@ vi.mock("@/hooks/useNavigationBlocker", () => ({
 
 interface AppStoreState {
   activeWorkspaceName: string;
+  activeProjectId: string;
 }
 
 vi.mock("@/store/AppStore", () => ({
   default: (selector: (state: AppStoreState) => string) =>
-    selector({ activeWorkspaceName: "test-workspace" }),
+    selector({
+      activeWorkspaceName: "test-workspace",
+      activeProjectId: "test-project-id",
+    }),
+  useActiveProjectId: () => "test-project-id",
 }));
 
 interface MockLinkProps {
@@ -72,9 +77,10 @@ describe("ReturnToAnnotationQueueButton", () => {
 
     expect(mockLink).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: "/$workspaceName/annotation-queues/$annotationQueueId",
+        to: "/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId",
         params: {
           workspaceName: "test-workspace",
+          projectId: "test-project-id",
           annotationQueueId: "queue-123",
         },
       }),

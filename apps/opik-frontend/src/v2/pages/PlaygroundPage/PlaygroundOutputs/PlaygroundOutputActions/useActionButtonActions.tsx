@@ -25,7 +25,7 @@ import createLogPlaygroundProcessor, {
   TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
-import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 import { useUpdateOutputTraceId } from "@/store/PlaygroundStore";
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;

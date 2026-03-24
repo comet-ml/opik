@@ -7,10 +7,11 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Optimization } from "@/types/optimizations";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 
 const DatasetNameCell = (context: CellContext<unknown, unknown>) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const row = context.row.original as Optimization;
   const name = row.dataset_name ?? "-";
 
@@ -26,8 +27,12 @@ const DatasetNameCell = (context: CellContext<unknown, unknown>) => {
 
       {row.dataset_id && (
         <Link
-          to="/$workspaceName/datasets/$datasetId/items"
-          params={{ workspaceName, datasetId: row.dataset_id }}
+          to="/$workspaceName/projects/$projectId/evaluation-suites/$datasetId/items"
+          params={{
+            workspaceName,
+            projectId: activeProjectId!,
+            datasetId: row.dataset_id,
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <Button

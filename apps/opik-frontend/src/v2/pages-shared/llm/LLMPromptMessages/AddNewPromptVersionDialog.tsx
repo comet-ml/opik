@@ -5,7 +5,7 @@ import { EditorView } from "@codemirror/view";
 import { ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -84,6 +84,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   onSave,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [promptId, setPromptId] = useState<string | undefined>(prompt?.id);
   const [saveMode, setSaveMode] = useState<SaveMode>(
     prompt?.id ? "update" : "new",
@@ -245,8 +246,12 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                 Selected prompt will be updated. You can view versions in the
                 <Link
                   onClick={(event) => event.stopPropagation()}
-                  to="/$workspaceName/prompts/$promptId"
-                  params={{ workspaceName, promptId: promptId! }}
+                  to="/$workspaceName/projects/$projectId/prompts/$promptId"
+                  params={{
+                    workspaceName,
+                    projectId: activeProjectId!,
+                    promptId: promptId!,
+                  }}
                   target="_blank"
                 >
                   <Button variant="link" size="sm" className="px-1">
@@ -285,8 +290,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                   A new prompt will be created in the
                   <Link
                     onClick={(event) => event.stopPropagation()}
-                    to="/$workspaceName/prompts"
-                    params={{ workspaceName }}
+                    to="/$workspaceName/projects/$projectId/prompts"
+                    params={{ workspaceName, projectId: activeProjectId! }}
                     target="_blank"
                   >
                     <Button variant="link" size="sm" className="px-1">

@@ -22,7 +22,7 @@ import {
 import { ExperimentItemStatus } from "@/types/evaluation-suites";
 import { OnChangeFn } from "@/types/shared";
 import { traceExist, traceVisible } from "@/lib/traces";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import PassFailBadge from "./PassFailBadge";
 import AssertionResultsTable from "./AssertionResultsTable";
@@ -161,6 +161,7 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
   runSummariesByExperiment,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
 
   const itemsByExperiment = useMemo(
     () => groupBy(experimentItems, "experiment_id"),
@@ -180,8 +181,12 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
           <h4 className="comet-body-accented">Item context</h4>
           {datasetId && (
             <Link
-              to="/$workspaceName/evaluation-suites/$suiteId/items"
-              params={{ workspaceName, suiteId: datasetId }}
+              to="/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items"
+              params={{
+                workspaceName,
+                projectId: activeProjectId!,
+                suiteId: datasetId,
+              }}
               search={datasetItemId ? { row: datasetItemId } : {}}
               onClick={(e) => e.stopPropagation()}
             >

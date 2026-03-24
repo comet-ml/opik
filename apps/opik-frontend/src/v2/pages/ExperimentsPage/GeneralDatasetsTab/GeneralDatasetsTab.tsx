@@ -28,7 +28,7 @@ import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCe
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import Loader from "@/shared/Loader/Loader";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import { isEvalSuiteExperiment } from "@/lib/experiments";
 import {
@@ -128,6 +128,7 @@ export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 const GeneralDatasetsTab: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
@@ -460,17 +461,18 @@ const GeneralDatasetsTab: React.FC = () => {
   const handleRowClick = useCallback(
     (row: GroupedExperiment) => {
       navigate({
-        to: "/$workspaceName/experiments/$datasetId/compare",
+        to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
         params: {
           datasetId: row.dataset_id,
           workspaceName,
+          projectId: activeProjectId!,
         },
         search: {
           experiments: [row.id],
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const hasGroups = Boolean(groups.length);

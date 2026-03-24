@@ -12,7 +12,7 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import Loader from "@/shared/Loader/Loader";
 import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import { Button } from "@/ui/button";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_NAME_ID,
@@ -101,6 +101,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const EvaluationSection: React.FC = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const {
     permissions: { canViewExperiments, canCreateExperiments },
   } = usePermissions();
@@ -131,17 +132,18 @@ const EvaluationSection: React.FC = () => {
   const handleRowClick = useCallback(
     (row: Experiment) => {
       navigate({
-        to: "/$workspaceName/experiments/$datasetId/compare",
+        to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
         params: {
           datasetId: row.dataset_id,
           workspaceName,
+          projectId: activeProjectId!,
         },
         search: {
           experiments: [row.id],
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const resizeConfig = useMemo(
@@ -188,7 +190,10 @@ const EvaluationSection: React.FC = () => {
         }
       />
       <div className="flex justify-end pt-1">
-        <Link to="/$workspaceName/experiments" params={{ workspaceName }}>
+        <Link
+          to="/$workspaceName/projects/$projectId/experiments"
+          params={{ workspaceName, projectId: activeProjectId! }}
+        >
           <Button variant="ghost" className="flex items-center gap-1 pr-0">
             All experiments <ArrowRight className="size-4" />
           </Button>

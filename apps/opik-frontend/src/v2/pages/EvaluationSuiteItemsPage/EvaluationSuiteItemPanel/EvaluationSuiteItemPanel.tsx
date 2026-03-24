@@ -36,7 +36,7 @@ import { useEffectiveSuiteAssertions } from "@/hooks/useEffectiveSuiteAssertions
 import { useEffectiveExecutionPolicy } from "@/hooks/useEffectiveExecutionPolicy";
 import { useEffectiveItemAssertions } from "@/hooks/useEffectiveItemAssertions";
 import { useEffectiveItemExecutionPolicy } from "@/hooks/useEffectiveItemExecutionPolicy";
-import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
+import { useSuiteIdFromURL } from "@/v2/pages-shared/evaluation-suites/useSuiteIdFromURL";
 import {
   EvaluationSuiteItemFormValues,
   toFormValues,

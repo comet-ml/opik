@@ -15,7 +15,7 @@ import { Alert } from "@/types/alerts";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import useAlertsBatchDeleteMutation from "@/api/alerts/useAlertsBatchDeleteMutation";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 
 const AlertsRowActionsCell: React.FunctionComponent<
   CellContext<Alert, unknown>
@@ -25,6 +25,7 @@ const AlertsRowActionsCell: React.FunctionComponent<
   const [open, setOpen] = useState<boolean | number>(false);
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
 
   const { mutate } = useAlertsBatchDeleteMutation();
 
@@ -38,11 +39,11 @@ const AlertsRowActionsCell: React.FunctionComponent<
     if (!alert.id) return;
 
     navigate({
-      to: "/$workspaceName/alerts/$alertId",
-      params: { workspaceName, alertId: alert.id },
+      to: "/$workspaceName/projects/$projectId/alerts/$alertId",
+      params: { workspaceName, projectId: activeProjectId!, alertId: alert.id },
       search: (prev: Record<string, unknown>) => prev,
     });
-  }, [navigate, workspaceName, alert.id]);
+  }, [navigate, workspaceName, activeProjectId, alert.id]);
 
   return (
     <CellWrapper

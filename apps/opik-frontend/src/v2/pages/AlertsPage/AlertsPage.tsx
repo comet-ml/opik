@@ -18,7 +18,7 @@ import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { Button } from "@/ui/button";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Alert, ALERT_TYPE } from "@/types/alerts";
 import {
   COLUMN_ID_ID,
@@ -177,6 +177,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 const AlertsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
 
   const [search = "", setSearch] = useQueryParam("alerts_search", StringParam, {
@@ -316,11 +317,11 @@ const AlertsPage: React.FunctionComponent = () => {
 
   const handleNewAlertClick = useCallback(() => {
     navigate({
-      to: "/$workspaceName/alerts/new",
-      params: { workspaceName },
+      to: "/$workspaceName/projects/$projectId/alerts/new",
+      params: { workspaceName, projectId: activeProjectId! },
       search: (prev: Record<string, unknown>) => prev,
     });
-  }, [navigate, workspaceName]);
+  }, [navigate, workspaceName, activeProjectId]);
 
   if (isPending) {
     return <Loader />;

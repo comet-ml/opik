@@ -5,7 +5,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import usePromptsList from "@/api/prompts/usePromptsList";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { formatNumberInK } from "@/lib/utils";
 import { Card, CardContent, CardHeader } from "@/ui/card";
 import { FileTerminal, FlaskConical, LayoutGrid } from "lucide-react";
@@ -15,6 +15,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 
 const WorkspaceStatisticSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
 
   const {
@@ -89,9 +90,10 @@ const WorkspaceStatisticSection = () => {
           className="min-w-52 flex-1 cursor-pointer hover:shadow-md"
           onClick={() =>
             navigate({
-              to: "/$workspaceName/experiments",
+              to: "/$workspaceName/projects/$projectId/experiments",
               params: {
                 workspaceName,
+                projectId: activeProjectId!,
               },
             })
           }
@@ -118,9 +120,10 @@ const WorkspaceStatisticSection = () => {
         className="min-w-52 flex-1 cursor-pointer hover:shadow-md"
         onClick={() =>
           navigate({
-            to: "/$workspaceName/prompts",
+            to: "/$workspaceName/projects/$projectId/prompts",
             params: {
               workspaceName,
+              projectId: activeProjectId!,
             },
           })
         }

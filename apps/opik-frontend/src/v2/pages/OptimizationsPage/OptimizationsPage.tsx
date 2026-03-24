@@ -22,7 +22,7 @@ import {
   OptimizationTotalCostCell,
 } from "@/v2/pages/OptimizationsPage/OptimizationMetricCells";
 import Loader from "@/shared/Loader/Loader";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { Filter } from "@/types/filters";
@@ -161,6 +161,7 @@ const actionsColumn = generateActionsColumDef({
 
 const OptimizationsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -295,14 +296,15 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (row: Optimization) => {
       navigate({
-        to: "/$workspaceName/optimizations/$optimizationId",
+        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
         params: {
           optimizationId: row.id,
           workspaceName,
+          projectId: activeProjectId!,
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const handleNewOptimizationClick = useCallback(() => {

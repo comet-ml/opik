@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/ui/dialog";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
-import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import { useDatasetIdFromCompareExperimentsURL } from "@/v2/pages/CompareExperimentsPage/useDatasetIdFromCompareExperimentsURL";
 import Loader from "@/shared/Loader/Loader";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";

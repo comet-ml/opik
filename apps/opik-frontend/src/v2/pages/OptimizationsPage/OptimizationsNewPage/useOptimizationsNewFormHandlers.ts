@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useFormContext } from "react-hook-form";
 
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
@@ -31,6 +31,7 @@ const getBreadcrumbTitle = (name: string) =>
 
 export const useOptimizationsNewFormHandlers = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
   const { setLastSessionRunId } = useLastOptimizationRun();
   const { mutateAsync: createOptimization } = useOptimizationCreateMutation();
@@ -224,9 +225,10 @@ export const useOptimizationsNewFormHandlers = () => {
       if (result?.id) {
         setLastSessionRunId(result.id);
         navigate({
-          to: "/$workspaceName/optimizations/$optimizationId",
+          to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
           params: {
             workspaceName,
+            projectId: activeProjectId!,
             optimizationId: result.id,
           },
         });
@@ -240,15 +242,16 @@ export const useOptimizationsNewFormHandlers = () => {
     createOptimization,
     navigate,
     workspaceName,
+    activeProjectId,
     setLastSessionRunId,
   ]);
 
   const handleCancel = useCallback(() => {
     navigate({
-      to: "/$workspaceName/optimizations",
-      params: { workspaceName },
+      to: "/$workspaceName/projects/$projectId/optimizations",
+      params: { workspaceName, projectId: activeProjectId! },
     });
-  }, [navigate, workspaceName]);
+  }, [navigate, workspaceName, activeProjectId]);
 
   const handleNameChange = useCallback(
     (value: string) => {

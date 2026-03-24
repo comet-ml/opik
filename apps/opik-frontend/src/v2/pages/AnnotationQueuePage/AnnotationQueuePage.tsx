@@ -5,7 +5,7 @@ import sortBy from "lodash/sortBy";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import { useAnnotationQueueIdFromURL } from "@/hooks/useAnnotationQueueIdFromURL";
+import { useAnnotationQueueIdFromURL } from "@/v2/pages/AnnotationQueuePage/useAnnotationQueueIdFromURL";
 import DateTag from "@/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import NavigationTag from "@/shared/NavigationTag";
