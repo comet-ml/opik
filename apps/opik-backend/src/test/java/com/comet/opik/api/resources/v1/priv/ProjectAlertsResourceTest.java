@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
+import static com.comet.opik.api.resources.utils.alerts.AlertAssertions.compareAlerts;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -134,9 +135,11 @@ class ProjectAlertsResourceTest {
                     HttpStatus.SC_CREATED);
             assertThat(alertId).isNotNull();
 
+            var expectedAlert = alert.toBuilder().id(alertId).build();
             var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
-            assertThat(stored.projectId()).isEqualTo(projectId);
+
+            compareAlerts(expectedAlert, stored, true);
         }
 
         @Test
@@ -144,12 +147,15 @@ class ProjectAlertsResourceTest {
         void createAlert__whenNoProjectId__thenProjectIdIsNull() {
             var mock = prepareMockWorkspace();
 
-            var alertId = alertResourceClient.createAlert(generateAlertWithoutProjectScope(),
-                    mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alert = generateAlertWithoutProjectScope();
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
 
+            var expectedAlert = alert.toBuilder().id(alertId).build();
             var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
-            assertThat(stored.projectId()).isNull();
+
+            compareAlerts(expectedAlert, stored, true);
         }
 
         @Test
@@ -161,10 +167,13 @@ class ProjectAlertsResourceTest {
             var otherProjectId = projectResourceClient.createProject(
                     "other-project-" + UUID.randomUUID(), mock.getLeft(), mock.getRight());
 
-            var scopedIds = IntStream.range(0, 3)
-                    .mapToObj(i -> alertResourceClient.createAlert(
-                            generateAlertWithoutProjectScope().toBuilder().projectId(projectId).build(),
-                            mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED))
+            var scopedAlerts = IntStream.range(0, 3)
+                    .mapToObj(i -> {
+                        var a = generateAlertWithoutProjectScope().toBuilder().projectId(projectId).build();
+                        var id = alertResourceClient.createAlert(a, mock.getLeft(), mock.getRight(),
+                                HttpStatus.SC_CREATED);
+                        return a.toBuilder().id(id).build();
+                    })
                     .toList();
 
             // Alerts scoped to a different project — must NOT appear in results
@@ -181,9 +190,14 @@ class ProjectAlertsResourceTest {
 
             assertThat(page.total()).isEqualTo(3);
             assertThat(page.content()).hasSize(3);
-            assertThat(page.content()).extracting(Alert::projectId).containsOnly(projectId);
-            assertThat(page.content().stream().map(Alert::id).toList())
-                    .containsExactlyInAnyOrderElementsOf(scopedIds);
+
+            for (var expected : scopedAlerts) {
+                var actual = page.content().stream()
+                        .filter(a -> a.id().equals(expected.id()))
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("Expected alert not found in page: " + expected.id()));
+                compareAlerts(expected, actual, true);
+            }
         }
 
         @Test
@@ -242,19 +256,30 @@ class ProjectAlertsResourceTest {
             var projectId = projectResourceClient.createProject(
                     "test-project-" + UUID.randomUUID(), mock.getLeft(), mock.getRight());
 
+            var scopedAlert = generateAlertWithoutProjectScope().toBuilder().projectId(projectId).build();
             var scopedId = alertResourceClient.createAlert(
-                    generateAlertWithoutProjectScope().toBuilder().projectId(projectId).build(),
-                    mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+                    scopedAlert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var expectedScoped = scopedAlert.toBuilder().id(scopedId).build();
 
+            var unscopedAlert = generateAlertWithoutProjectScope();
             var unscopedId = alertResourceClient.createAlert(
-                    generateAlertWithoutProjectScope(),
-                    mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+                    unscopedAlert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var expectedUnscoped = unscopedAlert.toBuilder().id(unscopedId).build();
 
             var page = alertResourceClient.findAlerts(mock.getLeft(), mock.getRight(),
                     1, 10, null, null, HttpStatus.SC_OK);
 
-            var returnedIds = page.content().stream().map(Alert::id).toList();
-            assertThat(returnedIds).contains(scopedId, unscopedId);
+            var actualScoped = page.content().stream()
+                    .filter(a -> a.id().equals(scopedId))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Scoped alert not found in global list"));
+            compareAlerts(expectedScoped, actualScoped, true);
+
+            var actualUnscoped = page.content().stream()
+                    .filter(a -> a.id().equals(unscopedId))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Unscoped alert not found in global list"));
+            compareAlerts(expectedUnscoped, actualUnscoped, true);
         }
     }
 }

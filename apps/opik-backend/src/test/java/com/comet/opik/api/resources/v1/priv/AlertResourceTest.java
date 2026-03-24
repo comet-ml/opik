@@ -34,6 +34,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.alerts.AlertAssertions;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -115,8 +116,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
-import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
-import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.utils.NumberUtils.formatDecimal;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -137,20 +136,6 @@ class AlertResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
-
-    private static final String[] ALERT_IGNORED_FIELDS = new String[]{
-            "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "workspaceId", "webhook.name", "webhook.secretToken", "webhook.createdAt",
-            "webhook.lastUpdatedAt",
-            "webhook.createdBy", "webhook.lastUpdatedBy", "triggers"};
-
-    private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
-            "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "triggerConfigs"};
-
-    private static final String[] TRIGGER_CONFIG_IGNORED_FIELDS = new String[]{
-            "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy"};
 
     public static final String[] PROMPT_TRIGGER_PAYLOAD_IGNORED_FIELDS = {"latestVersion", "requestedVersion",
             "template", "metadata", "changeDescription", "type", "createdAt", "lastUpdatedAt", "versionCount"};
@@ -2736,59 +2721,7 @@ class AlertResourceTest {
     }
 
     private void compareAlerts(Alert expected, Alert actual, boolean decryptSecretToken) {
-        var preparedExpected = prepareForComparison(expected, true);
-        var preparedActual = prepareForComparison(actual, false);
-
-        assertThat(preparedActual)
-                .usingRecursiveComparison()
-                .ignoringFields(ALERT_IGNORED_FIELDS)
-                .ignoringCollectionOrder()
-                .isEqualTo(preparedExpected);
-
-        assertThat(preparedActual.triggers())
-                .usingRecursiveComparison()
-                .ignoringFields(TRIGGER_IGNORED_FIELDS)
-                .ignoringCollectionOrder()
-                .isEqualTo(preparedExpected.triggers());
-
-        if (decryptSecretToken) {
-            // We should decrypt secretToken in order to compare, since it encrypts on deserialization
-            assertThat(decrypt(actual.webhook().secretToken())).isEqualTo(maskApiKey(expected.webhook().secretToken()));
-        } else {
-            assertThat(actual.webhook().secretToken()).isEqualTo(expected.webhook().secretToken());
-        }
-
-        for (int i = 0; i < preparedActual.triggers().size(); i++) {
-            var actualTrigger = preparedActual.triggers().get(i);
-            var expectedTrigger = preparedExpected.triggers().get(i);
-
-            assertThat(actualTrigger.triggerConfigs())
-                    .usingRecursiveComparison()
-                    .ignoringFields(TRIGGER_CONFIG_IGNORED_FIELDS)
-                    .ignoringCollectionOrder()
-                    .isEqualTo(expectedTrigger.triggerConfigs());
-        }
-    }
-
-    private Alert prepareForComparison(Alert alert, boolean isExpected) {
-        var sortedTriggers = alert.triggers().stream()
-                .map(trigger -> {
-                    var configs = trigger.triggerConfigs().stream()
-                            .map(config -> config.toBuilder()
-                                    .alertTriggerId(isExpected ? trigger.id() : config.alertTriggerId())
-                                    .build())
-                            .toList();
-                    return trigger.toBuilder()
-                            .triggerConfigs(configs)
-                            .alertId(isExpected ? alert.id() : trigger.alertId())
-                            .build();
-                })
-                .sorted(Comparator.comparing(AlertTrigger::id))
-                .toList();
-
-        return alert.toBuilder()
-                .triggers(sortedTriggers)
-                .build();
+        AlertAssertions.compareAlerts(expected, actual, decryptSecretToken);
     }
 
     private Alert generateAlert() {
