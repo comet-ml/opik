@@ -68,6 +68,7 @@ export enum ManagementPermissionsNames {
   DASHBOARD_VIEW = "dashboard_view",
   DASHBOARD_CREATE = "dashboard_create",
   DASHBOARD_EDIT = "dashboard_edit",
+  DASHBOARD_DELETE = "dashboard_delete",
   DATASET_VIEW = "dataset_view",
   DATASET_EDIT = "dataset_edit",
   DATASET_DELETE = "dataset_delete",

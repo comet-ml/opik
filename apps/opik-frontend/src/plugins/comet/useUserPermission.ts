@@ -118,6 +118,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canDeleteDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_DELETE),
+    [checkNullablePermission],
+  );
+
   const canDeleteProjects = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.PROJECT_DELETE),
     [checkNullablePermission],
@@ -215,6 +220,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canViewDashboards,
     canCreateDashboards,
     canEditDashboards,
+    canDeleteDashboards,
     canViewDatasets,
     canEditDatasets,
     canDeleteDatasets,
