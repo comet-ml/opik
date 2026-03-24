@@ -595,6 +595,16 @@ retention:
   workspaceBatchSize: ${RETENTION_WORKSPACE_BATCH_SIZE:-1000}
   slidingWindowDays: ${RETENTION_SLIDING_WINDOW_DAYS:-3}
   lockTimeoutSeconds: ${RETENTION_LOCK_TIMEOUT_SECONDS:-1800}
+  catchUp:
+    enabled: ${RETENTION_CATCH_UP_ENABLED:-true}
+    smallThreshold: ${RETENTION_CATCH_UP_SMALL_THRESHOLD:-10000}
+    largeThreshold: ${RETENTION_CATCH_UP_LARGE_THRESHOLD:-100000}
+    smallBatchSize: ${RETENTION_CATCH_UP_SMALL_BATCH_SIZE:-200}
+    mediumBatchSize: ${RETENTION_CATCH_UP_MEDIUM_BATCH_SIZE:-10}
+    mediumChunkDays: ${RETENTION_CATCH_UP_MEDIUM_CHUNK_DAYS:-7}
+    largeChunkDays: ${RETENTION_CATCH_UP_LARGE_CHUNK_DAYS:-2}
+    defaultVelocity: ${RETENTION_CATCH_UP_DEFAULT_VELOCITY:-1000000}
+    serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
 
 # LLM providers client configuration
 llmProviderClient:

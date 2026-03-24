@@ -1,9 +1,13 @@
 package com.comet.opik.domain.retention;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.retention.RetentionLevel;
+import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.api.retention.RetentionRule;
 import com.comet.opik.api.retention.RetentionRule.RetentionRulePage;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanDAO;
+import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -12,10 +16,13 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,14 +44,35 @@ public interface RetentionRuleService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class RetentionRuleServiceImpl implements RetentionRuleService {
 
     private static final String RULE_NOT_FOUND = "Retention rule not found";
 
-    private final @NonNull TransactionTemplate template;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull IdGenerator idGenerator;
+    /** ClickHouse error code for TOO_MANY_ROWS (max_rows_to_read exceeded). */
+    private static final int CH_TOO_MANY_ROWS = 158;
+
+    private final TransactionTemplate template;
+    private final Provider<RequestContext> requestContext;
+    private final IdGenerator idGenerator;
+    private final SpanDAO spanDAO;
+    private final InstantToUUIDMapper uuidMapper;
+    private final RetentionConfig config;
+
+    @Inject
+    RetentionRuleServiceImpl(
+            @NonNull TransactionTemplate template,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull IdGenerator idGenerator,
+            @NonNull SpanDAO spanDAO,
+            @NonNull InstantToUUIDMapper uuidMapper,
+            @NonNull @Config("retention") RetentionConfig config) {
+        this.template = template;
+        this.requestContext = requestContext;
+        this.idGenerator = idGenerator;
+        this.spanDAO = spanDAO;
+        this.uuidMapper = uuidMapper;
+        this.config = config;
+    }
 
     @Override
     public RetentionRule create(@NonNull RetentionRule rule) {
@@ -55,15 +83,35 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
         IdGenerator.validateVersion(id, "retention_rule");
 
         RetentionLevel level = inferLevel(rule);
+        boolean applyToPast = Optional.ofNullable(rule.applyToPast()).orElse(true);
+
+        // Estimate velocity and set up catch-up if applyToPast
+        final Long catchUpVelocity;
+        final UUID catchUpCursor;
+        final boolean catchUpDone;
+
+        if (applyToPast && config.getCatchUp().isEnabled() && rule.retention() != RetentionPeriod.UNLIMITED) {
+            var estimation = estimateVelocity(workspaceId, rule.retention(), Instant.now());
+            catchUpVelocity = estimation.velocity();
+            catchUpCursor = estimation.startCursor();
+            catchUpDone = false;
+        } else {
+            catchUpVelocity = null;
+            catchUpCursor = null;
+            catchUpDone = true;
+        }
 
         var newRule = rule.toBuilder()
                 .id(id)
                 .workspaceId(workspaceId)
                 .level(level)
-                .applyToPast(Optional.ofNullable(rule.applyToPast()).orElse(true))
+                .applyToPast(applyToPast)
                 .enabled(true)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
+                .catchUpVelocity(catchUpVelocity)
+                .catchUpCursor(catchUpCursor)
+                .catchUpDone(catchUpDone)
                 .build();
 
         return template.inTransaction(WRITE, handle -> {
@@ -76,8 +124,8 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
                     userName);
 
             dao.save(workspaceId, newRule);
-            log.info("Created retention rule '{}' (level={}) for project '{}' in workspace '{}'",
-                    id, level, newRule.projectId(), workspaceId);
+            log.info("Created retention rule '{}' (level='{}') for project '{}' in workspace '{}', velocity='{}'",
+                    id, level, newRule.projectId(), workspaceId, catchUpVelocity);
 
             return dao.findById(id, workspaceId).orElseThrow();
         });
@@ -148,6 +196,56 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
 
             return null;
         });
+    }
+
+    private record VelocityEstimation(long velocity, UUID startCursor) {
+    }
+
+    /**
+     * Estimate the span velocity for a workspace and compute the catch-up start cursor.
+     * If the estimation query fails with TOO_MANY_ROWS, uses a configurable default velocity.
+     */
+    private VelocityEstimation estimateVelocity(String workspaceId, RetentionPeriod period, Instant now) {
+        var catchUpConfig = config.getCatchUp();
+
+        // Compute the cutoff for this retention period (start-of-day UTC)
+        Instant cutoff = LocalDate.ofInstant(now, ZoneOffset.UTC)
+                .minusDays(period.getDays())
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant();
+        UUID cutoffId = uuidMapper.toLowerBound(cutoff);
+
+        // Start cursor at service launch date
+        UUID startCursor = uuidMapper.toLowerBound(
+                catchUpConfig.getServiceStartDate().atStartOfDay(ZoneOffset.UTC).toInstant());
+
+        try {
+            Long velocity = spanDAO.estimateVelocityForRetention(workspaceId, cutoffId).block();
+            long vel = velocity != null ? velocity : 0L;
+            log.info("Retention velocity estimated for workspace '{}': '{}' spans/week", workspaceId, vel);
+            return new VelocityEstimation(vel, startCursor);
+        } catch (Exception e) {
+            if (isTooManyRowsException(e)) {
+                log.info("Retention velocity estimation hit row limit for workspace '{}', using default '{}'",
+                        workspaceId, catchUpConfig.getDefaultVelocity());
+                return new VelocityEstimation(catchUpConfig.getDefaultVelocity(), startCursor);
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Check if the exception chain contains a ClickHouse TOO_MANY_ROWS error (code 158).
+     */
+    private static boolean isTooManyRowsException(Throwable t) {
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null && msg.contains("Code: " + CH_TOO_MANY_ROWS)) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
     }
 
     /**

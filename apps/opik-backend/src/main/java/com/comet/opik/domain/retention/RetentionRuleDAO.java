@@ -29,9 +29,12 @@ import java.util.UUID;
 interface RetentionRuleDAO {
 
     @SqlUpdate("INSERT INTO retention_rules" +
-            " (id, workspace_id, project_id, level, retention, apply_to_past, enabled, created_by, last_updated_by)" +
+            " (id, workspace_id, project_id, level, retention, apply_to_past, enabled, created_by, last_updated_by," +
+            " catch_up_velocity, catch_up_cursor, catch_up_done)" +
             " VALUES" +
-            " (:rule.id, :workspaceId, :rule.projectId, :rule.level, :rule.retention, :rule.applyToPast, :rule.enabled, :rule.createdBy, :rule.lastUpdatedBy)")
+            " (:rule.id, :workspaceId, :rule.projectId, :rule.level, :rule.retention, :rule.applyToPast, :rule.enabled,"
+            +
+            " :rule.createdBy, :rule.lastUpdatedBy, :rule.catchUpVelocity, :rule.catchUpCursor, :rule.catchUpDone)")
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("rule") RetentionRule rule);
 
     @SqlQuery("SELECT * FROM retention_rules WHERE id = :id AND workspace_id = :workspaceId")
@@ -78,4 +81,50 @@ interface RetentionRuleDAO {
     @UseStringTemplateEngine
     List<RetentionRule> findActiveWorkspaceRulesInRange(@Bind("rangeStart") String rangeStart,
             @Bind("rangeEnd") String rangeEnd);
+
+    // -- Catch-up queries --
+
+    /** Find small workspaces needing catch-up (velocity below threshold), ordered by cursor (most outdated first). */
+    @SqlQuery("SELECT * FROM retention_rules" +
+            " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
+            " AND catch_up_velocity \\< :smallThreshold" +
+            " ORDER BY catch_up_cursor ASC" +
+            " LIMIT :limit")
+    @UseStringTemplateEngine
+    List<RetentionRule> findSmallCatchUpRules(@Bind("smallThreshold") long smallThreshold,
+            @Bind("limit") int limit);
+
+    /** Find medium workspaces needing catch-up (velocity between thresholds), ordered by cursor. */
+    @SqlQuery("SELECT * FROM retention_rules" +
+            " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
+            " AND catch_up_velocity >= :smallThreshold AND catch_up_velocity \\< :largeThreshold" +
+            " ORDER BY catch_up_cursor ASC" +
+            " LIMIT :limit")
+    @UseStringTemplateEngine
+    List<RetentionRule> findMediumCatchUpRules(@Bind("smallThreshold") long smallThreshold,
+            @Bind("largeThreshold") long largeThreshold,
+            @Bind("limit") int limit);
+
+    /** Find the single most outdated large workspace needing catch-up (velocity at or above threshold). */
+    @SqlQuery("SELECT * FROM retention_rules" +
+            " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
+            " AND catch_up_velocity >= :largeThreshold" +
+            " ORDER BY catch_up_cursor ASC" +
+            " LIMIT 1")
+    @UseStringTemplateEngine
+    Optional<RetentionRule> findLargeCatchUpRule(@Bind("largeThreshold") long largeThreshold);
+
+    /** Advance the catch-up cursor for a rule. */
+    @SqlUpdate("UPDATE retention_rules SET catch_up_cursor = :cursor WHERE id = :id")
+    void updateCatchUpCursor(@Bind("id") UUID id, @Bind("cursor") UUID cursor);
+
+    /** Mark catch-up as done for a rule. */
+    @SqlUpdate("UPDATE retention_rules SET catch_up_done = true, catch_up_cursor = NULL WHERE id = :id")
+    void markCatchUpDone(@Bind("id") UUID id);
+
+    /** Batch-mark catch-up as done for multiple rules. */
+    @SqlUpdate("UPDATE retention_rules SET catch_up_done = true, catch_up_cursor = NULL" +
+            " WHERE id IN (<ids>)")
+    @UseStringTemplateEngine
+    void markCatchUpDoneBatch(@Define("ids") String ids);
 }

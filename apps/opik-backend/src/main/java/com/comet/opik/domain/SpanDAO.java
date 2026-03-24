@@ -1193,6 +1193,18 @@ public class SpanDAO {
             ;
             """;
 
+    private static final String ESTIMATE_VELOCITY_FOR_RETENTION = """
+            SELECT
+                if(count() = 0, 0,
+                    uniq(id) / greatest(dateDiff('week', UUIDv7ToDateTime(toUUID(min(id))), now()), 1)
+                ) AS spans_per_week
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND trace_id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
             SELECT
                 DISTINCT id, workspace_id
@@ -2804,6 +2816,31 @@ public class SpanDAO {
 
                     return Mono.from(statement.execute())
                             .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    /**
+     * Estimate the span velocity (spans/week) for a workspace in the catch-up range.
+     * Uses ClickHouse UUIDv7ToDateTime to derive the time range from the oldest span.
+     *
+     * @return estimated spans/week, or empty Mono if no data exists
+     * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
+     */
+    public Mono<Long> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
+        log.info("Estimating retention velocity for workspace '{}'", workspaceId);
+
+        var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
+                "retention_estimate_velocity", workspaceId, "");
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("cutoff_id", cutoffId);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono
+                                    .from(result.map((row, metadata) -> row.get("spans_per_week", Long.class))));
                 });
     }
 
