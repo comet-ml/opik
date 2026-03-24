@@ -19,7 +19,7 @@ jobs:
         working-directory: sdks/typescript
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.2.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v4.2.0
