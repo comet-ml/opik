@@ -378,6 +378,7 @@ public class FilterQueryBuilder {
             ImmutableMap.<OptimizationField, String>builder()
                     .put(OptimizationField.METADATA, METADATA_ANALYTICS_DB)
                     .put(OptimizationField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(OptimizationField.PROJECT_ID, PROJECT_ID_DB)
                     .put(OptimizationField.STATUS, STATUS_DB)
                     .build());
 
@@ -712,6 +713,7 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.OPTIMIZATION, Set.of(
                 OptimizationField.METADATA,
                 OptimizationField.DATASET_ID,
+                OptimizationField.PROJECT_ID,
                 OptimizationField.STATUS));
 
         map.put(FilterStrategy.DASHBOARD, Set.of(
