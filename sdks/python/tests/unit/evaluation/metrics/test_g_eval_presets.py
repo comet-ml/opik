@@ -1,7 +1,5 @@
 import pytest
 
-pytestmark = pytest.mark.requires_litellm
-
 from opik.evaluation.metrics.llm_judges.g_eval.metric import GEVAL_PRESETS, GEvalPreset
 from opik.evaluation.metrics.llm_judges.g_eval_presets import (
     AgentTaskCompletionJudge,
