@@ -39,7 +39,15 @@ public final class AlertScopeUtils {
                 .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
                 .orElse(null);
         if (StringUtils.isNotBlank(projectIdsString)) {
-            return JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class);
+            if (projectIdsString.startsWith("[")) {
+                return JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class);
+            }
+            // Legacy fallback: bare UUID or comma-separated UUIDs
+            return List.of(projectIdsString.split(",")).stream()
+                    .map(String::trim)
+                    .filter(StringUtils::isNotBlank)
+                    .map(UUID::fromString)
+                    .toList();
         }
         return List.of();
     }
