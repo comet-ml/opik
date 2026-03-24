@@ -16,6 +16,7 @@ import { useDashboardLifecycle } from "@/v1/pages-shared/dashboards/hooks/useDas
 import DashboardAutoSaveIndicator from "@/v1/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
 import ShareDashboardButton from "@/v1/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import DashboardContent from "@/v1/pages-shared/dashboards/DashboardContent/DashboardContent";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DashboardPage: React.FunctionComponent = () => {
   const { dashboardId } = useParams({ strict: false }) as {
@@ -23,9 +24,14 @@ const DashboardPage: React.FunctionComponent = () => {
   };
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
+  const {
+    permissions: { canEditDashboards },
+  } = usePermissions();
+
   const { dashboard, isPending, saveStatus } = useDashboardLifecycle({
     dashboardId,
     enabled: Boolean(dashboardId),
+    readOnly: !canEditDashboards,
   });
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
