@@ -11,6 +11,7 @@ from .experiment_item_reference import ExperimentItemReference
 from .feedback_score import FeedbackScore
 from .guardrails_validation import GuardrailsValidation
 from .json_list_string import JsonListString
+from .trace_source import TraceSource
 from .trace_visibility_mode import TraceVisibilityMode
 
 
@@ -65,6 +66,7 @@ class Trace(UniversalBaseModel):
     """
 
     experiment: typing.Optional[ExperimentItemReference] = None
+    source: typing.Optional[TraceSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
