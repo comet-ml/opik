@@ -48,23 +48,27 @@ public interface DashboardDAO {
                 description = COALESCE(:dashboard.description, description),
                 config = COALESCE(:dashboard.config, config),
                 type = COALESCE(:dashboard.type, type),
-                scope = COALESCE(:dashboard.scope, scope),
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
             """)
+    @UseStringTemplateEngine
     @AllowUnusedBindings
     int update(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
             @BindMethods("dashboard") DashboardUpdate dashboard,
             @Bind("slug") String slug,
-            @Bind("lastUpdatedBy") String lastUpdatedBy);
+            @Bind("lastUpdatedBy") String lastUpdatedBy,
+            @Define("scope") @Bind("scope") String scope);
 
-    @SqlQuery("SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId")
-    Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
-
-    @SqlQuery("SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId AND scope = :scope")
-    Optional<Dashboard> findByIdAndScope(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
-            @Bind("scope") String scope);
+    @SqlQuery("""
+            SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Define("scope") @Bind("scope") String scope);
 
     @SqlQuery("""
             SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND name = :name
@@ -78,8 +82,14 @@ public interface DashboardDAO {
     @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND slug = :slug")
     Optional<Dashboard> findBySlug(@Bind("workspaceId") String workspaceId, @Bind("slug") String slug);
 
-    @SqlUpdate("DELETE FROM dashboards WHERE id = :id AND workspace_id = :workspaceId")
-    int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+    @SqlUpdate("""
+            DELETE FROM dashboards WHERE id = :id AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Define("scope") @Bind("scope") String scope);
 
     @SqlQuery("SELECT COUNT(id) FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
@@ -119,32 +129,12 @@ public interface DashboardDAO {
     @SqlQuery("SELECT COUNT(*) FROM dashboards WHERE workspace_id = :workspaceId AND slug LIKE concat(:slugPrefix, '%')")
     long countBySlugPrefix(@Bind("workspaceId") String workspaceId, @Bind("slugPrefix") String slugPrefix);
 
-    @SqlUpdate("DELETE FROM dashboards WHERE id IN (<ids>) AND workspace_id = :workspaceId")
-    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
-
-    @SqlUpdate("DELETE FROM dashboards WHERE id = :id AND workspace_id = :workspaceId AND scope = :scope")
-    int deleteByScope(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
-            @Bind("scope") String scope);
-
-    @SqlUpdate("DELETE FROM dashboards WHERE id IN (<ids>) AND workspace_id = :workspaceId AND scope = :scope")
-    void deleteByScope(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId,
-            @Bind("scope") String scope);
-
     @SqlUpdate("""
-            UPDATE dashboards SET
-                name = COALESCE(:dashboard.name, name),
-                slug = COALESCE(:slug, slug),
-                description = COALESCE(:dashboard.description, description),
-                config = COALESCE(:dashboard.config, config),
-                type = COALESCE(:dashboard.type, type),
-                last_updated_by = :lastUpdatedBy
-            WHERE id = :id AND workspace_id = :workspaceId AND scope = :scope
+            DELETE FROM dashboards WHERE id IN (<ids>) AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
             """)
+    @UseStringTemplateEngine
     @AllowUnusedBindings
-    int updateByScope(@Bind("workspaceId") String workspaceId,
-            @Bind("id") UUID id,
-            @BindMethods("dashboard") DashboardUpdate dashboard,
-            @Bind("slug") String slug,
-            @Bind("lastUpdatedBy") String lastUpdatedBy,
-            @Bind("scope") String scope);
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId,
+            @Define("scope") @Bind("scope") String scope);
 }

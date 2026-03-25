@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
+import com.comet.opik.api.resources.utils.resources.DashboardTestDataFactory;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
@@ -678,7 +679,7 @@ class DashboardsResourceTest {
             var dashboard = dashboardResourceClient.createPartialDashboard().build();
             var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
-            var newConfig = dashboardResourceClient.createValidConfig();
+            var newConfig = DashboardTestDataFactory.createValidConfig();
             var update = DashboardUpdate.builder()
                     .config(newConfig)
                     .build();

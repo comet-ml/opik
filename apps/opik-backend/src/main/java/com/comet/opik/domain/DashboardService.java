@@ -40,20 +40,20 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(DashboardServiceImpl.class)
 public interface DashboardService {
 
-    Dashboard create(@NonNull Dashboard dashboard, @NonNull DashboardScope scope);
+    Dashboard create(Dashboard dashboard, DashboardScope scope);
 
-    Dashboard findById(@NonNull UUID id, @NonNull DashboardScope scope);
+    Dashboard findById(UUID id, DashboardScope scope);
 
     Dashboard findByName(String name, UUID projectId);
 
     DashboardPage find(int page, int size, String name, UUID projectId, List<SortingField> sortingFields,
-            List<? extends Filter> filters, @NonNull DashboardScope scope);
+            List<? extends Filter> filters, DashboardScope scope);
 
-    Dashboard update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate, @NonNull DashboardScope scope);
+    Dashboard update(UUID id, DashboardUpdate dashboardUpdate, DashboardScope scope);
 
-    void delete(@NonNull UUID id, @NonNull DashboardScope scope);
+    void delete(UUID id, DashboardScope scope);
 
-    void delete(@NonNull Set<UUID> ids, @NonNull DashboardScope scope);
+    void delete(Set<UUID> ids, DashboardScope scope);
 }
 
 @Slf4j
@@ -118,7 +118,7 @@ class DashboardServiceImpl implements DashboardService {
                 dao.save(newDashboard, workspaceId);
                 log.info("Created dashboard with id '{}', name '{}', slug '{}', scope '{}' in workspace '{}'",
                         dashboardId, dashboard.name(), uniqueSlug, scope, workspaceId);
-                return dao.findById(dashboardId, workspaceId).orElseThrow();
+                return dao.findById(dashboardId, workspaceId, scope.getValue()).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
@@ -137,7 +137,7 @@ class DashboardServiceImpl implements DashboardService {
         log.info("Finding dashboard by id '{}' with scope '{}' in workspace '{}'", id, scope, workspaceId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DashboardDAO.class);
-            return dao.findByIdAndScope(id, workspaceId, scope.getValue())
+            return dao.findById(id, workspaceId, scope.getValue())
                     .orElseThrow(() -> {
                         log.warn("Dashboard not found with id '{}' and scope '{}' in workspace '{}'",
                                 id, scope, workspaceId);
@@ -226,7 +226,7 @@ class DashboardServiceImpl implements DashboardService {
             }
 
             try {
-                int result = dao.updateByScope(workspaceId, id, dashboardUpdate, newSlug, userName, scope.getValue());
+                int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName, scope.getValue());
 
                 if (result == 0) {
                     log.warn("Dashboard not found with id '{}' and scope '{}' in workspace '{}'",
@@ -236,7 +236,7 @@ class DashboardServiceImpl implements DashboardService {
 
                 log.info("Updated dashboard with id '{}' and scope '{}' in workspace '{}'", id, scope, workspaceId);
 
-                return dao.findById(id, workspaceId).orElseThrow();
+                return dao.findById(id, workspaceId, scope.getValue()).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
@@ -257,7 +257,7 @@ class DashboardServiceImpl implements DashboardService {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
-            int result = dao.deleteByScope(id, workspaceId, scope.getValue());
+            int result = dao.delete(id, workspaceId, scope.getValue());
 
             if (result == 0) {
                 log.info("Dashboard with id '{}' and scope '{}' not found in workspace '{}', nothing to delete",
@@ -283,7 +283,7 @@ class DashboardServiceImpl implements DashboardService {
                 ids.size(), scope, workspaceId);
 
         template.inTransaction(WRITE, handle -> {
-            handle.attach(DashboardDAO.class).deleteByScope(ids, workspaceId, scope.getValue());
+            handle.attach(DashboardDAO.class).delete(ids, workspaceId, scope.getValue());
             return null;
         });
 
