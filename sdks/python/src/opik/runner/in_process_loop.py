@@ -11,6 +11,7 @@ import time
 from typing import Callable, Optional
 
 from ..api_objects.agent_config.context import agent_config_context
+from .. import id_helpers
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
@@ -165,12 +166,10 @@ class InProcessRunnerLoop:
         func: Callable = entry["func"]
         mask_id = job.mask_id
 
-        if job.trace_id:
-            opik_args = inputs.setdefault("opik_args", {})
-            trace_args = opik_args.setdefault("trace", {})
-            trace_args["id"] = job.trace_id
-
-        trace_id = job.trace_id
+        trace_id = id_helpers.generate_id()
+        opik_args = inputs.setdefault("opik_args", {})
+        trace_args = opik_args.setdefault("trace", {})
+        trace_args["id"] = trace_id
 
         try:
             timeout = job.timeout
