@@ -20,6 +20,7 @@ export const AlertPublic: core.serialization.ObjectSchema<serializers.AlertPubli
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     });
 
 export declare namespace AlertPublic {
@@ -35,5 +36,6 @@ export declare namespace AlertPublic {
         created_by?: string | null;
         last_updated_at?: string | null;
         last_updated_by?: string | null;
+        project_id?: string | null;
     }
 }
