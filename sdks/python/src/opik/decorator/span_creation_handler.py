@@ -123,6 +123,7 @@ def create_span_respecting_context(
             tags=start_span_arguments.tags,
             project_name=start_span_arguments.project_name,
             thread_id=start_span_arguments.thread_id,
+            source=source if source is not None else "sdk",
         )
 
         current_span_data = arguments_helpers.create_span_data(
