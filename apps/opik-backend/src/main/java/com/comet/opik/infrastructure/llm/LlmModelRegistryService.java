@@ -54,7 +54,6 @@ public class LlmModelRegistryService {
     // visible for testing
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config) {
         this.config = config;
-        this.registry = load();
 
         if (isRemoteConfigured()) {
             this.httpClient = HttpClient.newBuilder()
@@ -65,15 +64,20 @@ public class LlmModelRegistryService {
                 t.setDaemon(true);
                 return t;
             });
+        } else {
+            this.httpClient = null;
+            this.scheduler = null;
+        }
+
+        this.registry = load();
+
+        if (scheduler != null) {
             scheduler.scheduleAtFixedRate(this::reload,
                     config.getRefreshIntervalSeconds(),
                     config.getRefreshIntervalSeconds(),
                     TimeUnit.SECONDS);
             log.info("LLM model registry remote refresh scheduled every '{}' seconds from '{}'",
                     config.getRefreshIntervalSeconds(), config.getRemoteUrl());
-        } else {
-            this.httpClient = null;
-            this.scheduler = null;
         }
     }
 
