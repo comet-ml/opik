@@ -40,6 +40,7 @@ export enum RESOURCE_TYPE {
 export const RESOURCE_MAP = {
   [RESOURCE_TYPE.project]: {
     url: "/$workspaceName/projects/$projectId/traces",
+    projectUrl: "/$workspaceName/projects/$projectId/home",
     icon: LayoutGrid,
     param: "projectId",
     deleted: "Deleted project",
@@ -135,12 +136,14 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.traces]: {
     url: "/$workspaceName/projects/$projectId/traces",
+    projectUrl: "/$workspaceName/projects/$projectId/logs",
     icon: ListTree,
     param: "projectId",
     deleted: "Deleted traces",
     label: "traces",
     color: "var(--color-green)",
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.traces },
+    projectSearch: { logsType: LOGS_TYPE.traces },
   },
   [RESOURCE_TYPE.evaluationSuite]: {
     url: "/$workspaceName/evaluation-suites/$suiteId/items",
@@ -154,12 +157,14 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.threads]: {
     url: "/$workspaceName/projects/$projectId/traces",
+    projectUrl: "/$workspaceName/projects/$projectId/logs",
     icon: MessagesSquare,
     param: "projectId",
     deleted: "Deleted threads",
     label: "threads",
     color: "var(--thread-icon-text)",
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.threads },
+    projectSearch: { logsType: LOGS_TYPE.threads },
   },
 };
 
@@ -220,7 +225,14 @@ function ResourceLink({
     <Link
       to={url}
       params={linkParams}
-      search={{ ...("search" in props ? props.search : {}), ...search }}
+      search={{
+        ...(useProjectUrl && "projectSearch" in props
+          ? props.projectSearch
+          : "search" in props
+            ? props.search
+            : {}),
+        ...search,
+      }}
       onClick={(event) => event.stopPropagation()}
       className="max-w-full"
       disabled={deleted}

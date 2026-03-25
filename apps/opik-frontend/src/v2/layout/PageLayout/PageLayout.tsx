@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Outlet } from "@tanstack/react-router";
 import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
-import { cn } from "@/lib/utils";
+import SidebarToggle from "@/v2/layout/TopBar/SidebarToggle";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
 import WelcomeWizardDialog from "@/v2/pages-shared/WelcomeWizard/WelcomeWizardDialog";
@@ -10,14 +10,14 @@ import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus"
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import QuickstartDialog from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-
-const MOBILE_BREAKPOINT = 1024; // lg breakpoint in Tailwind
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 const PageLayout = () => {
-  const [storedExpanded = true, setStoredExpanded] =
-    useLocalStorageState<boolean>("sidebar-expanded");
+  const [storedPinned = true, setStoredPinned] =
+    useLocalStorageState<boolean>("sidebar-pinned");
   const [bannerHeight, setBannerHeight] = useState(0);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
 
   const welcomeWizardEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
@@ -29,12 +29,17 @@ const PageLayout = () => {
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
 
-  // Force sidebar collapsed on mobile, use stored preference on desktop
-  const isMobile =
-    typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
-  const expanded = isMobile ? false : storedExpanded;
+  const isMobile = useMediaQuery("(max-width: 1023px)");
+  const pinned = isMobile ? false : storedPinned;
 
-  // Show welcome wizard if enabled and not completed
+  const handleTogglePin = useCallback(() => {
+    setStoredPinned((prev) => !prev);
+  }, [setStoredPinned]);
+
+  const handleToggleOverlay = useCallback(() => {
+    setOverlayOpen((prev) => !prev);
+  }, []);
+
   useEffect(() => {
     if (
       welcomeWizardEnabled &&
@@ -42,7 +47,6 @@ const PageLayout = () => {
       !wizardStatus.completed &&
       !showWelcomeWizard
     ) {
-      // Show wizard after a small delay for better UX
       const timer = setTimeout(() => {
         setShowWelcomeWizard(true);
       }, 500);
@@ -57,15 +61,11 @@ const PageLayout = () => {
 
   return (
     <section
-      className={cn(
-        "relative flex h-screen min-h-0 w-screen min-w-0 flex-col",
-        {
-          "comet-expanded": expanded,
-        },
-      )}
+      className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col"
       style={
         {
           "--banner-height": `${bannerHeight}px`,
+          "--sidebar-width": pinned ? "240px" : "0px",
         } as React.CSSProperties
       }
     >
@@ -73,21 +73,33 @@ const PageLayout = () => {
         <RetentionBanner onChangeHeight={setBannerHeight} />
       ) : null}
 
-      <SideBar expanded={expanded} setExpanded={setStoredExpanded} />
+      <SideBar
+        pinned={pinned}
+        onTogglePin={handleTogglePin}
+        overlayOpen={overlayOpen}
+        onOverlayOpenChange={setOverlayOpen}
+        isMobile={isMobile}
+      />
       <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
-        <TopBar />
+        <TopBar
+          startSlot={
+            !pinned ? (
+              <SidebarToggle
+                onToggle={isMobile ? handleToggleOverlay : handleTogglePin}
+              />
+            ) : undefined
+          }
+        />
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
           <Outlet />
         </section>
       </main>
 
-      {/* Welcome Wizard Dialog */}
       <WelcomeWizardDialog
         open={showWelcomeWizard}
         onClose={handleCloseWelcomeWizard}
       />
 
-      {/* Quickstart Dialog */}
       <QuickstartDialog />
     </section>
   );

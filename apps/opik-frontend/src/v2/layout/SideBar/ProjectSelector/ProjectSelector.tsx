@@ -4,48 +4,52 @@ import {
   ChevronDown,
   MoreHorizontal,
   Pencil,
+  Settings2,
   Trash,
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { SearchInput } from "@/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useActiveProject from "@/hooks/useActiveProject";
+import {
+  setActiveProject,
+  useActiveProjectInitializer,
+} from "@/hooks/useActiveProjectInitializer";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { Spinner } from "@/ui/spinner";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useProjectById from "@/api/projects/useProjectById";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { Project } from "@/types/projects";
+import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
 
-interface ProjectSelectorProps {
-  expanded: boolean;
-}
+const ProjectSelector: React.FC = () => {
+  useActiveProjectInitializer();
 
-const ProjectSelector: React.FC<ProjectSelectorProps> = ({ expanded }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { setActiveProjectId } = useActiveProject();
   const activeProjectId = useActiveProjectId();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
-  const { data: activeProject } = useProjectById(
+  const { data: activeProject, isPending: isProjectPending } = useProjectById(
     { projectId: activeProjectId! },
     { enabled: !!activeProjectId },
   );
+
+  const isLoading = !!activeProjectId && isProjectPending;
 
   const { data: projectsData } = useProjectsList(
     {
@@ -59,41 +63,48 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({ expanded }) => {
 
   const handleSelect = useCallback(
     (projectId: string) => {
-      setActiveProjectId(projectId);
+      setActiveProject(workspaceName, projectId);
       setOpen(false);
       setSearch("");
       navigate({
-        to: "/$workspaceName/projects/$projectId/traces",
+        to: "/$workspaceName/projects/$projectId/home",
         params: { workspaceName, projectId },
       });
     },
-    [setActiveProjectId, navigate, workspaceName],
-  );
-
-  const projectName = activeProject?.name ?? "Select project";
-
-  const trigger = expanded ? (
-    <PopoverTrigger asChild>
-      <button className="flex w-full items-center gap-1 rounded-md bg-muted px-2 py-1">
-        <span className="comet-body-s-accented flex-1 truncate text-left text-foreground">
-          {projectName}
-        </span>
-        <ChevronDown className="size-3.5 shrink-0 text-muted-slate" />
-      </button>
-    </PopoverTrigger>
-  ) : (
-    <TooltipWrapper content={projectName} side="right">
-      <PopoverTrigger asChild>
-        <button className="flex w-9 items-center justify-center rounded-md bg-muted py-1">
-          <ChevronDown className="size-3.5 text-muted-slate" />
-        </button>
-      </PopoverTrigger>
-    </TooltipWrapper>
+    [navigate, workspaceName],
   );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {trigger}
+      <PopoverAnchor asChild>
+        <div className="flex w-full items-center gap-1">
+          {isLoading ? (
+            <span className="flex flex-1 items-center gap-2 rounded-md px-2 py-1">
+              <Spinner size="xs" />
+              <span className="comet-body-s text-muted-slate">Loading…</span>
+            </span>
+          ) : activeProject ? (
+            <Link
+              to="/$workspaceName/projects/$projectId/home"
+              params={{ workspaceName, projectId: activeProject.id }}
+              activeOptions={{ exact: true }}
+              className="comet-body-s-accented flex-1 truncate rounded-md px-2 py-1 text-left text-foreground hover:bg-primary-foreground data-[status=active]:bg-muted"
+            >
+              {activeProject.name}
+            </Link>
+          ) : (
+            <span className="comet-body-s-accented flex-1 truncate rounded-md px-2 py-1 text-left text-muted-slate">
+              Select project
+            </span>
+          )}
+          <button
+            className="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-primary-foreground"
+            onClick={() => setOpen((prev) => !prev)}
+          >
+            <ChevronDown className="size-3.5 text-muted-slate" />
+          </button>
+        </div>
+      </PopoverAnchor>
       <PopoverContent
         align="start"
         side="bottom"
@@ -105,6 +116,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({ expanded }) => {
             Projects
           </span>
         </div>
+        <Separator className="my-1" />
         <div className="px-1">
           <SearchInput
             searchText={search}
@@ -121,6 +133,17 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({ expanded }) => {
               project={project}
               isSelected={project.id === activeProjectId}
               onSelect={handleSelect}
+              onDelete={
+                project.id === activeProjectId
+                  ? () => {
+                      setActiveProject(workspaceName, null);
+                      navigate({
+                        to: "/$workspaceName/projects",
+                        params: { workspaceName },
+                      });
+                    }
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -137,6 +160,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({ expanded }) => {
             });
           }}
         >
+          <Settings2 className="mr-2 size-3.5" />
           Manage projects
         </Button>
       </PopoverContent>
@@ -148,12 +172,14 @@ interface ProjectItemProps {
   project: Project;
   isSelected: boolean;
   onSelect: (projectId: string) => void;
+  onDelete?: () => void;
 }
 
 const ProjectItem: React.FC<ProjectItemProps> = ({
   project,
   isSelected,
   onSelect,
+  onDelete,
 }) => {
   const resetKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean | number>(false);
@@ -165,10 +191,12 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
   const { mutate: deleteProject } = useProjectDeleteMutation();
 
   const handleDelete = useCallback(() => {
-    deleteProject({ projectId: project.id });
-  }, [project.id, deleteProject]);
+    deleteProject({ projectId: project.id }, { onSuccess: () => onDelete?.() });
+  }, [project.id, deleteProject, onDelete]);
 
-  const hasActions = canCreateProjects || canDeleteProjects;
+  const isDefaultProject = project.name === DEFAULT_PROJECT_NAME;
+  const canDelete = canDeleteProjects && !isDefaultProject;
+  const hasActions = canCreateProjects || canDelete;
 
   return (
     <>
@@ -228,7 +256,8 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
                   Edit
                 </DropdownMenuItem>
               )}
-              {canDeleteProjects && (
+              {canCreateProjects && canDelete && <DropdownMenuSeparator />}
+              {canDelete && (
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={(e) => {

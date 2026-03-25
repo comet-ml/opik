@@ -13,7 +13,6 @@ import { Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import {
   LOGS_TYPE,
-  PROJECT_TAB,
   SPANS_COLORS_MAP,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
@@ -232,10 +231,9 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             <div className="comet-title-xs">{title} -</div>
             <TooltipWrapper content="View all spans of this trace in table view">
               <Link
-                to={`/$workspaceName/projects/$projectId/traces`}
+                to={`/$workspaceName/projects/$projectId/logs`}
                 params={{ workspaceName, projectId }}
                 search={{
-                  tab: PROJECT_TAB.logs,
                   logsType: LOGS_TYPE.spans,
                   spans_filters: combinedSpansFilters,
                 }}
