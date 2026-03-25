@@ -495,15 +495,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             ), thread_costs AS (
-                SELECT tf.id AS thread_id, sum(s.total_estimated_cost) AS cost
-                FROM threads_filtered tf
-                JOIN traces_final tr ON tr.thread_id = tf.id
-                    AND tr.workspace_id = :workspace_id
-                    AND tr.project_id = :project_id
-                JOIN spans FINAL s ON s.trace_id = tr.id
-                    AND s.workspace_id = :workspace_id
-                    AND s.project_id = :project_id
-                GROUP BY tf.id
+                SELECT tr.thread_id AS thread_id, sum(s.total_estimated_cost) AS cost
+                FROM (
+                    SELECT trace_id, total_estimated_cost
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                ) s
+                JOIN traces_final tr ON s.trace_id = tr.id
+                GROUP BY tr.thread_id
             )
             SELECT
                 COUNTIf(tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_count,

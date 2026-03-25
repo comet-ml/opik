@@ -268,102 +268,35 @@ class KpiCardsResourceTest {
         }
     }
 
-    // === Entity Creation Helpers ===
+    // === Entity Creation Helper ===
 
     private void createEntities(EntityType entityType, String projectName,
             List<Long> durationsMs, List<Boolean> hasErrors, List<Double> costs) {
-        switch (entityType) {
-            case TRACES -> createTracesWithCostSpans(projectName, durationsMs, hasErrors, costs);
-            case SPANS -> createStandaloneSpans(projectName, durationsMs, hasErrors, costs);
-            case THREADS -> createThreads(projectName, durationsMs, costs);
-        }
-    }
-
-    private void createTracesWithCostSpans(String projectName,
-            List<Long> durationsMs, List<Boolean> hasErrors, List<Double> costs) {
-        List<Trace> traces = new ArrayList<>();
-        List<Span> spans = new ArrayList<>();
-
-        for (int i = 0; i < durationsMs.size(); i++) {
-            Instant now = Instant.now();
-
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(idGenerator.generateId(now))
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(durationsMs.get(i), ChronoUnit.MILLIS))
-                    .errorInfo(hasErrors.get(i) ? buildErrorInfo() : null)
-                    .threadId(null)
-                    .build();
-            traces.add(trace);
-
-            spans.add(factory.manufacturePojo(Span.class).toBuilder()
-                    .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
-                    .traceId(trace.id())
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(50, ChronoUnit.MILLIS))
-                    .totalEstimatedCost(BigDecimal.valueOf(costs.get(i)))
-                    .errorInfo(null)
-                    .build());
-        }
-
-        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-    }
-
-    private void createStandaloneSpans(String projectName,
-            List<Long> durationsMs, List<Boolean> hasErrors, List<Double> costs) {
-        List<Trace> traces = new ArrayList<>();
-        List<Span> spans = new ArrayList<>();
-
-        for (int i = 0; i < durationsMs.size(); i++) {
-            Instant now = Instant.now();
-
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(idGenerator.generateId(now))
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(durationsMs.get(i), ChronoUnit.MILLIS))
-                    .errorInfo(null)
-                    .threadId(null)
-                    .build();
-            traces.add(trace);
-
-            spans.add(factory.manufacturePojo(Span.class).toBuilder()
-                    .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
-                    .traceId(trace.id())
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(durationsMs.get(i), ChronoUnit.MILLIS))
-                    .errorInfo(hasErrors.get(i) ? buildErrorInfo() : null)
-                    .totalEstimatedCost(BigDecimal.valueOf(costs.get(i)))
-                    .build());
-        }
-
-        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-    }
-
-    private void createThreads(String projectName,
-            List<Long> durationsMs, List<Double> costs) {
         List<String> threadIds = new ArrayList<>();
         List<Trace> traces = new ArrayList<>();
         List<Span> spans = new ArrayList<>();
 
         for (int i = 0; i < durationsMs.size(); i++) {
-            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
-            threadIds.add(threadId);
-
             Instant now = Instant.now();
+
+            String threadId = entityType == EntityType.THREADS
+                    ? RandomStringUtils.secure().nextAlphabetic(10)
+                    : null;
+            if (threadId != null) {
+                threadIds.add(threadId);
+            }
+
+            boolean traceHasError = entityType == EntityType.TRACES && hasErrors.get(i);
+            boolean spanHasError = entityType == EntityType.SPANS && hasErrors.get(i);
+            long spanDurationMs = entityType == EntityType.SPANS ? durationsMs.get(i) : 50;
 
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .id(idGenerator.generateId(now))
                     .projectName(projectName)
-                    .threadId(threadId)
                     .startTime(now)
                     .endTime(now.plus(durationsMs.get(i), ChronoUnit.MILLIS))
-                    .errorInfo(null)
+                    .errorInfo(traceHasError ? buildErrorInfo() : null)
+                    .threadId(threadId)
                     .build();
             traces.add(trace);
 
@@ -372,17 +305,19 @@ class KpiCardsResourceTest {
                     .traceId(trace.id())
                     .projectName(projectName)
                     .startTime(now)
-                    .endTime(now.plus(50, ChronoUnit.MILLIS))
+                    .endTime(now.plus(spanDurationMs, ChronoUnit.MILLIS))
                     .totalEstimatedCost(BigDecimal.valueOf(costs.get(i)))
-                    .errorInfo(null)
+                    .errorInfo(spanHasError ? buildErrorInfo() : null)
                     .build());
         }
 
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        Mono.delay(Duration.ofMillis(100)).block();
-        traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+        if (entityType == EntityType.THREADS) {
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+        }
     }
 
     private ErrorInfo buildErrorInfo() {
