@@ -928,8 +928,10 @@ public class FilterQueryBuilder {
 
         if (filter.field().getType() == FieldType.ENUM_LEGACY) {
             return filter.field().legacyFallbackDbValue(filter.value())
-                    .map(fallback -> template.formatted(dbField, i, fallback))
-                    .orElse("(%s)".formatted(template.formatted(dbField, i)));
+                    .map(fallback -> "(%s)".formatted(template.formatted(dbField, i, fallback)))
+                    .orElseGet(() -> "(%s)".formatted(
+                            ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM).formatted(dbField,
+                                    i)));
         }
 
         return "(%s)".formatted(template.formatted(dbField, i));
