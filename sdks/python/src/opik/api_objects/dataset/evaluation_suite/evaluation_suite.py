@@ -107,6 +107,11 @@ class EvaluationSuite:
         """The underlying dataset storing suite items."""
         return self._dataset
 
+    @property
+    def project_name(self) -> Optional[str]:
+        """The project name associated with the evaluation suite."""
+        return self._dataset.project_name
+
     def get_tags(self) -> List[str]:
         """
         Get the tags for the suite.
@@ -437,6 +442,7 @@ class EvaluationSuite:
             >>> print(f"Suite passed: {result.passed}")
             >>> print(f"Items passed: {result.items_passed}/{result.items_total}")
         """
+        project_name = project_name or self.project_name
         return self.__internal_api__run_optimization_suite__(
             task=task,
             experiment_name_prefix=experiment_name_prefix,

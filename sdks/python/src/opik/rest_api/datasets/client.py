@@ -287,7 +287,9 @@ class DatasetsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Create/update dataset items based on dataset item id
+        Create/update dataset items based on dataset item id.
+        Each item's 'id' field is the stable identifier and upsert key.
+        Provide it to update an existing item, or omit it to create a new one.
 
         Parameters
         ----------
@@ -976,6 +978,10 @@ class DatasetsClient:
         data : JsonNode
 
         id : typing.Optional[str]
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
 
         trace_id : typing.Optional[str]
 
@@ -1705,7 +1711,9 @@ class AsyncDatasetsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Create/update dataset items based on dataset item id
+        Create/update dataset items based on dataset item id.
+        Each item's 'id' field is the stable identifier and upsert key.
+        Provide it to update an existing item, or omit it to create a new one.
 
         Parameters
         ----------
@@ -2451,6 +2459,10 @@ class AsyncDatasetsClient:
         data : JsonNode
 
         id : typing.Optional[str]
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
 
         trace_id : typing.Optional[str]
 

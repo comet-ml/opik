@@ -84,7 +84,7 @@ import {
 } from "./helpers";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { useConfirmAction } from "@/shared/ConfirmDialog/useConfirmAction";
-import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { LOGS_TYPE } from "@/constants/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
@@ -376,13 +376,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
               key="Go to project"
               onClick={() => {
                 navigate({
-                  to: "/$workspaceName/projects/$projectId/traces",
+                  to: "/$workspaceName/projects/$projectId/logs",
                   params: {
                     projectId: formProjectIds[0],
                     workspaceName,
                   },
                   search: {
-                    tab: PROJECT_TAB.logs,
                     logsType: {
                       [EVALUATORS_RULE_SCOPE.trace]: LOGS_TYPE.traces,
                       [EVALUATORS_RULE_SCOPE.thread]: LOGS_TYPE.threads,

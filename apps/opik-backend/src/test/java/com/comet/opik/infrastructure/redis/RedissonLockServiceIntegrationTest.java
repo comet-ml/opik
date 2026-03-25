@@ -248,6 +248,51 @@ class RedissonLockServiceIntegrationTest {
     }
 
     @Test
+    void testBestEffortLock_HoldUntilExpiry(LockService lockService) {
+        LockService.Lock lock = new LockService.Lock(UUID.randomUUID(), "best-effort-hold-until-expiry");
+        List<String> results = new ArrayList<>();
+
+        Mono<String> mainAction = Mono.fromCallable(() -> {
+            results.add("first-action");
+            return "first-result";
+        });
+
+        Mono<Void> fallbackAction = Mono.fromCallable(() -> {
+            results.add("fallback-action");
+            return null;
+        });
+
+        // Acquire lock with holdUntilExpiry=true, short TTL (1s)
+        StepVerifier.create(lockService.bestEffortLock(
+                lock,
+                mainAction,
+                fallbackAction,
+                Duration.ofSeconds(1), // lock TTL
+                Duration.ofMillis(200), // lock wait time
+                true // holdUntilExpiry
+        ))
+                .expectNext("first-result")
+                .verifyComplete();
+
+        // Action completed, but lock should still be held — second attempt should hit fallback
+        Mono<String> secondAction = Mono.fromCallable(() -> {
+            results.add("second-action");
+            return "second-result";
+        });
+
+        StepVerifier.create(lockService.bestEffortLock(
+                lock,
+                secondAction,
+                fallbackAction,
+                Duration.ofSeconds(1),
+                Duration.ofMillis(200)))
+                .verifyComplete();
+
+        // First action ran, second hit fallback because lock was still held
+        assertThat(results).containsExactly("first-action", "fallback-action");
+    }
+
+    @Test
     void testBestEffortLock_FallbackWhenLockUnavailable(LockService lockService, RedissonReactiveClient redisClient) {
         // Create two locks with the same key to simulate contention
         LockService.Lock lock = new LockService.Lock(UUID.randomUUID(), "best-effort-lock-fallback");

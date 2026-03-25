@@ -40,35 +40,16 @@ export class AgentConfig {
     return project.id;
   }
 
-  private async createBlueprintInternal(
-    options: CreateBlueprintOptions,
-    type: OpikApi.AgentBlueprintWriteType
-  ): Promise<string> {
-    const id = generateId();
-    const values: OpikApi.AgentConfigValueWrite[] = Object.entries(
-      options.values
-    )
+  private buildBlueprintValues(
+    values: Record<string, SupportedValue>
+  ): OpikApi.AgentConfigValueWrite[] {
+    return Object.entries(values)
       .filter(([, v]) => v != null)
       .map(([key, value]) => ({
         key,
         value: serializeValue(value),
         type: inferBackendType(value),
       }));
-
-    logger.debug(`Creating ${type} for project "${this.projectName}"`);
-
-    await this.opik.api.agentConfigs.createAgentConfig({
-      id,
-      projectName: this.projectName,
-      blueprint: {
-        id,
-        type,
-        description: options.description,
-        values,
-      },
-    });
-
-    return id;
   }
 
   /**
@@ -78,10 +59,47 @@ export class AgentConfig {
    * creates a new version; use `getBlueprint()` to retrieve the latest.
    */
   async createBlueprint(options: CreateBlueprintOptions): Promise<Blueprint> {
-    const id = await this.createBlueprintInternal(
-      options,
-      OpikApi.AgentBlueprintWriteType.Blueprint
-    );
+    const id = generateId();
+    const values = this.buildBlueprintValues(options.values);
+
+    logger.debug(`Creating blueprint for project "${this.projectName}"`);
+
+    await this.opik.api.agentConfigs.createAgentConfig({
+      id,
+      projectName: this.projectName,
+      blueprint: {
+        id,
+        type: OpikApi.AgentBlueprintWriteType.Blueprint,
+        description: options.description,
+        values,
+      },
+    });
+
+    const response = await this.opik.api.agentConfigs.getBlueprintById(id);
+    return await Blueprint.fromApiResponse(response, this.opik);
+  }
+
+  /**
+   * Adds a new blueprint version to an existing config and returns it.
+   *
+   * Use this when a config already exists and you want to publish updated values.
+   */
+  async updateBlueprint(options: CreateBlueprintOptions): Promise<Blueprint> {
+    const id = generateId();
+    const values = this.buildBlueprintValues(options.values);
+
+    logger.debug(`Updating blueprint for project "${this.projectName}"`);
+
+    await this.opik.api.agentConfigs.updateAgentConfig({
+      projectName: this.projectName,
+      blueprint: {
+        id,
+        type: OpikApi.AgentBlueprintWriteType.Blueprint,
+        description: options.description,
+        values,
+      },
+    });
+
     const response = await this.opik.api.agentConfigs.getBlueprintById(id);
     return await Blueprint.fromApiResponse(response, this.opik);
   }
@@ -90,14 +108,30 @@ export class AgentConfig {
    * Creates a mask — a partial override of config values used for A/B testing
    * or feature flags. Returns the mask ID.
    *
-   * Pass the returned mask ID to `getBlueprint({ maskId })` to retrieve a
-   * blueprint with the mask's values overlaid on top of the base blueprint.
+   * Masks always sit on top of an existing config. Pass the returned mask ID
+   * to `getBlueprint({ maskId })` to retrieve a blueprint with the mask's
+   * values overlaid on top of the base blueprint.
+   *
+   * @throws OpikApiError with status 404 if no config exists yet for this project.
+   *   Call `createBlueprint()` first to initialize the config.
    */
   async createMask(options: CreateBlueprintOptions): Promise<string> {
-    return this.createBlueprintInternal(
-      options,
-      OpikApi.AgentBlueprintWriteType.Mask
-    );
+    const id = generateId();
+    const values = this.buildBlueprintValues(options.values);
+
+    logger.debug(`Creating mask for project "${this.projectName}"`);
+
+    await this.opik.api.agentConfigs.updateAgentConfig({
+      projectName: this.projectName,
+      blueprint: {
+        id,
+        type: OpikApi.AgentBlueprintWriteType.Mask,
+        description: options.description,
+        values,
+      },
+    });
+
+    return id;
   }
 
   /**

@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info_write import ErrorInfoWrite
 from .json_list_string_write import JsonListStringWrite
+from .trace_write_source import TraceWriteSource
 
 
 class TraceWrite(UniversalBaseModel):
@@ -31,6 +32,7 @@ class TraceWrite(UniversalBaseModel):
     """
 
     thread_id: typing.Optional[str] = None
+    source: typing.Optional[TraceWriteSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

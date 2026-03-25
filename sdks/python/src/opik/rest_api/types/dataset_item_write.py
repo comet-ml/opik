@@ -11,7 +11,14 @@ from .json_node import JsonNode
 
 
 class DatasetItemWrite(UniversalBaseModel):
-    id: typing.Optional[str] = None
+    id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Stable item identifier.
+    On write, used as the upsert key.
+    If omitted, a new ID is generated.
+    Remains the same across dataset versions
+    """
+
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemWriteSource

@@ -71,7 +71,7 @@ jobs:
       - name: Run compatibility V1 tests
         working-directory: sdks/typescript
         run: |
-          npx vitest run tests/integration/compatibility_v1 --retry 2 --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/compat_v1_results_node${{matrix.node_version}}.xml
+          npm run test:compatibility -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/compat_v1_results_node${{matrix.node_version}}.xml
 
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2

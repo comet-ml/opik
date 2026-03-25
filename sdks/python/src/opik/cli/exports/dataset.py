@@ -193,6 +193,7 @@ def export_experiment_datasets(
             dataset_obj = opik.Dataset(
                 name=dataset_name,
                 description=None,  # Description not available from experiment
+                project_name=None,
                 rest_client=client.rest_client,
             )
             dataset_items = dataset_obj.get_items()

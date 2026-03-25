@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { ErrorInfoExperimentItemBulkWriteView } from "./ErrorInfoExperimentItemBulkWriteView.js";
 import { JsonListStringExperimentItemBulkWriteView } from "./JsonListStringExperimentItemBulkWriteView.js";
+import { TraceExperimentItemBulkWriteViewSource } from "./TraceExperimentItemBulkWriteViewSource.js";
 
 export const TraceExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     serializers.TraceExperimentItemBulkWriteView.Raw,
@@ -23,6 +24,7 @@ export const TraceExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     ttft: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
+    source: TraceExperimentItemBulkWriteViewSource.optional(),
 });
 
 export declare namespace TraceExperimentItemBulkWriteView {
@@ -40,5 +42,6 @@ export declare namespace TraceExperimentItemBulkWriteView {
         last_updated_at?: string | null;
         ttft?: number | null;
         thread_id?: string | null;
+        source?: TraceExperimentItemBulkWriteViewSource.Raw | null;
     }
 }

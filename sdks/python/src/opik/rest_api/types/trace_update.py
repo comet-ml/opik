@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info import ErrorInfo
 from .json_list_string import JsonListString
+from .trace_update_source import TraceUpdateSource
 
 
 class TraceUpdate(UniversalBaseModel):
@@ -43,6 +44,7 @@ class TraceUpdate(UniversalBaseModel):
     error_info: typing.Optional[ErrorInfo] = None
     thread_id: typing.Optional[str] = None
     ttft: typing.Optional[float] = None
+    source: typing.Optional[TraceUpdateSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

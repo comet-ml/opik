@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { ErrorInfo } from "./ErrorInfo.js";
 import { JsonListString } from "./JsonListString.js";
+import { TraceUpdateSource } from "./TraceUpdateSource.js";
 
 export const TraceUpdate: core.serialization.ObjectSchema<serializers.TraceUpdate.Raw, OpikApi.TraceUpdate> =
     core.serialization.object({
@@ -27,6 +28,7 @@ export const TraceUpdate: core.serialization.ObjectSchema<serializers.TraceUpdat
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
         ttft: core.serialization.number().optional(),
+        source: TraceUpdateSource.optional(),
     });
 
 export declare namespace TraceUpdate {
@@ -44,5 +46,6 @@ export declare namespace TraceUpdate {
         error_info?: ErrorInfo.Raw | null;
         thread_id?: string | null;
         ttft?: number | null;
+        source?: TraceUpdateSource.Raw | null;
     }
 }

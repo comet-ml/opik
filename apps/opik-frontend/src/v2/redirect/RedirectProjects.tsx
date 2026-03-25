@@ -25,7 +25,7 @@ const RedirectProjects = () => {
   useEffect(() => {
     if (projectByName?.id) {
       navigate({
-        to: "/$workspaceName/projects/$projectId/traces",
+        to: "/$workspaceName/projects/$projectId/home",
         params: {
           projectId: projectByName.id,
           workspaceName,
@@ -35,7 +35,7 @@ const RedirectProjects = () => {
   }, [projectByName?.id, workspaceName, navigate]);
 
   if (query.id) {
-    return <Navigate to={`/${workspaceName}/projects/${query.id}/traces`} />;
+    return <Navigate to={`/${workspaceName}/projects/${query.id}/home`} />;
   }
 
   if (!isPendingProjectByName && !projectByName) {

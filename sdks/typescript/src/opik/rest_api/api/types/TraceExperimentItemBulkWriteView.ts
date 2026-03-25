@@ -21,4 +21,5 @@ export interface TraceExperimentItemBulkWriteView {
     /** Time to first token in milliseconds */
     ttft?: number;
     threadId?: string;
+    source?: OpikApi.TraceExperimentItemBulkWriteViewSource;
 }

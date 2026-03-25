@@ -28,6 +28,7 @@ class Prompt(base_prompt.BasePrompt):
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -43,6 +44,7 @@ class Prompt(base_prompt.BasePrompt):
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
+            project_name: Optional project name for the prompt.
 
         Raises:
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
@@ -58,6 +60,7 @@ class Prompt(base_prompt.BasePrompt):
         self._description = description
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
+        self._project_name = project_name
 
         self._sync_with_backend()
 
@@ -75,6 +78,7 @@ class Prompt(base_prompt.BasePrompt):
             description=self._description,
             change_description=self._change_description,
             tags=self._tags,
+            project_name=self._project_name,
         )
 
         self._commit = prompt_version.commit
@@ -144,6 +148,11 @@ class Prompt(base_prompt.BasePrompt):
         """The list of tags associated with the prompt."""
         return copy.copy(self._tags) if self._tags else []
 
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this prompt belongs to."""
+        return self._project_name
+
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
         """
@@ -209,6 +218,7 @@ class Prompt(base_prompt.BasePrompt):
         cls,
         name: str,
         prompt_version: rest_api_types.PromptVersionDetail,
+        project_name: Optional[str] = None,
     ) -> "Prompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         prompt = cls.__new__(cls)
@@ -231,4 +241,5 @@ class Prompt(base_prompt.BasePrompt):
         )
         prompt._change_description = prompt_version.change_description
         prompt._tags = copy.copy(prompt_version.tags) if prompt_version.tags else []
+        prompt._project_name = project_name
         return prompt

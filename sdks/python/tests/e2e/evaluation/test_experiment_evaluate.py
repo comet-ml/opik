@@ -18,7 +18,8 @@ import pytest
 def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-experiment_creation_via_evaluate_function"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -70,6 +71,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         },
         prompt=prompt,
         experiment_tags=experiment_tags,
+        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -83,13 +85,16 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         feedback_scores_amount=1,
         prompts=[prompt],
         experiment_tags=experiment_tags,
+        project_name=project_name,
     )
 
     assert evaluation_result.dataset_id == dataset.id, (
         f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_id(
+        evaluation_result.experiment_id
+    )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 3, (
         f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
@@ -167,7 +172,8 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
 def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filter_dataset_items_by_id(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-experiment_creation_via_evaluate_function"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset_items = [
         {
@@ -225,6 +231,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         },
         prompt=prompt,
         dataset_item_ids=dataset_item_ids,
+        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -237,13 +244,21 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=[prompt],
+        project_name=project_name,
     )
 
     assert evaluation_result.dataset_id == dataset.id, (
         f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiments = opik_client.get_experiments_by_name(
+        experiment_name, project_name=project_name
+    )
+    assert len(retrieved_experiments) == 1, (
+        f"Expected 1 experiment, but got {len(retrieved_experiments)}. "
+        f"Experiments: {retrieved_experiments}"
+    )
+    retrieved_experiment = retrieved_experiments[0]
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 2, (
         f"Expected 2 experiment items, but got {len(experiment_items_contents)}. "
@@ -302,7 +317,8 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
 def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-experiment_creation_via_evaluate_function"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -355,6 +371,7 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         prompts=[prompt1, prompt2],
+        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -367,13 +384,16 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=[prompt1, prompt2],
+        project_name=project_name,
     )
 
     assert evaluation_result.dataset_id == dataset.id, (
         f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_id(
+        evaluation_result.experiment_id
+    )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 3, (
         f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
@@ -451,7 +471,8 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
 def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_backend(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-experiment_creation__experiment_config_not_set__None_metadata_sent_to_backend"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -478,6 +499,7 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         task=task,
         scoring_metrics=[equals_metric],
         experiment_name=experiment_name,
+        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -489,6 +511,7 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         experiment_metadata=None,
         traces_amount=1,  # one trace per dataset item
         feedback_scores_amount=1,
+        project_name=project_name,
     )
 
 
@@ -554,7 +577,8 @@ def test_experiment_creation__scoring_metrics_not_set(
     """
     We can create an experiment without scoring metrics
     """
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-experiment_creation__scoring_metrics_not_set"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -579,6 +603,7 @@ def test_experiment_creation__scoring_metrics_not_set(
         dataset=dataset,
         task=task,
         experiment_name=experiment_name,
+        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -601,13 +626,15 @@ def test_experiment_creation__scoring_metrics_not_set(
         experiment_metadata=None,
         traces_amount=1,
         feedback_scores_amount=0,
+        project_name=project_name,
     )
 
 
 def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scores_are_added_to_existing_experiment_items__amount_of_feedback_scores_increased(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-an_experiment_created_with_evaluate"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -644,6 +671,7 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
             "model_name": "gpt-3.5",
         },
         prompt=prompt,
+        project_name=project_name,
     )
     opik.flush_tracker()
 
@@ -657,6 +685,7 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         traces_amount=1,
         feedback_scores_amount=0,
         prompts=[prompt],
+        project_name=project_name,
     )
 
     # Populate the existing experiment with a new feedback score
@@ -667,6 +696,7 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
             metrics.Equals(name="metric2"),
             metrics.Equals(name="metric3"),
         ],
+        project_name=project_name,
     )
     opik.flush_tracker()
 
@@ -680,6 +710,7 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         traces_amount=1,
         feedback_scores_amount=3,
         prompts=[prompt],
+        project_name=project_name,
     )
 
     assert evaluation_result.dataset_id == dataset.id, (
@@ -690,7 +721,10 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
 def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = (
+        "test-project-get_experiment_by_name__two_experiments_with_the_same_name"
+    )
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -724,6 +758,7 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
     prompt = Prompt(
         name=f"test-experiment-prompt-{random_chars()}",
         prompt=f"test-experiment-prompt-template-{random_chars()}",
+        project_name=project_name,
     )
 
     equals_metric = metrics.Equals()
@@ -739,6 +774,7 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         prompt=prompt,
+        project_name=project_name,
     )
     evaluation_result2 = opik.evaluate(
         dataset=dataset,
@@ -752,6 +788,7 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         prompt=prompt,
+        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -764,6 +801,7 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=[prompt],
+        project_name=project_name,
     )
     verifiers.verify_experiment(
         opik_client=opik_client,
@@ -773,10 +811,15 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=[prompt],
+        project_name=project_name,
     )
 
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    retrieved_experiments = opik_client.get_experiments_by_name(experiment_name)
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
+    )
+    retrieved_experiments = opik_client.get_experiments_by_name(
+        experiment_name, project_name=project_name
+    )
     assert len(retrieved_experiments) == 2, (
         f"Expected 2 experiments with name '{experiment_name}', but got {len(retrieved_experiments)}. "
         f"Retrieved experiments: {[e.id for e in retrieved_experiments]}"
@@ -794,7 +837,8 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
 def test_experiment__get_experiments_by_name(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-get_experiments_by_name"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -828,6 +872,7 @@ def test_experiment__get_experiments_by_name(
     prompt = Prompt(
         name=f"test-experiment-prompt-{random_chars()}",
         prompt=f"test-experiment-prompt-template-{random_chars()}",
+        project_name=project_name,
     )
 
     experiments_names = [experiment_name, experiment_name, random_chars(10)]
@@ -847,6 +892,7 @@ def test_experiment__get_experiments_by_name(
                 "reference": lambda x: x["expected_model_output"]["output"],
             },
             prompt=prompt,
+            project_name=project_name,
         )
         evaluation_results.append(evaluation_result)
 
@@ -862,16 +908,22 @@ def test_experiment__get_experiments_by_name(
             traces_amount=3,  # one trace per dataset item
             feedback_scores_amount=1,
             prompts=[prompt],
+            project_name=project_name,
         )
 
     # check getting experiment by name
-    experiments = opik_client.get_experiments_by_name(experiment_name)
+    experiments = opik_client.get_experiments_by_name(
+        experiment_name, project_name=project_name
+    )
     assert len(experiments) == 2, (
         f"Expected 2 experiments with name '{experiment_name}', but got {len(experiments)}. "
         f"Experiment IDs: {[e.id for e in experiments]}"
     )
+    assert all(experiment.project_name == project_name for experiment in experiments)
 
-    experiments = opik_client.get_experiments_by_name(experiments_names[2])
+    experiments = opik_client.get_experiments_by_name(
+        experiments_names[2], project_name=project_name
+    )
     assert len(experiments) == 1, (
         f"Expected 1 experiment with name '{experiments_names[2]}', but got {len(experiments)}. "
         f"Experiment IDs: {[e.id for e in experiments]}"
@@ -936,7 +988,8 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """Test that experiment scoring functions compute and log experiment-level scores."""
-    dataset = opik_client.create_dataset(dataset_name)
+    project_name = "test-project-experiment_creation_via_evaluate_function__with_experiment_scoring_functions__scores_computed_and_logged"
+    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
 
     dataset.insert(
         [
@@ -992,6 +1045,7 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         experiment_scoring_functions=[constant_score],
+        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -1026,4 +1080,5 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
         experiment_scores={"fixed_number": 0.8},
+        project_name=project_name,
     )
