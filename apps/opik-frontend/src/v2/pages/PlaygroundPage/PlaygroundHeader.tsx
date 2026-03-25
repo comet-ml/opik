@@ -295,18 +295,14 @@ const PlaygroundHeader = ({
     }
 
     return (
-      <TooltipWrapper content={isRunDisabled ? runDisabledReason : undefined}>
-        <Button
-          variant="outline"
-          size="2xs"
-          onClick={() => setRunOnDatasetOpen(true)}
-          disabled={isRunDisabled}
-          style={isRunDisabled ? { pointerEvents: "auto" } : {}}
-        >
-          <Database className="mr-1 size-3.5" />
-          Test on dataset
-        </Button>
-      </TooltipWrapper>
+      <Button
+        variant="outline"
+        size="2xs"
+        onClick={() => setRunOnDatasetOpen(true)}
+      >
+        <Database className="mr-1 size-3.5" />
+        Test on dataset
+      </Button>
     );
   };
 
