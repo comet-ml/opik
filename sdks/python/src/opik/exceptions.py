@@ -102,6 +102,12 @@ class ExperimentNotFound(OpikException):
     pass
 
 
+class EmptyExperiment(OpikException):
+    """Exception raised when an experiment requires test cases for evaluation and has none"""
+
+    pass
+
+
 class DatasetNotFound(OpikException):
     pass
 
