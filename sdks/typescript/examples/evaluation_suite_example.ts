@@ -58,8 +58,8 @@ async function main() {
   console.log(`  Experiment ID: ${result.experimentId}`);
   console.log(`  Items total: ${result.itemsTotal}`);
   console.log(`  Items passed: ${result.itemsPassed}`);
-  console.log(`  Items failed: ${result.itemsFailed}`);
-  console.log(`  Pass rate: ${(result.passRate * 100).toFixed(1)}%`);
+  console.log(`  All passed: ${result.allItemsPassed}`);
+  console.log(`  Pass rate: ${result.passRate !== undefined ? (result.passRate * 100).toFixed(1) + "%" : "N/A"}`);
 
   // --- Cleanup ---
   // await client.deleteDataset(suiteName);
