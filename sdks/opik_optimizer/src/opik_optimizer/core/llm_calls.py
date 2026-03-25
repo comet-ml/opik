@@ -642,7 +642,7 @@ def call_model(
     )
 
     tracked_completion = track_completion(
-        project_name=effective_project_name, source="optimization"
+        project_name=effective_project_name
     )(litellm.completion)
     wants_all = return_all
     attempts = 2 if response_model is not None else 1
@@ -822,7 +822,7 @@ async def call_model_async(
     )
 
     tracked_completion = track_completion(
-        project_name=effective_project_name, source="optimization"
+        project_name=effective_project_name
     )(litellm.acompletion)
     logger.debug(
         f"call_model_async: model={model} project={effective_project_name} "

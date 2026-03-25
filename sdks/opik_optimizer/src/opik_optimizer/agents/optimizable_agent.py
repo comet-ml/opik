@@ -135,7 +135,7 @@ class OptimizableAgent(ABC):
         }
         if self.project_name:
             opik_metadata["project_name"] = self.project_name
-        response = track_completion(source="optimization")(litellm.completion)(
+        response = track_completion()(litellm.completion)(
             model=effective_model,
             messages=messages,
             seed=seed,
