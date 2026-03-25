@@ -41,7 +41,7 @@ import {
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
-import NoThreadsPage from "@/v2/pages/TracesPage/ThreadsTab/NoThreadsPage";
+import NoThreadsPage from "@/v2/pages/LogsPage/ThreadsTab/NoThreadsPage";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { Separator } from "@/ui/separator";
@@ -63,7 +63,7 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import ThreadsActionsPanel from "@/v2/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
+import ThreadsActionsPanel from "@/v2/pages/LogsPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -76,7 +76,7 @@ import ThreadsFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansF
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
-import LogsTypeToggle from "@/v2/pages/TracesPage/LogsTab/LogsTypeToggle";
+import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 
 const getRowId = (d: Thread) => d.id;

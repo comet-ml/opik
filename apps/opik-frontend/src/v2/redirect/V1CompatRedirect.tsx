@@ -1,9 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "@tanstack/react-router";
-import { useActiveWorkspaceName, useActiveProjectId } from "@/store/AppStore";
+import {
+  useActiveWorkspaceName,
+  useActiveProjectId,
+  useIsProjectLoading,
+} from "@/store/AppStore";
 import Loader from "@/shared/Loader/Loader";
-
-const FALLBACK_TIMEOUT_MS = 3000;
 
 type V1CompatRedirectProps = {
   toPath: string;
@@ -12,13 +14,15 @@ type V1CompatRedirectProps = {
 const V1CompatRedirect = ({ toPath }: V1CompatRedirectProps) => {
   const workspaceName = useActiveWorkspaceName();
   const activeProjectId = useActiveProjectId();
+  const isLoading = useIsProjectLoading();
   const navigate = useNavigate();
   const params = useParams({ strict: false });
   const location = useLocation();
   const splat = (params as Record<string, string>)["_splat"] ?? "";
-  const fallbackFired = useRef(false);
 
   useEffect(() => {
+    if (isLoading) return;
+
     if (activeProjectId) {
       const suffix = splat ? `/${splat}` : "";
       const target = `/${workspaceName}/projects/${activeProjectId}${toPath}${suffix}`;
@@ -27,23 +31,16 @@ const V1CompatRedirect = ({ toPath }: V1CompatRedirectProps) => {
         search: location.search as Record<string, unknown>,
         replace: true,
       });
-      return;
+    } else {
+      navigate({
+        to: "/$workspaceName/projects",
+        params: { workspaceName },
+        replace: true,
+      });
     }
-
-    const timer = setTimeout(() => {
-      if (!fallbackFired.current) {
-        fallbackFired.current = true;
-        navigate({
-          to: "/$workspaceName/projects",
-          params: { workspaceName },
-          replace: true,
-        });
-      }
-    }, FALLBACK_TIMEOUT_MS);
-
-    return () => clearTimeout(timer);
   }, [
     activeProjectId,
+    isLoading,
     workspaceName,
     toPath,
     splat,

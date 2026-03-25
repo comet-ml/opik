@@ -1,11 +1,3 @@
-// TODO: These splat-based redirects only handle URL navigation (bookmarks, external links).
-// Additional migration is still needed:
-//
-//    Traces page tab→route redirects: v1 used query params for tabs on the traces page
-//    (e.g. /$ws/projects/$pid/traces?tab=annotation-queues). In v2, those tabs became
-//    separate routes (/$ws/projects/$pid/annotation-queues). Old bookmarked URLs with
-//    ?tab= params need to redirect to the corresponding project-scoped routes.
-
 import { createRoute, type AnyRoute } from "@tanstack/react-router";
 import V1CompatRedirect from "@/v2/redirect/V1CompatRedirect";
 

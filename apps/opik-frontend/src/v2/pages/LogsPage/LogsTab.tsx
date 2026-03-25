@@ -1,6 +1,6 @@
 import React from "react";
-import TracesSpansTab from "@/v2/pages/TracesPage/TracesSpansTab/TracesSpansTab";
-import ThreadsTab from "@/v2/pages/TracesPage/ThreadsTab/ThreadsTab";
+import TracesSpansTab from "@/v2/pages/LogsPage/TracesSpansTab/TracesSpansTab";
+import ThreadsTab from "@/v2/pages/LogsPage/ThreadsTab/ThreadsTab";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 
 type LogsTabProps = {

@@ -1,4 +1,4 @@
-actions/checkout@v6name: TypeScript SDK Linter
+name: TypeScript SDK Linter
 run-name: "TypeScript SDK Linter ${{ github.ref_name }} by @${{ github.actor }}"
 on:
   pull_request:
@@ -19,7 +19,7 @@ jobs:
         working-directory: sdks/typescript
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6.2.2
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4.2.0

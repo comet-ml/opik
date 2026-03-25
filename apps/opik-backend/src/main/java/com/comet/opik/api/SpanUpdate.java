@@ -47,5 +47,6 @@ public record SpanUpdate(
         Map<String, Integer> usage,
         @DecimalMin("0.0") BigDecimal totalEstimatedCost,
         ErrorInfo errorInfo,
-        @PositiveOrZero Double ttft) implements TagUpdatable {
+        @PositiveOrZero Double ttft,
+        Source source) implements TagUpdatable {
 }

@@ -8,7 +8,7 @@ import {
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
-import InsightsViewSelector from "@/v2/pages/TracesPage/InsightsTab/InsightsViewSelector";
+import InsightsViewSelector from "@/v2/pages/InsightsPage/InsightsViewSelector";
 import ShareDashboardButton from "@/v2/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/v2/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -17,6 +17,7 @@ import {
   useDashboardStore,
   selectSetRuntimeConfig,
 } from "@/store/DashboardStore";
+import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import {
   PROJECT_TEMPLATE_LIST,
@@ -25,20 +26,16 @@ import {
 } from "@/lib/dashboard/templates";
 import { Separator } from "@/ui/separator";
 import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
 
-interface InsightsTabProps {
-  projectId: string;
-}
-
 const DEFAULT_TEMPLATE = PROJECT_TEMPLATE_LIST[0];
 const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 
-const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
-  projectId,
-}) => {
+const InsightsPage: React.FunctionComponent = () => {
+  const projectId = useProjectIdFromURL();
   const workspaceName = useActiveWorkspaceName();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
@@ -50,9 +47,6 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
     syncLocalStorageAcrossTabs: false,
   });
 
-  // Ensure a valid dashboard is always selected:
-  // - no permission → lock to default template
-  // - no selection or deprecated ID → fall back to default template
   useEffect(() => {
     const needsDefault =
       !dashboardId ||
@@ -107,9 +101,9 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
   );
 
   return (
-    <>
+    <PageBodyScrollContainer>
       <PageBodyStickyContainer
-        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3 pt-2"
+        className="mt-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3 pt-2"
         direction="bidirectional"
         limitWidth
       >
@@ -155,8 +149,8 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
 
         {!isPending && dashboard && <DashboardContent />}
       </div>
-    </>
+    </PageBodyScrollContainer>
   );
 };
 
-export default InsightsTab;
+export default InsightsPage;

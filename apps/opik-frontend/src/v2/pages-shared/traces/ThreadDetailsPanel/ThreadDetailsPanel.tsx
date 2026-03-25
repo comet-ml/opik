@@ -85,7 +85,7 @@ import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { useThreadMedia } from "@/hooks/useThreadMedia";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { LOGS_TYPE } from "@/constants/traces";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -552,13 +552,12 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             key="Go to project"
             onClick={() => {
               navigate({
-                to: "/$workspaceName/projects/$projectId/traces",
+                to: "/$workspaceName/projects/$projectId/logs",
                 params: {
                   projectId,
                   workspaceName,
                 },
                 search: {
-                  tab: PROJECT_TAB.logs,
                   logsType: LOGS_TYPE.traces,
                   traces_filters: [
                     {

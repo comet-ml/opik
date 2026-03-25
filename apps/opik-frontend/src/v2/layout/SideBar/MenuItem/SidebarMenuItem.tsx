@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useActiveWorkspaceName, useActiveProjectId } from "@/store/AppStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -33,12 +32,10 @@ export type MenuItemGroup = {
 
 interface SidebarMenuItemProps {
   item: MenuItem;
-  expanded: boolean;
 }
 
 const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   item,
-  expanded,
 }) => {
   const workspaceName = useActiveWorkspaceName();
   const activeProjectId = useActiveProjectId();
@@ -51,17 +48,15 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   const content = (
     <>
       <item.icon className="size-3.5 shrink-0" />
-      {expanded && <div className="grow truncate">{item.label}</div>}
+      <div className="grow truncate">{item.label}</div>
     </>
   );
 
-  const baseClasses = cn(
-    "comet-body-s relative flex w-full items-center gap-2 rounded-md",
-    expanded ? "px-2 py-1" : "w-9 justify-center py-1",
-  );
+  const baseClasses =
+    "comet-body-s relative flex w-full items-center gap-2 rounded-md px-2 py-1";
 
   if (item.disabled) {
-    const disabledElement = (
+    return (
       <li className="flex">
         <span
           className={cn(baseClasses, "cursor-not-allowed opacity-50")}
@@ -71,16 +66,6 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
         </span>
       </li>
     );
-
-    if (!expanded) {
-      return (
-        <TooltipWrapper content={item.label} side="right">
-          {disabledElement}
-        </TooltipWrapper>
-      );
-    }
-
-    return disabledElement;
   }
 
   const linkClasses = cn(
@@ -122,16 +107,6 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
           {content}
         </button>
       </li>
-    );
-  }
-
-  if (!itemElement) return null;
-
-  if (!expanded) {
-    return (
-      <TooltipWrapper content={item.label} side="right">
-        {itemElement}
-      </TooltipWrapper>
     );
   }
 
