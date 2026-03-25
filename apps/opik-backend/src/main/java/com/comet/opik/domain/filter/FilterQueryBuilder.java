@@ -318,6 +318,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceField.SOURCE, SOURCE_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -362,6 +363,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .put(SpanField.TRACE_ID, TRACE_ID_DB)
+                    .put(SpanField.SOURCE, SOURCE_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -537,7 +539,8 @@ public class FilterQueryBuilder {
                 TraceField.GUARDRAILS,
                 TraceField.VISIBILITY_MODE,
                 TraceField.ERROR_INFO,
-                TraceField.ERROR_TYPE));
+                TraceField.ERROR_TYPE,
+                TraceField.SOURCE));
 
         map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
                 TraceField.EXPERIMENT_ID));
@@ -575,7 +578,8 @@ public class FilterQueryBuilder {
                 SpanField.ERROR_INFO,
                 SpanField.ERROR_TYPE,
                 SpanField.TYPE,
-                SpanField.TRACE_ID));
+                SpanField.TRACE_ID,
+                SpanField.SOURCE));
 
         map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
                 TraceField.FEEDBACK_SCORES,
@@ -918,8 +922,21 @@ public class FilterQueryBuilder {
 
     private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
-        var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
-        return "(%s)".formatted(formattedTemplate);
+        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i);
+        var formattedTemplate = template.formatted(dbField, i);
+
+        return filter.field().legacyFallbackDbValue(filter.value())
+                .map(fallback -> buildWithLegacyFallback(filter.operator(), dbField, i, fallback, formattedTemplate))
+                .orElse("(%s)".formatted(formattedTemplate));
+    }
+
+    private static String buildWithLegacyFallback(
+            Operator operator, String dbField, int i, String fallback, String formattedTemplate) {
+        return switch (operator) {
+            case EQUAL -> "(%s = :filter%d OR %s = '%s')".formatted(dbField, i, dbField, fallback);
+            case NOT_EQUAL -> "(%s != :filter%d AND %s != '%s')".formatted(dbField, i, dbField, fallback);
+            default -> "(%s)".formatted(formattedTemplate);
+        };
     }
 
     private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {

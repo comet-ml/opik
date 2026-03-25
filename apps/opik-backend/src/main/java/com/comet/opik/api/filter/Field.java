@@ -3,6 +3,8 @@ package com.comet.opik.api.filter;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.fasterxml.jackson.annotation.JsonValue;
 
+import java.util.Optional;
+
 public interface Field {
 
     String ID_QUERY_PARAM = "id";
@@ -73,6 +75,17 @@ public interface Field {
 
     default boolean isDynamic(FilterStrategy filterStrategy) {
         return false;
+    }
+
+    /**
+     * Returns an additional DB value to OR/AND-include alongside the primary filter value, to capture
+     * rows that predate a field's introduction (e.g. legacy {@code unknown} rows treated as {@code sdk}).
+     * <p>
+     * Fields that have no legacy fallback return {@link Optional#empty()} (the default).
+     * </p>
+     */
+    default Optional<String> legacyFallbackDbValue(String filterValue) {
+        return Optional.empty();
     }
 
 }
