@@ -62,6 +62,7 @@ public class AgentConfigsResource {
     @Operation(operationId = "createAgentConfig", summary = "Create optimizer config with initial blueprint", description = "Creates a new optimizer config with initial blueprint. Fails if the project already has a config.", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "400", description = "Bad Request (e.g. MASK type not allowed)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Conflict (config already exists)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })

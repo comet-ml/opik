@@ -22,12 +22,17 @@ public class PromptVersionEventListener {
         log.info("Processing prompt version created event: promptId='{}', commit='{}', workspace='{}'",
                 event.promptId(), event.commit(), event.workspaceId());
 
-        agentConfigService.updateBlueprintsForNewPromptVersion(
-                event.workspaceId(),
-                event.promptId(),
-                event.commit(),
-                "auto-update",
-                event.excludeProjectIds())
-                .block(Duration.ofSeconds(30));
+        try {
+            agentConfigService.updateBlueprintsForNewPromptVersion(
+                    event.workspaceId(),
+                    event.promptId(),
+                    event.commit(),
+                    "auto-update",
+                    event.excludeProjectIds())
+                    .block(Duration.ofSeconds(30));
+        } catch (Exception e) {
+            log.error("Failed to auto-update blueprints for prompt '{}' commit '{}' in workspace '{}'",
+                    event.promptId(), event.commit(), event.workspaceId(), e);
+        }
     }
 }
