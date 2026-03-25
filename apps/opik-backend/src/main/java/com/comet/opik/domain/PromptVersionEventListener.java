@@ -6,9 +6,9 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 import java.time.Duration;
-import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 @EagerSingleton
 @Slf4j

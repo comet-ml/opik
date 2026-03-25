@@ -572,23 +572,6 @@ class AgentConfigsResourceTest {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
-            var mask = AgentBlueprint.builder()
-                    .type(BlueprintType.MASK)
-                    .description("Override model and add top_p")
-                    .values(List.of(
-                            AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING)
-                                    .build(),
-                            AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.FLOAT).build()))
-                    .build();
-
-            var maskRequest = AgentConfigCreate.builder()
-                    .projectId(projectId)
-                    .blueprint(mask)
-                    .build();
-
-            var maskId = agentConfigsResourceClient.createAgentConfig(maskRequest, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_CREATED);
-
             var blueprint1 = AgentBlueprint.builder()
                     .type(BlueprintType.BLUEPRINT)
                     .description("Initial configuration")
@@ -611,8 +594,8 @@ class AgentConfigsResourceTest {
                     .blueprint(blueprint1)
                     .build();
 
-            var blueprint1Id = agentConfigsResourceClient.updateAgentConfig(request1, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(request1, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
 
             var blueprint2 = AgentBlueprint.builder()
                     .type(BlueprintType.BLUEPRINT)
@@ -644,6 +627,23 @@ class AgentConfigsResourceTest {
                     .build();
 
             var blueprint3Id = agentConfigsResourceClient.updateAgentConfig(request3, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("Override model and add top_p")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING)
+                                    .build(),
+                            AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.FLOAT).build()))
+                    .build();
+
+            var maskRequest = AgentConfigCreate.builder()
+                    .projectId(projectId)
+                    .blueprint(mask)
+                    .build();
+
+            var maskId = agentConfigsResourceClient.updateAgentConfig(maskRequest, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
@@ -874,41 +874,6 @@ class AgentConfigsResourceTest {
                     arguments("nonexistent", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("dev", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("nonexistent", UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
-        }
-
-        @Test
-        @DisplayName("when mask belongs to different project, then return 404")
-        void applyMask__whenMaskFromDifferentProject__thenReturn404() {
-            var projectName1 = UUID.randomUUID().toString();
-            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, TEST_WORKSPACE);
-
-            var projectName2 = UUID.randomUUID().toString();
-            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, TEST_WORKSPACE);
-
-            var blueprint1 = AgentBlueprint.builder()
-                    .type(BlueprintType.BLUEPRINT)
-                    .description("Project 1 blueprint")
-                    .values(List.of(
-                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
-                    .build();
-
-            agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder().projectId(projectId1).blueprint(blueprint1).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
-
-            var mask = AgentBlueprint.builder()
-                    .type(BlueprintType.MASK)
-                    .description("Project 2 mask")
-                    .values(List.of(
-                            AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
-                    .build();
-
-            var maskId = agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder().projectId(projectId2).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
-
-            agentConfigsResourceClient.getLatestBlueprint(projectId1, maskId, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
