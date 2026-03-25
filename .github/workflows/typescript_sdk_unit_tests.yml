@@ -1,4 +1,4 @@
-name: TypeScript SDK Unit Tests
+actions/checkout@v6name: TypeScript SDK Unit Tests
 run-name: "TypeScript SDK Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
   pull_request:

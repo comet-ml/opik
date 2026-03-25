@@ -1,4 +1,4 @@
-name: Docs - Compress Images
+actions/checkout@v6name: Docs - Compress Images
 on:
   workflow_dispatch:
   pull_request:

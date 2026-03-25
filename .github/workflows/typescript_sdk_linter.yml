@@ -1,4 +1,4 @@
-name: TypeScript SDK Linter
+actions/checkout@v6name: TypeScript SDK Linter
 run-name: "TypeScript SDK Linter ${{ github.ref_name }} by @${{ github.actor }}"
 on:
   pull_request:
