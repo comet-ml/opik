@@ -54,6 +54,8 @@ export interface CreatePromptOptions extends CommonPromptOptions {
   name: string;
   /** Template text content with placeholders */
   prompt: string;
+  /** Optional project name to scope the prompt. If not provided, uses the client's configured project. */
+  projectName?: string;
 }
 
 /**
@@ -162,4 +164,6 @@ export interface CreateChatPromptOptions extends CommonPromptOptions {
   messages: ChatMessage[];
   /** Whether to validate template placeholders */
   validatePlaceholders?: boolean;
+  /** Optional project name to scope the prompt. If not provided, uses the client's configured project. */
+  projectName?: string;
 }

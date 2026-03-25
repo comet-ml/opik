@@ -83,6 +83,7 @@ export async function evaluate<T = Record<string, unknown>>(
     prompts: options.prompts,
     datasetVersionId: versionInfo?.id,
     tags: options.tags,
+    projectName: options.projectName,
   });
 
   try {
