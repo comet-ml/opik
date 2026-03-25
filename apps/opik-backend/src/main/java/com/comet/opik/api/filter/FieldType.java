@@ -20,6 +20,7 @@ public enum FieldType {
     MAP("map"),
     LIST("list"),
     ENUM("enum"),
+    ENUM_LEGACY("enum_legacy"),
     ERROR_CONTAINER("error_container"),
     CUSTOM("custom"),
     ;

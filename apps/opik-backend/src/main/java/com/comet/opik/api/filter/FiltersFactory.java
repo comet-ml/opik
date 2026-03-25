@@ -42,6 +42,7 @@ public class FiltersFactory {
                     .put(FieldType.STRING_EXACT, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.STRING_STATE_DB, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.ENUM, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.ENUM_LEGACY, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.DATE_TIME, filter -> {
                         try {
                             Instant.parse(filter.value());
