@@ -57,7 +57,6 @@ jobs:
             # Avoid Buildx Bake concurrent image export collisions in CI.
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
-            TOGGLE_AGENT_CONFIGURATION_ENABLED: "true"
           run: |
             cd ${{ github.workspace }}
             ./opik.sh --backend --port-mapping --build
