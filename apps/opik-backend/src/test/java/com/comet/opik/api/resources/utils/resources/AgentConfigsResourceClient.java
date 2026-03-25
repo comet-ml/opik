@@ -69,9 +69,9 @@ public class AgentConfigsResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
-            if (expectedStatus == HttpStatus.SC_OK) {
-                var blueprint = actualResponse.readEntity(AgentBlueprint.class);
-                return blueprint.id();
+            if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
+                assertThat(actualResponse.getLocation()).isNotNull();
+                return TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
 
             return null;
@@ -86,6 +86,16 @@ public class AgentConfigsResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request));
+    }
+
+    public Response updateAgentConfigWithResponse(AgentConfigCreate request, String apiKey,
+            String workspaceName) {
+        return client.target(BLUEPRINTS_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(request));
     }
 
     public Response createAgentConfigWithResponse(String body, String apiKey, String workspaceName) {

@@ -399,7 +399,7 @@ class AgentConfigsResourceTest {
                                             .key("temperature").value("0.5").type(ValueType.FLOAT).build()))
                                     .build())
                             .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             var blueprint3Id = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
@@ -411,7 +411,7 @@ class AgentConfigsResourceTest {
                                             .key("max_tokens").value("2048").type(ValueType.INTEGER).build()))
                                     .build())
                             .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             var bp1 = agentConfigsResourceClient.getBlueprintById(blueprint1Id, null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
@@ -440,8 +440,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("when config already exists for project, then POST returns 400")
-        void createAgentConfig__whenConfigAlreadyExists__thenReturn400() {
+        @DisplayName("Error: POST returns 409 when config already exists for project")
+        void createAgentConfig__whenConfigAlreadyExists__thenReturn409() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -459,11 +459,17 @@ class AgentConfigsResourceTest {
 
             agentConfigsResourceClient.createAgentConfig(request, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-            agentConfigsResourceClient.createAgentConfig(request, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
+            try (var actualResponse = agentConfigsResourceClient.createAgentConfigWithResponse(request, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var body = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(body.errors()).anyMatch(e -> e.contains("already exists"));
+            }
         }
 
         @Test
-        @DisplayName("when config does not exist for project, then PATCH returns 404")
+        @DisplayName("Error: PATCH returns 404 when config does not exist for project")
         void updateAgentConfig__whenConfigDoesNotExist__thenReturn404() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
@@ -480,8 +486,15 @@ class AgentConfigsResourceTest {
                     .blueprint(blueprint)
                     .build();
 
-            agentConfigsResourceClient.updateAgentConfig(request, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+            try (var actualResponse = agentConfigsResourceClient.updateAgentConfigWithResponse(request, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var body = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(body.errors()).anyMatch(e -> e.contains("No config found"));
+            }
         }
+
     }
 
     @Nested
@@ -533,7 +546,7 @@ class AgentConfigsResourceTest {
                     .build();
 
             var blueprint1Id = agentConfigsResourceClient.updateAgentConfig(request1, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_OK);
+                    HttpStatus.SC_NO_CONTENT);
 
             var blueprint2 = AgentBlueprint.builder()
                     .type(BlueprintType.BLUEPRINT)
@@ -549,7 +562,7 @@ class AgentConfigsResourceTest {
                     .build();
 
             var blueprint2Id = agentConfigsResourceClient.updateAgentConfig(request2, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_OK);
+                    HttpStatus.SC_NO_CONTENT);
 
             var blueprint3 = AgentBlueprint.builder()
                     .type(BlueprintType.BLUEPRINT)
@@ -565,7 +578,7 @@ class AgentConfigsResourceTest {
                     .build();
 
             var blueprint3Id = agentConfigsResourceClient.updateAgentConfig(request3, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_OK);
+                    HttpStatus.SC_NO_CONTENT);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
                     .projectId(projectId)
@@ -934,7 +947,7 @@ class AgentConfigsResourceTest {
 
             var maskId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             agentConfigsResourceClient.getBlueprintById(maskId, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
@@ -966,7 +979,7 @@ class AgentConfigsResourceTest {
 
             var maskId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
                     .projectId(projectId)
@@ -1010,7 +1023,7 @@ class AgentConfigsResourceTest {
 
             var blueprint2Id = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             agentConfigsResourceClient.createOrUpdateEnvs(
                     AgentConfigEnvUpdate.builder()
@@ -1230,7 +1243,7 @@ class AgentConfigsResourceTest {
 
             var blueprint2Id = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             var mask = AgentBlueprint.builder()
                     .type(BlueprintType.MASK)
@@ -1241,7 +1254,7 @@ class AgentConfigsResourceTest {
 
             agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
                     .projectId(projectId)
@@ -1488,7 +1501,7 @@ class AgentConfigsResourceTest {
 
             var maskId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 

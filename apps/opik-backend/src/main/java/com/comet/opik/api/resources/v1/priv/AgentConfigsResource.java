@@ -62,7 +62,7 @@ public class AgentConfigsResource {
     @Operation(operationId = "createAgentConfig", summary = "Create optimizer config with initial blueprint", description = "Creates a new optimizer config with initial blueprint. Fails if the project already has a config.", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
-            @ApiResponse(responseCode = "400", description = "Bad Request (config already exists)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict (config already exists)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response createAgentConfig(
@@ -71,7 +71,7 @@ public class AgentConfigsResource {
 
         log.info("Creating config for project '{}'", request.projectName());
 
-        AgentBlueprint createdBlueprint = agentConfigService.createConfig(request);
+        AgentBlueprint createdBlueprint = agentConfigService.createConfig(request).block();
 
         log.info("Created config with blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
 
@@ -86,10 +86,11 @@ public class AgentConfigsResource {
 
     @PATCH
     @Path("/blueprints")
+    @Consumes(MediaType.APPLICATION_JSON)
     @JsonView(AgentConfig.View.Write.class)
     @Operation(operationId = "updateAgentConfig", summary = "Add blueprint to existing config", description = "Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.", responses = {
-            @ApiResponse(responseCode = "200", description = "Blueprint added", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
+            @ApiResponse(responseCode = "204", description = "Blueprint added", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "404", description = "Not Found (no config for project)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -99,7 +100,7 @@ public class AgentConfigsResource {
 
         log.info("Adding blueprint to config for project '{}'", request.projectName());
 
-        AgentBlueprint blueprint = agentConfigService.updateConfig(request);
+        AgentBlueprint blueprint = agentConfigService.updateConfig(request).block();
 
         log.info("Added blueprint '{}' to config for project '{}'", blueprint.id(), request.projectName());
 
@@ -107,7 +108,7 @@ public class AgentConfigsResource {
                 .path(blueprint.id().toString())
                 .build();
 
-        return Response.ok(blueprint)
+        return Response.noContent()
                 .location(location)
                 .build();
     }
@@ -219,7 +220,7 @@ public class AgentConfigsResource {
 
         log.info("Creating or updating environments for project '{}'", request.projectId());
 
-        agentConfigService.createOrUpdateEnvs(request);
+        agentConfigService.createOrUpdateEnvs(request).block();
 
         return Response.noContent().build();
     }
@@ -239,7 +240,7 @@ public class AgentConfigsResource {
         log.info("Setting environment '{}' to blueprint '{}' for project '{}'",
                 envName, request.blueprintName(), projectId);
 
-        agentConfigService.setEnvByBlueprintName(projectId, envName, request.blueprintName());
+        agentConfigService.setEnvByBlueprintName(projectId, envName, request.blueprintName()).block();
 
         return Response.noContent().build();
     }

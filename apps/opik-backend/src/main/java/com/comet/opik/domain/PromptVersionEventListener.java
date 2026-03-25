@@ -25,6 +25,7 @@ public class PromptVersionEventListener {
                 event.promptId(),
                 event.commit(),
                 "auto-update",
-                event.excludeProjectIds());
+                event.excludeProjectIds())
+                .block();
     }
 }

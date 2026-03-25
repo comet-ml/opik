@@ -198,7 +198,7 @@ class AgentConfig:
                     field_types=field_types,
                 )
             except rest_api_core.ApiError as e:
-                if e.status_code != 400:
+                if e.status_code != 409:
                     raise
                 # A parallel caller created the config first — re-fetch and compare.
                 latest = manager.get_blueprint(field_types=field_types)
