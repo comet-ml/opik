@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmModelDefinition;
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -148,6 +149,55 @@ class LlmModelRegistryServiceTest {
 
         assertThatThrownBy(() -> registry.put("new-provider", List.of()))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void findModelByQualifiedName() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        var service = new LlmModelRegistryService(config);
+
+        var result = service.findModel("vertex_ai/gemini-2.0-flash-001");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.VERTEX_AI);
+        assertThat(result.get().model().id()).isEqualTo("gemini-2.0-flash-001");
+        assertThat(result.get().model().structuredOutput()).isTrue();
+    }
+
+    @Test
+    void findModelByIdSkipsModelsWithQualifiedName() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        var service = new LlmModelRegistryService(config);
+
+        // "gemini-2.0-flash-001" is the id of a vertex-ai model that has a qualifiedName,
+        // so bare id lookup should NOT match it
+        var result = service.findModel("gemini-2.0-flash-001");
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findModelById() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        var service = new LlmModelRegistryService(config);
+
+        var result = service.findModel("gpt-4o");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_AI);
+        assertThat(result.get().model().structuredOutput()).isTrue();
+    }
+
+    @Test
+    void findModelReturnsEmptyForUnknownModel() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.findModel("nonexistent-model")).isEmpty();
     }
 
     @Test
