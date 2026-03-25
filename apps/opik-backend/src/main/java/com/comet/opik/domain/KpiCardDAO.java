@@ -572,7 +572,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
     }
 
     private ST buildTemplate(String query, KpiCardCriteria criteria, String workspaceId,
-                             String queryName) {
+            String queryName) {
         return getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, criteria.projectId().toString());
     }
 
@@ -671,13 +671,13 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     .previousValue(filterNan(row.get("previous_avg_cost", Double.class)))
                     .build());
 
-          if (entityType != EntityType.THREADS) {
-            stats.add(KpiMetric.builder()
-              .type(KpiMetricType.ERRORS)
-              .currentValue(filterNan(row.get("current_errors", Double.class)))
-              .previousValue(filterNan(row.get("previous_errors", Double.class)))
-              .build());
-          }
+            if (entityType != EntityType.THREADS) {
+                stats.add(KpiMetric.builder()
+                        .type(KpiMetricType.ERRORS)
+                        .currentValue(filterNan(row.get("current_errors", Double.class)))
+                        .previousValue(filterNan(row.get("previous_errors", Double.class)))
+                        .build());
+            }
 
             return KpiCardResponse.builder().stats(stats).build();
         }));

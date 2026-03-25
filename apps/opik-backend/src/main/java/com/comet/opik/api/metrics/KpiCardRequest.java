@@ -23,8 +23,7 @@ public record KpiCardRequest(
         @NotNull Instant intervalStart,
         @NotNull Instant intervalEnd) {
 
-    @AssertTrue(message = "intervalStart must be before intervalEnd")
-    public boolean isStartBeforeEnd() {
+    @AssertTrue(message = "intervalStart must be before intervalEnd") public boolean isStartBeforeEnd() {
         return intervalStart.isBefore(intervalEnd);
     }
 
