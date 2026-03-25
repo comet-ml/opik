@@ -11,7 +11,7 @@ interface DatasetItemChangesPayload {
   added_items: DatasetItem[];
   edited_items: Partial<DatasetItem>[];
   deleted_ids: string[];
-  base_version: string;
+  base_version: string | null;
   tags?: string[];
   change_description?: string;
   evaluators?: Evaluator[];
@@ -60,7 +60,6 @@ const useDatasetItemChangesMutation = (
       }
 
       // For other errors, show toast
-
       toast({
         title: "Error",
         description: extractErrorMessage(error),
