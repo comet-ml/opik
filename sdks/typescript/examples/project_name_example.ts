@@ -62,10 +62,10 @@ async function main() {
 
   // --- Cleanup ---
   console.log("\n--- Cleanup ---");
-  await client.deleteDataset(datasetName);
-  await client.deleteDataset(otherDatasetName, "other-project");
-  await client.deleteExperiment(experiment.id);
-  await client.deletePrompts([prompt.id]);
+  // await client.deleteDataset(datasetName);
+  // await client.deleteDataset(otherDatasetName, "other-project");
+  // await client.deleteExperiment(experiment.id);
+  // await client.deletePrompts([prompt.id]);
   await client.flush();
   console.log("Done!\n");
 }
