@@ -150,6 +150,7 @@ export class OpikClient {
       {
         id: generateId(),
         startTime: new Date(),
+        source: "sdk",
         ...traceData,
         projectName,
       },

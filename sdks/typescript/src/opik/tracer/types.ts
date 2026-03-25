@@ -2,6 +2,8 @@ import type { Prompt } from "@/prompt/Prompt";
 import type * as OpikApi from "@/rest_api/api";
 import type { FeedbackScoreBatchItem } from "@/rest_api/api/types/FeedbackScoreBatchItem";
 
+export type TraceSource = "sdk" | "experiment" | "optimization";
+
 /**
  * A feedback score for batch operations.
  *
