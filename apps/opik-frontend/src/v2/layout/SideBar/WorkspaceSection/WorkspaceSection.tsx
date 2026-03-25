@@ -8,8 +8,8 @@ import { calculateWorkspaceName } from "@/lib/utils";
 
 const WorkspaceSection: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const WorkspaceSelectorComponent = usePluginsStore(
-    (state) => state.WorkspaceSelector,
+  const SidebarWorkspaceSelectorComponent = usePluginsStore(
+    (state) => state.SidebarWorkspaceSelector,
   );
   const {
     permissions: { canViewDashboards },
@@ -18,21 +18,27 @@ const WorkspaceSection: React.FC = () => {
   const menuGroups = getWorkspaceMenuItems({ canViewDashboards });
   const displayName = calculateWorkspaceName(workspaceName);
 
+  const renderWorkspaceSelector = () => {
+    if (SidebarWorkspaceSelectorComponent) {
+      return <SidebarWorkspaceSelectorComponent />;
+    }
+
+    return (
+      <div className="comet-body-s-accented truncate rounded-md px-2 py-1 text-foreground">
+        {displayName}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col px-3 py-2">
       <div className="comet-body-s-accented truncate px-2 py-1 text-light-slate">
         Workspace
       </div>
 
-      {WorkspaceSelectorComponent ? (
-        <WorkspaceSelectorComponent />
-      ) : (
-        <div className="comet-body-s-accented truncate rounded-md px-2 py-1 text-foreground">
-          {displayName}
-        </div>
-      )}
+      {renderWorkspaceSelector()}
 
-      <ul className="flex flex-col text-muted-slate">
+      <ul className="mt-2 flex flex-col text-muted-slate">
         {menuGroups.flatMap((group) =>
           group.items.map((item) => (
             <SidebarMenuItem key={item.id} item={item} />

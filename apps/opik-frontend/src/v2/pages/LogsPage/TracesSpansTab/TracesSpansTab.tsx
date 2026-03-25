@@ -54,10 +54,10 @@ import { BaseTraceData, Span, Trace } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
-import NoTracesPage from "@/v2/pages/TracesPage/NoTracesPage";
+import NoTracesPage from "@/v2/pages/LogsPage/NoTracesPage";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import TracesActionsPanel from "@/v2/pages/TracesPage/TracesSpansTab/TracesActionsPanel";
+import TracesActionsPanel from "@/v2/pages/LogsPage/TracesSpansTab/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -113,7 +113,7 @@ import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter
 import SpanTypeCell from "@/shared/DataTableCells/SpanTypeCell";
 import { Filter, FilterOperator } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
-import LogsTypeToggle from "@/v2/pages/TracesPage/LogsTab/LogsTypeToggle";
+import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 
 const getRowId = (d: Trace | Span) => d.id;

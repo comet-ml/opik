@@ -1,12 +1,8 @@
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
-import LogsTab from "@/v2/pages/TracesPage/LogsTab/LogsTab";
-import InsightsTab from "@/v2/pages/TracesPage/InsightsTab/InsightsTab";
-import RulesTab from "@/v2/pages/TracesPage/RulesTab/RulesTab";
-import AnnotationQueuesTab from "@/v2/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
+import LogsTab from "@/v2/pages/LogsPage/LogsTab";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { Construction } from "lucide-react";
@@ -14,10 +10,9 @@ import { useState } from "react";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import useProjectTabs from "@/v2/pages/TracesPage/useProjectTabs";
-import { PROJECT_TAB } from "@/constants/traces";
+import useLogsType from "@/v2/pages/LogsPage/useLogsType";
 
-const TracesPage = () => {
+const LogsPage = () => {
   const projectId = useProjectIdFromURL();
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
@@ -35,65 +30,11 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
-  const {
-    activeTab,
-    logsType,
-    needsDefaultResolution,
-    setLogsType,
-    handleTabChange,
-  } = useProjectTabs({
+  const { logsType, needsDefaultResolution, setLogsType } = useLogsType({
     projectId,
   });
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
-
-  const renderContent = () => {
-    return (
-      <Tabs
-        defaultValue={PROJECT_TAB.logs}
-        value={activeTab}
-        onValueChange={handleTabChange}
-        className="min-w-min"
-      >
-        <PageBodyStickyContainer direction="horizontal" limitWidth>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value={PROJECT_TAB.logs}>
-              Logs
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value={PROJECT_TAB.insights}>
-              Insights
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value={PROJECT_TAB.evaluators}>
-              Online evaluation
-            </TabsTrigger>
-            <TabsTrigger
-              variant="underline"
-              value={PROJECT_TAB.annotationQueues}
-            >
-              Annotation queues
-            </TabsTrigger>
-          </TabsList>
-        </PageBodyStickyContainer>
-        <TabsContent value={PROJECT_TAB.logs}>
-          <LogsTab
-            projectId={projectId}
-            projectName={projectName}
-            logsType={logsType}
-            onLogsTypeChange={setLogsType}
-          />
-        </TabsContent>
-        <TabsContent value={PROJECT_TAB.insights}>
-          <InsightsTab projectId={projectId} />
-        </TabsContent>
-        <TabsContent value={PROJECT_TAB.evaluators}>
-          <RulesTab projectId={projectId} />
-        </TabsContent>
-        <TabsContent value={PROJECT_TAB.annotationQueues}>
-          <AnnotationQueuesTab projectId={projectId} />
-        </TabsContent>
-      </Tabs>
-    );
-  };
 
   return (
     <>
@@ -129,7 +70,16 @@ const TracesPage = () => {
             <div className="text-muted-slate">{project.description}</div>
           </PageBodyStickyContainer>
         )}
-        {needsDefaultResolution ? <Loader /> : renderContent()}
+        {needsDefaultResolution ? (
+          <Loader />
+        ) : (
+          <LogsTab
+            projectId={projectId}
+            projectName={projectName}
+            logsType={logsType}
+            onLogsTypeChange={setLogsType}
+          />
+        )}
       </PageBodyScrollContainer>
       {isGuardrailsEnabled && (
         <SetGuardrailDialog
@@ -142,4 +92,4 @@ const TracesPage = () => {
   );
 };
 
-export default TracesPage;
+export default LogsPage;

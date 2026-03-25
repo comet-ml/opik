@@ -55,6 +55,8 @@ import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
+import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+
 const getRowId = (d: EvaluatorsRule) => d.id;
 
 const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
@@ -69,15 +71,6 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: "projects",
-    label: "Projects",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) =>
-      row.projects && row.projects.length > 0
-        ? row.projects.map((p) => p.project_name).join(", ")
-        : "N/A",
   },
   {
     id: "last_updated_at",
@@ -118,6 +111,11 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
   },
 ];
 
+const FILTER_COLUMNS = DEFAULT_COLUMNS.filter(
+  (col) =>
+    col.id !== "type" && col.id !== "enabled" && col.id !== "sampling_rate",
+);
+
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
   right: [],
@@ -125,7 +123,6 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "projects",
   "enabled",
   "sampling_rate",
   "type",
@@ -135,7 +132,6 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
-  "projects",
   "enabled",
   "sampling_rate",
   "type",
@@ -152,6 +148,7 @@ const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
+  const projectId = useProjectIdFromURL();
   const {
     permissions: { canUpdateOnlineEvaluationRules },
   } = usePermissions();
@@ -175,7 +172,7 @@ export const OnlineEvaluationPage: React.FC = () => {
     },
   );
 
-  const [filters = [], setFilters] = useQueryParam(`filters`, JsonParam, {
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
 
@@ -183,7 +180,7 @@ export const OnlineEvaluationPage: React.FC = () => {
     ColumnSort[]
   >({
     localStorageKey: COLUMNS_SORT_KEY,
-    queryKey: `sorting`,
+    queryKey: "sorting",
     defaultValue: [],
     queryParamConfig: JsonParam,
   });
@@ -206,6 +203,7 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const { data, isPending, isPlaceholderData, isFetching } = useRulesList(
     {
+      projectId,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -224,7 +222,6 @@ export const OnlineEvaluationPage: React.FC = () => {
   const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no rules yet` : "No search results";
 
-  // Backend now enriches projects (ID + name pairs) from projectIds
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
   const editingRule = rows.find((r) => r.id === editRuleId);
@@ -232,7 +229,6 @@ export const OnlineEvaluationPage: React.FC = () => {
   const isDialogOpen =
     Boolean(editingRule) || Boolean(cloningRule) || openDialogForCreate;
 
-  // Determine which rule to pass and what mode to use
   const dialogRule = editingRule || cloningRule;
   const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";
 
@@ -360,20 +356,6 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId, setCloneRuleId],
   );
 
-  // Filter out "type" (Scope), "enabled" (Status), "sampling_rate", and "projects" from filter options
-  // Note: projects filtering is not supported by backend (see OPIK-3446)
-  const filterableColumns = useMemo(
-    () =>
-      DEFAULT_COLUMNS.filter(
-        (col) =>
-          col.id !== "type" &&
-          col.id !== "enabled" &&
-          col.id !== "sampling_rate" &&
-          col.id !== "projects",
-      ),
-    [],
-  );
-
   if (isPending) {
     return <Loader />;
   }
@@ -388,6 +370,7 @@ export const OnlineEvaluationPage: React.FC = () => {
           setOpen={handleCloseDialog}
           rule={dialogRule}
           mode={dialogMode}
+          projectId={projectId}
         />
       </>
     );
@@ -414,11 +397,11 @@ export const OnlineEvaluationPage: React.FC = () => {
             dimension="sm"
           ></SearchInput>
           <FiltersButton
-            columns={filterableColumns}
+            columns={FILTER_COLUMNS}
             filters={filters}
             onChange={setFilters}
             layout="icon"
-          ></FiltersButton>
+          />
         </div>
         <div className="flex items-center gap-2">
           {canUpdateOnlineEvaluationRules && (
@@ -470,6 +453,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         setOpen={handleCloseDialog}
         rule={dialogRule}
         mode={dialogMode}
+        projectId={projectId}
       />
     </div>
   );

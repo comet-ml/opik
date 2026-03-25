@@ -14,9 +14,11 @@ const TopBar: React.FunctionComponent<TopBarProps> = ({ startSlot }) => {
 
   return (
     <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
-      <div className="flex min-w-1 flex-1 items-center gap-1">
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
         {startSlot}
-        <Breadcrumbs />
+        <div className="min-w-0 flex-1">
+          <Breadcrumbs />
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

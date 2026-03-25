@@ -25,6 +25,7 @@ type PluginStore = {
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
+  SidebarWorkspaceSelector: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -44,6 +45,7 @@ const PLUGIN_NAMES = [
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
+  "SidebarWorkspaceSelector",
   "init",
 ];
 
@@ -61,6 +63,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
+  SidebarWorkspaceSelector: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
