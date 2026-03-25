@@ -32,6 +32,7 @@ export class AgentConfigsClient {
      * @param {OpikApi.AgentConfigCreateWrite} request
      * @param {AgentConfigsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.UnauthorizedError}
      * @throws {@link OpikApi.ConflictError}
      *
@@ -93,6 +94,8 @@ export class AgentConfigsClient {
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 409:
