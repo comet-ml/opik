@@ -22,11 +22,6 @@ jobs:
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
           cp apps/opik-backend/src/main/resources/model_prices_and_context_window.json apps/opik-frontend/src/data/model_prices_and_context_window.json
 
-      - name: Create branch
-        uses: JosiahSiegel/remote-branch-action@v1.2.0
-        with:
-          branch: ${{ env.BRANCH_NAME }}
-
       - name: Commit files
         run: |
           set -ex
