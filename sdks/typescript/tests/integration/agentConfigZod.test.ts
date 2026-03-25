@@ -67,7 +67,7 @@ describe.skipIf(!shouldRunApiTests)(
     ): Promise<Record<string, unknown>> => {
       const traces = await client.searchTraces({
         projectName,
-        filterString: `id = "${traceId}"`,
+        filterString: `id = "${traceId}" AND metadata.agent_configuration contains ""`,
         waitForAtLeast: 1,
         waitForTimeout: 30,
       });
