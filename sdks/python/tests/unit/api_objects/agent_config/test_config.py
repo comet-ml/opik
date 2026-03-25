@@ -302,7 +302,7 @@ class TestAgentConfigManagerCreateMask:
     ):
         agent_config.create_mask(fields_with_values={"temperature": (float, 0.3, None)})
 
-        call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
+        call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
         assert blueprint.type == "mask"
         assert blueprint.values is not None
@@ -320,7 +320,7 @@ class TestAgentConfigManagerCreateMask:
     ):
         agent_config.create_mask(fields_with_values={"temperature": (float, 0.3, None)})
 
-        call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
+        call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
         assert "blueprint" in call_kwargs
         assert call_kwargs["blueprint"].id is not None
 
@@ -339,7 +339,7 @@ class TestAgentConfigManagerCreateMask:
             description="variant-A",
         )
 
-        call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
+        call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
         assert call_kwargs["blueprint"].description == "variant-A"
 
     def test_create_mask__with_project_name__passes_project_to_backend(
@@ -347,7 +347,7 @@ class TestAgentConfigManagerCreateMask:
     ):
         agent_config.create_mask(fields_with_values={"temp": (float, 0.5, None)})
 
-        call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
+        call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
 
 

@@ -39,7 +39,7 @@ class AgentConfigsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config
+        Creates a new optimizer config with initial blueprint. Fails if the project already has a config.
 
         Parameters
         ----------
@@ -70,6 +70,55 @@ class AgentConfigsClient:
         client.agent_configs.create_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', type="string", )], ), )
         """
         _response = self._raw_client.create_agent_config(
+            blueprint=blueprint,
+            project_id=project_id,
+            project_name=project_name,
+            id=id,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def update_agent_config(
+        self,
+        *,
+        blueprint: AgentBlueprintWrite,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
+
+        Parameters
+        ----------
+        blueprint : AgentBlueprintWrite
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        id : typing.Optional[str]
+            Agent config ID. Generated automatically if not provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import AgentBlueprintWrite
+        from Opik import AgentConfigValueWrite
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.update_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', type="string", )], ), )
+        """
+        _response = self._raw_client.update_agent_config(
             blueprint=blueprint,
             project_id=project_id,
             project_name=project_name,
@@ -411,7 +460,7 @@ class AsyncAgentConfigsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config
+        Creates a new optimizer config with initial blueprint. Fails if the project already has a config.
 
         Parameters
         ----------
@@ -445,6 +494,58 @@ class AsyncAgentConfigsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_agent_config(
+            blueprint=blueprint,
+            project_id=project_id,
+            project_name=project_name,
+            id=id,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def update_agent_config(
+        self,
+        *,
+        blueprint: AgentBlueprintWrite,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
+
+        Parameters
+        ----------
+        blueprint : AgentBlueprintWrite
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        id : typing.Optional[str]
+            Agent config ID. Generated automatically if not provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import AgentBlueprintWrite
+        from Opik import AgentConfigValueWrite
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.update_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', type="string", )], ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_agent_config(
             blueprint=blueprint,
             project_id=project_id,
             project_name=project_name,
