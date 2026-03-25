@@ -50,6 +50,7 @@ import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(PromptServiceImpl.class)
@@ -815,7 +816,7 @@ class PromptServiceImpl implements PromptService {
     private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String workspaceName,
             String userName) {
         prompts.stream()
-                .collect(java.util.stream.Collectors.groupingBy(p -> Optional.ofNullable(p.projectId())))
+                .collect(groupingBy(p -> Optional.ofNullable(p.projectId())))
                 .forEach((projectId, projectPrompts) -> eventBus.post(AlertEvent.builder()
                         .eventType(PROMPT_DELETED)
                         .userName(userName)

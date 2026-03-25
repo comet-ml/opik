@@ -15,15 +15,14 @@ public class MaskedSecretTokenSerializer extends JsonSerializer<String> {
     public void serialize(String value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
         if (value == null) {
             gen.writeNull();
-        } else {
-            String decrypted;
-            try {
-                decrypted = EncryptionUtils.decrypt(value);
-            } catch (Exception e) {
-                log.debug("Failed to decrypt secret token, falling back to raw value", e);
-                decrypted = value;
-            }
-            gen.writeString(EncryptionUtils.maskApiKey(decrypted));
+            return;
+        }
+
+        try {
+            gen.writeString(EncryptionUtils.maskApiKey(EncryptionUtils.decrypt(value)));
+        } catch (Exception e) {
+            log.debug("Failed to decrypt secret token, falling back to masked raw value", e);
+            gen.writeString(EncryptionUtils.maskApiKey(value));
         }
     }
 }

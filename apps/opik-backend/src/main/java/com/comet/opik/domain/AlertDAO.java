@@ -239,7 +239,7 @@ interface AlertDAO {
     List<Alert> findByWorkspaceAndEventTypes(@Define("workspaceId") @Bind("workspaceId") String workspaceId,
             @BindList("eventTypes") Set<String> eventTypes);
 
-    String COUNT = """
+    @SqlQuery("""
              WITH target_alerts AS (
                 SELECT
                     a.id as id,
@@ -261,9 +261,7 @@ interface AlertDAO {
                 count(id)
             FROM target_alerts
             <if(filters)> WHERE <filters> <endif>
-            """;
-
-    @SqlQuery(COUNT)
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long count(@Bind("workspaceId") String workspaceId,
