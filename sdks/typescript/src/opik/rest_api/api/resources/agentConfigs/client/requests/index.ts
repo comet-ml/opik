@@ -1,4 +1,3 @@
-export type { AgentConfigCreateWrite } from "./AgentConfigCreateWrite.js";
 export type { AgentConfigEnvSetByName } from "./AgentConfigEnvSetByName.js";
 export type { AgentConfigEnvUpdate } from "./AgentConfigEnvUpdate.js";
 export type { DeleteEnvRequest } from "./DeleteEnvRequest.js";

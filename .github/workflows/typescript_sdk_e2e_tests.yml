@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6
 
       - name: Set up Node.js ${{matrix.node_version}}
         uses: actions/setup-node@v4.2.0
@@ -51,7 +51,7 @@ jobs:
           COMPOSE_BAKE: false
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --backend --port-mapping --guardrails --build
+          ./opik.sh --backend --port-mapping --build
 
       - name: Check Opik server availability
         shell: bash
@@ -95,7 +95,7 @@ jobs:
 
       - name: Attach BE log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: opik-backend-log-node${{matrix.node_version}}
           path: ${{ github.workspace }}/opik-backend_node${{matrix.node_version}}.log
@@ -104,4 +104,4 @@ jobs:
         if: always()
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --stop --guardrails
+          ./opik.sh --stop

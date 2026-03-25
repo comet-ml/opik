@@ -186,9 +186,9 @@ paths:
     post:
       tags:
       - Agent Configs
-      summary: Create optimizer config or add blueprint
-      description: "Creates a new optimizer config with initial blueprint, or adds\
-        \ a new blueprint to existing config"
+      summary: Create optimizer config with initial blueprint
+      description: Creates a new optimizer config with initial blueprint. Fails if
+        the project already has a config.
       operationId: createAgentConfig
       requestBody:
         content:
@@ -206,7 +206,47 @@ paths:
                 type: string
               example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
         "400":
-          description: Bad Request
+          description: Bad Request (e.g. MASK type not allowed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+        "409":
+          description: Conflict (config already exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+    patch:
+      tags:
+      - Agent Configs
+      summary: Add blueprint to existing config
+      description: Adds a new blueprint to an existing optimizer config. Fails if
+        the project has no config yet.
+      operationId: updateAgentConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigCreate_Write"
+      responses:
+        "204":
+          description: Blueprint added
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
+        "404":
+          description: Not Found (no config for project)
           content:
             application/json:
               schema:
@@ -1846,7 +1886,10 @@ paths:
       tags:
       - Datasets
       summary: Create/update dataset items
-      description: Create/update dataset items based on dataset item id
+      description: |-
+        Create/update dataset items based on dataset item id.
+        Each item's 'id' field is the stable identifier and upsert key.
+        Provide it to update an existing item, or omit it to create a new one.
       operationId: createOrUpdateDatasetItems
       requestBody:
         content:
@@ -11222,9 +11265,18 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         dataset_item_id:
           type: string
+          description: |
+            Deprecated.
+            Always equals 'id'.
+            Retained for backward compatibility and will be removed in a future version
           format: uuid
           readOnly: true
         trace_id:
@@ -11541,6 +11593,11 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         trace_id:
           type: string
@@ -11896,9 +11953,18 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         dataset_item_id:
           type: string
+          description: |
+            Deprecated.
+            Always equals 'id'.
+            Retained for backward compatibility and will be removed in a future version
           format: uuid
           readOnly: true
         trace_id:
@@ -12429,9 +12495,18 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         dataset_item_id:
           type: string
+          description: |
+            Deprecated.
+            Always equals 'id'.
+            Retained for backward compatibility and will be removed in a future version
           format: uuid
           readOnly: true
         trace_id:
@@ -13404,6 +13479,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     Trace:
       required:
       - start_time
@@ -13527,6 +13609,13 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference"
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -13705,6 +13794,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -13747,6 +13843,13 @@ components:
           format: double
         thread_id:
           type: string
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
       description: "Please provide either none, only one of evaluate_task_result or\
         \ trace, but never both"
     ValueEntry_ExperimentItemBulkWriteView:
@@ -17113,7 +17216,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agentConfigurationEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -17181,8 +17283,6 @@ components:
         ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
-          type: boolean
-        agentConfigurationEnabled:
           type: boolean
     SpanBatchUpdate:
       required:
@@ -17296,6 +17396,13 @@ components:
         ttft:
           type: number
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     ErrorInfo_Write:
       required:
       - exception_type
@@ -17378,6 +17485,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     SpanBatch:
       required:
       - spans
@@ -17570,6 +17684,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     ValueEntry_Public:
       type: object
       properties:
@@ -17794,6 +17915,13 @@ components:
         ttft:
           type: number
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -17907,6 +18035,13 @@ components:
           format: double
         thread_id:
           type: string
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     TraceBatch:
       required:
       - traces
@@ -18157,6 +18292,13 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference_Public"
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     TraceThread:
       type: object
       properties:

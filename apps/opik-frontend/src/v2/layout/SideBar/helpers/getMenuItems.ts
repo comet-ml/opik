@@ -41,7 +41,7 @@ const getMenuItems = ({
       items: [
         {
           id: "logs",
-          path: projectPath("/traces"),
+          path: projectPath("/logs"),
           type: MENU_ITEM_TYPE.router,
           icon: Rows3,
           label: "Logs",
@@ -49,10 +49,11 @@ const getMenuItems = ({
         },
         {
           id: "insights",
+          path: projectPath("/insights"),
           type: MENU_ITEM_TYPE.router,
           icon: ChartLine,
           label: "Insights",
-          disabled: true,
+          disabled: !projectPrefix,
         },
       ],
     },

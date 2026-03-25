@@ -18,7 +18,6 @@ describe.skipIf(!shouldRunApiTests)(
   "AgentConfig CRUD Integration Test",
   () => {
     let client: Opik;
-    const testProjectName = `test-agent-config-${Date.now()}`;
 
     beforeAll(() => {
       console.log(getIntegrationTestStatus());
@@ -27,10 +26,11 @@ describe.skipIf(!shouldRunApiTests)(
         return;
       }
 
-      client = new Opik({ projectName: testProjectName });
+      client = new Opik({});
     });
 
     it("should create a blueprint and retrieve it by latest", async () => {
+      const testProjectName = `test-agent-config-${Date.now()}`;
       const agentConfig = client.getAgentConfig({
         projectName: testProjectName,
       });
@@ -63,6 +63,7 @@ describe.skipIf(!shouldRunApiTests)(
     });
 
     it("should retrieve a blueprint by ID", async () => {
+      const testProjectName = `test-agent-config-${Date.now()}`;
       const agentConfig = client.getAgentConfig({
         projectName: testProjectName,
       });
@@ -78,6 +79,7 @@ describe.skipIf(!shouldRunApiTests)(
     });
 
     it("should create a mask blueprint", async () => {
+      const testProjectName = `test-agent-config-${Date.now()}`;
       const agentConfig = client.getAgentConfig({
         projectName: testProjectName,
       });
@@ -102,6 +104,7 @@ describe.skipIf(!shouldRunApiTests)(
     });
 
     it("should tag a blueprint with an env label and retrieve it by env", async () => {
+      const testProjectName = `test-agent-config-${Date.now()}`;
       const agentConfig = client.getAgentConfig({
         projectName: testProjectName,
       });
@@ -133,6 +136,7 @@ describe.skipIf(!shouldRunApiTests)(
       const promptVersionV1 = versionsV1[0];
       expect(promptVersionV1.commit).toBe(commitV1);
 
+      const testProjectName = `test-agent-config-${Date.now()}`;
       const agentConfig = client.getAgentConfig({
         projectName: testProjectName,
       });
@@ -180,6 +184,7 @@ describe.skipIf(!shouldRunApiTests)(
     });
 
     it("should return null for nonexistent blueprint ID", async () => {
+      const testProjectName = `test-agent-config-${Date.now()}`;
       const agentConfig = client.getAgentConfig({
         projectName: testProjectName,
       });

@@ -19,7 +19,7 @@ import {
 import { Filter } from "@/types/filters";
 import { isFilterValid, createFilter } from "@/lib/filters";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { LOGS_TYPE } from "@/constants/traces";
 import useAppStore from "@/store/AppStore";
 import { CHART_TYPE } from "@/constants/chart";
 import {
@@ -292,13 +292,12 @@ const ProjectMetricsWidget: React.FunctionComponent<
       return {
         onClick: () => {
           navigate({
-            to: "/$workspaceName/projects/$projectId/traces",
+            to: "/$workspaceName/projects/$projectId/logs",
             params: {
               projectId,
               workspaceName,
             },
             search: {
-              tab: PROJECT_TAB.logs,
               logsType,
               [filtersKey]: [...widgetFilters, filter],
               time_range: runtimeContext.dateRange,

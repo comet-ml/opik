@@ -8,7 +8,7 @@ import {
 import { Button } from "@/ui/button";
 import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
-import { Project } from "@/types/projects";
+import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import { CellContext } from "@tanstack/react-table";
 import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -26,6 +26,9 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
   const {
     permissions: { canCreateProjects, canDeleteProjects },
   } = usePermissions();
+
+  const isDefaultProject = project.name === DEFAULT_PROJECT_NAME;
+  const canDelete = canDeleteProjects && !isDefaultProject;
 
   const { mutate } = useProjectDeleteMutation();
 
@@ -77,10 +80,8 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
               Edit
             </DropdownMenuItem>
           )}
-          {(canCreateProjects || canDeleteProjects) && (
-            <DropdownMenuSeparator />
-          )}
-          {canDeleteProjects && (
+          {canCreateProjects && canDelete && <DropdownMenuSeparator />}
+          {canDelete && (
             <DropdownMenuItem
               onClick={() => {
                 setOpen(1);
