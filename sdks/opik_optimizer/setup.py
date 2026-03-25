@@ -19,7 +19,7 @@ setup(
         "datasets",
         "deap>=1.4.3",
         "hf_xet",
-        "litellm",
+        "litellm!=1.82.7,!=1.82.8",  # compromised: https://docs.litellm.ai/blog/security-update-march-2026
         "opik>=1.7.17",
         "optuna",
         "pandas",

@@ -21,7 +21,9 @@ dependencies = [
     #   See: https://github.com/BerriAI/litellm/pull/15529
     # - Exclude 1.81.x: HTTP client closed during concurrent calls
     #   See: https://github.com/BerriAI/litellm/issues/19608
-    "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1,!=1.81.*",
+    # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
+    #   See: https://docs.litellm.ai/blog/security-update-march-2026
+    "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1,!=1.81.*,!=1.82.7,!=1.82.8",
     "mcp>=1.0.0",
     "opik>=1.9.7",
     "optuna",
