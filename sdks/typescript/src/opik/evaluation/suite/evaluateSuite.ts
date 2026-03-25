@@ -110,6 +110,7 @@ export async function evaluateSuite<T = Record<string, unknown>>(
     datasetVersionId: versionInfo?.id,
     evaluationMethod: "evaluation_suite",
     tags: options.tags,
+    projectName: options.projectName,
   });
 
   try {

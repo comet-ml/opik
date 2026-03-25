@@ -525,6 +525,7 @@ from .span import Span
 from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
+from .span_experiment_item_bulk_write_view_source import SpanExperimentItemBulkWriteViewSource
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 from .span_filter import SpanFilter
 from .span_filter_operator import SpanFilterOperator
@@ -537,14 +538,18 @@ from .span_llm_as_judge_code_public import SpanLlmAsJudgeCodePublic
 from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
+from .span_public_source import SpanPublicSource
 from .span_public_type import SpanPublicType
+from .span_source import SpanSource
 from .span_type import SpanType
 from .span_update import SpanUpdate
+from .span_update_source import SpanUpdateSource
 from .span_update_type import SpanUpdateType
 from .span_user_defined_metric_python_code import SpanUserDefinedMetricPythonCode
 from .span_user_defined_metric_python_code_public import SpanUserDefinedMetricPythonCodePublic
 from .span_user_defined_metric_python_code_write import SpanUserDefinedMetricPythonCodeWrite
 from .span_write import SpanWrite
+from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .start_multipart_upload_response import StartMultipartUploadResponse
@@ -577,6 +582,7 @@ from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
 from .trace_enrichment_options import TraceEnrichmentOptions
 from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
+from .trace_experiment_item_bulk_write_view_source import TraceExperimentItemBulkWriteViewSource
 from .trace_filter import TraceFilter
 from .trace_filter_operator import TraceFilterOperator
 from .trace_filter_public import TraceFilterPublic
@@ -585,7 +591,9 @@ from .trace_filter_write import TraceFilterWrite
 from .trace_filter_write_operator import TraceFilterWriteOperator
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
+from .trace_public_source import TracePublicSource
 from .trace_public_visibility_mode import TracePublicVisibilityMode
+from .trace_source import TraceSource
 from .trace_thread import TraceThread
 from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_filter_operator import TraceThreadFilterOperator
@@ -604,8 +612,10 @@ from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefined
 from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
 from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
 from .trace_update import TraceUpdate
+from .trace_update_source import TraceUpdateSource
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
+from .trace_write_source import TraceWriteSource
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
@@ -1117,6 +1127,7 @@ __all__ = [
     "SpanBatch",
     "SpanEnrichmentOptions",
     "SpanExperimentItemBulkWriteView",
+    "SpanExperimentItemBulkWriteViewSource",
     "SpanExperimentItemBulkWriteViewType",
     "SpanFilter",
     "SpanFilterOperator",
@@ -1129,14 +1140,18 @@ __all__ = [
     "SpanLlmAsJudgeCodeWrite",
     "SpanPagePublic",
     "SpanPublic",
+    "SpanPublicSource",
     "SpanPublicType",
+    "SpanSource",
     "SpanType",
     "SpanUpdate",
+    "SpanUpdateSource",
     "SpanUpdateType",
     "SpanUserDefinedMetricPythonCode",
     "SpanUserDefinedMetricPythonCodePublic",
     "SpanUserDefinedMetricPythonCodeWrite",
     "SpanWrite",
+    "SpanWriteSource",
     "SpanWriteType",
     "SpansCountResponse",
     "StartMultipartUploadResponse",
@@ -1169,6 +1184,7 @@ __all__ = [
     "TraceCountResponse",
     "TraceEnrichmentOptions",
     "TraceExperimentItemBulkWriteView",
+    "TraceExperimentItemBulkWriteViewSource",
     "TraceFilter",
     "TraceFilterOperator",
     "TraceFilterPublic",
@@ -1177,7 +1193,9 @@ __all__ = [
     "TraceFilterWriteOperator",
     "TracePagePublic",
     "TracePublic",
+    "TracePublicSource",
     "TracePublicVisibilityMode",
+    "TraceSource",
     "TraceThread",
     "TraceThreadFilter",
     "TraceThreadFilterOperator",
@@ -1196,8 +1214,10 @@ __all__ = [
     "TraceThreadUserDefinedMetricPythonCodePublic",
     "TraceThreadUserDefinedMetricPythonCodeWrite",
     "TraceUpdate",
+    "TraceUpdateSource",
     "TraceVisibilityMode",
     "TraceWrite",
+    "TraceWriteSource",
     "Usage",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",

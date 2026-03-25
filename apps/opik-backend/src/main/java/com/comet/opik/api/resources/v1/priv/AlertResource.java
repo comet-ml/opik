@@ -50,8 +50,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.AlertType.GENERAL;
-import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
-import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 
 @Path("/v1/private/alerts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -153,11 +151,7 @@ public class AlertResource {
 
         log.info("Got alerts on workspace_id '{}', count '{}'", workspaceId, alertPage.size());
 
-        return Response.ok(alertPage.toBuilder()
-                .content(alertPage.content().stream()
-                        .map(this::maskSecretToken)
-                        .toList())
-                .build()).build();
+        return Response.ok(alertPage).build();
     }
 
     @GET
@@ -177,7 +171,7 @@ public class AlertResource {
 
         log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
 
-        return Response.ok().entity(maskSecretToken(alert)).build();
+        return Response.ok().entity(alert).build();
     }
 
     @POST
@@ -240,11 +234,4 @@ public class AlertResource {
         return Response.ok().entity(examples).build();
     }
 
-    private Alert maskSecretToken(Alert alert) {
-        return alert.toBuilder().webhook(alert.webhook().toBuilder()
-                .secretToken(alert.webhook().secretToken() != null
-                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
-                        : null)
-                .build()).build();
-    }
 }

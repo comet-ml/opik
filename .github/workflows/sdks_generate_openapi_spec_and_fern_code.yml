@@ -56,6 +56,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -81,11 +83,6 @@ jobs:
       - name: Set branch name
         run: |
           echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
-
-      - name: Create branch
-        uses: JosiahSiegel/remote-branch-action@v1.2.0
-        with:
-          branch: ${{ env.BRANCH_NAME }}
 
       - name: Run Generate OpenAPI spec and Fern code
         env:

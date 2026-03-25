@@ -20,8 +20,9 @@ const AgentNameStep: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid) return;
-    // Will transition to CONNECT_AGENT once that step is implemented
-    goToStep(AGENT_ONBOARDING_STEPS.DONE, { agentName: trimmedName });
+    goToStep(AGENT_ONBOARDING_STEPS.CONNECT_AGENT, {
+      agentName: trimmedName,
+    });
   };
 
   return (

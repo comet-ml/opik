@@ -122,6 +122,13 @@ export class OpikClient {
     clients.push(this);
   }
 
+  /**
+   * Resolves the project name, falling back to the client's configured project name.
+   */
+  public resolveProjectName(projectName?: string): string {
+    return projectName ?? this.config.projectName;
+  }
+
   private displayTraceLog = (traceId: string, projectName: string) => {
     if (projectName === this.lastProjectNameLogged || !this.config.apiUrl) {
       return;
@@ -160,12 +167,15 @@ export class OpikClient {
    * Retrieves an existing dataset by name
    *
    * @param name The name of the dataset to retrieve
+   * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
    * @returns A Dataset object associated with the specified name
    * @throws Error if the dataset doesn't exist
    */
   public getDataset = async <T extends DatasetItemData = DatasetItemData>(
-    name: string
+    name: string,
+    projectName?: string
   ): Promise<Dataset<T>> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Getting dataset with name "${name}"`);
     try {
       // TODO Requires Batch class update to be able use name instead of id and get it from there
@@ -173,9 +183,10 @@ export class OpikClient {
 
       const response = await this.api.datasets.getDatasetByIdentifier({
         datasetName: name,
+        projectName: resolvedProjectName,
       });
 
-      return new Dataset<T>(response, this);
+      return new Dataset<T>({ ...response, projectName: resolvedProjectName }, this);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         throw new DatasetNotFoundError(name);
@@ -189,21 +200,25 @@ export class OpikClient {
    *
    * @param name The name of the dataset
    * @param description Optional description of the dataset
+   * @param projectName Optional project name to scope the dataset. If not provided, uses the client's configured project.
    * @returns The created Dataset object
    */
   public createDataset = async <T extends DatasetItemData = DatasetItemData>(
     name: string,
-    description?: string
+    description?: string,
+    projectName?: string
   ): Promise<Dataset<T>> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Creating dataset with name "${name}"`);
 
-    const entity = new Dataset<T>({ name, description }, this);
+    const entity = new Dataset<T>({ name, description, projectName: resolvedProjectName }, this);
 
     try {
       this.datasetBatchQueue.create({
         name: entity.name,
         description: entity.description,
         id: entity.id,
+        projectName: resolvedProjectName,
       });
 
       logger.debug("Dataset added to the queue with name:", entity.name);
@@ -220,26 +235,28 @@ export class OpikClient {
    *
    * @param name The name of the dataset
    * @param description Optional description of the dataset (used if created)
+   * @param projectName Optional project name to scope the dataset. If not provided, uses the client's configured project.
    * @returns A promise that resolves to the existing or newly created Dataset object
    */
   public getOrCreateDataset = async <
     T extends DatasetItemData = DatasetItemData,
   >(
     name: string,
-    description?: string
+    description?: string,
+    projectName?: string
   ): Promise<Dataset<T>> => {
     logger.debug(
       `Attempting to retrieve or create dataset with name: "${name}"`
     );
 
     try {
-      return await this.getDataset(name);
+      return await this.getDataset(name, projectName);
     } catch (error) {
       if (error instanceof DatasetNotFoundError) {
         logger.info(
           `Dataset "${name}" not found. Proceeding to create a new one.`
         );
-        return this.createDataset(name, description);
+        return this.createDataset(name, description, projectName);
       }
       logger.error(`Error retrieving dataset "${name}":`, error);
       throw error;
@@ -250,25 +267,36 @@ export class OpikClient {
    * Returns all datasets up to the specified limit
    *
    * @param maxResults Maximum number of datasets to return (default: 100)
+   * @param projectName Optional project name to filter datasets by. If not provided, uses the client's configured project.
    * @returns List of Dataset objects
    */
   public getDatasets = async <T extends DatasetItemData = DatasetItemData>(
-    maxResults: number = 100
+    maxResults: number = 100,
+    projectName?: string
   ): Promise<Dataset<T>[]> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Getting all datasets (limit: ${maxResults})`);
 
     try {
       // Flush the queue first to ensure all pending datasets are created
       await this.datasetBatchQueue.flush();
 
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — list without project filter
+      }
+
       const response = await this.api.datasets.findDatasets({
         size: maxResults,
+        ...(projectId && { projectId }),
       });
 
       const datasets: Dataset<T>[] = [];
 
       for (const datasetData of response.content || []) {
-        datasets.push(new Dataset<T>(datasetData, this));
+        datasets.push(new Dataset<T>({ ...datasetData, projectName: resolvedProjectName }, this));
       }
 
       logger.info(`Retrieved ${datasets.length} datasets`);
@@ -283,12 +311,13 @@ export class OpikClient {
    * Deletes a dataset by name
    *
    * @param name The name of the dataset to delete
+   * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
    */
-  public deleteDataset = async (name: string): Promise<void> => {
+  public deleteDataset = async (name: string, projectName?: string): Promise<void> => {
     logger.debug(`Deleting dataset with name "${name}"`);
 
     try {
-      const dataset = await this.getDataset(name);
+      const dataset = await this.getDataset(name, projectName);
       if (!dataset.id) {
         throw new Error(`Cannot delete dataset "${name}": ID not available`);
       }
@@ -582,6 +611,7 @@ export class OpikClient {
     datasetVersionId,
     evaluationMethod,
     tags,
+    projectName,
   }: {
     datasetName: string;
     name?: string;
@@ -592,6 +622,7 @@ export class OpikClient {
     datasetVersionId?: string;
     evaluationMethod?: OpikApi.ExperimentWriteEvaluationMethod;
     tags?: string[];
+    projectName?: string;
   }): Promise<Experiment> => {
     logger.debug(`Creating experiment for dataset "${datasetName}"`);
 
@@ -605,8 +636,9 @@ export class OpikClient {
       prompts
     );
 
+    const resolvedProjectName = this.resolveProjectName(projectName);
     const id = generateId();
-    const experiment = new Experiment({ id, name, datasetName, prompts, tags }, this);
+    const experiment = new Experiment({ id, name, datasetName, prompts, tags, projectName: resolvedProjectName }, this);
 
     try {
       await this.api.experiments.createExperiment({
@@ -620,6 +652,7 @@ export class OpikClient {
         datasetVersionId,
         tags,
         evaluationMethod,
+        projectName: resolvedProjectName,
       });
 
       logger.debug("Experiment created with id:", id);
@@ -695,6 +728,7 @@ export class OpikClient {
           id: experimentData.id,
           name: experimentData.name,
           datasetName: experimentData.datasetName ?? undefined,
+          projectName: experimentData.projectName ?? undefined,
         },
         this
       );
@@ -715,12 +749,14 @@ export class OpikClient {
    * @param name The name of the experiments to retrieve
    * @returns A list of Experiment objects with the given name
    */
-  public getExperimentsByName = async (name: string): Promise<Experiment[]> => {
+  public getExperimentsByName = async (name: string, projectName?: string): Promise<Experiment[]> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Getting experiments with name "${name}"`);
 
     try {
       const streamResponse = await this.api.experiments.streamExperiments({
         name,
+        projectName: resolvedProjectName,
       });
 
       const rawItems = await parseNdjsonStreamToArray<ExperimentPublic>(
@@ -735,6 +771,7 @@ export class OpikClient {
               id: exp.id,
               name: exp.name,
               datasetName: exp.datasetName ?? undefined,
+              projectName: exp.projectName ?? undefined,
             },
             this
           )
@@ -751,10 +788,10 @@ export class OpikClient {
    * @param name The name of the experiment to retrieve
    * @returns The Experiment object
    */
-  public getExperiment = async (name: string): Promise<Experiment> => {
+  public getExperiment = async (name: string, projectName?: string): Promise<Experiment> => {
     logger.debug(`Getting experiment with name "${name}"`);
 
-    const experiments = await this.getExperimentsByName(name);
+    const experiments = await this.getExperimentsByName(name, projectName);
 
     if (experiments.length === 0) {
       throw new ExperimentNotFoundError(name);
@@ -768,16 +805,18 @@ export class OpikClient {
    *
    * @param datasetName The name of the dataset
    * @param maxResults Maximum number of experiments to return (default: 100)
+   * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
    * @returns A list of Experiment objects associated with the dataset
    * @throws {DatasetNotFoundError} If the dataset doesn't exist
    */
   public getDatasetExperiments = async (
     datasetName: string,
-    maxResults: number = 100
+    maxResults: number = 100,
+    projectName?: string
   ): Promise<Experiment[]> => {
     logger.debug(`Getting experiments for dataset "${datasetName}"`);
 
-    const dataset = await this.getDataset(datasetName);
+    const dataset = await this.getDataset(datasetName, projectName);
 
     const pageSize = Math.min(100, maxResults);
     const experiments: Experiment[] = [];
@@ -868,7 +907,8 @@ export class OpikClient {
       promptData: OpikApi.PromptPublic,
       versionData: OpikApi.PromptVersionDetail
     ) => T,
-    logContext: string
+    logContext: string,
+    projectName?: string
   ): Promise<T> => {
     logger.debug(`Creating ${logContext}`, { name });
 
@@ -905,6 +945,7 @@ export class OpikClient {
               type: normalizedType,
             },
             templateStructure,
+            projectName,
           },
           this.api.requestOptions
         );
@@ -960,6 +1001,7 @@ export class OpikClient {
   public createPrompt = async (
     options: CreatePromptOptions
   ): Promise<Prompt> => {
+    const resolvedProjectName = this.resolveProjectName(options.projectName);
     return this.createPromptInternal(
       options.name,
       options.prompt,
@@ -970,7 +1012,8 @@ export class OpikClient {
       },
       (promptData, versionData) =>
         Prompt.fromApiResponse(promptData, versionData, this),
-      "prompt"
+      "prompt",
+      resolvedProjectName
     );
   };
 
@@ -998,6 +1041,7 @@ export class OpikClient {
   public createChatPrompt = async (
     options: CreateChatPromptOptions
   ): Promise<ChatPrompt> => {
+    const resolvedProjectName = this.resolveProjectName(options.projectName);
     // Serialize messages to JSON for backend storage
     const messagesJson = JSON.stringify(options.messages);
 
@@ -1022,7 +1066,8 @@ export class OpikClient {
       },
       (promptData, versionData) =>
         ChatPrompt.fromApiResponse(promptData, versionData, this),
-      "chat prompt"
+      "chat prompt",
+      resolvedProjectName
     );
   };
 
@@ -1040,6 +1085,17 @@ export class OpikClient {
     logger.debug("Getting prompt", options);
 
     try {
+      // Resolve project name for filtering
+      const resolvedProjectName = this.resolveProjectName(options.projectName);
+      const resolvedOptions = { ...options, projectName: resolvedProjectName };
+
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — search without project filter
+      }
+
       // Step 1: Search for the prompt by name to get tags and description
       const searchResponse = await this.api.prompts.getPrompts(
         {
@@ -1047,6 +1103,7 @@ export class OpikClient {
             { field: "name", operator: "=", value: options.name },
           ]),
           size: 1,
+          ...(projectId && { projectId }),
         },
         this.api.requestOptions
       );
@@ -1059,7 +1116,7 @@ export class OpikClient {
 
       // Step 2: Get the version (latest if no commit specified)
       const versionData = await this.api.prompts.retrievePromptVersion(
-        options,
+        resolvedOptions,
         this.api.requestOptions
       );
 
@@ -1106,6 +1163,17 @@ export class OpikClient {
     logger.debug("Getting chat prompt", options);
 
     try {
+      // Resolve project name for filtering
+      const resolvedProjectName = this.resolveProjectName(options.projectName);
+      const resolvedOptions = { ...options, projectName: resolvedProjectName };
+
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — search without project filter
+      }
+
       // Step 1: Search for the prompt by name to get tags and description
       const searchResponse = await this.api.prompts.getPrompts(
         {
@@ -1113,6 +1181,7 @@ export class OpikClient {
             { field: "name", operator: "=", value: options.name },
           ]),
           size: 1,
+          ...(projectId && { projectId }),
         },
         this.api.requestOptions
       );
@@ -1125,7 +1194,7 @@ export class OpikClient {
 
       // Step 2: Get the version (latest if no commit specified)
       const versionData = await this.api.prompts.retrievePromptVersion(
-        options,
+        resolvedOptions,
         this.api.requestOptions
       );
 

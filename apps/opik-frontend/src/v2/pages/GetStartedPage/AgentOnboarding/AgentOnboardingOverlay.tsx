@@ -4,6 +4,7 @@ import AgentOnboardingProvider, {
   AGENT_ONBOARDING_STEPS,
 } from "./AgentOnboardingContext";
 import AgentNameStep from "./AgentNameStep";
+import ConnectAgentStep from "./ConnectAgentStep";
 
 const AgentOnboardingSteps: React.FC = () => {
   const { currentStep } = useAgentOnboarding();
@@ -11,6 +12,8 @@ const AgentOnboardingSteps: React.FC = () => {
   switch (currentStep) {
     case AGENT_ONBOARDING_STEPS.AGENT_NAME:
       return <AgentNameStep />;
+    case AGENT_ONBOARDING_STEPS.CONNECT_AGENT:
+      return <ConnectAgentStep />;
     default:
       return null;
   }
