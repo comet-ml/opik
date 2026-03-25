@@ -1,9 +1,10 @@
+import { MockInstance } from "vitest";
 import { Opik } from "opik";
 import { mockAPIFunction } from "../../mockUtils";
 
 describe("trace source auto-set", () => {
   let client: Opik;
-  let createTracesSpy: ReturnType<typeof vi.spyOn>;
+  let createTracesSpy: MockInstance<typeof client.api.traces.createTraces>;
 
   beforeEach(() => {
     client = new Opik();
