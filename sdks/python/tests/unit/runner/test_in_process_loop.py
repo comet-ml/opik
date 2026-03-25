@@ -156,7 +156,7 @@ class TestJobExecution:
     def test_execute_job__sync_entrypoint__calls_function(
         self, mock_api, shutdown_event
     ):
-        def my_agent(q):
+        def my_agent(q, **kwargs):
             return f"answer: {q}"
 
         registry.register("my_agent", my_agent, "proj", [], "")
@@ -180,7 +180,7 @@ class TestJobExecution:
     def test_execute_job__async_entrypoint__calls_function(
         self, mock_api, shutdown_event
     ):
-        async def my_agent(q):
+        async def my_agent(q, **kwargs):
             return f"answer: {q}"
 
         registry.register("my_agent", my_agent, "proj", [], "")
@@ -218,7 +218,7 @@ class TestJobExecution:
         assert "Unknown agent" in call_kwargs["error"]
 
     def test_execute_job__exception__reports_failed(self, mock_api, shutdown_event):
-        def bad_agent():
+        def bad_agent(**kwargs):
             raise ValueError("boom")
 
         registry.register("bad", bad_agent, "proj", [], "")
@@ -240,7 +240,7 @@ class TestJobExecution:
         assert "ValueError" in call_kwargs["error"]
 
     def test_execute_job__timeout__reports_failed(self, mock_api, shutdown_event):
-        def slow_agent():
+        def slow_agent(**kwargs):
             time.sleep(5)
 
         registry.register("slow", slow_agent, "proj", [], "")
@@ -262,7 +262,7 @@ class TestJobExecution:
         assert "timed out" in call_kwargs["error"].lower()
 
     def test_execute_job__cancelled__skipped(self, mock_api, shutdown_event):
-        def my_agent():
+        def my_agent(**kwargs):
             return "ok"
 
         registry.register("my_agent", my_agent, "proj", [], "")
@@ -313,14 +313,15 @@ class TestJobExecution:
         loop.run_until_complete(lp._execute_job(job))
         loop.close()
 
-        assert captured_kwargs["opik_args"]["trace"]["id"] == "t-123"
+        assert captured_kwargs["opik_args"]["trace"]["id"] != "t-123"
+        assert captured_kwargs["opik_args"]["trace"]["id"]  # non-empty generated id
         assert captured_kwargs["opik_args"]["trace"]["tags"] == ["existing"]
         assert captured_kwargs["opik_args"]["span"]["metadata"] == {"k": "v"}
 
     def test_execute_job__report_failure__does_not_raise(
         self, mock_api, shutdown_event
     ):
-        def my_agent():
+        def my_agent(**kwargs):
             return "ok"
 
         registry.register("my_agent", my_agent, "proj", [], "")
