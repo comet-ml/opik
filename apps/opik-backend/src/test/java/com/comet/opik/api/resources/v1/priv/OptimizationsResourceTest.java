@@ -1671,6 +1671,52 @@ class OptimizationsResourceTest {
             assertThat(afterCompletedCompletedPage.content().get(0).id()).isEqualTo(optId);
             assertThat(afterCompletedCompletedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
         }
+
+        @Test
+        @DisplayName("Filter optimizations by project_id")
+        void filterOptimizationsByProjectId() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create two projects
+            String project1Name = "project-" + UUID.randomUUID();
+            String project2Name = "project-" + UUID.randomUUID();
+            var project1Id = projectResourceClient.createProject(project1Name, apiKey, workspaceName);
+            var project2Id = projectResourceClient.createProject(project2Name, apiKey, workspaceName);
+
+            // Create one optimization per project using projectName
+            var opt1 = optimizationResourceClient.createPartialOptimization()
+                    .projectName(project1Name)
+                    .projectId(null)
+                    .build();
+            var opt2 = optimizationResourceClient.createPartialOptimization()
+                    .projectName(project2Name)
+                    .projectId(null)
+                    .build();
+
+            var opt1Id = optimizationResourceClient.create(opt1, apiKey, workspaceName);
+            var opt2Id = optimizationResourceClient.create(opt2, apiKey, workspaceName);
+
+            // Verify project_id was set on the stored optimization
+            var actualOpt1 = optimizationResourceClient.get(opt1Id, apiKey, workspaceName, 200);
+            assertThat(actualOpt1.projectId()).isEqualTo(project1Id);
+
+            // Filter by project1Id
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.PROJECT_ID)
+                    .operator(Operator.EQUAL)
+                    .value(project1Id.toString())
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            assertThat(page.content()).containsExactly(actualOpt1);
+        }
     }
 
 }
