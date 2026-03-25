@@ -214,7 +214,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         seed: int | None = None,
         model_kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        response = track_completion()(litellm.completion)(
+        response = track_completion(source="optimization")(litellm.completion)(
             model=model,
             messages=messages,
             seed=seed,

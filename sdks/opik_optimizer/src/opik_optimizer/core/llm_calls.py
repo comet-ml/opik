@@ -641,9 +641,9 @@ def call_model(
         effective_project_name,
     )
 
-    tracked_completion = track_completion(project_name=effective_project_name)(
-        litellm.completion
-    )
+    tracked_completion = track_completion(
+        project_name=effective_project_name, source="optimization"
+    )(litellm.completion)
     wants_all = return_all
     attempts = 2 if response_model is not None else 1
     last_error: StructuredOutputParsingError | None = None
@@ -821,9 +821,9 @@ async def call_model_async(
         project_name=effective_project_name,
     )
 
-    tracked_completion = track_completion(project_name=effective_project_name)(
-        litellm.acompletion
-    )
+    tracked_completion = track_completion(
+        project_name=effective_project_name, source="optimization"
+    )(litellm.acompletion)
     logger.debug(
         f"call_model_async: model={model} project={effective_project_name} "
         f"n={final_params_for_litellm.get('n')} has_metadata={bool(final_params_for_litellm.get('metadata'))}"
