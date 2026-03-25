@@ -18,6 +18,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
@@ -85,6 +86,13 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         log.info("Creating optimizer config for workspace '{}'", workspaceId);
 
+        if (request.blueprint().type() == AgentBlueprint.BlueprintType.MASK) {
+            throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(List.of(
+                            "Cannot create config with a MASK blueprint. Use BLUEPRINT type for POST.")))
+                    .build());
+        }
+
         return resolveProjectId(request, workspaceId, userName)
                 .flatMap(projectId -> lockService.executeWithLock(
                         new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
@@ -114,7 +122,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                             .build()));
 
                             return blueprint;
-                        }))));
+                        })).subscribeOn(Schedulers.boundedElastic())));
     }
 
     @Override
@@ -132,7 +140,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             AgentConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
                             if (existingConfig == null) {
-                                throw new NotFoundException(Response.status(Response.Status.NOT_FOUND)
+                                throw new ClientErrorException(Response.status(Response.Status.NOT_FOUND)
                                         .entity(new ErrorMessage(List.of(
                                                 "No config found for project '%s'. Use POST to create one first."
                                                         .formatted(projectId))))
@@ -141,13 +149,15 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             return createBlueprint(dao, request, existingConfig.id(), projectId, workspaceId,
                                     userName);
-                        }))));
+                        })).subscribeOn(Schedulers.boundedElastic())));
     }
 
     private Mono<UUID> resolveProjectId(AgentConfigCreate request, String workspaceId, String userName) {
         if (request.projectId() != null) {
-            projectService.get(request.projectId(), workspaceId);
-            return Mono.just(request.projectId());
+            return Mono.fromCallable(() -> {
+                projectService.get(request.projectId(), workspaceId);
+                return request.projectId();
+            }).subscribeOn(Schedulers.boundedElastic());
         }
 
         String projectName = WorkspaceUtils.getProjectName(request.projectName());
@@ -438,14 +448,14 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         return lockService.<Void>executeWithLock(
                 new LockService.Lock(ENV_LOCK_FORMAT.formatted(workspaceId, projectId)),
-                Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
+                Mono.<Void>fromRunnable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
                     AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
                     validateBlueprintReferences(dao, workspaceId, projectId, request.envs());
                     upsertEnvs(dao, workspaceId, projectId, userName, request.envs());
 
                     return null;
-                })));
+                })).subscribeOn(Schedulers.boundedElastic()));
     }
 
     @Override
@@ -459,7 +469,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         return lockService.<Void>executeWithLock(
                 new LockService.Lock(ENV_LOCK_FORMAT.formatted(workspaceId, projectId)),
-                Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
+                Mono.<Void>fromRunnable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
                     AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
                     AgentBlueprint blueprint = requireBlueprintByName(dao, workspaceId, projectId, blueprintName);
@@ -471,7 +481,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                     .build()));
 
                     return null;
-                })));
+                })).subscribeOn(Schedulers.boundedElastic()));
     }
 
     private void upsertEnvs(AgentConfigDAO dao, String workspaceId, UUID projectId, String userName,
@@ -598,7 +608,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         return lockService.executeWithLock(
                 new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
-                Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
+                Mono.fromCallable(() -> transactionTemplate.<List<UUID>>inTransaction(WRITE, handle -> {
                     AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
                     List<AgentConfigDAO.BlueprintValueReference> references = dao
@@ -659,6 +669,9 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     return blueprintInserts.stream()
                             .map(AgentConfigDAO.BlueprintInsertData::id)
                             .toList();
-                })));
+                })).subscribeOn(Schedulers.boundedElastic())
+                        .doOnSuccess(ids -> log.info(
+                                "Completed blueprint updates for prompt '{}' with commit '{}': updated {} blueprints",
+                                promptId, newCommit, ids.size())));
     }
 }

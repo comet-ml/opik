@@ -111,6 +111,9 @@ export class AgentConfig {
    * Masks always sit on top of an existing config. Pass the returned mask ID
    * to `getBlueprint({ maskId })` to retrieve a blueprint with the mask's
    * values overlaid on top of the base blueprint.
+   *
+   * @throws OpikApiError with status 404 if no config exists yet for this project.
+   *   Call `createBlueprint()` first to initialize the config.
    */
   async createMask(options: CreateBlueprintOptions): Promise<string> {
     const id = generateId();

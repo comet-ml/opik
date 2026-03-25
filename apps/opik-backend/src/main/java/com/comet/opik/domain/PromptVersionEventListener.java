@@ -6,6 +6,8 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.time.Duration;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 @EagerSingleton
@@ -26,6 +28,6 @@ public class PromptVersionEventListener {
                 event.commit(),
                 "auto-update",
                 event.excludeProjectIds())
-                .block();
+                .block(Duration.ofSeconds(30));
     }
 }

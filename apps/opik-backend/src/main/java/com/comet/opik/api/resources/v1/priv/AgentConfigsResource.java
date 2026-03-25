@@ -86,7 +86,6 @@ public class AgentConfigsResource {
 
     @PATCH
     @Path("/blueprints")
-    @Consumes(MediaType.APPLICATION_JSON)
     @JsonView(AgentConfig.View.Write.class)
     @Operation(operationId = "updateAgentConfig", summary = "Add blueprint to existing config", description = "Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.", responses = {
             @ApiResponse(responseCode = "204", description = "Blueprint added", headers = {
