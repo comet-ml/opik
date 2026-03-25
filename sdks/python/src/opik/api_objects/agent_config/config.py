@@ -175,6 +175,39 @@ class AgentConfigManager:
             rest_client_=self._rest_client,
         )
 
+    def update_blueprint(
+        self,
+        fields_with_values: typing.Optional[
+            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
+        ] = None,
+        description: typing.Optional[str] = None,
+        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    ) -> Blueprint:
+        """Add a new blueprint to an existing config and return it.
+
+        Args:
+            fields_with_values: Explicit ``{field_name: (python_type, value)}``
+                mapping.
+            description: Human-readable description stored with the blueprint.
+            field_types: Mapping of prefixed field key to Python type used
+                when fetching back the created blueprint.
+        """
+        fields_with_values = self._resolve_fields_with_values(None, fields_with_values)
+        blueprint_id = id_helpers.generate_id()
+        payload = self._build_blueprint_payload(
+            fields_with_values, description, id=blueprint_id
+        )
+        self._rest_client.agent_configs.update_agent_config(
+            blueprint=payload,
+            project_name=self._project_name,
+        )
+        raw = self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
+        return Blueprint(
+            raw_blueprint=raw,
+            field_types=field_types,
+            rest_client_=self._rest_client,
+        )
+
     def tag_blueprint_with_env(self, env: str, blueprint_id: str) -> None:
         """Associate a blueprint with an environment name.
 
@@ -217,7 +250,7 @@ class AgentConfigManager:
         payload = self._build_blueprint_payload(
             fields_with_values, description, id=mask_id, config_type="mask"
         )
-        self._rest_client.agent_configs.create_agent_config(
+        self._rest_client.agent_configs.update_agent_config(
             blueprint=payload,
             project_name=self._project_name,
         )

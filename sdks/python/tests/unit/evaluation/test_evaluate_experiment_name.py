@@ -148,6 +148,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
 
@@ -276,6 +277,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
 
@@ -519,6 +521,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
 
@@ -663,6 +666,7 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
 

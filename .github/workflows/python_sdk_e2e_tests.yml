@@ -44,7 +44,7 @@ jobs:
 
         steps:
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v6
             
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
@@ -57,7 +57,6 @@ jobs:
             # Avoid Buildx Bake concurrent image export collisions in CI.
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
-            TOGGLE_AGENT_CONFIGURATION_ENABLED: "true"
           run: |
             cd ${{ github.workspace }}
             ./opik.sh --backend --port-mapping --build
@@ -109,7 +108,7 @@ jobs:
 
         - name: Attach BE log
           if: failure()
-          uses: actions/upload-artifact@v4
+          uses: actions/upload-artifact@v7
           with:
               name: opik-backend-log-p${{matrix.python_version}}
               path: ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log

@@ -104,6 +104,21 @@ def test_publish_version_and_retrieve__happyflow(
     )
     assert isinstance(v1_name, str) and v1_name != ""
 
+    # Backend auto-tags the first blueprint as "prod" — verify without any manual deploy_to.
+    get_global_registry().clear()
+
+    @opik.track(project_name=project_name)
+    def fetch_auto_prod():
+        return opik_client.get_agent_config(
+            fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
+            project_name=project_name,
+            env="prod",
+        )
+
+    auto_prod = fetch_auto_prod()
+    assert auto_prod.temperature == pytest.approx(0.5)
+    assert auto_prod.model == "gpt-3.5"
+
     # Publishing the same values again must be a no-op (1 entry in history).
     get_global_registry().clear()
     opik_client.create_agent_config_version(

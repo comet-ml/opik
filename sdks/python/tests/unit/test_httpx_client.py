@@ -144,12 +144,10 @@ class TestOpikHttpxClientDeprecationHeader:
         self.client.get(rx_url)
         self.client.get(rx_url)
 
-        assert len(capture_log.records) == 1
-        assert capture_log.records[0].levelname == "WARNING"
-        assert (
-            capture_log.records[0].message
-            == f"Deprecation warning for GET {rx_url}: deprecated"
-        )
+        records = [r for r in capture_log.records if rx_url in r.message]
+        assert len(records) == 1
+        assert records[0].levelname == "WARNING"
+        assert records[0].message == f"Deprecation warning for GET {rx_url}: deprecated"
 
     @respx.mock
     def test_deprecation_header_absent__no_warning_logged_and_response_still_returned(
@@ -175,10 +173,8 @@ class TestOpikHttpxClientDeprecationHeader:
 
         response = self.client.get(rx_url)
 
-        assert capture_log.records[0].levelname == "WARNING"
-        assert (
-            capture_log.records[0].message
-            == f"Deprecation warning for GET {rx_url}: deprecated"
-        )
+        records = [r for r in capture_log.records if rx_url in r.message]
+        assert records[0].levelname == "WARNING"
+        assert records[0].message == f"Deprecation warning for GET {rx_url}: deprecated"
 
         assert response.status_code == 200

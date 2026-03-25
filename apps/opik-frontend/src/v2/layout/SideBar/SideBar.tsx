@@ -1,8 +1,7 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PanelLeftClose } from "lucide-react";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { cn } from "@/lib/utils";
@@ -16,25 +15,31 @@ import WorkspaceSection from "@/v2/layout/SideBar/WorkspaceSection/WorkspaceSect
 const HOME_PATH = "/$workspaceName/home";
 
 type SideBarProps = {
-  expanded: boolean;
-  setExpanded: OnChangeFn<boolean | undefined>;
+  pinned: boolean;
+  onTogglePin: () => void;
+  overlayOpen: boolean;
+  onOverlayOpenChange: (open: boolean) => void;
+  isMobile: boolean;
 };
 
 const SideBar: React.FunctionComponent<SideBarProps> = ({
-  expanded,
-  setExpanded,
+  pinned,
+  onTogglePin,
+  overlayOpen,
+  onOverlayOpenChange,
+  isMobile,
 }) => {
   const workspaceName = useActiveWorkspaceName();
   const LogoComponent = usePluginsStore((state) => state.Logo);
 
   const logo = LogoComponent ? (
-    <LogoComponent expanded={expanded} />
+    <LogoComponent expanded={true} />
   ) : (
-    <Logo expanded={expanded} />
+    <Logo expanded={true} />
   );
 
-  return (
-    <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
+  const sidebarContent = (
+    <>
       <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
         <Link
           to={HOME_PATH}
@@ -43,37 +48,72 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         >
           {logo}
         </Link>
+        {(pinned || isMobile) && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={isMobile ? () => onOverlayOpenChange(false) : onTogglePin}
+            className="absolute right-2 z-10"
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
+        )}
       </div>
 
       <div className="relative flex h-[calc(100%-var(--header-height))] flex-col">
-        <Button
-          variant="outline"
-          size="icon-2xs"
-          onClick={() => setExpanded((s) => !s)}
-          className={cn(
-            "absolute -right-3 top-2 z-50 hidden rounded-full lg:group-hover:flex",
-          )}
-        >
-          {expanded ? <ChevronLeft /> : <ChevronRight />}
-        </Button>
-
         <div className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-4">
-          <ProjectSelector expanded={expanded} />
+          <ProjectSelector />
           <ul className="mt-2 flex flex-col">
-            <SideBarMenuItems expanded={expanded} />
+            <SideBarMenuItems />
           </ul>
         </div>
 
         <div className="shrink-0 px-3 pb-4">
           <Separator />
-          <WorkspaceSection expanded={expanded} />
+          <WorkspaceSection />
           <Separator />
           <div className="pt-2">
-            <GitHubStarListItem expanded={expanded} />
+            <GitHubStarListItem />
           </div>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  if (pinned) {
+    return (
+      <aside className="comet-sidebar-width h-[calc(100vh-var(--banner-height))] border-r transition-all">
+        {sidebarContent}
+      </aside>
+    );
+  }
+
+  return (
+    <>
+      {!isMobile && !overlayOpen && (
+        <div
+          className="fixed left-0 top-0 z-50 h-screen w-[10px]"
+          onMouseEnter={() => onOverlayOpenChange(true)}
+        />
+      )}
+
+      {isMobile && overlayOpen && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => onOverlayOpenChange(false)}
+        />
+      )}
+
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-50 h-screen w-[240px] border-r bg-background shadow-lg transition-transform duration-200",
+          overlayOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+        onMouseLeave={isMobile ? undefined : () => onOverlayOpenChange(false)}
+      >
+        {sidebarContent}
+      </aside>
+    </>
   );
 };
 

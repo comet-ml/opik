@@ -48,6 +48,9 @@ describe("AgentConfig domain object", () => {
   let createAgentConfigSpy: MockInstance<
     typeof client.api.agentConfigs.createAgentConfig
   >;
+  let updateAgentConfigSpy: MockInstance<
+    typeof client.api.agentConfigs.updateAgentConfig
+  >;
   let getBlueprintByIdSpy: MockInstance<
     typeof client.api.agentConfigs.getBlueprintById
   >;
@@ -69,6 +72,10 @@ describe("AgentConfig domain object", () => {
 
     createAgentConfigSpy = vi
       .spyOn(client.api.agentConfigs, "createAgentConfig")
+      .mockImplementation(mockAPIFunction);
+
+    updateAgentConfigSpy = vi
+      .spyOn(client.api.agentConfigs, "updateAgentConfig")
       .mockImplementation(mockAPIFunction);
 
     getBlueprintByIdSpy = vi
@@ -102,6 +109,7 @@ describe("AgentConfig domain object", () => {
 
   afterEach(() => {
     createAgentConfigSpy.mockRestore();
+    updateAgentConfigSpy.mockRestore();
     getBlueprintByIdSpy.mockRestore();
     getLatestBlueprintSpy.mockRestore();
     getBlueprintByEnvSpy.mockRestore();
@@ -110,7 +118,7 @@ describe("AgentConfig domain object", () => {
   });
 
   describe("createBlueprint", () => {
-    it("should call createAgentConfig then getBlueprintById and return a Blueprint", async () => {
+    it("should call createAgentConfig (POST) then getBlueprintById and return a Blueprint", async () => {
       const agentConfig = client.getAgentConfig();
 
       const blueprint = await agentConfig.createBlueprint({
@@ -119,6 +127,7 @@ describe("AgentConfig domain object", () => {
       });
 
       expect(createAgentConfigSpy).toHaveBeenCalledOnce();
+      expect(updateAgentConfigSpy).not.toHaveBeenCalled();
       const createCall = createAgentConfigSpy.mock.calls[0][0];
       expect(createCall.projectName).toBe("test-project");
       expect(createCall.blueprint.type).toBe("blueprint");
@@ -165,17 +174,56 @@ describe("AgentConfig domain object", () => {
     });
   });
 
+  describe("updateBlueprint", () => {
+    it("should call updateAgentConfig (PATCH) then getBlueprintById and return a Blueprint", async () => {
+      const agentConfig = client.getAgentConfig();
+
+      const blueprint = await agentConfig.updateBlueprint({
+        values: { temperature: 0.9, model: "gpt-4o" },
+        description: "Updated blueprint",
+      });
+
+      expect(updateAgentConfigSpy).toHaveBeenCalledOnce();
+      expect(createAgentConfigSpy).not.toHaveBeenCalled();
+      const updateCall = updateAgentConfigSpy.mock.calls[0][0];
+      expect(updateCall.projectName).toBe("test-project");
+      expect(updateCall.blueprint.type).toBe("blueprint");
+      expect(updateCall.blueprint.values).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "temperature", value: "0.9", type: "float" }),
+          expect.objectContaining({ key: "model", value: "gpt-4o", type: "string" }),
+        ])
+      );
+
+      expect(getBlueprintByIdSpy).toHaveBeenCalledOnce();
+      expect(blueprint).toBeInstanceOf(Blueprint);
+    });
+
+    it("should use a client-side generated UUID in the PATCH body", async () => {
+      const agentConfig = client.getAgentConfig();
+      await agentConfig.updateBlueprint({ values: { key: "val" } });
+
+      const updateCall = updateAgentConfigSpy.mock.calls[0][0];
+      expect(updateCall.blueprint.id).toBeDefined();
+      expect(typeof updateCall.blueprint.id).toBe("string");
+      if (updateCall.blueprint.id) {
+        expect(getBlueprintByIdSpy.mock.calls[0][0]).toBe(updateCall.blueprint.id);
+      }
+    });
+  });
+
   describe("createMask", () => {
-    it("should post with type=mask and return the mask ID", async () => {
+    it("should call updateAgentConfig (PATCH) with type=mask and return the mask ID", async () => {
       const agentConfig = client.getAgentConfig();
       const maskId = await agentConfig.createMask({
         values: { temperature: "0.5" },
         description: "A/B variant",
       });
 
-      expect(createAgentConfigSpy).toHaveBeenCalledOnce();
-      const createCall = createAgentConfigSpy.mock.calls[0][0];
-      expect(createCall.blueprint.type).toBe("mask");
+      expect(updateAgentConfigSpy).toHaveBeenCalledOnce();
+      expect(createAgentConfigSpy).not.toHaveBeenCalled();
+      const updateCall = updateAgentConfigSpy.mock.calls[0][0];
+      expect(updateCall.blueprint.type).toBe("mask");
 
       expect(typeof maskId).toBe("string");
       expect(maskId).toBeDefined();
@@ -188,8 +236,8 @@ describe("AgentConfig domain object", () => {
         values: { temperature: 0.5 },
       });
 
-      const createCall = createAgentConfigSpy.mock.calls[0][0];
-      expect(createCall.blueprint.values).toEqual(
+      const updateCall = updateAgentConfigSpy.mock.calls[0][0];
+      expect(updateCall.blueprint.values).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ key: "temperature", value: "0.5", type: "float" }),
         ])

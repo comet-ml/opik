@@ -15,12 +15,11 @@ import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPage";
 import HomePage from "@/v2/pages/HomePage/HomePage";
-import OldHomePage from "@/v2/pages/HomePage/OldHomePage";
 import PartialPageLayout from "@/v2/layout/PartialPageLayout/PartialPageLayout";
 import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
-import TracesPage from "@/v2/pages/TracesPage/TracesPage";
+import LogsPage from "@/v2/pages/LogsPage/LogsPage";
 import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/v2/pages/PromptPage/PromptPage";
@@ -48,6 +47,9 @@ import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
 import EvaluationSuitesPage from "@/v2/pages/EvaluationSuitesPage/EvaluationSuitesPage";
 import EvaluationSuitePage from "@/v2/pages/EvaluationSuitePage/EvaluationSuitePage";
 import EvaluationSuiteItemsPage from "@/v2/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
+import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
+import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
+import InsightsPage from "@/v2/pages/InsightsPage/InsightsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -105,23 +107,11 @@ const baseRoute = createRoute({
   ),
 });
 
-// ----------- home
+// ----------- home (redirects to active project traces)
 const homeRoute = createRoute({
   path: "/$workspaceName/home",
   getParentRoute: () => workspaceGuardRoute,
-  component: OldHomePage,
-  staticData: {
-    title: "Home",
-  },
-});
-
-const homeRouteNew = createRoute({
-  path: "/$workspaceName/home-new",
-  getParentRoute: () => workspaceGuardRoute,
   component: HomePage,
-  staticData: {
-    title: "Home",
-  },
 });
 
 const workspaceRoute = createRoute({
@@ -160,15 +150,15 @@ const getStartedRoute = createRoute({
 const projectsRoute = createRoute({
   path: "/projects",
   getParentRoute: () => workspaceRoute,
-  staticData: {
-    title: "Projects",
-  },
 });
 
 const projectsListRoute = createRoute({
   path: "/",
   getParentRoute: () => projectsRoute,
   component: ProjectsPage,
+  staticData: {
+    title: "Manage projects",
+  },
 });
 
 const projectScopedRoute = createRoute({
@@ -180,11 +170,41 @@ const projectScopedRoute = createRoute({
   },
 });
 
-// ----------- traces (project-scoped)
-const tracesRoute = createRoute({
+// ----------- project home (project-scoped)
+const projectHomeRoute = createRoute({
+  path: "/home",
+  getParentRoute: () => projectScopedRoute,
+  component: ProjectHomePage,
+  staticData: {
+    title: "Project home",
+  },
+});
+
+// ----------- logs (project-scoped)
+const logsRoute = createRoute({
+  path: "/logs",
+  getParentRoute: () => projectScopedRoute,
+  component: LogsPage,
+  staticData: {
+    title: "Logs",
+  },
+});
+
+// ----------- insights (project-scoped)
+const insightsRoute = createRoute({
+  path: "/insights",
+  getParentRoute: () => projectScopedRoute,
+  component: InsightsPage,
+  staticData: {
+    title: "Insights",
+  },
+});
+
+// ----------- traces redirect (old path → /logs, handles ?tab= params)
+const tracesRedirectRoute = createRoute({
   path: "/traces",
   getParentRoute: () => projectScopedRoute,
-  component: TracesPage,
+  component: TracesTabRedirect,
 });
 
 // ----------- experiments (project-scoped)
@@ -504,13 +524,15 @@ const routeTree = rootRoute.addChildren([
   workspaceGuardRoute.addChildren([
     baseRoute,
     homeRoute,
-    homeRouteNew,
     workspaceRoute.addChildren([
       // Projects: workspace-level list + project-scoped routes
       projectsRoute.addChildren([
         projectsListRoute,
         projectScopedRoute.addChildren([
-          tracesRoute,
+          projectHomeRoute,
+          logsRoute,
+          insightsRoute,
+          tracesRedirectRoute,
           experimentsRoute.addChildren([
             experimentsListRoute,
             compareExperimentsRoute,

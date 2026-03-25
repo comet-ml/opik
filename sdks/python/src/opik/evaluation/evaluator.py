@@ -284,6 +284,7 @@ def evaluate(
         prompts=checked_prompts,
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),
+        project_name=project_name,
     )
 
     # wrap scoring functions if any
@@ -360,6 +361,7 @@ def evaluate_suite(
         evaluation_method="evaluation_suite",
         tags=experiment_tags,
         dataset_version_id=None,
+        project_name=project_name,
     )
     if optimization_id is not None:
         create_experiment_kwargs["type"] = experiment_type or "trial"
@@ -571,6 +573,7 @@ def evaluate_experiment(
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     experiment_id: Optional[str] = None,
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
+    project_name: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """Update the existing experiment with new evaluation metrics. You can use either `scoring_metrics` or `scorer_functions` to calculate
     evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
@@ -607,6 +610,8 @@ def evaluate_experiment(
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
+
+        project_name: The name of the project to which the experiment belongs. If not provided, the default project will be used.
     """
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -620,10 +625,12 @@ def evaluate_experiment(
         experiment = client.get_experiment_by_id(id=experiment_id)
     else:
         experiment = rest_operations.get_experiment_with_unique_name(
-            client=client, experiment_name=experiment_name
+            client=client, experiment_name=experiment_name, project_name=project_name
         )
 
-    dataset_ = client.get_dataset(name=experiment.dataset_name)
+    dataset_ = client.get_dataset(
+        name=experiment.dataset_name, project_name=project_name
+    )
 
     test_cases = rest_operations.get_experiment_test_cases(
         experiment_=experiment,
@@ -891,6 +898,7 @@ def evaluate_prompt(
         prompts=prompts,
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),
+        project_name=project_name,
     )
 
     # wrap scoring functions if any
@@ -1128,6 +1136,7 @@ def evaluate_optimization_trial(
         optimization_id=optimization_id,
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),
+        project_name=project_name,
     )
 
     return _evaluate_task(
