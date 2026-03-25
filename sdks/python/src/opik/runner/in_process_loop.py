@@ -24,6 +24,22 @@ _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
 
+def _inject_trace_id(inputs: dict, trace_id: str) -> None:
+    """Merge trace_id into inputs["opik_args"]["trace"]["id"].
+
+    Skips injection when opik_args is explicitly set to None — callers that
+    set the key to None signal they own that slot and we must not clobber it.
+    """
+    existing = inputs.get("opik_args")
+    if existing is None and "opik_args" in inputs:
+        return
+    opik_args = dict(existing) if isinstance(existing, dict) else {}
+    trace_args = dict(opik_args.get("trace") or {})
+    trace_args["id"] = trace_id
+    opik_args["trace"] = trace_args
+    inputs["opik_args"] = opik_args
+
+
 class InProcessRunnerLoop:
     def __init__(
         self,
@@ -167,9 +183,7 @@ class InProcessRunnerLoop:
         mask_id = job.mask_id
 
         trace_id = id_helpers.generate_id()
-        opik_args = inputs.setdefault("opik_args", {})
-        trace_args = opik_args.setdefault("trace", {})
-        trace_args["id"] = trace_id
+        _inject_trace_id(inputs, trace_id)
 
         try:
             timeout = job.timeout

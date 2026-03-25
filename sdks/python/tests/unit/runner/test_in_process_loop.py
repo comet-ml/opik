@@ -341,3 +341,40 @@ class TestJobExecution:
         loop.close()
 
         mock_api.runners.report_job_result.assert_called_once()
+
+
+class TestInjectTraceId:
+    def test_absent_key__injects_fresh_opik_args(self):
+        inputs: dict = {}
+        in_process_loop._inject_trace_id(inputs, "tid-1")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-1"
+
+    def test_dict_value__merges_trace_id(self):
+        inputs = {"opik_args": {"trace": {"tags": ["t"]}, "span": {"k": "v"}}}
+        in_process_loop._inject_trace_id(inputs, "tid-2")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-2"
+        assert inputs["opik_args"]["trace"]["tags"] == ["t"]
+        assert inputs["opik_args"]["span"] == {"k": "v"}
+
+    def test_explicit_none__leaves_inputs_unchanged(self):
+        inputs: dict = {"opik_args": None}
+        in_process_loop._inject_trace_id(inputs, "tid-3")
+        assert inputs["opik_args"] is None
+
+    def test_trace_none__treats_as_empty(self):
+        inputs = {"opik_args": {"trace": None}}
+        in_process_loop._inject_trace_id(inputs, "tid-4")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-4"
+
+    def test_non_dict_opik_args__replaces_with_fresh(self):
+        inputs: dict = {"opik_args": "unexpected"}
+        in_process_loop._inject_trace_id(inputs, "tid-5")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-5"
+
+    def test_does_not_mutate_original_dict(self):
+        original_trace = {"tags": ["x"]}
+        original_opik = {"trace": original_trace}
+        inputs = {"opik_args": original_opik}
+        in_process_loop._inject_trace_id(inputs, "tid-6")
+        assert original_opik.get("trace", {}).get("id") is None
+        assert original_trace.get("id") is None
