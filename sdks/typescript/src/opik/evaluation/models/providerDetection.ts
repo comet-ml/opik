@@ -196,8 +196,12 @@ export function detectProvider(
     const apiKey = (options?.apiKey as string) || process.env.OPENAI_API_KEY;
     validateApiKey("OpenAI", apiKey, "OPENAI_API_KEY");
 
+    const organization =
+      (options?.organization as string) || process.env.OPENAI_ORG_ID;
+
     return createOpenAI({
       apiKey,
+      ...(organization && { organization }),
       ...options,
     })(modelId);
   }
