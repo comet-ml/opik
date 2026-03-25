@@ -18,7 +18,7 @@ jobs:
       run:
         working-directory: sdks/python
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: install pre-commit
         run: pip install pre-commit
       - name: linting

@@ -1,8 +1,8 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Trash } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import { Project } from "@/types/projects";
+import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import useProjectBatchDeleteMutation from "@/api/projects/useProjectBatchDeleteMutation";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -16,15 +16,19 @@ const ProjectsActionsPanel: React.FunctionComponent<
 > = ({ projects }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
-  const disabled = !projects?.length;
+  const deletableProjects = useMemo(
+    () => projects.filter((p) => p.name !== DEFAULT_PROJECT_NAME),
+    [projects],
+  );
+  const disabled = !deletableProjects.length;
 
   const { mutate } = useProjectBatchDeleteMutation();
 
   const deleteProjectsHandler = useCallback(() => {
     mutate({
-      ids: projects.map((p) => p.id),
+      ids: deletableProjects.map((p) => p.id),
     });
-  }, [projects, mutate]);
+  }, [deletableProjects, mutate]);
 
   return (
     <div className="flex items-center gap-2">

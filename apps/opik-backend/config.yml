@@ -357,6 +357,84 @@ rateLimit:
       userFacingBucketName: ollie_state_upload
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for ollie state uploads. Please try again later."
+    getSpans:
+      # Default: 30
+      # Description: how many getSpansByProject queries are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_GET_SPANS_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Spans
+      # Description: User facing bucket name
+      userFacingBucketName: get_spans
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    search_spans:
+      # Default: 30
+      # Description: how many searchSpans queries are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_SEARCH_SPANS_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Search-Spans
+      # Description: User facing bucket name
+      userFacingBucketName: search_spans
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    getSpanStats:
+      # Default: 30
+      # Description: how many getSpanStats queries are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_GET_SPAN_STATS_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Span-Stats
+      # Description: User facing bucket name
+      userFacingBucketName: get_span_stats
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    getTraces:
+      # Default: 30
+      # Description: how many getTracesByProject queries are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_GET_TRACES_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Traces
+      # Description: User facing bucket name
+      userFacingBucketName: get_traces
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    searchTraces:
+      # Default: 30
+      # Description: how many searchTraces queries are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_SEARCH_TRACES_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Search-Traces
+      # Description: User facing bucket name
+      userFacingBucketName: search_traces
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    getTraceStats:
+      # Default: 30
+      # Description: how many getTraceStats queries are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_GET_TRACE_STATS_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Trace-Stats
+      # Description: User facing bucket name
+      userFacingBucketName: get_trace_stats
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
@@ -802,9 +880,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not Agent Configuration feature is enabled
-  agentConfigurationEnabled: ${TOGGLE_AGENT_CONFIGURATION_ENABLED:-"false"}
 
 # Local Runner configuration
 localRunner:

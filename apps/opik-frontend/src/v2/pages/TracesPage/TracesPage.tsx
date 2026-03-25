@@ -12,7 +12,7 @@ import { Button } from "@/ui/button";
 import { Construction } from "lucide-react";
 import { useState } from "react";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
+import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useProjectTabs from "@/v2/pages/TracesPage/useProjectTabs";
 import { PROJECT_TAB } from "@/constants/traces";

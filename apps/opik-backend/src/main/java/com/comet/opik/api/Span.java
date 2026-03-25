@@ -81,7 +81,9 @@ public record Span(
         @JsonView({
                 Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
-                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Schema(description = "Time to first token in milliseconds") @PositiveOrZero Double ttft){
+                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Schema(description = "Time to first token in milliseconds") @PositiveOrZero Double ttft,
+        @JsonView({Span.View.Public.class, Span.View.Write.class,
+                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) Source source){
 
     @Builder(toBuilder = true)
     public record SpanPage(
@@ -119,7 +121,8 @@ public record Span(
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         TOTAL_ESTIMATED_COST_VERSION("total_estimated_cost_version"),
         DURATION("duration"),
-        TTFT("ttft");
+        TTFT("ttft"),
+        SOURCE("source");
 
         @JsonValue
         private final String value;

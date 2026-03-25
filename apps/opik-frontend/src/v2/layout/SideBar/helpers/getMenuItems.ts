@@ -41,7 +41,7 @@ const getMenuItems = ({
       items: [
         {
           id: "logs",
-          path: projectPath("/traces"),
+          path: projectPath("/logs"),
           type: MENU_ITEM_TYPE.router,
           icon: Rows3,
           label: "Logs",

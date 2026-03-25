@@ -6,6 +6,7 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
@@ -185,7 +186,8 @@ class TraceDAOImpl implements TraceDAO {
                 truncation_threshold,
                 input_slim,
                 output_slim,
-                ttft
+                ttft,
+                source
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -210,7 +212,8 @@ class TraceDAOImpl implements TraceDAO {
                         :truncation_threshold<item.index>,
                         :input_slim<item.index>,
                         :output_slim<item.index>,
-                        :ttft<item.index>
+                        :ttft<item.index>,
+                        :source<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -244,7 +247,8 @@ class TraceDAOImpl implements TraceDAO {
                 truncation_threshold,
                 input_slim,
                 output_slim,
-                ttft
+                ttft,
+                source
             )
             SELECT
                 new_trace.id as id,
@@ -315,7 +319,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     isNotNull(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
-                ) as ttft
+                ) as ttft,
+                multiIf(
+                    notEquals(old_trace.source, 'unknown'), old_trace.source,
+                    new_trace.source
+                ) as source
             FROM (
                 SELECT
                     :id as id,
@@ -337,7 +345,8 @@ class TraceDAOImpl implements TraceDAO {
                     :truncation_threshold as truncation_threshold,
                     :input_slim as input_slim,
                     :output_slim as output_slim,
-                    :ttft as ttft
+                    :ttft as ttft,
+                    :source as source
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -358,7 +367,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
             )
             SELECT
             	id,
@@ -380,7 +389,8 @@ class TraceDAOImpl implements TraceDAO {
                 :truncation_threshold as truncation_threshold,
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> ttft <endif> as ttft
+                <if(ttft)> :ttft <else> ttft <endif> as ttft,
+                <if(source)> :source <else> source <endif> as source
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -1803,7 +1813,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
             )
             SELECT
                 new_trace.id as id,
@@ -1884,7 +1894,11 @@ class TraceDAOImpl implements TraceDAO {
                     isNotNull(new_trace.ttft), new_trace.ttft,
                     isNotNull(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
-                ) as ttft
+                ) as ttft,
+                multiIf(
+                    notEquals(old_trace.source, 'unknown'), old_trace.source,
+                    new_trace.source
+                ) as source
             FROM (
                 SELECT
                     :id as id,
@@ -1906,7 +1920,8 @@ class TraceDAOImpl implements TraceDAO {
                     :truncation_threshold as truncation_threshold,
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
-                    <if(ttft)> :ttft <else> null <endif> as ttft
+                    <if(ttft)> :ttft <else> null <endif> as ttft,
+                    :source as source
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -2606,6 +2621,12 @@ class TraceDAOImpl implements TraceDAO {
             statement.bindNull("visibility_mode", String.class);
         }
 
+        if (trace.source() != null) {
+            statement.bind("source", trace.source().getValue());
+        } else {
+            statement.bindNull("source", String.class);
+        }
+
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
         if (trace.ttft() != null) {
@@ -2720,6 +2741,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> statement.bind("ttft", ttft));
 
+        Optional.ofNullable(traceUpdate.source())
+                .ifPresent(source -> statement.bind("source", source.getValue()));
+
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
@@ -2754,6 +2778,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> template.add("ttft", ttft));
+
+        Optional.ofNullable(traceUpdate.source())
+                .ifPresent(source -> template.add("source", source.getValue()));
 
         return template;
     }
@@ -2994,6 +3021,10 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .source(Optional.ofNullable(
+                        getValue(exclude, Trace.TraceField.SOURCE, row, "source", String.class))
+                        .flatMap(Source::fromString)
+                        .orElse(null))
                 .experiment(mapExperiment(exclude, row))
                 .build();
     }
@@ -3081,6 +3112,12 @@ class TraceDAOImpl implements TraceDAO {
 
             bindUserNameAndWorkspace(statement, userName, workspaceId);
             bindUpdateParams(traceUpdate, statement);
+
+            if (traceUpdate.source() != null) {
+                statement.bind("source", traceUpdate.source().getValue());
+            } else {
+                statement.bindNull("source", String.class);
+            }
 
             Segment segment = startSegment("traces", "Clickhouse", "insert_partial");
 
@@ -3313,6 +3350,12 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bind("ttft" + i, trace.ttft());
                 } else {
                     statement.bindNull("ttft" + i, Double.class);
+                }
+
+                if (trace.source() != null) {
+                    statement.bind("source" + i, trace.source().getValue());
+                } else {
+                    statement.bindNull("source" + i, String.class);
                 }
 
                 i++;

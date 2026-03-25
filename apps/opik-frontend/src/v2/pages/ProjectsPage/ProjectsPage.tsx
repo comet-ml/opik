@@ -54,7 +54,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
-import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { LOGS_TYPE } from "@/constants/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
@@ -183,13 +183,12 @@ const ProjectsPage: React.FunctionComponent = () => {
         customMeta: {
           onZoomIn: (row: ProjectWithStatistic) => {
             navigate({
-              to: "/$workspaceName/projects/$projectId/traces",
+              to: "/$workspaceName/projects/$projectId/logs",
               params: {
                 projectId: row.id,
                 workspaceName,
               },
               search: {
-                tab: PROJECT_TAB.logs,
                 logsType: LOGS_TYPE.traces,
                 traces_filters: [
                   {
@@ -416,7 +415,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (row: ProjectWithStatistic) => {
       navigate({
-        to: "/$workspaceName/projects/$projectId/traces",
+        to: "/$workspaceName/projects/$projectId/home",
         params: {
           projectId: row.id,
           workspaceName,
