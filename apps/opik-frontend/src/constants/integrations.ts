@@ -15,6 +15,7 @@ import ragasLogoUrl from "/images/integrations/ragas.png";
 import dspyLogoUrl from "/images/integrations/dspy.png";
 
 import agnoLogoUrl from "/images/integrations/agno.png";
+import agentspecLogoUrl from "/images/integrations/agentspec.png";
 import autogenLogoUrl from "/images/integrations/autogen.png";
 import crewaiLogoUrl from "/images/integrations/crewai.png";
 import deepseekLogoUrl from "/images/integrations/deepseek.png";
@@ -52,6 +53,7 @@ import ollamaCode from "@/integrations/integration-scripts/Ollama.py?raw";
 import crewaiCode from "@/integrations/integration-scripts/CrewAI.py?raw";
 import adkCode from "@/integrations/integration-scripts/ADK.py?raw";
 import openrouterCode from "@/integrations/integration-scripts/OpenRouter.py?raw";
+import agentspecCode from "@/integrations/integration-scripts/AgentSpec.py?raw";
 import autogenCode from "@/integrations/integration-scripts/AutoGen.py?raw";
 import agnoCode from "@/integrations/integration-scripts/Agno.py?raw";
 import deepseekCode from "@/integrations/integration-scripts/DeepSeek.py?raw";
@@ -307,7 +309,17 @@ export const INTEGRATIONS: Integration[] = [
       'pip install -U "autogen-agentchat" "autogen-ext[openai]" opik opentelemetry-sdk opentelemetry-instrumentation-openai opentelemetry-exporter-otlp',
     docsLink: buildDocsUrl("/integrations/autogen"),
   },
-
+  {
+    id: "agentspec",
+    title: "Agent Spec",
+    description: "Frameworks & tools",
+    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+    icon: agentspecLogoUrl,
+    code: agentspecCode,
+    installCommand:
+      'pip install -U opik "pyagentspec[langgraph]" opentelemetry-sdk opentelemetry-instrumentation',
+    docsLink: buildDocsUrl("/integrations/agentspec"),
+  },
   {
     id: "agno",
     title: "Agno",

@@ -1,0 +1,164 @@
+---
+description: Start here to integrate Opik into your Agent Spec-based application
+  for end-to-end observability, unit testing, and optimization.
+headline: Agent Spec | Opik Documentation
+og:description: Trace Agent Spec workflows in Opik to debug and optimize agent execution.
+og:site_name: Opik Documentation
+og:title: Agent Spec - Opik
+title: Observability for Agent Spec with Opik
+---
+
+[Open Agent Specification](https://oracle.github.io/agent-spec/development/agentspec/index.html) is a portable
+configuration language for defining agentic systems (agents, tools, and structured workflows).
+
+Agent Spec Tracing is an extension of Agent Spec that standardizes how agent and flow executions emit traces.
+This makes it easier to analyze what happened (LLM calls, tool calls, and intermediate steps) across different runtimes and adapters.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=agentspec&utm_campaign=opik)
+provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=agentspec&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=agentspec&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+To use Agent Spec with Opik, install `opik` and `pyagentspec`:
+
+```bash
+pip install -U opik pyagentspec opentelemetry-sdk opentelemetry-instrumentation
+```
+
+If you are using the LangGraph adapter (as in the example below), install the LangGraph extra as well:
+
+```bash
+pip install -U "pyagentspec[langgraph]"
+```
+
+If you are using another framework, you can install the respective extra for `pyagentspec`, according to the
+[installation instructions](https://oracle.github.io/agent-spec/installation.html#extra-dependencies).
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type.
+See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring your LLM provider
+
+In order to run the example below, you will need to configure your LLM provider API keys. For this example, we'll use OpenAI.
+You can [find or create your API keys in these pages](https://platform.openai.com/settings/organization/api-keys):
+
+You can set them as environment variables:
+
+```bash
+export OPENAI_API_KEY="YOUR_API_KEY"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+```
+
+## Tracing Agent Spec workflows with Opik
+
+Opik provides an `AgentSpecInstrumentor` that connects Agent Spec Tracing to Opik.
+Wrap your Agent Spec runtime execution in the instrumentor context to capture traces.
+
+```python
+import asyncio
+
+from pyagentspec.agent import Agent
+from pyagentspec.llms import OpenAiConfig
+from pyagentspec.property import FloatProperty
+from pyagentspec.tools import ServerTool
+
+
+def build_agentspec_agent() -> Agent:
+    tools = [
+        ServerTool(
+            name="sum",
+            description="Sum two numbers",
+            inputs=[FloatProperty(title="a"), FloatProperty(title="b")],
+            outputs=[FloatProperty(title="result")],
+        ),
+        ServerTool(
+            name="subtract",
+            description="Subtract two numbers",
+            inputs=[FloatProperty(title="a"), FloatProperty(title="b")],
+            outputs=[FloatProperty(title="result")],
+        ),
+    ]
+
+    return Agent(
+        name="calculator_agent",
+        description="An agent that provides assistance with tool use.",
+        llm_config=OpenAiConfig(name="openai-gpt-5-mini", model_id="gpt-5-mini"),
+        system_prompt=(
+            "You are a helpful calculator agent.\n"
+            "Your duty is to compute the result of the given operation using tools, "
+            "and to output the result.\n"
+            "It's important that you reply with the result only.\n"
+        ),
+        tools=tools,
+    )
+
+
+async def main():
+    from opik.integrations.agentspec import AgentSpecInstrumentor
+    from pyagentspec.adapters.langgraph import AgentSpecLoader
+
+    agent = build_agentspec_agent()
+    tool_registry = {
+        "sum": lambda a, b: a + b,
+        "subtract": lambda a, b: a - b,
+    }
+
+    langgraph_agent = AgentSpecLoader(tool_registry=tool_registry).load_component(agent)
+
+    with AgentSpecInstrumentor().instrument_context(
+        project_name="agentspec-demo",
+        mask_sensitive_information=False,
+    ):
+        messages = []
+        while True:
+            user_input = input("USER  >>> ")
+            if user_input.lower() in ["exit", "quit"]:
+                break
+            messages.append({"role": "user", "content": user_input})
+            response = langgraph_agent.invoke(
+                input={"messages": messages},
+                config={"configurable": {"thread_id": "1"}},
+            )
+            agent_answer = response["messages"][-1].content.strip()
+            print("AGENT >>>", agent_answer)
+            messages.append({"role": "assistant", "content": agent_answer})
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+<Tip>
+  Agent Spec traces often include prompts, tool inputs/outputs, and messages. If you need to avoid logging sensitive
+  information, set `mask_sensitive_information=True`.
+</Tip>
+
+Once you run the script and interact with your agent, you can inspect the trace tree in Opik to debug tool usage,
+LLM generations, and intermediate steps.
+
+## Further improvements
+
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).
