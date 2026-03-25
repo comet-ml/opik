@@ -5,8 +5,8 @@ from opik.api_objects.experiment import experiment_item
 from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
 
-from . import verifiers
-from ..testlib import assert_equal, ANY_BUT_NONE
+from .. import verifiers
+from tests.testlib import assert_equal, ANY_BUT_NONE
 
 
 def llm_task(item: Dict[str, Any]):
@@ -41,8 +41,7 @@ def equals_scoring_function(dataset_item: Dict[str, Any], task_outputs: Dict[str
 def test__find_experiment_items_for_dataset__happy_path(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    project_name = "test_project_find_experiment_items_for_dataset"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name)
 
     dataset.insert(
         [
@@ -72,7 +71,6 @@ def test__find_experiment_items_for_dataset__happy_path(
         scoring_key_mapping={
             "reference": lambda x: x["expected_model_output"]["output"],
         },
-        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -85,20 +83,16 @@ def test__find_experiment_items_for_dataset__happy_path(
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
-        project_name=project_name,
     )
 
     # find experiment items for dataset
-    retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
-    )
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiments = opik_client.get_experiments_client()
     experiment_items_contents = experiments.find_experiment_items_for_dataset(
         dataset_name=dataset_name,
         experiment_ids=[retrieved_experiment.id],
-        project_name=opik_client.project_name,
     )
-    assert retrieved_experiment.project_name == project_name
+
     assert len(experiment_items_contents) == 3
 
     EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
@@ -175,8 +169,7 @@ def test__find_experiment_items_for_dataset__happy_path(
 def test__find_experiment_items_for_dataset__filtered__happy_path(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    project_name = "test_project_find_experiment_items_for_dataset"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name)
 
     dataset.insert(
         [
@@ -206,7 +199,6 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
         scoring_key_mapping={
             "reference": lambda x: x["expected_model_output"]["output"],
         },
-        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -219,21 +211,16 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
-        project_name=project_name,
     )
 
     # find experiment items for dataset
-    retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
-    )
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiments = opik_client.get_experiments_client()
     experiment_items_contents = experiments.find_experiment_items_for_dataset(
         dataset_name=dataset_name,
         experiment_ids=[retrieved_experiment.id],
         filter_string="feedback_scores.equals_scoring_function = 0.0",
-        project_name=project_name,
     )
-    assert retrieved_experiment.project_name == project_name
 
     assert len(experiment_items_contents) == 1
 
@@ -300,9 +287,8 @@ def test__experiment_scores__happy_path(
             ),
         ]
 
-    project_name = "test_project_experiment_scores"
     # Create dataset
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name)
     dataset.insert(
         [
             {
@@ -333,7 +319,6 @@ def test__experiment_scores__happy_path(
         scoring_key_mapping={
             "reference": lambda x: x["expected_model_output"]["output"],
         },
-        project_name=project_name,
     )
 
     opik.flush_tracker()
@@ -346,7 +331,6 @@ def test__experiment_scores__happy_path(
         experiment_metadata={"model_name": "test-model"},
         traces_amount=3,
         feedback_scores_amount=1,
-        project_name=project_name,
     )
 
     # Verify experiment scores are present in evaluation result
@@ -365,14 +349,11 @@ def test__experiment_scores__happy_path(
     }, f"Expected score names {{max_score, min_score, avg_score}}, got {score_names}"
 
     # Verify experiment scores are retrievable via SDK API
-    retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
-    )
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     rest_client = opik_client._rest_client
     experiment_content = rest_client.experiments.get_experiment_by_id(
         retrieved_experiment.id
     )
-    assert retrieved_experiment.project_name == project_name
 
     assert experiment_content.experiment_scores is not None, (
         "Experiment scores should be persisted in backend"

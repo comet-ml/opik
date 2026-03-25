@@ -9,7 +9,11 @@ def test_dataset_items_count__cached_value__returns_cached_count():
 
     # Create dataset with initial count
     dataset = Dataset(
-        "test_dataset", "Test description", mock_rest_client, dataset_items_count=5
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=5,
     )
 
     # Access the count
@@ -32,7 +36,11 @@ def test_dataset_items_count__no_cached_value__fetches_from_backend():
 
     # Create dataset without initial count
     dataset = Dataset(
-        "test_dataset", "Test description", mock_rest_client, dataset_items_count=None
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=None,
     )
 
     # Access the count
@@ -41,7 +49,7 @@ def test_dataset_items_count__no_cached_value__fetches_from_backend():
     # Should fetch from backend
     assert count == 10
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -57,7 +65,11 @@ def test_dataset_items_count__fetched_once__cached_for_subsequent_calls():
 
     # Create dataset without initial count
     dataset = Dataset(
-        "test_dataset", "Test description", mock_rest_client, dataset_items_count=None
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=None,
     )
 
     # Access the count multiple times
@@ -70,7 +82,7 @@ def test_dataset_items_count__fetched_once__cached_for_subsequent_calls():
     assert count2 == 10
     assert count3 == 10
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -80,7 +92,11 @@ def test_delete__invalidates_cached_count():
 
     # Create dataset with initial count
     dataset = Dataset(
-        "test_dataset", "Test description", mock_rest_client, dataset_items_count=5
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=5,
     )
 
     # Verify initial count
@@ -100,7 +116,7 @@ def test_delete__invalidates_cached_count():
 
     assert count == 3
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -110,7 +126,11 @@ def test_update__invalidates_cached_count():
 
     # Create dataset with initial count
     dataset = Dataset(
-        "test_dataset", "Test description", mock_rest_client, dataset_items_count=5
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=5,
     )
 
     # Verify initial count
@@ -135,7 +155,7 @@ def test_update__invalidates_cached_count():
 
     assert count == 5
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -145,7 +165,11 @@ def test_insert__invalidates_cached_count():
 
     # Create dataset with initial count
     dataset = Dataset(
-        "test_dataset", "Test description", mock_rest_client, dataset_items_count=5
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=5,
     )
 
     # Verify initial count
@@ -175,7 +199,7 @@ def test_insert__invalidates_cached_count():
 
     assert count == 7
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )
 
 
@@ -191,7 +215,11 @@ def test_backend_returns_none_count__property_returns_none():
 
     # Create dataset without initial count
     dataset = Dataset(
-        "test_dataset", "Test description", mock_rest_client, dataset_items_count=None
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=None,
     )
 
     # Access the count
@@ -200,5 +228,5 @@ def test_backend_returns_none_count__property_returns_none():
     # Should return None
     assert count is None
     mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset"
+        dataset_name="test_dataset", project_name="Test project"
     )

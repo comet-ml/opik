@@ -34,6 +34,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -49,6 +50,7 @@ class ChatPrompt(base_prompt.BasePrompt):
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
+            project_name: Optional project name for the prompt.
 
         Raises:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
@@ -71,6 +73,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._description = description
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
+        self._project_name = project_name
         self._commit: Optional[str] = None
         self.__internal_api__prompt_id__: str
         self.__internal_api__version_id__: str
@@ -103,6 +106,7 @@ class ChatPrompt(base_prompt.BasePrompt):
             description=self._description,
             change_description=self._change_description,
             tags=self._tags,
+            project_name=self._project_name,
         )
 
         self._commit = prompt_version.commit
@@ -162,6 +166,11 @@ class ChatPrompt(base_prompt.BasePrompt):
     def change_description(self) -> Optional[str]:
         """The description of changes in this version."""
         return self._change_description
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this prompt belongs to."""
+        return self._project_name
 
     @property
     @override
@@ -239,6 +248,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         cls,
         name: str,
         prompt_version: rest_api_types.PromptVersionDetail,
+        project_name: Optional[str] = None,
     ) -> "ChatPrompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         chat_prompt = cls.__new__(cls)
@@ -267,4 +277,5 @@ class ChatPrompt(base_prompt.BasePrompt):
         chat_prompt._tags = (
             copy.copy(prompt_version.tags) if prompt_version.tags else []
         )
+        chat_prompt._project_name = project_name
         return chat_prompt

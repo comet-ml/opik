@@ -162,16 +162,23 @@ class DatasetVersion(DatasetExportOperations):
         dataset_id: str,
         rest_client: rest_api_client.OpikApi,
         version_info: dataset_version_public.DatasetVersionPublic,
+        project_name: Optional[str],
     ) -> None:
         self._dataset_name = dataset_name
         self._dataset_id = dataset_id
         self._rest_client = rest_client
         self._version_info = version_info
+        self._project_name = project_name
 
     @property
     def dataset_name(self) -> str:
         """The name of the dataset this version belongs to."""
         return self._dataset_name
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this dataset belongs to."""
+        return self._project_name
 
     @property
     def name(self) -> str:
@@ -264,6 +271,7 @@ class DatasetVersion(DatasetExportOperations):
         return rest_operations.stream_dataset_items(
             rest_client=self._rest_client,
             dataset_name=self._dataset_name,
+            project_name=self._project_name,
             nb_samples=nb_samples,
             batch_size=batch_size,
             dataset_item_ids=dataset_item_ids,
@@ -313,6 +321,7 @@ class Dataset(DatasetExportOperations):
         self,
         name: str,
         description: Optional[str],
+        project_name: Optional[str],
         rest_client: rest_api_client.OpikApi,
         dataset_items_count: Optional[int] = None,
     ) -> None:
@@ -323,6 +332,7 @@ class Dataset(DatasetExportOperations):
         self._description = description
         self._rest_client = rest_client
         self._dataset_items_count = dataset_items_count
+        self._project_name = project_name
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
@@ -331,13 +341,18 @@ class Dataset(DatasetExportOperations):
     def id(self) -> str:
         """The id of the dataset"""
         return self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._name
+            dataset_name=self._name, project_name=self._project_name
         ).id
 
     @property
     def name(self) -> str:
         """The name of the dataset."""
         return self._name
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this dataset belongs to."""
+        return self._project_name
 
     @property
     def description(self) -> Optional[str]:
@@ -353,7 +368,7 @@ class Dataset(DatasetExportOperations):
         """
         if self._dataset_items_count is None:
             dataset_info = self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=self._name
+                dataset_name=self._name, project_name=self._project_name
             )
             self._dataset_items_count = dataset_info.dataset_items_count
         return self._dataset_items_count
@@ -479,7 +494,7 @@ class Dataset(DatasetExportOperations):
             List of tag strings.
         """
         dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._name
+            dataset_name=self._name, project_name=self._project_name
         )
         return dataset_fern.tags or []
 
@@ -712,6 +727,7 @@ class Dataset(DatasetExportOperations):
         return rest_operations.stream_dataset_items(
             rest_client=self._rest_client,
             dataset_name=self._name,
+            project_name=self._project_name,
             nb_samples=nb_samples,
             batch_size=batch_size,
             dataset_item_ids=dataset_item_ids,
@@ -825,4 +841,5 @@ class Dataset(DatasetExportOperations):
             dataset_id=self.id,
             rest_client=self._rest_client,
             version_info=version_info,
+            project_name=self._project_name,
         )
