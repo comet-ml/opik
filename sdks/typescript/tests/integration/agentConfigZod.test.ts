@@ -188,6 +188,22 @@ describe.skipIf(!shouldRunApiTests)(
         const byEnv = await fetchByEnv();
         expect(byEnv.temperature).toBeCloseTo(0.5);
         expect(byEnv.hint).toBeNull();
+
+        // Deploy v2 (latest) to "eu_west" then retrieve by that tag
+        await latest.deployTo("eu_west");
+
+        const fetchByEuWest = track(async () => {
+          return client.getAgentConfigVersion(MyConfig, {
+            fallback: { temperature: 0, model: "fallback" },
+            projectName,
+            env: "eu_west",
+          });
+        });
+        const byEuWest = await fetchByEuWest();
+        expect(byEuWest.temperature).toBeCloseTo(0.8);
+        expect(byEuWest.model).toBe("gpt-4");
+        expect(byEuWest.hint).toBe("use chain-of-thought");
+        expect(byEuWest.blueprintVersion).toBe(v2Name);
       },
       60_000
     );
