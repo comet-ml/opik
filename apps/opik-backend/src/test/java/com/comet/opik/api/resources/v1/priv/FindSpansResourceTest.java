@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.FilterTestUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
