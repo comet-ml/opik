@@ -1,9 +1,8 @@
-package com.comet.opik.domain.alerts;
+package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
-import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
@@ -12,6 +11,8 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.alerts.AlertScopeUtils;
+import com.comet.opik.domain.alerts.AlertWebhookSender;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -31,7 +32,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
@@ -55,7 +55,6 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
-import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 
@@ -211,7 +210,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             return Mono.empty();
         }
         // Extract all configurations from trigger
-        List<TriggerConfig> configs = extractTriggerConfig(trigger);
+        List<TriggerConfig> configs = extractTriggerConfig(trigger, alert.projectId());
         if (configs.isEmpty()) {
             log.warn(
                     "Skipping alert: no trigger configs found for alert '{}' (id: '{}'), trigger: '{}', trigger id: '{}'",
@@ -356,25 +355,15 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         };
     }
 
-    private List<TriggerConfig> extractTriggerConfig(AlertTrigger trigger) {
+    private List<TriggerConfig> extractTriggerConfig(AlertTrigger trigger, UUID projectId) {
         if (CollectionUtils.isEmpty(trigger.triggerConfigs())) {
             log.warn("Trigger has no configuration for metrics alert: event type: '{}', trigger id: '{}'",
                     trigger.eventType(), trigger.id());
             return List.of();
         }
 
-        // Extract project IDs from SCOPE_PROJECT config type (same for all configs)
-        var projectIdsString = trigger.triggerConfigs().stream()
-                .filter(c -> c.type() == AlertTriggerConfigType.SCOPE_PROJECT)
-                .findFirst()
-                .map(AlertTriggerConfig::configValue)
-                .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
-                .orElse(null);
-
-        List<UUID> projectIds = null;
-        if (StringUtils.isNotBlank(projectIdsString)) {
-            projectIds = JsonUtils.readCollectionValue(projectIdsString, List.class, UUID.class);
-        }
+        Set<UUID> collected = AlertScopeUtils.collectProjectIds(projectId, trigger.triggerConfigs());
+        List<UUID> projectIds = collected.isEmpty() ? null : List.copyOf(collected);
 
         // Determine which threshold config type to use based on event type
         AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {
