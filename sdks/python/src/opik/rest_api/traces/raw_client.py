@@ -34,7 +34,9 @@ from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_thread_update import TraceThreadUpdate
 from ..types.trace_update import TraceUpdate
+from ..types.trace_update_source import TraceUpdateSource
 from ..types.trace_write import TraceWrite
+from ..types.trace_write_source import TraceWriteSource
 from ..types.value_entry import ValueEntry
 
 # this is used as the default value for optional parameters
@@ -584,6 +586,7 @@ class RawTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        source: typing.Optional[TraceWriteSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -619,6 +622,8 @@ class RawTracesClient:
 
         thread_id : typing.Optional[str]
 
+        source : typing.Optional[TraceWriteSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -651,6 +656,7 @@ class RawTracesClient:
                 "last_updated_at": last_updated_at,
                 "ttft": ttft,
                 "thread_id": thread_id,
+                "source": source,
             },
             headers={
                 "content-type": "application/json",
@@ -760,6 +766,7 @@ class RawTracesClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
+        source: typing.Optional[TraceUpdateSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -800,6 +807,8 @@ class RawTracesClient:
 
         ttft : typing.Optional[float]
 
+        source : typing.Optional[TraceUpdateSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -832,6 +841,7 @@ class RawTracesClient:
                 ),
                 "thread_id": thread_id,
                 "ttft": ttft,
+                "source": source,
             },
             headers={
                 "content-type": "application/json",
@@ -2679,6 +2689,7 @@ class AsyncRawTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        source: typing.Optional[TraceWriteSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2714,6 +2725,8 @@ class AsyncRawTracesClient:
 
         thread_id : typing.Optional[str]
 
+        source : typing.Optional[TraceWriteSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2746,6 +2759,7 @@ class AsyncRawTracesClient:
                 "last_updated_at": last_updated_at,
                 "ttft": ttft,
                 "thread_id": thread_id,
+                "source": source,
             },
             headers={
                 "content-type": "application/json",
@@ -2855,6 +2869,7 @@ class AsyncRawTracesClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
+        source: typing.Optional[TraceUpdateSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2895,6 +2910,8 @@ class AsyncRawTracesClient:
 
         ttft : typing.Optional[float]
 
+        source : typing.Optional[TraceUpdateSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2927,6 +2944,7 @@ class AsyncRawTracesClient:
                 ),
                 "thread_id": thread_id,
                 "ttft": ttft,
+                "source": source,
             },
             headers={
                 "content-type": "application/json",

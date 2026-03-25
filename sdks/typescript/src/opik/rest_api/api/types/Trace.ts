@@ -38,4 +38,5 @@ export interface Trace {
     /** List of unique provider names from all spans in this trace, sorted alphabetically */
     providers?: string[];
     experiment?: OpikApi.ExperimentItemReference;
+    source?: OpikApi.TraceSource;
 }

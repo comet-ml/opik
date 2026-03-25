@@ -7,6 +7,7 @@ import { Comment } from "./Comment.js";
 import { ErrorInfo } from "./ErrorInfo.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { JsonListString } from "./JsonListString.js";
+import { SpanSource } from "./SpanSource.js";
 import { SpanType } from "./SpanType.js";
 
 export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi.Span> = core.serialization.object({
@@ -40,6 +41,7 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     ),
     duration: core.serialization.number().optional(),
     ttft: core.serialization.number().optional(),
+    source: SpanSource.optional(),
 });
 
 export declare namespace Span {
@@ -71,5 +73,6 @@ export declare namespace Span {
         total_estimated_cost_version?: string | null;
         duration?: number | null;
         ttft?: number | null;
+        source?: SpanSource.Raw | null;
     }
 }

@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { ErrorInfoExperimentItemBulkWriteView } from "./ErrorInfoExperimentItemBulkWriteView.js";
 import { JsonListStringExperimentItemBulkWriteView } from "./JsonListStringExperimentItemBulkWriteView.js";
+import { SpanExperimentItemBulkWriteViewSource } from "./SpanExperimentItemBulkWriteViewSource.js";
 import { SpanExperimentItemBulkWriteViewType } from "./SpanExperimentItemBulkWriteViewType.js";
 
 export const SpanExperimentItemBulkWriteView: core.serialization.ObjectSchema<
@@ -32,6 +33,7 @@ export const SpanExperimentItemBulkWriteView: core.serialization.ObjectSchema<
         core.serialization.string().optional(),
     ),
     ttft: core.serialization.number().optional(),
+    source: SpanExperimentItemBulkWriteViewSource.optional(),
 });
 
 export declare namespace SpanExperimentItemBulkWriteView {
@@ -54,5 +56,6 @@ export declare namespace SpanExperimentItemBulkWriteView {
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
         ttft?: number | null;
+        source?: SpanExperimentItemBulkWriteViewSource.Raw | null;
     }
 }

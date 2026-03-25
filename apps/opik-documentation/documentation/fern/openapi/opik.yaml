@@ -205,6 +205,12 @@ paths:
               schema:
                 type: string
               example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
+        "400":
+          description: Bad Request (e.g. MASK type not allowed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
         "409":
           description: Conflict (config already exists)
           content:
@@ -1880,7 +1886,10 @@ paths:
       tags:
       - Datasets
       summary: Create/update dataset items
-      description: Create/update dataset items based on dataset item id
+      description: |-
+        Create/update dataset items based on dataset item id.
+        Each item's 'id' field is the stable identifier and upsert key.
+        Provide it to update an existing item, or omit it to create a new one.
       operationId: createOrUpdateDatasetItems
       requestBody:
         content:
@@ -8856,10 +8865,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8869,6 +8874,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9388,10 +9397,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9401,6 +9406,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9738,10 +9747,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9751,6 +9756,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10184,10 +10193,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -10197,6 +10202,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10278,10 +10287,6 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -10291,6 +10296,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -11256,9 +11265,18 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         dataset_item_id:
           type: string
+          description: |
+            Deprecated.
+            Always equals 'id'.
+            Retained for backward compatibility and will be removed in a future version
           format: uuid
           readOnly: true
         trace_id:
@@ -11575,6 +11593,11 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         trace_id:
           type: string
@@ -11930,9 +11953,18 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         dataset_item_id:
           type: string
+          description: |
+            Deprecated.
+            Always equals 'id'.
+            Retained for backward compatibility and will be removed in a future version
           format: uuid
           readOnly: true
         trace_id:
@@ -12463,9 +12495,18 @@ components:
       properties:
         id:
           type: string
+          description: |
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
           format: uuid
         dataset_item_id:
           type: string
+          description: |
+            Deprecated.
+            Always equals 'id'.
+            Retained for backward compatibility and will be removed in a future version
           format: uuid
           readOnly: true
         trace_id:
@@ -13438,6 +13479,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     Trace:
       required:
       - start_time
@@ -13561,6 +13609,13 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference"
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -13739,6 +13794,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -13781,6 +13843,13 @@ components:
           format: double
         thread_id:
           type: string
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
       description: "Please provide either none, only one of evaluate_task_result or\
         \ trace, but never both"
     ValueEntry_ExperimentItemBulkWriteView:
@@ -16029,10 +16098,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16582,10 +16651,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16714,10 +16783,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16809,10 +16878,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         exclude_blueprint_update_for_projects:
           uniqueItems: true
           type: array
@@ -16858,10 +16927,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17147,7 +17216,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agentConfigurationEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -17215,8 +17283,6 @@ components:
         ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
-          type: boolean
-        agentConfigurationEnabled:
           type: boolean
     SpanBatchUpdate:
       required:
@@ -17330,6 +17396,13 @@ components:
         ttft:
           type: number
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     ErrorInfo_Write:
       required:
       - exception_type
@@ -17412,6 +17485,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     SpanBatch:
       required:
       - spans
@@ -17604,6 +17684,13 @@ components:
           type: number
           description: Time to first token in milliseconds
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     ValueEntry_Public:
       type: object
       properties:
@@ -17828,6 +17915,13 @@ components:
         ttft:
           type: number
           format: double
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -17941,6 +18035,13 @@ components:
           format: double
         thread_id:
           type: string
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     TraceBatch:
       required:
       - traces
@@ -18191,6 +18292,13 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference_Public"
+        source:
+          type: string
+          enum:
+          - sdk
+          - experiment
+          - playground
+          - optimization
     TraceThread:
       type: object
       properties:
