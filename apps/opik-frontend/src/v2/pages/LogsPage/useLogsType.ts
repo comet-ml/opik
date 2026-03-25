@@ -25,7 +25,7 @@ const useLogsType = (options: UseLogsTypeOptions) => {
   const { intervalStart, intervalEnd } =
     useMetricDateRangeWithQueryAndStorage();
 
-  const { data: threadsStats } = useThreadsStatistic(
+  const { data: threadsStats, isError: isStatsError } = useThreadsStatistic(
     {
       projectId,
       fromTime: intervalStart,
@@ -38,6 +38,7 @@ const useLogsType = (options: UseLogsTypeOptions) => {
   );
 
   const threadCount = useMemo(() => {
+    if (isStatsError) return 0;
     if (!threadsStats) return undefined;
 
     const threadCountStat = threadsStats.stats?.find(
@@ -49,7 +50,7 @@ const useLogsType = (options: UseLogsTypeOptions) => {
     return threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
       ? threadCountStat.value
       : 0;
-  }, [threadsStats]);
+  }, [threadsStats, isStatsError]);
 
   const [storedLogsType, setStoredLogsType] = useLocalStorageState<LOGS_TYPE>(
     `project-logsType-${projectId}`,
