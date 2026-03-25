@@ -43,7 +43,7 @@ import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
-import { useTruncationEnabled } from "@/v1/server-sync-provider";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
@@ -63,7 +63,7 @@ import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DurationCell from "@/shared/DataTableCells/DurationCell";

@@ -11,5 +11,6 @@ export interface FindOptimizationsRequest {
     name?: string;
     datasetName?: string;
     datasetDeleted?: boolean;
+    projectId?: string;
     filters?: string;
 }

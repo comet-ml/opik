@@ -45,7 +45,7 @@ jobs:
               echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
             fi
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v6
           with:
             ref: ${{steps.setup.outputs.build_from}}
             fetch-tags: true

@@ -53,7 +53,7 @@ jobs:
 
         steps:
             - name: Checkout repo
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -132,7 +132,7 @@ jobs:
 
             - name: Upload Allure Results
               if: always()
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                 name: allure-results
                 path: tests_end_to_end/typescript-tests/allure-results
@@ -140,7 +140,7 @@ jobs:
 
             - name: Upload Playwright Report
               if: always()
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                 name: playwright-report
                 path: tests_end_to_end/typescript-tests/playwright-report

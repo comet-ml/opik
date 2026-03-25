@@ -32,7 +32,7 @@ import { buildDocsUrl } from "@/lib/utils";
 import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
 import { Dataset, DATASET_TYPE, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 
 const ACCEPTED_TYPE = ".csv";
 

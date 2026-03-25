@@ -72,6 +72,12 @@ class BasePrompt(ABC):
         """The list of tags associated with the prompt."""
         pass
 
+    @property
+    @abstractmethod
+    def project_name(self) -> Optional[str]:
+        """The name of the project this prompt belongs to."""
+        pass
+
     # Internal API fields for backend synchronization
     __internal_api__prompt_id__: str
     __internal_api__version_id__: str

@@ -73,7 +73,7 @@ jobs:
       # PHASE 1: Checkout & Environment Setup
       # ========================================
       - name: "📥 Checkout repository"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: "🔍 Get PR/commit information"
         id: get-pr-info
@@ -345,7 +345,7 @@ jobs:
       # ========================================
       - name: "📤 Upload Allure results"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: allure-results
           path: tests_end_to_end/typescript-tests/allure-results
@@ -353,7 +353,7 @@ jobs:
 
       - name: "📤 Upload Playwright report"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: tests_end_to_end/typescript-tests/playwright-report
@@ -361,7 +361,7 @@ jobs:
 
       - name: "📤 Upload test results JSON"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-json
           path: tests_end_to_end/typescript-tests/test-results/results.json

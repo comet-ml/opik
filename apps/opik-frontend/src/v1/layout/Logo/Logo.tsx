@@ -1,6 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
-import { useTheme } from "@/v1/theme-provider";
+import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import imageLogoUrl from "/images/opik-logo.png";
 import imageLogoInvertedUrl from "/images/opik-logo-inverted.png";

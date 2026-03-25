@@ -6,6 +6,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
+import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.filter.PromptFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
@@ -17,6 +18,7 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hc.core5.http.HttpStatus;
@@ -194,6 +196,14 @@ public class PromptResourceClient {
             return response.readEntity(new GenericType<>() {
             });
         }
+    }
+
+    public Response callRetrievePromptVersion(PromptVersionRetrieve request, String apiKey, String workspaceName) {
+        return client.target(PROMPT_PATH.formatted(baseURI) + "/versions/retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 
     public PromptVersion createPromptVersion(Prompt prompt, String apiKey, String workspaceName) {

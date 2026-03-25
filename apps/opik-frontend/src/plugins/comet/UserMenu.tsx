@@ -16,7 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import { useOpenQuickStartDialog } from "@/v1/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/hooks/useOpenQuickStartDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
 import { Button } from "@/ui/button";
@@ -37,7 +37,7 @@ import { useToast } from "@/ui/use-toast";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";

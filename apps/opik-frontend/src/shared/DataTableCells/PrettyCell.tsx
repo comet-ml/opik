@@ -7,7 +7,7 @@ import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 import { prettifyMessage } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
-import { useTruncationEnabled } from "@/v1/server-sync-provider";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 
 type CustomMeta = {
   fieldType: "input" | "output";

@@ -23,7 +23,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetItemEdit(
-        @JsonView(DatasetItemEdit.View.Write.class) @NotNull @Schema(description = "Row ID of the item to edit (from API response)", required = true) UUID id,
+        @JsonView(DatasetItemEdit.View.Write.class) @NotNull @Schema(description = "Stable dataset item identifier (dataset_item_id). Remains the same across dataset versions") UUID id,
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "New data to merge with existing item data") Map<String, JsonNode> data,
 

@@ -492,42 +492,38 @@ public class ExperimentService {
         var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
         IdGenerator.validateVersion(id, "Experiment");
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
-            return resolveProjectId(experiment, workspaceId, userName)
-                    .flatMap(resolvedExperiment -> datasetService
-                            .getOrCreateDataset(resolvedExperiment.datasetName())
-                            .flatMap(datasetId -> {
-                                // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
-                                if (!featureFlags.isDatasetVersioningEnabled()) {
-                                    return processExperimentCreation(resolvedExperiment, id, name, datasetId, null);
-                                }
+        return resolveProjectId(experiment)
+                .flatMap(resolvedExperiment -> datasetService
+                        .getOrCreateDataset(resolvedExperiment.datasetName(), resolvedExperiment.projectId())
+                        .flatMap(datasetId -> {
+                            // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
+                            if (!featureFlags.isDatasetVersioningEnabled()) {
+                                return processExperimentCreation(resolvedExperiment, id, name, datasetId, null);
+                            }
 
-                                // Case 2: Feature toggle ON - resolve version and link experiment
-                                return resolveDatasetVersion(resolvedExperiment, datasetId)
-                                        .flatMap(resolved -> {
-                                            var experimentWithVersion = resolvedExperiment.toBuilder()
-                                                    .datasetVersionId(resolved.versionId())
-                                                    .build();
-                                            return processExperimentCreation(experimentWithVersion, id, name,
-                                                    datasetId,
-                                                    resolved.executionPolicy());
-                                        })
-                                        .switchIfEmpty(Mono.defer(() -> {
-                                            log.info(
-                                                    "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
-                                                    datasetId);
-                                            var experimentWithNullVersion = resolvedExperiment.toBuilder()
-                                                    .datasetVersionId(null)
-                                                    .build();
-                                            return processExperimentCreation(experimentWithNullVersion, id, name,
-                                                    datasetId,
-                                                    null);
-                                        }));
-                            }))
-                    .onErrorResume(throwable -> handleCreateError(throwable, id));
-        });
+                            // Case 2: Feature toggle ON - resolve version and link experiment
+                            return resolveDatasetVersion(resolvedExperiment, datasetId)
+                                    .flatMap(resolved -> {
+                                        var experimentWithVersion = resolvedExperiment.toBuilder()
+                                                .datasetVersionId(resolved.versionId())
+                                                .build();
+                                        return processExperimentCreation(experimentWithVersion, id, name,
+                                                datasetId,
+                                                resolved.executionPolicy());
+                                    })
+                                    .switchIfEmpty(Mono.defer(() -> {
+                                        log.info(
+                                                "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
+                                                datasetId);
+                                        var experimentWithNullVersion = resolvedExperiment.toBuilder()
+                                                .datasetVersionId(null)
+                                                .build();
+                                        return processExperimentCreation(experimentWithNullVersion, id, name,
+                                                datasetId,
+                                                null);
+                                    }));
+                        }))
+                .onErrorResume(throwable -> handleCreateError(throwable, id));
     }
 
     /**
@@ -630,23 +626,11 @@ public class ExperimentService {
         });
     }
 
-    private Mono<Experiment> resolveProjectId(Experiment experiment, String workspaceId, String userName) {
-        return Mono.fromCallable(() -> {
-            UUID resolvedProjectId;
-            if (StringUtils.isNotBlank(experiment.projectName()) && experiment.projectId() == null) {
-                var project = projectService.getOrCreate(workspaceId, experiment.projectName(), userName);
-                resolvedProjectId = project.id();
-            } else {
-                resolvedProjectId = experiment.projectId();
-            }
-
-            if (resolvedProjectId != null) {
-                projectService.validateProjectIdExists(resolvedProjectId, workspaceId);
-                return experiment.toBuilder().projectId(resolvedProjectId).build();
-            }
-
-            return experiment;
-        }).subscribeOn(Schedulers.boundedElastic());
+    private Mono<Experiment> resolveProjectId(Experiment experiment) {
+        return projectService.resolveProjectIdOrCreate(experiment.projectId(), experiment.projectName())
+                .map(resolvedProjectId -> resolvedProjectId
+                        .map(id -> experiment.toBuilder().projectId(id).build())
+                        .orElse(experiment));
     }
 
     private boolean hasPromptVersionLinks(Experiment experiment) {

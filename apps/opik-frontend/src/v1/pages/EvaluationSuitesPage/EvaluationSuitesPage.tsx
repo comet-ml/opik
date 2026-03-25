@@ -47,6 +47,8 @@ import DatasetTypeCell from "@/v1/pages/EvaluationSuitesPage/DatasetTypeCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const EvaluationSuiteRowActionsCell = createDatasetRowActionsCell({
   entityName: "dataset",
@@ -183,8 +185,12 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
+  const isDatasetExportEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_EXPORT_ENABLED,
+  );
+
   const {
-    permissions: { canDeleteDatasets },
+    permissions: { canEditDatasets, canDeleteDatasets },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -281,6 +287,9 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
     return datasets.filter((row) => rowSelection[row.id]);
   }, [rowSelection, datasets]);
 
+  const showActionsColumn =
+    canEditDatasets || canDeleteDatasets || isDatasetExportEnabled;
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Dataset>(),
@@ -289,11 +298,15 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef<Dataset>({
-        cell: EvaluationSuiteRowActionsCell,
-      }),
+      ...(showActionsColumn
+        ? [
+            generateActionsColumDef<Dataset>({
+              cell: EvaluationSuiteRowActionsCell,
+            }),
+          ]
+        : []),
     ];
-  }, [sortableBy, columnsOrder, selectedColumns]);
+  }, [sortableBy, columnsOrder, selectedColumns, showActionsColumn]);
 
   const sortConfig = useMemo(
     () => ({

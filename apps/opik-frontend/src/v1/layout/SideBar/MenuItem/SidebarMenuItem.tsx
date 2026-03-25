@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 
 export enum MENU_ITEM_TYPE {
   link = "link",

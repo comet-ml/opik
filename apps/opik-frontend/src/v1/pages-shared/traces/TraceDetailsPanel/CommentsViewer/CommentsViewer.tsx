@@ -10,7 +10,7 @@ import {
   DetailsActionSectionValue,
   DetailsActionSectionLayout,
 } from "@/v1/pages-shared/traces/DetailsActionSection";
-import CommentsSection from "../../UserComment/CommentsSection";
+import CommentsSection from "@/shared/UserComment/CommentsSection";
 
 export type CommentsViewerProps = {
   data: Trace | Span;

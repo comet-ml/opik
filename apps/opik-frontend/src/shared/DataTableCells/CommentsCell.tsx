@@ -3,14 +3,14 @@ import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { CommentItems } from "@/types/comment";
-import UserCommentAvatar from "@/v1/pages-shared/traces/UserComment/UserCommentAvatar";
-import UserCommentHoverList from "@/v1/pages-shared/traces/UserComment/UserCommentHoverList";
-import UserCommentAvatarList from "@/v1/pages-shared/traces/UserComment/UserCommentAvatarList";
-import { isLocalCommentCheck } from "@/v1/pages-shared/traces/UserComment/UserComment";
+import UserCommentAvatar from "@/shared/UserComment/UserCommentAvatar";
+import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
+import UserCommentAvatarList from "@/shared/UserComment/UserCommentAvatarList";
+import { isLocalCommentCheck } from "@/shared/UserComment/UserComment";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
-} from "@/v1/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
+} from "@/shared/DataTableCells/VerticallySplitCellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 import { cn } from "@/lib/utils";
 

@@ -12,7 +12,7 @@ import { Filters } from "@/types/filters";
 import { createFilter, isFilterValid } from "@/lib/filters";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
-import TraceCountCell from "@/shared/DataTableCells/TraceCountCell";
+import TraceCountCell from "@/v1/pages-shared/traces/TraceCountCell/TraceCountCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";

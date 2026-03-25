@@ -12,6 +12,7 @@ import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
 import { ExperimentsClient } from "./api/resources/experiments/client/Client.js";
 import { FeedbackDefinitionsClient } from "./api/resources/feedbackDefinitions/client/Client.js";
 import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
+import { LlmModelsClient } from "./api/resources/llmModels/client/Client.js";
 import { LlmProviderKeyClient } from "./api/resources/llmProviderKey/client/Client.js";
 import { ManualEvaluationClient } from "./api/resources/manualEvaluation/client/Client.js";
 import { OllamaClient } from "./api/resources/ollama/client/Client.js";
@@ -21,6 +22,7 @@ import { OptimizationsClient } from "./api/resources/optimizations/client/Client
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
 import { PromptsClient } from "./api/resources/prompts/client/Client.js";
 import { RedirectClient } from "./api/resources/redirect/client/Client.js";
+import { RetentionRulesClient } from "./api/resources/retentionRules/client/Client.js";
 import { RunnersClient } from "./api/resources/runners/client/Client.js";
 import { ServiceTogglesClient } from "./api/resources/serviceToggles/client/Client.js";
 import { SpansClient } from "./api/resources/spans/client/Client.js";
@@ -58,6 +60,7 @@ export class OpikApiClient {
     protected _experiments: ExperimentsClient | undefined;
     protected _feedbackDefinitions: FeedbackDefinitionsClient | undefined;
     protected _guardrails: GuardrailsClient | undefined;
+    protected _llmModels: LlmModelsClient | undefined;
     protected _llmProviderKey: LlmProviderKeyClient | undefined;
     protected _runners: RunnersClient | undefined;
     protected _manualEvaluation: ManualEvaluationClient | undefined;
@@ -67,6 +70,7 @@ export class OpikApiClient {
     protected _optimizations: OptimizationsClient | undefined;
     protected _projects: ProjectsClient | undefined;
     protected _prompts: PromptsClient | undefined;
+    protected _retentionRules: RetentionRulesClient | undefined;
     protected _serviceToggles: ServiceTogglesClient | undefined;
     protected _spans: SpansClient | undefined;
     protected _traces: TracesClient | undefined;
@@ -131,6 +135,10 @@ export class OpikApiClient {
         return (this._guardrails ??= new GuardrailsClient(this._options));
     }
 
+    public get llmModels(): LlmModelsClient {
+        return (this._llmModels ??= new LlmModelsClient(this._options));
+    }
+
     public get llmProviderKey(): LlmProviderKeyClient {
         return (this._llmProviderKey ??= new LlmProviderKeyClient(this._options));
     }
@@ -165,6 +173,10 @@ export class OpikApiClient {
 
     public get prompts(): PromptsClient {
         return (this._prompts ??= new PromptsClient(this._options));
+    }
+
+    public get retentionRules(): RetentionRulesClient {
+        return (this._retentionRules ??= new RetentionRulesClient(this._options));
     }
 
     public get serviceToggles(): ServiceTogglesClient {

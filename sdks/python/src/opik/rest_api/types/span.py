@@ -9,6 +9,7 @@ from .comment import Comment
 from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
 from .json_list_string import JsonListString
+from .span_source import SpanSource
 from .span_type import SpanType
 
 
@@ -51,6 +52,8 @@ class Span(UniversalBaseModel):
     """
     Time to first token in milliseconds
     """
+
+    source: typing.Optional[SpanSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

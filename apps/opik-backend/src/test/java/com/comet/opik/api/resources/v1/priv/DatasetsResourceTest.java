@@ -695,7 +695,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -743,7 +743,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -793,7 +793,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -840,7 +840,7 @@ class DatasetsResourceTest {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -889,9 +889,9 @@ class DatasetsResourceTest {
                     .visibility(visibility)
                     .build());
 
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1186,7 +1186,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -1234,7 +1234,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1283,7 +1283,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1331,7 +1331,7 @@ class DatasetsResourceTest {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1383,9 +1383,9 @@ class DatasetsResourceTest {
                     .visibility(visibility)
                     .build());
 
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .datasetName(null)
@@ -1719,13 +1719,8 @@ class DatasetsResourceTest {
                     .projectName("nonexistent-project-" + UUID.randomUUID())
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(identifier))) {
-
+            try (var actualResponse = datasetResourceClient.callGetDatasetByIdentifier(identifier, API_KEY,
+                    TEST_WORKSPACE)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
                         .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
@@ -1756,13 +1751,8 @@ class DatasetsResourceTest {
                     .projectName(projectName)
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(identifier))) {
-
+            try (var actualResponse = datasetResourceClient.callGetDatasetByIdentifier(identifier, apiKey,
+                    workspaceName)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
             }
@@ -1939,299 +1929,6 @@ class DatasetsResourceTest {
         return experimentResourceClient.create(experiment, apiKey, workspaceName);
     }
 
-    static Stream<Arguments> datasetSortingFields() {
-        Comparator<Dataset> idComparator = Comparator.comparing(Dataset::id);
-        Comparator<Dataset> nameComparator = Comparator.comparing(Dataset::name, String.CASE_INSENSITIVE_ORDER);
-        Comparator<Dataset> descriptionComparator = Comparator.comparing(Dataset::description,
-                String.CASE_INSENSITIVE_ORDER);
-        Comparator<Dataset> tagsComparator = Comparator.comparing(d -> d.tags().toString(),
-                String.CASE_INSENSITIVE_ORDER);
-        Comparator<Dataset> createdAtComparator = Comparator.comparing(Dataset::createdAt);
-        Comparator<Dataset> createdByComparator = Comparator.comparing(Dataset::createdBy,
-                String.CASE_INSENSITIVE_ORDER);
-        Comparator<Dataset> lastUpdatedAtComparator = Comparator.comparing(Dataset::lastUpdatedAt);
-        Comparator<Dataset> lastUpdatedByComparator = Comparator.comparing(Dataset::lastUpdatedBy,
-                String.CASE_INSENSITIVE_ORDER);
-        Comparator<Dataset> lastCreatedExperimentAtComparator = Comparator.comparing(
-                Dataset::lastCreatedExperimentAt,
-                Comparator.nullsLast(Comparator.naturalOrder()));
-        Comparator<Dataset> lastCreatedOptimizationAtComparator = Comparator.comparing(
-                Dataset::lastCreatedOptimizationAt,
-                Comparator.nullsLast(Comparator.naturalOrder()));
-        Comparator<Dataset> idComparatorReversed = Comparator.comparing(Dataset::id).reversed();
-
-        return Stream.of(
-                Arguments.of(idComparator,
-                        SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
-                Arguments.of(idComparator.reversed(),
-                        SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
-
-                Arguments.of(nameComparator.thenComparing(idComparatorReversed),
-                        SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
-                Arguments.of(nameComparator.reversed().thenComparing(idComparatorReversed),
-                        SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
-
-                Arguments.of(descriptionComparator,
-                        SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.ASC).build()),
-                Arguments.of(descriptionComparator.reversed(),
-                        SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.DESC).build()),
-
-                Arguments.of(tagsComparator,
-                        SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
-                Arguments.of(tagsComparator.reversed(),
-                        SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
-
-                Arguments.of(createdAtComparator,
-                        SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
-                Arguments.of(createdAtComparator.reversed(),
-                        SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
-
-                Arguments.of(createdByComparator.thenComparing(idComparatorReversed),
-                        SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
-                Arguments.of(createdByComparator.reversed().thenComparing(idComparatorReversed),
-                        SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
-
-                Arguments.of(lastUpdatedAtComparator,
-                        SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
-                                .build()),
-                Arguments.of(lastUpdatedAtComparator.reversed(),
-                        SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
-                                .build()),
-
-                Arguments.of(lastUpdatedByComparator.thenComparing(idComparatorReversed),
-                        SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
-                                .build()),
-                Arguments.of(lastUpdatedByComparator.reversed().thenComparing(idComparatorReversed),
-                        SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
-                                .build()),
-
-                Arguments.of(lastCreatedExperimentAtComparator,
-                        SortingField.builder().field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
-                                .direction(Direction.ASC).build()),
-                Arguments.of(lastCreatedExperimentAtComparator.reversed(),
-                        SortingField.builder().field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
-                                .direction(Direction.DESC).build()),
-
-                Arguments.of(lastCreatedOptimizationAtComparator,
-                        SortingField.builder().field(SortableFields.LAST_CREATED_OPTIMIZATION_AT)
-                                .direction(Direction.ASC).build()),
-                Arguments.of(lastCreatedOptimizationAtComparator.reversed(),
-                        SortingField.builder().field(SortableFields.LAST_CREATED_OPTIMIZATION_AT)
-                                .direction(Direction.DESC).build()));
-    }
-
-    static Stream<Arguments> getValidFilters() {
-        return Stream.of(
-                // TAGS field tests (existing)
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.TAGS)
-                                .operator(Operator.CONTAINS)
-                                .value(datasets.getFirst().tags().iterator().next())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.TAGS)
-                                .operator(Operator.NOT_CONTAINS)
-                                .value(datasets.getFirst().tags().iterator().next())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
-
-                // ID field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.ID)
-                                .operator(Operator.EQUAL)
-                                .value(datasets.getFirst().id().toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.ID)
-                                .operator(Operator.NOT_EQUAL)
-                                .value(datasets.getFirst().id().toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
-
-                // NAME field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.NAME)
-                                .operator(Operator.EQUAL)
-                                .value(datasets.getFirst().name())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.NAME)
-                                .operator(Operator.NOT_EQUAL)
-                                .value(datasets.getFirst().name())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.NAME)
-                                .operator(Operator.CONTAINS)
-                                .value(datasets.getFirst().name().substring(0, 3))
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
-                                .filter(dataset -> dataset.name()
-                                        .contains(datasets.getFirst().name().substring(0, 3)))
-                                .toList()),
-
-                // DESCRIPTION field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.DESCRIPTION)
-                                .operator(Operator.EQUAL)
-                                .value(datasets.getFirst().description())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.DESCRIPTION)
-                                .operator(Operator.NOT_EQUAL)
-                                .value(datasets.getFirst().description())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.DESCRIPTION)
-                                .operator(Operator.CONTAINS)
-                                .value(datasets.getFirst().description() != null
-                                        ? datasets.getFirst().description().substring(0,
-                                                Math.min(3, datasets.getFirst().description().length()))
-                                        : "test")
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
-                                .filter(dataset -> {
-                                    String searchValue = datasets.getFirst().description() != null
-                                            ? datasets.getFirst().description().substring(0,
-                                                    Math.min(3, datasets.getFirst().description().length()))
-                                            : "test";
-                                    return dataset.description() != null
-                                            && dataset.description().contains(searchValue);
-                                })
-                                .toList()),
-
-                // CREATED_AT field tests (following prompt test pattern)
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.CREATED_AT)
-                                .operator(Operator.NOT_EQUAL)
-                                .value(Instant.now().toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.CREATED_AT)
-                                .operator(Operator.GREATER_THAN)
-                                .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-
-                // CREATED_BY field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.CREATED_BY)
-                                .operator(Operator.EQUAL)
-                                .value(USER)
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.CREATED_BY)
-                                .operator(Operator.NOT_EQUAL)
-                                .value(USER)
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.CREATED_BY)
-                                .operator(Operator.CONTAINS)
-                                .value(USER.substring(0, 3))
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-
-                // LAST_UPDATED_AT field tests (following prompt test pattern)
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.LAST_UPDATED_AT)
-                                .operator(Operator.GREATER_THAN_EQUAL)
-                                .value(Instant.now().toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.LAST_UPDATED_AT)
-                                .operator(Operator.LESS_THAN)
-                                .value(Instant.now().toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-
-                // LAST_UPDATED_BY field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.LAST_UPDATED_BY)
-                                .operator(Operator.EQUAL)
-                                .value(USER)
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.LAST_UPDATED_BY)
-                                .operator(Operator.NOT_EQUAL)
-                                .value(USER)
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.LAST_UPDATED_BY)
-                                .operator(Operator.CONTAINS)
-                                .value(USER.substring(0, 3))
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-
-                // LAST_CREATED_EXPERIMENT_AT field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.LAST_CREATED_EXPERIMENT_AT)
-                                .operator(Operator.LESS_THAN)
-                                .value(Instant.now().toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-
-                // LAST_CREATED_OPTIMIZATION_AT field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
-                                .operator(Operator.LESS_THAN)
-                                .value(Instant.now().toString())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
-
-                // TYPE field tests
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.TYPE)
-                                .operator(Operator.EQUAL)
-                                .value(datasets.getFirst().type().getValue())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
-                                .filter(d -> d.type() == datasets.getFirst().type())
-                                .toList()),
-                Arguments.of(
-                        (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
-                                .field(DatasetField.TYPE)
-                                .operator(Operator.NOT_EQUAL)
-                                .value(datasets.getFirst().type().getValue())
-                                .build(),
-                        (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
-                                .filter(d -> d.type() != datasets.getFirst().type())
-                                .toList()));
-    }
-
     @Nested
     @DisplayName("Get:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -2378,9 +2075,9 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest#datasetSortingFields")
+        @MethodSource
         @DisplayName("when fetching all datasets, then return datasets sorted by valid fields")
-        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByValidFields(
+        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields(
                 Comparator<Dataset> comparator,
                 SortingField sorting) {
             String workspaceName = UUID.randomUUID().toString();
@@ -2411,6 +2108,118 @@ class DatasetsResourceTest {
 
             requestAndAssertDatasetsPage(workspaceName, apiKey, datasets, sorting.direction(),
                     sorting.field(), null);
+        }
+
+        static Stream<Arguments> getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByByValidFields() {
+            // Comparators for all sortable fields
+            Comparator<Dataset> idComparator = Comparator.comparing(Dataset::id);
+            Comparator<Dataset> nameComparator = Comparator.comparing(Dataset::name, String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> descriptionComparator = Comparator.comparing(Dataset::description,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> tagsComparator = Comparator.comparing(d -> d.tags().toString(),
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> createdAtComparator = Comparator.comparing(Dataset::createdAt);
+            Comparator<Dataset> createdByComparator = Comparator.comparing(Dataset::createdBy,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> lastUpdatedAtComparator = Comparator.comparing(Dataset::lastUpdatedAt);
+            Comparator<Dataset> lastUpdatedByComparator = Comparator.comparing(Dataset::lastUpdatedBy,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dataset> lastCreatedExperimentAtComparator = Comparator.comparing(
+                    Dataset::lastCreatedExperimentAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            Comparator<Dataset> lastCreatedOptimizationAtComparator = Comparator.comparing(
+                    Dataset::lastCreatedOptimizationAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            Comparator<Dataset> idComparatorReversed = Comparator.comparing(Dataset::id).reversed();
+
+            return Stream.of(
+                    // ID field sorting
+                    Arguments.of(
+                            idComparator,
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            idComparator.reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+
+                    // NAME field sorting
+                    Arguments.of(
+                            nameComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            nameComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+
+                    // DESCRIPTION field sorting
+                    Arguments.of(
+                            descriptionComparator,
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            descriptionComparator.reversed(),
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.DESC).build()),
+
+                    // TAGS field sorting
+                    Arguments.of(
+                            tagsComparator,
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            tagsComparator.reversed(),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
+
+                    // CREATED_AT field sorting
+                    Arguments.of(
+                            createdAtComparator,
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+
+                    // CREATED_BY field sorting
+                    Arguments.of(
+                            createdByComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdByComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_AT field sorting
+                    Arguments.of(
+                            lastUpdatedAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+
+                    // LAST_UPDATED_BY field sorting
+                    Arguments.of(
+                            lastUpdatedByComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedByComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
+                                    .build()),
+
+                    // LAST_CREATED_EXPERIMENT_AT field sorting
+                    Arguments.of(
+                            lastCreatedExperimentAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
+                                    .direction(Direction.ASC).build()),
+                    Arguments.of(
+                            lastCreatedExperimentAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
+                                    .direction(Direction.DESC).build()),
+
+                    // LAST_CREATED_OPTIMIZATION_AT field sorting
+                    Arguments.of(
+                            lastCreatedOptimizationAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_CREATED_OPTIMIZATION_AT)
+                                    .direction(Direction.ASC).build()),
+                    Arguments.of(
+                            lastCreatedOptimizationAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_CREATED_OPTIMIZATION_AT)
+                                    .direction(Direction.DESC).build()));
         }
 
         @ParameterizedTest
@@ -2509,7 +2318,7 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest#getValidFilters")
+        @MethodSource("getValidFilters")
         @DisplayName("when fetching all datasets, then return datasets filtered datasets")
         void whenFilterDatasets__thenReturnDatasetsFiltered(Function<List<Dataset>, DatasetFilter> getFilter,
                 Function<List<Dataset>, List<Dataset>> getExpectedDatasets) {
@@ -2538,6 +2347,218 @@ class DatasetsResourceTest {
 
             requestAndAssertDatasetsPage(workspaceName, apiKey, expectedDatasets, null,
                     null, List.of(filter));
+        }
+
+        static Stream<Arguments> getValidFilters() {
+            return Stream.of(
+                    // TAGS field tests (existing)
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().tags().iterator().next())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TAGS)
+                                    .operator(Operator.NOT_CONTAINS)
+                                    .value(datasets.getFirst().tags().iterator().next())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+
+                    // ID field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.ID)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+
+                    // NAME field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.NAME)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().name())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.NAME)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().name())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.NAME)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().name().substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(dataset -> dataset.name()
+                                            .contains(datasets.getFirst().name().substring(0, 3)))
+                                    .toList()),
+
+                    // DESCRIPTION field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.DESCRIPTION)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().description())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of(datasets.getFirst())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.DESCRIPTION)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().description())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.subList(1, datasets.size())),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.DESCRIPTION)
+                                    .operator(Operator.CONTAINS)
+                                    .value(datasets.getFirst().description() != null
+                                            ? datasets.getFirst().description().substring(0,
+                                                    Math.min(3, datasets.getFirst().description().length()))
+                                            : "test")
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(dataset -> {
+                                        String searchValue = datasets.getFirst().description() != null
+                                                ? datasets.getFirst().description().substring(0,
+                                                        Math.min(3, datasets.getFirst().description().length()))
+                                                : "test";
+                                        return dataset.description() != null
+                                                && dataset.description().contains(searchValue);
+                                    })
+                                    .toList()),
+
+                    // CREATED_AT field tests (following prompt test pattern)
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_AT)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_AT)
+                                    .operator(Operator.GREATER_THAN)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // CREATED_BY field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.CREATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_UPDATED_AT field tests (following prompt test pattern)
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_AT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_UPDATED_BY field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> List.of()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_UPDATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_CREATED_EXPERIMENT_AT field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_CREATED_EXPERIMENT_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // LAST_CREATED_OPTIMIZATION_AT field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // TYPE field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TYPE)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().type().getValue())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(d -> d.type() == datasets.getFirst().type())
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TYPE)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().type().getValue())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(d -> d.type() != datasets.getFirst().type())
+                                    .toList()));
         }
 
         @Test
@@ -3644,15 +3665,15 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("Success")
         void createDatasetItem() {
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .build();
 
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(null)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2))
                     .datasetId(null)
                     .build();
@@ -3663,9 +3684,9 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when item id is null, then return no content and create item")
         void createDatasetItem__whenItemIdIsNull__thenReturnNoContentAndCreateItem() {
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3695,25 +3716,26 @@ class DatasetsResourceTest {
         public Stream<Arguments> invalidDatasetItemBatches() {
             return Stream.of(
                     arguments(
-                            factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                            DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                                     .items(List.of()).build(),
                             "items size must be between 1 and 1000"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .items(null).build(),
                             "items must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .datasetName(null)
                             .datasetId(null)
                             .build(),
                             "The request body must provide either a dataset_name or a dataset_id"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .datasetName("")
                             .datasetId(null)
                             .build(),
                             "datasetName must not be blank"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                             .datasetId(null)
-                            .items(IntStream.range(0, 1001).mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .items(IntStream.range(0, 1001)
+                                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                                     .toList())
                             .build(),
                             "items size must be between 1 and 1000"));
@@ -3723,7 +3745,7 @@ class DatasetsResourceTest {
         @DisplayName("when dataset id not found, then return 404")
         void createDatasetItem__whenDatasetIdNotFound__thenReturn404() {
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class);
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -3742,11 +3764,11 @@ class DatasetsResourceTest {
         @DisplayName("when dataset item id not valid, then return bad request")
         void createDatasetItem__whenDatasetItemIdIsNotValid__thenReturnBadRequest() {
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .id(UUID.randomUUID())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3768,9 +3790,9 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when dataset item already exists, then return no content and update item")
         void createDatasetItem__whenDatasetItemAlreadyExists__thenReturnNoContentAndUpdateItem() {
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3779,7 +3801,7 @@ class DatasetsResourceTest {
 
             getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
 
-            var newItem = factory.manufacturePojo(DatasetItem.class)
+            var newItem = DatasetResourceClient.buildDatasetItem(factory)
                     .toBuilder()
                     .id(item.id())
                     .build();
@@ -3794,11 +3816,11 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when dataset item support null values for data fields, then return no content and create item")
         void createDatasetItem__whenDatasetItemSupportNullValuesForDataFields__thenReturnNoContentAndCreateItem() {
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(Map.of("test", NullNode.getInstance()))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -3832,7 +3854,7 @@ class DatasetsResourceTest {
         void createDatasetItem__whenDatasetMultipleItems__thenReturnNoContentAndCreateItems() {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -3844,82 +3866,82 @@ class DatasetsResourceTest {
 
         public Stream<Arguments> invalidDatasetItems() {
             return Stream.of(
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .data(null)
                                     .build()))
                             .build(),
                             "items[0].data must not be empty"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .data(Map.of())
                                     .build()))
                             .build(),
                             "items[0].data must not be empty"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(null)
                                     .build()))
                             .build(),
                             "items[0].source must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.MANUAL)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .traceId(null)
                                     .build()))
                             .build(),
                             "items[0].source when it is manual, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.MANUAL)
                                     .spanId(null)
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is manual, trace_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SDK)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .traceId(null)
                                     .build()))
                             .build(),
                             "items[0].source when it is sdk, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SDK)
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .spanId(null)
                                     .build()))
                             .build(),
                             "items[0].source when it is sdk, trace_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SPAN)
                                     .spanId(null)
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is span, span_id must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.SPAN)
                                     .traceId(null)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is span, trace_id must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.TRACE)
                                     .spanId(factory.manufacturePojo(UUID.class))
                                     .traceId(factory.manufacturePojo(UUID.class))
                                     .build()))
                             .build(),
                             "items[0].source when it is trace, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                            .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    arguments(DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                            .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .source(DatasetItemSource.TRACE)
                                     .spanId(null)
                                     .traceId(null)
@@ -3939,14 +3961,14 @@ class DatasetsResourceTest {
             UUID id = createAndAssert(dataset);
 
             var items = IntStream.range(0, 1000)
-                    .mapToObj(__ -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .mapToObj(__ -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
                             .build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(id)
                     .datasetName(null)
@@ -3973,13 +3995,13 @@ class DatasetsResourceTest {
                     .projectName(UUID.randomUUID().toString())
                     .build(), API_KEY, TEST_WORKSPACE);
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .traceId(traceId)
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .build();
@@ -4022,13 +4044,13 @@ class DatasetsResourceTest {
                     .projectName(projectName)
                     .build(), API_KEY, TEST_WORKSPACE);
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .spanId(spanId)
                     .traceId(traceId)
                     .source(DatasetItemSource.SPAN)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(datasetId)
                     .build();
@@ -4065,10 +4087,10 @@ class DatasetsResourceTest {
         @DisplayName("Success")
         void getDatasetItemById() {
 
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -4108,10 +4130,10 @@ class DatasetsResourceTest {
         void streamDataItems__whenStreamingDatasetItems__thenReturnItemsSortedByCreatedDate() {
 
             var items = IntStream.range(0, 10)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4133,10 +4155,10 @@ class DatasetsResourceTest {
         void streamDataItems__whenStreamingDatasetItemsWithLastRetrievedId__thenReturnItemsSortedByCreatedDate() {
 
             var items = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4389,7 +4411,7 @@ class DatasetsResourceTest {
 
             // Create 3000 items total, but insert in batches of 1000 (max batch size)
             var allItems = IntStream.range(0, 3000)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
@@ -4401,7 +4423,7 @@ class DatasetsResourceTest {
             // Insert items in 3 batches of 1000 each
             for (int i = 0; i < 3; i++) {
                 var batchItems = allItems.subList(i * 1000, (i + 1) * 1000);
-                var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                         .datasetName(datasetName)
                         .items(batchItems)
                         .datasetId(null)
@@ -4435,10 +4457,10 @@ class DatasetsResourceTest {
         @DisplayName("when streaming dataset items without filters, then return all items")
         void streamDataItems__whenStreamingWithoutFilters__thenReturnAllItems() {
             var items = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4472,10 +4494,10 @@ class DatasetsResourceTest {
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             var items = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(dataset.name())
@@ -4509,10 +4531,10 @@ class DatasetsResourceTest {
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
             var items = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .datasetName(dataset.name())
@@ -4535,10 +4557,10 @@ class DatasetsResourceTest {
         @DisplayName("when streaming dataset items with non-existing project_name, then return items without project scope")
         void streamDataItems__whenNonExistingProjectName__thenReturnItemsWithoutProjectScope() {
             var items = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -4635,14 +4657,14 @@ class DatasetsResourceTest {
         @DisplayName("Success: patch different fields")
         void patchDatasetItem(String scenarioName, java.util.function.Function<DatasetItem, DatasetItem> patchBuilder) {
             // Create initial item with SPAN source
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .source(DatasetItemSource.SPAN)
                     .traceId(GENERATOR.generate())
                     .spanId(GENERATOR.generate())
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4714,11 +4736,11 @@ class DatasetsResourceTest {
         @DisplayName("Success: add tags to dataset item")
         void patchDatasetItem__whenAddingTags__thenSucceed() {
             // Create initial item without tags
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4747,11 +4769,11 @@ class DatasetsResourceTest {
         void patchDatasetItem__whenUpdatingTags__thenSucceed() {
             // Create initial item with tags
             var initialTags = Set.of("tag1", "tag2");
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(initialTags)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4780,11 +4802,11 @@ class DatasetsResourceTest {
         void patchDatasetItem__whenRemovingTags__thenSucceed() {
             // Create initial item with tags
             var initialTags = Set.of("tag1", "tag2", "tag3");
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(initialTags)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4813,11 +4835,11 @@ class DatasetsResourceTest {
         void patchDatasetItem__whenClearingAllTags__thenSucceed() {
             // Create initial item with tags
             var initialTags = Set.of("tag1", "tag2", "tag3");
-            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var originalItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(initialTags)
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
@@ -4850,17 +4872,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch add tags with merge")
         void batchUpdateDatasetItems__whenAddingTagsWithMerge__thenSucceed() {
             // Create items with different initial tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("existing1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("existing2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -4900,14 +4922,14 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch replace tags without merge")
         void batchUpdateDatasetItems__whenReplacingTagsWithoutMerge__thenSucceed() {
             // Create items with initial tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("old1", "old2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("old3", "old4"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2))
                     .datasetId(null)
                     .build();
@@ -4983,17 +5005,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update by filters with merge tags")
         void batchUpdateDatasetItems__whenUsingFiltersWithMerge__thenSucceed() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("exclude", "tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5039,17 +5061,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update by filters automatically merges tags even when mergeTags is false")
         void batchUpdateDatasetItems__whenUsingFiltersWithMergeFalse__thenAutoMerges() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("include", "tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("other"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5131,17 +5153,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update with empty filters updates all items")
         void batchUpdateDatasetItems__whenEmptyFilters__thenUpdatesAllItems() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5184,28 +5206,28 @@ class DatasetsResourceTest {
         @DisplayName("Success: batch update by filters with dataset_id only affects specified dataset")
         void batchUpdateDatasetItems__whenFilterWithDatasetId__thenAffectsOnlySpecifiedDataset() {
             // Create two separate datasets with items that have similar tags
-            var dataset1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var dataset1 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(null)
                     .datasetName("dataset-1")
                     .build();
 
-            var dataset2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var dataset2 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(null)
                     .datasetName("dataset-2")
                     .build();
 
             // Create items with matching tags in both datasets
-            var dataset1Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset1Item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("target-tag"))
                     .build();
-            var dataset1Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset1Item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("other-tag"))
                     .build();
 
-            var dataset2Item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset2Item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("target-tag"))
                     .build();
-            var dataset2Item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var dataset2Item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("other-tag"))
                     .build();
 
@@ -5282,11 +5304,11 @@ class DatasetsResourceTest {
         @DisplayName("Error: batch update by filters without dataset_id should fail")
         void batchUpdateDatasetItems__whenFilterWithoutDatasetId__thenFails() {
             // Create a dataset with items
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("some-tag"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item))
                     .datasetId(null)
                     .build();
@@ -5329,7 +5351,7 @@ class DatasetsResourceTest {
         void deleteDatasetItem() {
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(null)
                     .build();
@@ -5456,17 +5478,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: delete by filters")
         void deleteDatasetItems__whenUsingFilters__thenSucceed() {
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("keep-me", "tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5532,25 +5554,25 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with identical tags in both datasets
-            var item1Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1Dataset1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset1"))
                     .build();
-            var item2Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2Dataset1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset1"))
                     .build();
-            var item3Dataset1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3Dataset1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("keep-me", "dataset1"))
                     .build();
 
-            var item1Dataset2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1Dataset2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset2"))
                     .build();
-            var item2Dataset2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2Dataset2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("delete-me", "dataset2"))
                     .build();
 
             // Insert items into dataset 1
-            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch1 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1Dataset1, item2Dataset1, item3Dataset1))
                     .datasetId(dataset1Id)
                     .datasetName(null)
@@ -5558,7 +5580,7 @@ class DatasetsResourceTest {
             putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
 
             // Insert items into dataset 2
-            var batch2 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch2 = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1Dataset2, item2Dataset2))
                     .datasetId(dataset2Id)
                     .datasetName(null)
@@ -5622,17 +5644,17 @@ class DatasetsResourceTest {
         @DisplayName("Success: delete all items in dataset using dataset_id filter only")
         void deleteDatasetItems__whenOnlyDatasetIdFilter__thenDeletesAllItemsInDataset() {
             // Create items
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(null)
                     .build();
@@ -5688,7 +5710,7 @@ class DatasetsResourceTest {
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5717,7 +5739,7 @@ class DatasetsResourceTest {
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5749,7 +5771,7 @@ class DatasetsResourceTest {
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5790,7 +5812,7 @@ class DatasetsResourceTest {
                     .id(null)
                     .build());
 
-            var item = factory.manufacturePojo(DatasetItem.class);
+            var item = DatasetResourceClient.buildDatasetItem(factory);
 
             var item2 = item.toBuilder()
                     .id(factory.manufacturePojo(UUID.class))
@@ -5810,7 +5832,7 @@ class DatasetsResourceTest {
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item, item2, item3))
                     .datasetId(datasetId)
                     .build();
@@ -5842,7 +5864,7 @@ class DatasetsResourceTest {
                     .map(item -> item.toBuilder().data(ImmutableMap.of("image", original)).build())
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -5942,16 +5964,16 @@ class DatasetsResourceTest {
                     .build());
 
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
-            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var matchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(matchingDataSupplier.apply(searchKey))
                     .build();
 
-            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var nonMatchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(nonMatchingDataSupplier.apply(searchKey))
                     .build();
 
             var items = List.of(matchingItem, nonMatchingItem);
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -6013,16 +6035,16 @@ class DatasetsResourceTest {
                     .build());
 
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
-            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var matchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(matchingDataSupplier.apply(searchKey))
                     .build();
 
-            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var nonMatchingItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(nonMatchingDataSupplier.apply(searchKey))
                     .build();
 
             var items = List.of(matchingItem, nonMatchingItem);
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
                     .build();
@@ -6047,7 +6069,7 @@ class DatasetsResourceTest {
 
         // Helper method to create dataset items with content
         private DatasetItem createDatasetItem(String content) {
-            return factory.manufacturePojo(DatasetItem.class).toBuilder()
+            return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .data(Map.of("content", new TextNode(content)))
                     .build();
         }
@@ -6070,20 +6092,20 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1", "tag2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2", "tag3"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3", "tag4"))
                     .build();
-            var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item4 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag5"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3, item4))
                     .datasetId(datasetId)
                     .build();
@@ -6111,17 +6133,17 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1", "tag2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag2", "tag3"))
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3", "tag4"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(datasetId)
                     .build();
@@ -6145,14 +6167,14 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1", "tag2"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag3", "tag4"))
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2))
                     .datasetId(datasetId)
                     .build();
@@ -6176,17 +6198,17 @@ class DatasetsResourceTest {
                     .build());
 
             // Create items, some with tags and some without
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of("tag1"))
                     .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item2 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(null)
                     .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var item3 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .tags(Set.of())
                     .build();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(List.of(item1, item2, item3))
                     .datasetId(datasetId)
                     .build();
@@ -6311,7 +6333,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating 5 dataset items for the dataset above
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -6530,7 +6552,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating 5 dataset items for the dataset above
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetName(dataset.name())
                     .datasetId(datasetId)
                     .build();
@@ -6718,7 +6740,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating 5 dataset items for the dataset above
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             var datasetItemBatchWithImage = datasetItemBatch.toBuilder()
@@ -7035,7 +7057,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Creating a dataset item
-            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory);
             var datasetItemBatch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
@@ -7171,7 +7193,7 @@ class DatasetsResourceTest {
         private void createDatasetItems(List<DatasetItem> items) {
             for (int i = 0; i < 5; i++) {
                 if (i == 0) {
-                    DatasetItem item = factory.manufacturePojo(DatasetItem.class)
+                    DatasetItem item = DatasetResourceClient.buildDatasetItem(factory)
                             .toBuilder()
                             .source(DatasetItemSource.SDK)
                             .data(new HashMap<>() {
@@ -7213,7 +7235,7 @@ class DatasetsResourceTest {
 
                     items.add(item);
                 } else {
-                    var item = factory.manufacturePojo(DatasetItem.class);
+                    var item = DatasetResourceClient.buildDatasetItem(factory);
 
                     items.add(item);
                 }
@@ -7503,9 +7525,9 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Create dataset items with conditional search term placement
-            var datasetItem1Builder = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem1Builder = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId);
-            var datasetItem2Builder = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem2Builder = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId);
 
             if ("dataset_item_data".equals(searchField)) {
@@ -7643,7 +7665,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7706,7 +7728,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7763,7 +7785,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7853,7 +7875,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -7929,7 +7951,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -8001,7 +8023,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
@@ -8071,18 +8093,19 @@ class DatasetsResourceTest {
             assertThat(itemB.assertionResults().getFirst().passed()).isFalse();
             assertThat(itemB.status()).isEqualTo(RunStatus.FAILED);
 
-            assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull();
-            assertThat(actualDatasetItem.runSummariesByExperiment()).containsKey(experimentIdA.toString());
-            assertThat(actualDatasetItem.runSummariesByExperiment()).containsKey(experimentIdB.toString());
+            // Each suite experiment has its own independent run summary (passThreshold defaults to 1)
+            assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull().hasSize(2);
 
             var summaryA = actualDatasetItem.runSummariesByExperiment().get(experimentIdA.toString());
-            assertThat(summaryA.passedRuns()).isEqualTo(1);
+            assertThat(summaryA).isNotNull();
             assertThat(summaryA.totalRuns()).isEqualTo(1);
+            assertThat(summaryA.passedRuns()).isEqualTo(1);
             assertThat(summaryA.status()).isEqualTo(RunStatus.PASSED);
 
             var summaryB = actualDatasetItem.runSummariesByExperiment().get(experimentIdB.toString());
-            assertThat(summaryB.passedRuns()).isEqualTo(0);
+            assertThat(summaryB).isNotNull();
             assertThat(summaryB.totalRuns()).isEqualTo(1);
+            assertThat(summaryB.passedRuns()).isEqualTo(0);
             assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
         }
     }
@@ -8119,10 +8142,10 @@ class DatasetsResourceTest {
             traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
 
             // Create dataset items
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(traces.stream()
-                            .map(trace -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .map(trace -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                                     .datasetId(datasetId)
                                     .traceId(trace.id())
                                     .spanId(null)
@@ -8281,14 +8304,14 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
                     .build();
@@ -8360,14 +8383,14 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
                     .build();
@@ -8428,14 +8451,14 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
                     .build();
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
                     .build();
@@ -8525,7 +8548,7 @@ class DatasetsResourceTest {
             traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
 
             var datasetItems = traces.stream()
-                    .map(trace -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .map(trace -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                             .datasetId(datasetId)
                             .traceId(trace.id())
                             .spanId(null)
@@ -8678,7 +8701,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -8733,7 +8756,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -8810,7 +8833,7 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .build();
 
@@ -9009,7 +9032,7 @@ class DatasetsResourceTest {
         allItems.addAll(matchingItems);
         allItems.addAll(nonMatchingItems);
 
-        var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+        var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                 .items(allItems)
                 .datasetId(null)
                 .build();
@@ -9026,7 +9049,7 @@ class DatasetsResourceTest {
      * @return DatasetItem with specified tags
      */
     private DatasetItem createItemWithTags(Set<String> tags) {
-        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+        return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .tags(tags)
                 .build();
     }
@@ -9038,7 +9061,7 @@ class DatasetsResourceTest {
      * @return DatasetItem with specified data
      */
     private DatasetItem createItemWithData(Map<String, JsonNode> data) {
-        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+        return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .data(data)
                 .build();
     }
@@ -9051,7 +9074,7 @@ class DatasetsResourceTest {
      * @return DatasetItem with specified tags and null experimentItems, createdAt, lastUpdatedAt
      */
     private DatasetItem createItemWithTagsAndNulls(Set<String> tags) {
-        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+        return DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .tags(tags)
                 .experimentItems(null)
                 .createdAt(null)
@@ -9103,8 +9126,8 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experiment2, apiKey, workspaceName);
 
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
 
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
@@ -9283,8 +9306,8 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
 
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
@@ -9445,9 +9468,9 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experiment3, apiKey, workspaceName);
 
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem3 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem3 = DatasetResourceClient.buildDatasetItem(factory);
 
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
@@ -9621,8 +9644,8 @@ class DatasetsResourceTest {
             createAndAssert(experiment, apiKey, workspaceName);
 
             // Create dataset items
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
                             .items(List.of(datasetItem1, datasetItem2))
@@ -9763,9 +9786,9 @@ class DatasetsResourceTest {
             createAndAssert(experiment, apiKey, workspaceName);
 
             // Create dataset items
-            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
-            var datasetItem3 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem1 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem2 = DatasetResourceClient.buildDatasetItem(factory);
+            var datasetItem3 = DatasetResourceClient.buildDatasetItem(factory);
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder()
                             .items(List.of(datasetItem1, datasetItem2, datasetItem3))
@@ -9927,7 +9950,7 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Create dataset item
-            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory);
             var datasetItemBatch = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(List.of(datasetItem))
@@ -10054,10 +10077,10 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
-                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                             .toList())
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
@@ -10159,10 +10182,10 @@ class DatasetsResourceTest {
             var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
-                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                             .toList())
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
@@ -10273,10 +10296,10 @@ class DatasetsResourceTest {
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
             // Create 3 dataset items
-            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
-                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
                             .toList())
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
@@ -10334,390 +10357,4 @@ class DatasetsResourceTest {
         }
     }
 
-    @Nested
-    @DisplayName("Project-scoped dataset operations")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ProjectScopedDatasets {
-
-        @Test
-        @DisplayName("Create dataset with project_id persists and returns project_id")
-        void createDatasetWithProjectId() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var dataset = buildDataset().toBuilder()
-                    .id(null)
-                    .projectId(projectId)
-                    .build();
-
-            var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
-            var fetchedDataset = datasetResourceClient.getDatasetById(id, apiKey, workspaceName);
-
-            assertDataset(fetchedDataset, dataset);
-        }
-
-        @Test
-        @DisplayName("Create dataset with non-existing project_id returns not found")
-        void createDatasetWithNonExistingProjectId() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var dataset = buildDataset().toBuilder()
-                    .id(null)
-                    .projectId(factory.manufacturePojo(UUID.class))
-                    .build();
-
-            try (var response = datasetResourceClient.callCreateDataset(dataset, apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
-        }
-
-        @Test
-        @DisplayName("Create dataset with project_name of existing project resolves project_id")
-        void createDatasetWithExistingProjectName() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = "project-" + UUID.randomUUID();
-            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var dataset = buildDataset().toBuilder()
-                    .id(null)
-                    .projectName(projectName)
-                    .build();
-
-            var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
-            var fetchedDataset = datasetResourceClient.getDatasetById(id, apiKey, workspaceName);
-
-            var expectedDataset = dataset.toBuilder()
-                    .projectId(projectId)
-                    .build();
-            assertDataset(fetchedDataset, expectedDataset);
-        }
-
-        @Test
-        @DisplayName("Create dataset with project_name of non-existing project creates project and resolves project_id")
-        void createDatasetWithNonExistingProjectName() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = "new-project-" + UUID.randomUUID();
-
-            var dataset = buildDataset().toBuilder()
-                    .id(null)
-                    .projectName(projectName)
-                    .build();
-
-            var id = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
-            var fetchedDataset = datasetResourceClient.getDatasetById(id, apiKey, workspaceName);
-
-            // Verify the project was created and the projectId was resolved
-            assertThat(fetchedDataset.projectId()).isNotNull();
-
-            var expectedDataset = dataset.toBuilder()
-                    .projectId(fetchedDataset.projectId())
-                    .build();
-            assertDataset(fetchedDataset, expectedDataset);
-        }
-
-        @Test
-        @DisplayName("Find datasets filtered by project_id returns only project datasets")
-        void findDatasetsByProjectId() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-            var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            var projectDataset = buildDataset().toBuilder()
-                    .id(null)
-                    .projectId(projectId)
-                    .build();
-            datasetResourceClient.createDataset(projectDataset, apiKey, workspaceName);
-
-            var otherProjectDataset = buildDataset().toBuilder()
-                    .id(null)
-                    .projectId(otherProjectId)
-                    .build();
-            datasetResourceClient.createDataset(otherProjectDataset, apiKey, workspaceName);
-
-            var workspaceDataset = buildDataset().toBuilder()
-                    .id(null)
-                    .projectId(null)
-                    .build();
-            datasetResourceClient.createDataset(workspaceDataset, apiKey, workspaceName);
-
-            var page = datasetResourceClient.getDatasetsByProjectId(projectId, workspaceName, apiKey);
-
-            assertThat(page.content()).hasSize(1);
-            assertDataset(page.content().getFirst(), projectDataset);
-        }
-
-        private void assertDataset(Dataset actual, Dataset expected) {
-            assertThat(actual)
-                    .usingRecursiveComparison()
-                    .ignoringFields(DATASET_IGNORED_FIELDS)
-                    .isEqualTo(expected);
-        }
-    }
-
-    @Nested
-    @DisplayName("Find by project:")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class FindProjectDatasets {
-
-        @Test
-        @DisplayName("Success")
-        void getProjectDatasets() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-            var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            List<Dataset> expected1 = buildDatasets().stream()
-                    .map(d -> d.toBuilder().projectId(projectId).build())
-                    .toList();
-            List<Dataset> expected2 = buildDatasets().stream()
-                    .map(d -> d.toBuilder().projectId(projectId).build())
-                    .toList();
-
-            expected1.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
-            expected2.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
-
-            // Datasets in another project — must not appear in results
-            buildDatasets().stream()
-                    .map(d -> d.toBuilder().projectId(otherProjectId).build())
-                    .forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
-
-            Dataset dataset = buildDataset().toBuilder()
-                    .name("The most expressive LLM: " + UUID.randomUUID()
-                            + " \uD83D\uDE05\uD83E\uDD23\uD83D\uDE02\uD83D\uDE42\uD83D\uDE43\uD83E\uDEE0")
-                    .description("Emoji Test \uD83E\uDD13\uD83E\uDDD0")
-                    .projectId(projectId)
-                    .build();
-
-            createAndAssert(dataset, apiKey, workspaceName);
-
-            int defaultPageSize = 10;
-            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, defaultPageSize,
-                    workspaceName, apiKey);
-
-            var expectedContent = new ArrayList<Dataset>();
-            expectedContent.add(dataset);
-
-            expected2.reversed()
-                    .stream()
-                    .filter(__ -> expectedContent.size() < defaultPageSize)
-                    .forEach(expectedContent::add);
-
-            expected1.reversed()
-                    .stream()
-                    .filter(__ -> expectedContent.size() < defaultPageSize)
-                    .forEach(expectedContent::add);
-
-            findAndAssertPage(actualPage, defaultPageSize, expectedContent.size() + 1, 1, expectedContent);
-        }
-
-        @Test
-        @DisplayName("when limit is 5 but there are N datasets, then return 5 datasets and total N")
-        void getProjectDatasets__whenLimitIs5ButThereAre10Datasets__thenReturn5DatasetsAndTotal10() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            List<Dataset> expected1 = buildDatasets().stream()
-                    .map(d -> d.toBuilder().projectId(projectId).build())
-                    .toList();
-            List<Dataset> expected2 = buildDatasets().stream()
-                    .map(d -> d.toBuilder().projectId(projectId).build())
-                    .toList();
-
-            expected1.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
-            expected2.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
-
-            int pageSize = 5;
-            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, pageSize, workspaceName,
-                    apiKey);
-            var expectedContent = new ArrayList<>(expected2.reversed().subList(0, pageSize));
-
-            findAndAssertPage(actualPage, pageSize, expected1.size() + expected2.size(), 1, expectedContent);
-        }
-
-        @Test
-        @DisplayName("when fetching all datasets, then return datasets sorted by created date")
-        void getProjectDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByCreatedDate() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            List<Dataset> expected = buildDatasets().stream()
-                    .map(d -> d.toBuilder().projectId(projectId).build())
-                    .toList();
-            expected.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
-
-            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, expected.size(), workspaceName,
-                    apiKey);
-
-            findAndAssertPage(actualPage, expected.size(), expected.size(), 1, expected.reversed());
-        }
-
-        @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest#datasetSortingFields")
-        @DisplayName("when fetching all datasets, then return datasets sorted by valid fields")
-        void getProjectDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByValidFields(
-                Comparator<Dataset> comparator,
-                SortingField sorting) {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            List<Dataset> datasets = buildDatasets().stream()
-                    .map(d -> d.toBuilder()
-                            .lastUpdatedBy(USER)
-                            .createdBy(USER)
-                            .projectId(projectId)
-                            .build())
-                    .toList();
-
-            datasets.forEach(dataset -> {
-                var id = createAndAssert(dataset, apiKey, workspaceName);
-                saveDatasetsLastOptimizationCreated(
-                        Set.of(new DatasetLastOptimizationCreated(id, Instant.now())), workspaceId);
-                saveDatasetsLastExperimentCreated(
-                        Set.of(new DatasetLastExperimentCreated(id, Instant.now())), workspaceId);
-            });
-
-            datasets = datasets.stream().sorted(comparator).toList();
-
-            var actualPage = datasetResourceClient.getProjectDatasetsWithSortingField(
-                    projectId, datasets.size(), List.of(sorting), null, workspaceName, apiKey);
-
-            findAndAssertPage(actualPage, datasets.size(), datasets.size(), 1, datasets);
-        }
-
-        @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.DatasetsResourceTest#getValidFilters")
-        @DisplayName("when fetching all datasets, then return datasets filtered")
-        void whenFilterProjectDatasets__thenReturnDatasetsFiltered(
-                Function<List<Dataset>, DatasetFilter> getFilter,
-                Function<List<Dataset>, List<Dataset>> getExpectedDatasets) {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            List<Dataset> datasets = buildDatasets().stream()
-                    .map(d -> d.toBuilder().projectId(projectId).build())
-                    .toList();
-
-            Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated = new HashSet<>();
-            Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated = new HashSet<>();
-
-            datasets.forEach(dataset -> {
-                var id = createAndAssert(dataset, apiKey, workspaceName);
-                datasetsLastOptimizationCreated.add(new DatasetLastOptimizationCreated(id, Instant.now()));
-                datasetsLastExperimentCreated.add(new DatasetLastExperimentCreated(id, Instant.now()));
-            });
-
-            saveDatasetsLastOptimizationCreated(datasetsLastOptimizationCreated, workspaceId);
-            saveDatasetsLastExperimentCreated(datasetsLastExperimentCreated, workspaceId);
-
-            List<Dataset> expectedDatasets = getExpectedDatasets.apply(datasets).reversed();
-            DatasetFilter filter = getFilter.apply(datasets);
-
-            var actualPage = datasetResourceClient.getProjectDatasetsWithSortingField(
-                    projectId, Math.max(1, expectedDatasets.size()), null, List.of(filter),
-                    workspaceName, apiKey);
-
-            findAndAssertPage(actualPage, expectedDatasets.size(), expectedDatasets.size(), 1, expectedDatasets);
-        }
-
-        @Test
-        @DisplayName("when searching by dataset name, then return matching datasets")
-        void getProjectDatasets__whenSearchingByDatasetName__thenReturnMatchingDatasets() {
-            UUID datasetSuffix = UUID.randomUUID();
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            List<Dataset> datasets = List.of(
-                    buildDataset().toBuilder()
-                            .name("MySQL, realtime chatboot: " + datasetSuffix).projectId(projectId).build(),
-                    buildDataset().toBuilder()
-                            .name("Chatboot using mysql: " + datasetSuffix).projectId(projectId).build(),
-                    buildDataset().toBuilder()
-                            .name("Chatboot MYSQL expert: " + datasetSuffix).projectId(projectId).build(),
-                    buildDataset().toBuilder()
-                            .name("Chatboot expert (my SQL): " + datasetSuffix).projectId(projectId).build(),
-                    buildDataset().toBuilder()
-                            .name("Chatboot expert: " + datasetSuffix).projectId(projectId).build());
-
-            datasets.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
-
-            var actualPage = datasetResourceClient.getProjectDatasets(projectId, 1, 100, "MySql", null, null,
-                    workspaceName, apiKey);
-
-            assertThat(actualPage.total()).isEqualTo(3);
-            assertThat(actualPage.size()).isEqualTo(3);
-            assertThat(actualPage.content().stream().map(Dataset::name).toList()).contains(
-                    "MySQL, realtime chatboot: " + datasetSuffix,
-                    "Chatboot using mysql: " + datasetSuffix,
-                    "Chatboot MYSQL expert: " + datasetSuffix);
-        }
-
-        private void saveDatasetsLastOptimizationCreated(
-                Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated, String workspaceId) {
-            mySqlTemplate.inTransaction(WRITE, handle -> {
-                var dao = handle.attach(DatasetDAO.class);
-                dao.recordOptimizations(workspaceId, datasetsLastOptimizationCreated);
-                return null;
-            });
-        }
-
-        private void saveDatasetsLastExperimentCreated(
-                Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated, String workspaceId) {
-            mySqlTemplate.inTransaction(WRITE, handle -> {
-                var dao = handle.attach(DatasetDAO.class);
-                dao.recordExperiments(workspaceId, datasetsLastExperimentCreated);
-                return null;
-            });
-        }
-    }
 }

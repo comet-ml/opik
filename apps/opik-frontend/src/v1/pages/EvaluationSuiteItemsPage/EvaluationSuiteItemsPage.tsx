@@ -27,6 +27,7 @@ import DateTag from "@/shared/DateTag/DateTag";
 import Loader from "@/shared/Loader/Loader";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
@@ -72,6 +73,10 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
   const { navigate: navigateToExperiment } = useNavigateToExperiment();
   const { loadPlayground } = useLoadPlayground();
 
+  const {
+    permissions: { canEditDatasets },
+  } = usePermissions();
+
   const { mutate: updateSuite } = useDatasetUpdateMutation();
 
   const { data: suite, isPending } = useDatasetById(
@@ -89,6 +94,12 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
   const datasetType = suite?.type;
   const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
   const latestVersion = suite?.latest_version;
+
+  const suiteTags = suite?.tags ?? [];
+  const showTags = canEditDatasets || suiteTags.length > 0;
+  const tagListProps = canEditDatasets
+    ? { tags: suiteTags }
+    : { tags: [] as string[], immutableTags: suiteTags };
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: suiteId, page: 1, size: 1 },
@@ -386,14 +397,19 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               </TooltipPortal>
             </Tooltip>
           )}
-          <Separator orientation="vertical" className="ml-1.5 mt-1 h-4" />
-          <TagListRenderer
-            tags={suite?.tags ?? []}
-            onAddTag={handleAddTag}
-            onDeleteTag={handleDeleteTag}
-            align="start"
-            className="min-h-0 w-auto"
-          />
+          {showTags && (
+            <>
+              <Separator orientation="vertical" className="ml-1.5 mt-1 h-4" />
+              <TagListRenderer
+                {...tagListProps}
+                onAddTag={handleAddTag}
+                onDeleteTag={handleDeleteTag}
+                canAdd={canEditDatasets}
+                align="start"
+                className="min-h-0 w-auto"
+              />
+            </>
+          )}
         </div>
       </div>
       <Tabs value={tab || "items"} onValueChange={setTab}>

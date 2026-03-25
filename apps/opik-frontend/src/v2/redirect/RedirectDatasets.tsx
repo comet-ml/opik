@@ -1,0 +1,66 @@
+import React, { useEffect } from "react";
+import Loader from "@/shared/Loader/Loader";
+import { StringParam, useQueryParams } from "use-query-params";
+import useAppStore from "@/store/AppStore";
+import { Link, Navigate, useNavigate } from "@tanstack/react-router";
+import NoData from "@/shared/NoData/NoData";
+import useDatasetItemByName from "@/api/datasets/useDatasetItemByName";
+import { Button } from "@/ui/button";
+
+const RedirectDatasets = () => {
+  const [query] = useQueryParams({
+    id: StringParam,
+    name: StringParam,
+  });
+
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const { data: datasetByName, isPending: isPendingDatasetByName } =
+    useDatasetItemByName(
+      { datasetName: query.name || "" },
+      { enabled: !!query.name && !query.id },
+    );
+
+  useEffect(() => {
+    if (datasetByName?.id) {
+      navigate({
+        to: "/$workspaceName/evaluation-suites/$suiteId/items",
+        params: {
+          suiteId: datasetByName.id,
+          workspaceName,
+        },
+      });
+    }
+  }, [datasetByName?.id, workspaceName, navigate]);
+
+  if (query.id) {
+    return (
+      <Navigate to={`/${workspaceName}/evaluation-suites/${query.id}/items`} />
+    );
+  }
+
+  if (!isPendingDatasetByName && !datasetByName) {
+    return (
+      <NoData
+        icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
+        title="This evaluation suite could not be found"
+        message="The evaluation suite you're looking for doesn't exist or has been deleted."
+      >
+        <div className="pt-5">
+          <Link to="/$workspaceName/home" params={{ workspaceName }}>
+            <Button>Back to Home</Button>
+          </Link>
+        </div>
+      </NoData>
+    );
+  }
+
+  if (!query.id && !query.name) {
+    return <NoData message="No evaluation suite params set" />;
+  }
+
+  return <Loader />;
+};
+
+export default RedirectDatasets;

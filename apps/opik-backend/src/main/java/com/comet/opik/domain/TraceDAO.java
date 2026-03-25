@@ -6,6 +6,7 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
@@ -78,7 +79,7 @@ import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.*;
 
 @ImplementedBy(TraceDAOImpl.class)
-interface TraceDAO {
+public interface TraceDAO {
 
     Mono<UUID> insert(Trace trace, Connection connection);
 
@@ -127,6 +128,26 @@ interface TraceDAO {
     Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
 
     Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags);
+
+    /**
+     * Bulk delete traces for data retention enforcement (applyToPast=true).
+     * Deletes traces in [lowerBound, cutoffId) that are not linked to experiments.
+     *
+     * @param workspaceIds workspaces whose traces should be purged
+     * @param cutoffId     UUID v7 upper bound (exclusive)
+     * @param lowerBound   UUID v7 lower bound (inclusive) — typically cutoff minus buffer days
+     */
+    Mono<Long> deleteForRetention(List<String> workspaceIds, UUID cutoffId, UUID lowerBound);
+
+    /**
+     * Bulk delete traces for data retention enforcement (applyToPast=false).
+     * Each workspace has its own lower bound (max of rule minId and cutoff-buffer).
+     *
+     * @param workspaceMinIds map of workspace_id to its effective lower bound
+     * @param cutoffId        UUID v7 upper bound (exclusive)
+     * @param lowerBound      global lower bound for experiment_items subquery
+     */
+    Mono<Long> deleteForRetentionBounded(Map<String, UUID> workspaceMinIds, UUID cutoffId, UUID lowerBound);
 }
 
 @Slf4j
@@ -165,7 +186,8 @@ class TraceDAOImpl implements TraceDAO {
                 truncation_threshold,
                 input_slim,
                 output_slim,
-                ttft
+                ttft,
+                source
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -190,7 +212,8 @@ class TraceDAOImpl implements TraceDAO {
                         :truncation_threshold<item.index>,
                         :input_slim<item.index>,
                         :output_slim<item.index>,
-                        :ttft<item.index>
+                        :ttft<item.index>,
+                        :source<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -224,7 +247,8 @@ class TraceDAOImpl implements TraceDAO {
                 truncation_threshold,
                 input_slim,
                 output_slim,
-                ttft
+                ttft,
+                source
             )
             SELECT
                 new_trace.id as id,
@@ -295,7 +319,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     isNotNull(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
-                ) as ttft
+                ) as ttft,
+                multiIf(
+                    notEquals(old_trace.source, 'unknown'), old_trace.source,
+                    new_trace.source
+                ) as source
             FROM (
                 SELECT
                     :id as id,
@@ -317,7 +345,8 @@ class TraceDAOImpl implements TraceDAO {
                     :truncation_threshold as truncation_threshold,
                     :input_slim as input_slim,
                     :output_slim as output_slim,
-                    :ttft as ttft
+                    :ttft as ttft,
+                    :source as source
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -338,7 +367,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
             )
             SELECT
             	id,
@@ -360,7 +389,8 @@ class TraceDAOImpl implements TraceDAO {
                 :truncation_threshold as truncation_threshold,
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> ttft <endif> as ttft
+                <if(ttft)> :ttft <else> ttft <endif> as ttft,
+                <if(source)> :source <else> source <endif> as source
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -642,7 +672,7 @@ class TraceDAOImpl implements TraceDAO {
             ), experiments_agg AS (
                 SELECT DISTINCT
                     ei.trace_id,
-                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
                     e.name AS experiment_name,
                     e.dataset_id AS experiment_dataset_id
@@ -652,6 +682,15 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN :ids
                 ) ei
+                LEFT JOIN (
+                    SELECT id, dataset_item_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (
+                        SELECT dataset_item_id FROM experiment_items
+                        WHERE workspace_id = :workspace_id AND trace_id IN :ids
+                    )
+                ) div ON div.id = ei.dataset_item_id
                 INNER JOIN (
                     SELECT id, name, dataset_id
                     FROM experiments
@@ -1169,7 +1208,7 @@ class TraceDAOImpl implements TraceDAO {
             , experiments_agg AS (
                 SELECT DISTINCT
                     ei.trace_id,
-                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
                     e.name AS experiment_name,
                     e.dataset_id AS experiment_dataset_id
@@ -1180,6 +1219,17 @@ class TraceDAOImpl implements TraceDAO {
                     <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 ) ei
+                LEFT JOIN (
+                    SELECT id, dataset_item_id
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (
+                        SELECT dataset_item_id FROM experiment_items
+                        WHERE workspace_id = :workspace_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                    )
+                ) div ON div.id = ei.dataset_item_id
                 INNER JOIN (
                     SELECT id, name, dataset_id
                     FROM experiments
@@ -1727,6 +1777,21 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    private static final String DELETE_FOR_RETENTION = """
+            DELETE FROM traces
+            WHERE workspace_id IN :workspace_ids
+            AND id >= :lower_bound
+            AND id \\< :cutoff_id
+            AND id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids
+                AND trace_id >= :lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
     private static final String SELECT_TRACE_ID_AND_WORKSPACE = """
             SELECT
                 DISTINCT id, workspace_id
@@ -1748,7 +1813,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
             )
             SELECT
                 new_trace.id as id,
@@ -1829,7 +1894,11 @@ class TraceDAOImpl implements TraceDAO {
                     isNotNull(new_trace.ttft), new_trace.ttft,
                     isNotNull(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
-                ) as ttft
+                ) as ttft,
+                multiIf(
+                    notEquals(old_trace.source, 'unknown'), old_trace.source,
+                    new_trace.source
+                ) as source
             FROM (
                 SELECT
                     :id as id,
@@ -1851,7 +1920,8 @@ class TraceDAOImpl implements TraceDAO {
                     :truncation_threshold as truncation_threshold,
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
-                    <if(ttft)> :ttft <else> null <endif> as ttft
+                    <if(ttft)> :ttft <else> null <endif> as ttft,
+                    :source as source
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -2551,6 +2621,12 @@ class TraceDAOImpl implements TraceDAO {
             statement.bindNull("visibility_mode", String.class);
         }
 
+        if (trace.source() != null) {
+            statement.bind("source", trace.source().getValue());
+        } else {
+            statement.bindNull("source", String.class);
+        }
+
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
         if (trace.ttft() != null) {
@@ -2665,6 +2741,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> statement.bind("ttft", ttft));
 
+        Optional.ofNullable(traceUpdate.source())
+                .ifPresent(source -> statement.bind("source", source.getValue()));
+
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
@@ -2700,6 +2779,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> template.add("ttft", ttft));
+
+        Optional.ofNullable(traceUpdate.source())
+                .ifPresent(source -> template.add("source", source.getValue()));
 
         return template;
     }
@@ -2941,6 +3023,10 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .source(Optional.ofNullable(
+                        getValue(exclude, Trace.TraceField.SOURCE, row, "source", String.class))
+                        .flatMap(Source::fromString)
+                        .orElse(null))
                 .experiment(mapExperiment(exclude, row))
                 .build();
     }
@@ -3029,6 +3115,12 @@ class TraceDAOImpl implements TraceDAO {
 
             bindUserNameAndWorkspace(statement, userName, workspaceId);
             bindUpdateParams(traceUpdate, statement);
+
+            if (traceUpdate.source() != null) {
+                statement.bind("source", traceUpdate.source().getValue());
+            } else {
+                statement.bindNull("source", String.class);
+            }
 
             Segment segment = startSegment("traces", "Clickhouse", "insert_partial");
 
@@ -3263,6 +3355,12 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bind("ttft" + i, trace.ttft());
                 } else {
                     statement.bindNull("ttft" + i, Double.class);
+                }
+
+                if (trace.source() != null) {
+                    statement.bind("source" + i, trace.source().getValue());
+                } else {
+                    statement.bindNull("source" + i, String.class);
                 }
 
                 i++;
@@ -3755,5 +3853,73 @@ class TraceDAOImpl implements TraceDAO {
         // Inject providers as first field in metadata
         return JsonUtils.prependField(
                 baseMetadata, Trace.TraceField.PROVIDERS.getValue(), providers);
+    }
+
+    @Override
+    public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+            @NonNull UUID lowerBound) {
+        Preconditions.checkArgument(
+                CollectionUtils.isNotEmpty(workspaceIds), "Argument 'workspaceIds' must not be empty");
+
+        log.info("Retention delete traces: workspaces='{}', cutoffId='{}', lowerBound='{}'",
+                workspaceIds.size(), cutoffId, lowerBound);
+
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null,
+                workspaceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("cutoff_id", cutoffId)
+                            .bind("lower_bound", lowerBound);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    @Override
+    public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds,
+            @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
+        Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
+
+        log.info("Retention delete traces (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
+
+        var logComment = getLogComment("retention_delete_traces_bounded", null, workspaceMinIds.size());
+        var entries = List.copyOf(workspaceMinIds.entrySet());
+
+        var sb = new StringBuilder("DELETE FROM traces WHERE (");
+        for (int i = 0; i < entries.size(); i++) {
+            if (i > 0) sb.append(" OR ");
+            sb.append("(workspace_id = :ws_").append(i)
+                    .append(" AND id >= :lb_").append(i)
+                    .append(" AND id < :cutoff_id)");
+        }
+        sb.append(") AND id NOT IN (")
+                .append("SELECT trace_id FROM experiment_items")
+                .append(" WHERE workspace_id IN :workspace_ids_flat")
+                .append(" AND trace_id >= :min_lower_bound")
+                .append(" AND trace_id < :cutoff_id")
+                .append(") SETTINGS log_comment = '").append(logComment)
+                .append("', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1");
+
+        var sql = sb.toString();
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(sql)
+                            .bind("cutoff_id", cutoffId)
+                            .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
+                            .bind("min_lower_bound", lowerBound);
+
+                    for (int i = 0; i < entries.size(); i++) {
+                        statement.bind("ws_" + i, entries.get(i).getKey());
+                        statement.bind("lb_" + i, entries.get(i).getValue());
+                    }
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
     }
 }

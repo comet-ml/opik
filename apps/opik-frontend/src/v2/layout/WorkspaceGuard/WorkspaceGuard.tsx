@@ -1,0 +1,52 @@
+import PageLayout from "@/v2/layout/PageLayout/PageLayout";
+import Loader from "@/shared/Loader/Loader";
+import usePluginStore from "@/store/PluginsStore";
+import { FeatureTogglesProvider } from "@/contexts/feature-toggles-provider";
+import { ServerSyncProvider } from "@/contexts/server-sync-provider";
+import PermissionsGuard from "@/v2/layout/PermissionsGuard/PermissionsGuard";
+import WorkspaceVersionResolver from "@/shared/WorkspaceVersionResolver/WorkspaceVersionResolver";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
+import { DEFAULT_PERMISSIONS } from "@/types/permissions";
+
+const WorkspaceGuard = ({
+  Layout = PageLayout,
+}: {
+  Layout: React.FC<{ children?: React.ReactNode }>;
+}) => {
+  const WorkspacePreloader = usePluginStore(
+    (state) => state.WorkspacePreloader,
+  );
+  const PermissionsProviderPlugin = usePluginStore(
+    (state) => state.PermissionsProvider,
+  );
+
+  if (!WorkspacePreloader) {
+    return <Loader />;
+  }
+
+  const layout = (
+    <FeatureTogglesProvider>
+      <ServerSyncProvider>
+        <Layout />
+      </ServerSyncProvider>
+    </FeatureTogglesProvider>
+  );
+
+  return (
+    <WorkspacePreloader>
+      <WorkspaceVersionResolver>
+        {PermissionsProviderPlugin ? (
+          <PermissionsProviderPlugin>
+            <PermissionsGuard>{layout}</PermissionsGuard>
+          </PermissionsProviderPlugin>
+        ) : (
+          <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+            {layout}
+          </PermissionsProvider>
+        )}
+      </WorkspaceVersionResolver>
+    </WorkspacePreloader>
+  );
+};
+
+export default WorkspaceGuard;
