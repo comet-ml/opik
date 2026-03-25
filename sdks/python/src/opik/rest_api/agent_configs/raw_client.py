@@ -10,7 +10,7 @@ from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
-from ..errors.bad_request_error import BadRequestError
+from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unauthorized_error import UnauthorizedError
 from ..types.agent_blueprint_public import AgentBlueprintPublic
@@ -78,8 +78,8 @@ class RawAgentConfigsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
-            if _response.status_code == 400:
-                raise BadRequestError(
+            if _response.status_code == 401:
+                raise UnauthorizedError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -89,8 +89,8 @@ class RawAgentConfigsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 401:
-                raise UnauthorizedError(
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -113,7 +113,7 @@ class RawAgentConfigsClient:
         project_name: typing.Optional[str] = OMIT,
         id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[AgentBlueprintWrite]:
+    ) -> HttpResponse[None]:
         """
         Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
 
@@ -135,8 +135,7 @@ class RawAgentConfigsClient:
 
         Returns
         -------
-        HttpResponse[AgentBlueprintWrite]
-            Blueprint added
+        HttpResponse[None]
         """
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/agent-configs/blueprints",
@@ -157,14 +156,7 @@ class RawAgentConfigsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    AgentBlueprintWrite,
-                    parse_obj_as(
-                        type_=AgentBlueprintWrite,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
+                return HttpResponse(response=_response, data=None)
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     headers=dict(_response.headers),
@@ -843,8 +835,8 @@ class AsyncRawAgentConfigsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
-            if _response.status_code == 400:
-                raise BadRequestError(
+            if _response.status_code == 401:
+                raise UnauthorizedError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -854,8 +846,8 @@ class AsyncRawAgentConfigsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 401:
-                raise UnauthorizedError(
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -878,7 +870,7 @@ class AsyncRawAgentConfigsClient:
         project_name: typing.Optional[str] = OMIT,
         id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[AgentBlueprintWrite]:
+    ) -> AsyncHttpResponse[None]:
         """
         Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
 
@@ -900,8 +892,7 @@ class AsyncRawAgentConfigsClient:
 
         Returns
         -------
-        AsyncHttpResponse[AgentBlueprintWrite]
-            Blueprint added
+        AsyncHttpResponse[None]
         """
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/agent-configs/blueprints",
@@ -922,14 +913,7 @@ class AsyncRawAgentConfigsClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    AgentBlueprintWrite,
-                    parse_obj_as(
-                        type_=AgentBlueprintWrite,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
+                return AsyncHttpResponse(response=_response, data=None)
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     headers=dict(_response.headers),

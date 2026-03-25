@@ -86,7 +86,7 @@ class AgentConfigsClient:
         project_name: typing.Optional[str] = OMIT,
         id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> AgentBlueprintWrite:
+    ) -> None:
         """
         Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
 
@@ -108,8 +108,7 @@ class AgentConfigsClient:
 
         Returns
         -------
-        AgentBlueprintWrite
-            Blueprint added
+        None
 
         Examples
         --------
@@ -511,7 +510,7 @@ class AsyncAgentConfigsClient:
         project_name: typing.Optional[str] = OMIT,
         id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> AgentBlueprintWrite:
+    ) -> None:
         """
         Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
 
@@ -533,8 +532,7 @@ class AsyncAgentConfigsClient:
 
         Returns
         -------
-        AgentBlueprintWrite
-            Blueprint added
+        None
 
         Examples
         --------

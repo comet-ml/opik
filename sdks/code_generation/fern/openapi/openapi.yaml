@@ -201,8 +201,8 @@ paths:
               schema:
                 type: string
               example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
-        "400":
-          description: Bad Request (config already exists)
+        "409":
+          description: Conflict (config already exists)
           content:
             application/json:
               schema:
@@ -226,12 +226,15 @@ paths:
             schema:
               $ref: "#/components/schemas/AgentConfigCreate_Write"
       responses:
-        "200":
+        "204":
           description: Blueprint added
-          content:
-            application/json:
+          headers:
+            Location:
+              required: true
+              style: simple
               schema:
-                $ref: "#/components/schemas/AgentBlueprint_Write"
+                type: string
+              example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
         "404":
           description: Not Found (no config for project)
           content:

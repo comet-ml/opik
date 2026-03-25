@@ -32,8 +32,8 @@ export class AgentConfigsClient {
      * @param {OpikApi.AgentConfigCreateWrite} request
      * @param {AgentConfigsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
-     * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.ConflictError}
      *
      * @example
      *     await client.agentConfigs.createAgentConfig({
@@ -93,10 +93,10 @@ export class AgentConfigsClient {
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
-                case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -137,14 +137,14 @@ export class AgentConfigsClient {
     public updateAgentConfig(
         request: OpikApi.AgentConfigCreateWrite,
         requestOptions?: AgentConfigsClient.RequestOptions,
-    ): core.HttpResponsePromise<OpikApi.AgentBlueprintWrite> {
+    ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__updateAgentConfig(request, requestOptions));
     }
 
     private async __updateAgentConfig(
         request: OpikApi.AgentConfigCreateWrite,
         requestOptions?: AgentConfigsClient.RequestOptions,
-    ): Promise<core.WithRawResponse<OpikApi.AgentBlueprintWrite>> {
+    ): Promise<core.WithRawResponse<void>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
             mergeOnlyDefinedHeaders({
@@ -176,16 +176,7 @@ export class AgentConfigsClient {
             logging: this._options.logging,
         });
         if (_response.ok) {
-            return {
-                data: serializers.AgentBlueprintWrite.parseOrThrow(_response.body, {
-                    unrecognizedObjectKeys: "passthrough",
-                    allowUnrecognizedUnionMembers: true,
-                    allowUnrecognizedEnumValues: true,
-                    skipValidation: true,
-                    breadcrumbsPrefix: ["response"],
-                }),
-                rawResponse: _response.rawResponse,
-            };
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
