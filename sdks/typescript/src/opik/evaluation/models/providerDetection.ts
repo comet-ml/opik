@@ -200,9 +200,9 @@ export function detectProvider(
       (options?.organization as string) || process.env.OPENAI_ORG_ID;
 
     return createOpenAI({
+      ...options,
       apiKey,
       ...(organization && { organization }),
-      ...options,
     })(modelId);
   }
 
@@ -211,8 +211,8 @@ export function detectProvider(
     validateApiKey("Anthropic", apiKey, "ANTHROPIC_API_KEY");
 
     return createAnthropic({
-      apiKey,
       ...options,
+      apiKey,
     })(modelId);
   }
 
@@ -221,8 +221,8 @@ export function detectProvider(
     validateApiKey("Google Gemini", apiKey, "GOOGLE_API_KEY");
 
     return createGoogleGenerativeAI({
-      apiKey,
       ...options,
+      apiKey,
     })(modelId);
   }
 
