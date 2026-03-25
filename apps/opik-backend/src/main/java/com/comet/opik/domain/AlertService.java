@@ -264,6 +264,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        validateNoProjectScopeConflict(alert);
         var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
@@ -280,6 +281,9 @@ class AlertServiceImpl implements AlertService {
 
         // Ensure the alert exists, will throw NotFoundException if not
         var existingAlert = getById(id);
+
+        validateNoProjectScopeConflict(alert);
+
         alert = alert.toBuilder()
                 .createdBy(existingAlert.createdBy())
                 .createdAt(existingAlert.createdAt())
@@ -521,7 +525,6 @@ class AlertServiceImpl implements AlertService {
     }
 
     private Alert prepareAlert(Alert alert, String userName, String workspaceId) {
-        validateNoProjectScopeConflict(alert);
 
         UUID id = alert.id() == null ? idGenerator.generateId() : alert.id();
         IdGenerator.validateVersion(id, "Alert");

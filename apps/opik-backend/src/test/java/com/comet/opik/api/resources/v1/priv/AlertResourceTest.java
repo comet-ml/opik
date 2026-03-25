@@ -429,6 +429,119 @@ class AlertResourceTest {
             alertResourceClient.updateAlert(nonExistentId, alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NOT_FOUND);
         }
+
+        @Test
+        @DisplayName("when update has no SCOPE_PROJECT trigger configs, then project_id is updated")
+        void updateAlert__whenNoScopeProjectTriggers__thenProjectIdIsUpdated() {
+            var mock = prepareMockWorkspace();
+
+            UUID projectAId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+            UUID projectBId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+
+            var original = generateAlertForProject(projectAId);
+            var createdAlertId = alertResourceClient.createAlert(original, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var updateBase = generateAlertUpdate(actualAlert);
+            var updatedTriggers = updateBase.triggers().stream()
+                    .map(t -> stripScopeProjectConfigs(t))
+                    .toList();
+            var updated = updateBase.toBuilder().projectId(projectBId).triggers(updatedTriggers).build();
+            alertResourceClient.updateAlert(createdAlertId, updated, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+
+            var result = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            compareAlerts(updated, result, true);
+        }
+
+        @Test
+        @DisplayName("when update has SCOPE_PROJECT trigger configs and no project_id, then project_id is null")
+        void updateAlert__whenScopeProjectTriggersAndNoProjectId__thenProjectIdIsNull() {
+            var mock = prepareMockWorkspace();
+
+            UUID projectAId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+            UUID scopedProjectId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+
+            var original = generateAlertForProject(projectAId);
+            var createdAlertId = alertResourceClient.createAlert(original, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var scopeProjectConfig = AlertTriggerConfig.builder()
+                    .id(factory.manufacturePojo(UUID.class))
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .configValue(Map.of(PROJECT_IDS_CONFIG_KEY, JsonUtils.writeValueAsString(Set.of(scopedProjectId))))
+                    .build();
+
+            var triggerWithScope = actualAlert.triggers().getFirst().toBuilder()
+                    .triggerConfigs(List.of(scopeProjectConfig))
+                    .createdBy(null)
+                    .createdAt(null)
+                    .build();
+
+            var updated = generateAlertUpdate(actualAlert).toBuilder()
+                    .projectId(null)
+                    .triggers(List.of(triggerWithScope))
+                    .build();
+
+            alertResourceClient.updateAlert(createdAlertId, updated, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+
+            var result = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            compareAlerts(updated, result, true);
+        }
+
+        @Test
+        @DisplayName("when update has both project_id and SCOPE_PROJECT trigger configs, then return bad request")
+        void updateAlert__whenProjectIdAndScopeProjectTriggersBothPresent__thenReturnBadRequest() {
+            var mock = prepareMockWorkspace();
+
+            UUID projectAId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+            UUID projectBId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+
+            var original = generateAlertForProject(projectAId);
+            var createdAlertId = alertResourceClient.createAlert(original, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var scopeProjectConfig = AlertTriggerConfig.builder()
+                    .id(factory.manufacturePojo(UUID.class))
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .configValue(Map.of(PROJECT_IDS_CONFIG_KEY, JsonUtils.writeValueAsString(Set.of(projectBId))))
+                    .build();
+
+            var triggerWithScope = actualAlert.triggers().getFirst().toBuilder()
+                    .triggerConfigs(List.of(scopeProjectConfig))
+                    .createdBy(null)
+                    .createdAt(null)
+                    .build();
+
+            var updated = generateAlertUpdate(actualAlert).toBuilder()
+                    .projectId(projectBId)
+                    .triggers(List.of(triggerWithScope))
+                    .build();
+
+            alertResourceClient.updateAlert(createdAlertId, updated, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
     }
 
     @Nested
@@ -2780,6 +2893,21 @@ class AlertResourceTest {
         return builder.build();
     }
 
+    private Alert generateAlertForProject(UUID projectId) {
+        var base = generateAlert();
+        var filteredTriggers = base.triggers().stream()
+                .map(t -> t.toBuilder()
+                        .triggerConfigs(t.triggerConfigs().stream()
+                                .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
+                                .toList())
+                        .build())
+                .toList();
+        return base.toBuilder()
+                .projectId(projectId)
+                .triggers(filteredTriggers)
+                .build();
+    }
+
     private Alert generateAlertUpdate(Alert existingAlert) {
         var alert = generateAlert();
 
@@ -2796,6 +2924,14 @@ class AlertResourceTest {
                 .id(existingAlert.id())
                 .webhook(webhook)
                 .triggers(List.of(unchangedTrigger, newTrigger, updatedTrigger))
+                .build();
+    }
+
+    private AlertTrigger stripScopeProjectConfigs(AlertTrigger trigger) {
+        return trigger.toBuilder()
+                .triggerConfigs(trigger.triggerConfigs().stream()
+                        .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
+                        .toList())
                 .build();
     }
 
