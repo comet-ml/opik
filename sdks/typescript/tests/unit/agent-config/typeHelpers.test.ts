@@ -125,6 +125,24 @@ describe("deserializeValue", () => {
   );
 });
 
+describe("serializeValue — explicit backendType for prompt types", () => {
+  it('serializes BasePrompt with backendType "prompt" → returns commit', () => {
+    const prompt = makePromptLike("commit-abc123");
+    expect(serializeValue(prompt, "prompt")).toBe("commit-abc123");
+  });
+
+  it('throws when serializing BasePrompt without commit and backendType "prompt"', () => {
+    const prompt = makePromptLike(undefined as unknown as string);
+    (prompt as { commit: unknown }).commit = undefined;
+    expect(() => serializeValue(prompt, "prompt")).toThrow("without a commit");
+  });
+
+  it('serializes PromptVersion with backendType "prompt_commit" → returns commit', () => {
+    const pv = makePromptVersion("commit-xyz789");
+    expect(serializeValue(pv, "prompt_commit")).toBe("commit-xyz789");
+  });
+});
+
 describe("getSchemaPrefix", () => {
   it("throws TypeError when schema is missing .describe()", () => {
     const Schema = z.object({ x: z.number() });

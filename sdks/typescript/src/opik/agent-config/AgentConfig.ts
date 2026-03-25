@@ -1,6 +1,15 @@
 import { getTrackContext } from "@/decorators/track";
 import { z } from "zod";
-import type { FieldMeta } from "./typeHelpers";
+import type { FieldMeta, SupportedValue } from "./typeHelpers";
+import { serializeValue } from "./typeHelpers";
+
+function toMetadataValue(value: unknown, backendType: string): unknown {
+  if (value === null || value === undefined) return undefined;
+  if (backendType === "prompt" || backendType === "prompt_commit") {
+    return serializeValue(value as SupportedValue, backendType);
+  }
+  return value;
+}
 
 interface AgentConfigMeta {
   readonly blueprintId: string | undefined;
@@ -103,7 +112,7 @@ function injectTraceMetadata(opts: {
 
   for (const [fieldName, meta] of fieldMeta.entries()) {
     valuesMetadata[meta.prefixedKey] = {
-      value: values[fieldName],
+      value: toMetadataValue(values[fieldName], meta.backendType),
       type: meta.backendType,
       description: meta.description,
     };

@@ -57,6 +57,47 @@ describe.skipIf(!shouldRunApiTests)(
       }
     });
 
+    /**
+     * Fetches a single trace by ID and returns the agent_configuration block from
+     * its metadata, waiting up to 30 s for the trace to be indexed.
+     */
+    const fetchAgentConfigMeta = async (
+      traceId: string,
+      projectName: string
+    ): Promise<Record<string, unknown>> => {
+      const traces = await client.searchTraces({
+        projectName,
+        filterString: `id = "${traceId}"`,
+        waitForAtLeast: 1,
+        waitForTimeout: 30,
+      });
+      const meta = traces[0]?.metadata as Record<string, unknown> | undefined;
+      expect(meta?.agent_configuration).toBeDefined();
+      return meta!.agent_configuration as Record<string, unknown>;
+    };
+
+    /**
+     * Asserts the shape of one field entry inside agent_configuration.values.
+     * Pass `closeToValue` for floats that need approximate comparison.
+     */
+    const verifyAgentConfigField = (
+      values: Record<string, { value: unknown; type: string; description?: string }>,
+      key: string,
+      expected: { type: string; value?: unknown; closeToValue?: number; description?: string }
+    ): void => {
+      const entry = values[key];
+      expect(entry).toBeDefined();
+      expect(entry.type).toBe(expected.type);
+      if (expected.description !== undefined) {
+        expect(entry.description).toBe(expected.description);
+      }
+      if (expected.closeToValue !== undefined) {
+        expect(entry.value).toBeCloseTo(expected.closeToValue);
+      } else if ("value" in expected) {
+        expect(entry.value).toBe(expected.value);
+      }
+    };
+
     // ─── Test 1: publish, dedup, new version, get by latest / version name / env ───
 
     it(
@@ -242,27 +283,13 @@ describe.skipIf(!shouldRunApiTests)(
         expect(traceId).toBeDefined();
         expect(spanId).toBeDefined();
 
-        // Poll for the trace to appear and verify metadata
-        const traces = await client.searchTraces({
-          projectName,
-          filterString: `id = "${traceId}"`,
-          waitForAtLeast: 1,
-          waitForTimeout: 30,
-        });
-
-        const trace = traces[0];
-        expect(trace).toBeDefined();
-
-        const meta = trace?.metadata as Record<string, unknown> | undefined;
-        expect(meta?.agent_configuration).toBeDefined();
-
-        const agentMeta = meta?.agent_configuration as Record<string, unknown>;
+        const agentMeta = await fetchAgentConfigMeta(traceId!, projectName);
         expect(agentMeta._blueprint_id).toBeDefined();
         expect(agentMeta.blueprint_version).toBeDefined();
-        expect(agentMeta.values).toEqual({
-          "TraceSchema.temperature": { value: 0.7, type: "float" },
-          "TraceSchema.model": { value: "gpt-4", type: "string" },
-        });
+
+        const agentValues = agentMeta.values as Record<string, { value: unknown; type: string }>;
+        verifyAgentConfigField(agentValues, "TraceSchema.temperature", { type: "float", closeToValue: 0.7 });
+        verifyAgentConfigField(agentValues, "TraceSchema.model", { type: "string", value: "gpt-4" });
       },
       60_000
     );
@@ -381,12 +408,23 @@ describe.skipIf(!shouldRunApiTests)(
         );
         expect(typeof versionName).toBe("string");
 
-        const run = track(async () => {
-          return client.getAgentConfigVersion(MyConfig, {
+        let traceId: string | undefined;
+
+        const run = track({ projectName }, async () => {
+          const cfg = await client.getAgentConfigVersion(MyConfig, {
             fallback: { model: "fallback", system_prompt: storedPrompt },
             projectName,
             latest: true,
           });
+
+          // Access fields to trigger metadata injection
+          void cfg.model;
+          void cfg.system_prompt;
+
+          const ctx = getTrackContext();
+          traceId = ctx?.trace?.data?.id;
+
+          return cfg;
         });
         const cfg = await run();
 
@@ -396,6 +434,19 @@ describe.skipIf(!shouldRunApiTests)(
         expect((cfg.system_prompt as Prompt).prompt).toBe(
           "You are a helpful assistant. Think step by step."
         );
+
+        await client.flush();
+        expect(traceId).toBeDefined();
+
+        const agentMeta = await fetchAgentConfigMeta(traceId!, projectName);
+        const agentValues = agentMeta.values as Record<string, { value: unknown; type: string }>;
+        verifyAgentConfigField(agentValues, "PromptConfig.model", { type: "string", value: "gpt-4" });
+        // prompt field must be serialized to its commit string, not a Prompt object
+        verifyAgentConfigField(agentValues, "PromptConfig.system_prompt", {
+          type: "prompt",
+          description: "System prompt for the agent",
+          value: storedPrompt.commit,
+        });
       },
       60_000
     );
