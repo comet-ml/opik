@@ -2,7 +2,7 @@
 --changeset borystkachenko:000037_add_annotation_queues_table
 --comment: Create annotation-queues table for human annotation workflows
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
 (
     id              FixedString(36),
     workspace_id    String,
@@ -22,5 +22,5 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB
 ORDER BY (workspace_id, project_id, id)
 SETTINGS index_granularity = 8192;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';
 

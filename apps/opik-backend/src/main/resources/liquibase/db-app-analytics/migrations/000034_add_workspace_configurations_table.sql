@@ -1,7 +1,7 @@
 --liquibase formatted sql
 --changeset thiagohora:000034_add_workspace_configurations_table
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '{cluster}' (
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' (
     workspace_id                    String,
     timeout_mark_thread_as_inactive UInt32, -- timeout in seconds, 0 means no timeout
     created_at                      DateTime64(9, 'UTC') DEFAULT now64(9),
@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.workspace_configuration
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/workspace_configurations', '{replica}', last_updated_at)
 ORDER BY workspace_id;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '{cluster}'; 
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'; 

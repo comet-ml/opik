@@ -4,8 +4,8 @@
 
 -- Change feedback_definitions column type to support string-based feedback definition names
 -- This allows referencing feedback definitions by their name rather than UUID
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '{cluster}'
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
     MODIFY COLUMN feedback_definitions Array(String);
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '{cluster}' MODIFY COLUMN feedback_definitions Array(FixedString(36));
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.annotation_queues ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' MODIFY COLUMN feedback_definitions Array(FixedString(36));
 

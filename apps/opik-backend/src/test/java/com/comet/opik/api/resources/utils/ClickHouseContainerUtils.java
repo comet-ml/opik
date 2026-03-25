@@ -15,6 +15,8 @@ public class ClickHouseContainerUtils {
 
     public static final String DATABASE_NAME = "opik";
     public static final String DATABASE_NAME_VARIABLE = "ANALYTICS_DB_DATABASE_NAME";
+    public static final String CLUSTER_NAME = "cluster";
+    public static final String CLUSTER_NAME_VARIABLE = "ANALYTICS_DB_CLUSTER_NAME";
     private static final Network NETWORK = Network.newNetwork();
     private static final Set<GenericContainer<?>> CONTAINERS = Sets.newConcurrentHashSet();
 
@@ -107,6 +109,6 @@ public class ClickHouseContainerUtils {
     }
 
     public static Map<String, String> migrationParameters() {
-        return Map.of(DATABASE_NAME_VARIABLE, DATABASE_NAME);
+        return Map.of(DATABASE_NAME_VARIABLE, DATABASE_NAME, CLUSTER_NAME_VARIABLE, CLUSTER_NAME);
     }
 }

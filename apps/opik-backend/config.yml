@@ -78,6 +78,12 @@ databaseAnalytics:
   #  Default: opik
   #  Description: The database name
   databaseName: ${ANALYTICS_DB_DATABASE_NAME:-opik}
+  #  Default: cluster
+  #  Description: The ClickHouse cluster name used in ON CLUSTER DDL statements.
+  #  For self-hosted deployments with macros configured, use 'cluster' (default).
+  #  For managed ClickHouse services (e.g., Alibaba Cloud, ClickHouse Cloud),
+  #  set this to the actual cluster name from system.clusters.
+  clusterName: ${ANALYTICS_DB_CLUSTER_NAME:-cluster}
   #  Default:
   #   - health_check_interval=2000
   #   - compress=1

@@ -3,7 +3,7 @@
 --comment: Add project_id column to experiment_items for denormalization optimization (OPIK-4381)
 
 -- Add nullable project_id column to store trace project association
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}'
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
     ADD COLUMN IF NOT EXISTS project_id Nullable(FixedString(36));
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS project_id;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' DROP COLUMN IF EXISTS project_id;
 

@@ -2,7 +2,7 @@
 --changeset idoberko2:000047_add_dataset_item_versions_table
 --comment: Create dataset_item_versions table for immutable dataset version snapshots
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
 (
     id                      FixedString(36),
     dataset_item_id         FixedString(36),
@@ -30,8 +30,8 @@ ORDER BY (workspace_id, dataset_id, dataset_version_id, id)
 SETTINGS index_granularity = 8192;
 
 -- Add data_hash to dataset_items (draft items) for version comparison
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}'
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
     ADD COLUMN IF NOT EXISTS data_hash UInt64 MATERIALIZED xxHash64(toString(data));
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '{cluster}';
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS data_hash;
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' DROP COLUMN IF EXISTS data_hash;

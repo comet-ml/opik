@@ -2,7 +2,7 @@
 --changeset thiaghora:000043_create_alert_logs_table_to_store_webhook_logs
 --comment: Create alert_logs table for tracking webhook event handler logs
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.alert_logs ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.alert_logs ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
 (
     `timestamp` DateTime64(9, 'UTC') DEFAULT now64(9),
     `workspace_id` String,
@@ -16,4 +16,4 @@ ORDER BY (workspace_id, alert_id, timestamp)
 TTL toDateTime(timestamp + toIntervalMonth(6))
 SETTINGS index_granularity = 8192;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.alert_logs ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.alert_logs ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';

@@ -1,7 +1,7 @@
 --liquibase formatted sql
 --changeset thiagohora:000030_add_project_configs_table
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.project_configurations ON CLUSTER '{cluster}' (
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.project_configurations ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' (
     workspace_id                                String,
     project_id                                  FixedString(36),
     timeout_mark_thread_as_inactive             Time,
@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.project_configurations 
 ) ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/project_configurations', '{replica}', last_updated_at)
 ORDER BY (workspace_id, project_id);
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.project_configurations ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.project_configurations ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';

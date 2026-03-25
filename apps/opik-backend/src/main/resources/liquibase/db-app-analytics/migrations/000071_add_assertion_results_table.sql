@@ -2,7 +2,7 @@
 --changeset danield:000071_add_assertion_results_table
 --comment: Create dedicated assertion_results table to separate assertion data from feedback_scores
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.assertion_results ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.assertion_results ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
 (
     entity_id       FixedString(36),
     entity_type     Enum8('unknown' = 0, 'span' = 1, 'trace' = 2, 'thread' = 3),
@@ -21,4 +21,4 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.assertion_results ON CL
         ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name)
         SETTINGS index_granularity = 8192;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.assertion_results ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.assertion_results ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';

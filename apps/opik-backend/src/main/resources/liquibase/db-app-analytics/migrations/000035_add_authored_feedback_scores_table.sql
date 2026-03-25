@@ -1,7 +1,7 @@
 --liquibase formatted sql
 --changeset ido:000035_add_authored_feedback_scores
 
-CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}'
+CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
 (
     entity_id       FixedString(36),
     entity_type     Enum8('unknown' = 0, 'span' = 1, 'trace' = 2, 'thread' = 3),
@@ -21,4 +21,4 @@ CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '
         ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name)
         SETTINGS index_granularity = 8192;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';

@@ -17,4 +17,4 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB
 ORDER BY (workspace_id, project_id, queue_id, item_id)
 SETTINGS index_granularity = 8192;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';

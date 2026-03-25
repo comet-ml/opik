@@ -1,10 +1,10 @@
 --liquibase formatted sql
 --changeset borystkachenko:000039_fix_annotation_queue_items_table
 
-DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
+DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' SYNC SETTINGS max_table_size_to_drop = 0;
 --rollback --rollback empty -- Cannot rollback drop table operation
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items  ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items  ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
 (
     workspace_id        String,
     project_id          FixedString(36),
@@ -19,4 +19,4 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB
 ORDER BY (workspace_id, project_id, queue_id, item_id)
 SETTINGS index_granularity = 8192;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}';

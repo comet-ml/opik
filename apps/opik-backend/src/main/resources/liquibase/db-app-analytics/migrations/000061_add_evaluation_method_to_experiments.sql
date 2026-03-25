@@ -2,7 +2,7 @@
 --changeset JetoPistola:000061_add_evaluation_method_to_experiments
 --comment: Add evaluation_method field to experiments table to distinguish how an experiment was created
 
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}'
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
     ADD COLUMN IF NOT EXISTS evaluation_method ENUM('unknown' = 0, 'dataset' = 1, 'evaluation_suite' = 2) DEFAULT 'unknown';
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS evaluation_method;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' DROP COLUMN IF EXISTS evaluation_method;

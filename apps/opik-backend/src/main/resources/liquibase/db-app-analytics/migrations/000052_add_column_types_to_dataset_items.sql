@@ -3,7 +3,7 @@
 --comment: Add materialized column_types column to dataset_items and dataset_item_versions tables for performance optimization of JSON key and type extraction
 
 -- Add column_types to dataset_items table
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}'
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
     ADD COLUMN IF NOT EXISTS column_types Map(String, Array(String)) MATERIALIZED 
         mapFromArrays(
             mapKeys(data),
@@ -11,13 +11,13 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}'
         );
 
 -- Add column_types to dataset_item_versions table
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '{cluster}'
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}'
     ADD COLUMN IF NOT EXISTS column_types Map(String, Array(String)) MATERIALIZED 
         mapFromArrays(
             mapKeys(data),
             arrayMap(key -> [toString(JSONType(data[key]))], mapKeys(data))
         );
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS column_types;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS column_types;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' DROP COLUMN IF EXISTS column_types;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '${ANALYTICS_DB_CLUSTER_NAME}' DROP COLUMN IF EXISTS column_types;
 
