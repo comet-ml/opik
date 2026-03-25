@@ -203,7 +203,7 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
         });
     }
 
-    private record VelocityEstimation(long velocity, UUID startCursor) {
+    record VelocityEstimation(long velocity, UUID startCursor) {
     }
 
     /**
@@ -211,7 +211,10 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
      * On success, uses the oldest span timestamp as cursor start.
      * If the estimation query fails with TOO_MANY_ROWS, falls back to service start date.
      */
-    private VelocityEstimation estimateVelocity(String workspaceId, RetentionPeriod period, Instant now) {
+    // Package-visible for unit testing (TOO_MANY_ROWS path requires mocked DAOs since
+    // ClickHouse's max_rows_to_read profile setting also blocks normal INSERT/SELECT operations,
+    // making it impossible to test via integration tests with a real ClickHouse container)
+    VelocityEstimation estimateVelocity(String workspaceId, RetentionPeriod period, Instant now) {
         var catchUpConfig = config.getCatchUp();
 
         // Compute the cutoff for this retention period (start-of-day UTC)
@@ -259,7 +262,8 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
      *
      * This is a blocking loop, acceptable because rule creation is a rare admin operation.
      */
-    private UUID scoutFirstDataCursor(String workspaceId, UUID serviceStartCursor, UUID cutoffId) {
+    // Package-visible for unit testing (same reason as estimateVelocity)
+    UUID scoutFirstDataCursor(String workspaceId, UUID serviceStartCursor, UUID cutoffId) {
         Instant serviceStart = extractInstant(serviceStartCursor);
         Instant cutoff = extractInstant(cutoffId);
         Instant monthStart = serviceStart;
