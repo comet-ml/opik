@@ -2,11 +2,13 @@ package com.comet.opik.api.filter;
 
 import com.comet.opik.api.Source;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 import java.util.Optional;
 import java.util.function.Function;
 
 @Getter
+@RequiredArgsConstructor
 public enum SpanField implements Field {
     ID(ID_QUERY_PARAM, FieldType.STRING_EXACT),
     NAME(NAME_QUERY_PARAM, FieldType.STRING),
@@ -41,12 +43,6 @@ public enum SpanField implements Field {
 
     SpanField(String queryParamField, FieldType type) {
         this(queryParamField, type, null);
-    }
-
-    SpanField(String queryParamField, FieldType type, Function<String, Optional<String>> legacyFallback) {
-        this.queryParamField = queryParamField;
-        this.type = type;
-        this.legacyFallback = legacyFallback;
     }
 
     @Override
