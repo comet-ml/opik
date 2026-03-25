@@ -9,7 +9,7 @@
  *
  * Requires a running Opik server. Set OPIK_URL_OVERRIDE in .env or env vars.
  */
-import { Opik } from "../src/opik/index";
+import { Opik } from "opik";
 
 async function main() {
   const timestamp = Date.now();
