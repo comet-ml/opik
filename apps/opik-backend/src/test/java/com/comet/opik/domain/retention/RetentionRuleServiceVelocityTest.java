@@ -120,8 +120,8 @@ class RetentionRuleServiceVelocityTest {
         }
 
         @Test
-        @DisplayName("Uses service start date when scouting finds no data at all")
-        void usesServiceStartWhenScoutingFindsNothing() {
+        @DisplayName("Marks catch-up done when scouting finds no data at all")
+        void marksDoneWhenScoutingFindsNothing() {
             when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
                     .thenReturn(Mono.error(tooManyRowsException()));
 
@@ -131,10 +131,9 @@ class RetentionRuleServiceVelocityTest {
 
             var result = service.estimateVelocity(WORKSPACE_ID, PERIOD, NOW);
 
-            assertThat(result.velocity()).isEqualTo(1_000_000L);
-            Instant cursorTime = extractInstant(result.startCursor());
-            assertThat(cursorTime).isEqualTo(
-                    LocalDate.of(2024, 9, 1).atStartOfDay(ZoneOffset.UTC).toInstant());
+            // No data found — velocity 0, null cursor signals catch-up should be marked done
+            assertThat(result.velocity()).isZero();
+            assertThat(result.startCursor()).isNull();
         }
 
         @Test

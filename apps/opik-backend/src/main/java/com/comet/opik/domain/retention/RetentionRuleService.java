@@ -99,7 +99,8 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
             var estimation = estimateVelocity(workspaceId, rule.retention(), Instant.now());
             catchUpVelocity = estimation.velocity();
             catchUpCursor = estimation.startCursor();
-            catchUpDone = false;
+            // If estimation/scouting found no data (velocity=0, cursor=null), mark done immediately
+            catchUpDone = estimation.startCursor() == null;
         } else {
             catchUpVelocity = null;
             catchUpCursor = null;
@@ -248,6 +249,10 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
                 log.info("Retention velocity estimation hit row limit for workspace '{}', scouting for first data",
                         workspaceId);
                 UUID scoutedCursor = scoutFirstDataCursor(workspaceId, fallbackCursor, cutoffId);
+                if (scoutedCursor == null) {
+                    // Scouting found no data in any month — nothing to catch up
+                    return new VelocityEstimation(0L, null);
+                }
                 return new VelocityEstimation(catchUpConfig.getDefaultVelocity(), scoutedCursor);
             }
             throw e;
@@ -297,8 +302,8 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
             monthStart = monthEnd;
         }
 
-        log.info("Scouting found no data for workspace '{}', using service start date", workspaceId);
-        return serviceStartCursor;
+        log.info("Scouting found no data for workspace '{}', no catch-up needed", workspaceId);
+        return null;
     }
 
     /**
