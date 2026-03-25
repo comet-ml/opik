@@ -192,7 +192,7 @@ def verify_dataset(
     name: str,
     description: str = mock.ANY,
     dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
-    project_name: Optional[str] = mock.ANY,
+    project_name: Optional[str] = None,
 ):
     if not synchronization.until(
         lambda: opik_client.get_dataset(name=name) is not None,
@@ -200,10 +200,11 @@ def verify_dataset(
     ):
         raise AssertionError(f"Failed to get dataset with name {name}.")
 
-    actual_dataset = opik_client.get_dataset(name=name)
+    actual_dataset = opik_client.get_dataset(name=name, project_name=project_name)
     assert actual_dataset.description == description
     assert actual_dataset.name == name
-    assert actual_dataset.project_name == project_name
+    if project_name is not None:
+        assert actual_dataset.project_name == project_name
 
     actual_dataset_items = list(
         actual_dataset.__internal_api__stream_items_as_dataclasses__()
@@ -738,6 +739,10 @@ def verify_dataset_filtered_items(
         assert inputs == expected_inputs, (
             f"Input mismatch: {inputs} != {expected_inputs}"
         )
+        if project_name is not None:
+            assert all(
+                item["project_name"] == project_name for item in filtered_items
+            ), "Project name mismatch in dataset items"
 
 
 def verify_traces_annotation_queue(

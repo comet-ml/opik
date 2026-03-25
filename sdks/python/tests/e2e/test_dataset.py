@@ -39,14 +39,17 @@ def test_create_and_populate_dataset__happyflow(
         dataset_item.DatasetItem(
             input={"question": "What is the of capital of France?"},
             expected_output={"output": "Paris"},
+            project_name=project_name,
         ),
         dataset_item.DatasetItem(
             input={"question": "What is the of capital of Germany?"},
             expected_output={"output": "Berlin"},
+            project_name=project_name,
         ),
         dataset_item.DatasetItem(
             input={"question": "What is the of capital of Poland?"},
             expected_output={"output": "Warsaw"},
+            project_name=project_name,
         ),
     ]
 
@@ -89,6 +92,7 @@ def test_insert_and_update_item__dataset_size_should_be_the_same__an_item_with_t
     EXPECTED_DATASET_ITEMS = [
         dataset_item.DatasetItem(
             input={"question": "What is the of capital of Belarus?"},
+            project_name=project_name,
         ),
     ]
 
@@ -109,12 +113,16 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
         "expected_model_output": {"output": "Paris"},
     }
 
+    project_name = "dataset-test-project"
+
     # Write the dataset
-    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset = opik_client.create_dataset(
+        dataset_name, description=DESCRIPTION, project_name=project_name
+    )
     dataset.insert([item])
 
     # Read the dataset and insert the same item
-    new_dataset = opik_client.get_dataset(dataset_name)
+    new_dataset = opik_client.get_dataset(dataset_name, project_name=project_name)
     new_dataset.insert([item])
 
     # Verify the dataset
@@ -123,16 +131,19 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
         name=dataset_name,
         description=DESCRIPTION,
         dataset_items=[
-            dataset_item.DatasetItem(**item),
+            dataset_item.DatasetItem(**{"project_name": project_name, **item}),
         ],
-        project_name=opik_client.project_name,  # use the default project name from the client
+        project_name=project_name,
     )
 
 
 def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset"
 
-    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    project_name = "dataset-test-project"
+    dataset = opik_client.create_dataset(
+        dataset_name, description=DESCRIPTION, project_name=project_name
+    )
 
     dataset.insert(
         [
@@ -153,7 +164,7 @@ def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
         name=dataset_name,
         description=DESCRIPTION,
         dataset_items=[],
-        project_name=opik_client.project_name,  # use the default project name from the client
+        project_name=project_name,
     )
 
 
@@ -299,7 +310,9 @@ def test_get_version_view__returns_items_from_specific_version(
     v1_view = dataset.get_version_view("v1")
     v1_items = v1_view.get_items()
     assert len(v1_items) == 1
-    assert v1_items[0]["input"] == {"question": "What is the capital of France?"}
+    ds_item = v1_items[0]
+    assert ds_item["input"] == {"question": "What is the capital of France?"}
+    assert ds_item["project_name"] == project_name
     assert v1_view.version_name == "v1"
     assert v1_view.items_total == 1
     assert v1_view.project_name == project_name

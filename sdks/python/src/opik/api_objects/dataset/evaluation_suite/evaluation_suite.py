@@ -322,6 +322,7 @@ class EvaluationSuite:
             description=description,
             evaluators=evaluator_items,
             execution_policy=execution_policy_item,
+            project_name=self._dataset.project_name,
             **data,
         )
         self._dataset.__internal_api__insert_items_as_dataclasses__([ds_item])
@@ -382,6 +383,7 @@ class EvaluationSuite:
                     description=item.get("description"),
                     evaluators=evaluator_items,
                     execution_policy=execution_policy_item,
+                    project_name=self._dataset.project_name,
                     **item["data"],
                 )
             )

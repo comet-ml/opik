@@ -128,6 +128,7 @@ def stream_dataset_items(
                 description=item.description,
                 evaluators=evaluators,
                 execution_policy=execution_policy,
+                project_name=project_name,
                 **item.data,
             )
 

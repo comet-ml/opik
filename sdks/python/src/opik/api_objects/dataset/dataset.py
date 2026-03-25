@@ -122,7 +122,7 @@ class DatasetExportOperations(abc.ABC):
             A list of dictionaries representing the dataset items.
         """
         dataset_items_as_dicts = [
-            {"id": item.id, **item.get_content()}
+            {"id": item.id, "project_name": item.project_name, **item.get_content()}
             for item in self.__internal_api__stream_items_as_dataclasses__(
                 nb_samples=nb_samples, filter_string=filter_string
             )
@@ -553,7 +553,10 @@ class Dataset(DatasetExportOperations):
         """
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name, items=batch, batch_group_id=batch_group_id
+                dataset_name=self._name,
+                items=batch,
+                batch_group_id=batch_group_id,
+                project_name=self._project_name,
             )
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
@@ -564,6 +567,9 @@ class Dataset(DatasetExportOperations):
         # Remove duplicates if they already exist
         deduplicated_items: List[dataset_item.DatasetItem] = []
         for item in items:
+            item.project_name = (
+                item.project_name if item.project_name else self._project_name
+            )
             item_hash = item.content_hash()
 
             if item_hash in self._hashes:
