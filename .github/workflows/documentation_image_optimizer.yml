@@ -1,4 +1,4 @@
-actions/checkout@v6name: Docs - Compress Images
+name: Docs - Compress Images
 on:
   workflow_dispatch:
   pull_request:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v6.2.2
+        uses: actions/checkout@v6
           
       - name: Compress Images
         uses: calibreapp/image-actions@1.1.0

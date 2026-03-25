@@ -1,4 +1,4 @@
-actions/checkout@v6name: TypeScript SDK Unit Tests
+name: TypeScript SDK Unit Tests
 run-name: "TypeScript SDK Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
   pull_request:
@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6.2.2
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4.2.0
