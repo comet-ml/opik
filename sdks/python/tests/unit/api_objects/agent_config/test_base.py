@@ -12,6 +12,7 @@ from opik.api_objects.agent_config.context import agent_config_context
 from opik.api_objects.span import span_data as span_data_mod
 from opik.exceptions import AgentConfigNotFound, OpikException
 from opik.rest_api import core as rest_api_core
+from opik.rest_api.errors import ConflictError
 from opik.rest_api.core.request_options import RequestOptions
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
 from opik.rest_api.types.agent_config_value_public import AgentConfigValuePublic
@@ -300,10 +301,10 @@ class TestCreateAgentConfigVersion:
 
         mock_rest_client.agent_configs.create_or_update_envs.assert_not_called()
 
-    def test_race_condition_400__parallel_create__values_match__reuses_existing(
+    def test_race_condition_409__parallel_create__values_match__reuses_existing(
         self, mock_rest_client, mock_opik_client
     ):
-        """POST returns 400 because a parallel caller already created the config.
+        """POST returns 409 because a parallel caller already created the config.
         The re-fetched blueprint matches local values → no update, reuse existing."""
 
         class MyConfig(AgentConfig):
@@ -311,8 +312,8 @@ class TestCreateAgentConfigVersion:
 
         cfg = MyConfig(temp=0.7)
 
-        mock_rest_client.agent_configs.create_agent_config.side_effect = (
-            rest_api_core.ApiError(status_code=400, body="config already exists")
+        mock_rest_client.agent_configs.create_agent_config.side_effect = ConflictError(
+            body="config already exists"
         )
         mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
         mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
@@ -333,10 +334,10 @@ class TestCreateAgentConfigVersion:
         mock_rest_client.agent_configs.update_agent_config.assert_not_called()
         assert result == "v1"
 
-    def test_race_condition_400__parallel_create__values_differ__updates(
+    def test_race_condition_409__parallel_create__values_differ__updates(
         self, mock_rest_client, mock_opik_client
     ):
-        """POST returns 400 because a parallel caller already created the config
+        """POST returns 409 because a parallel caller already created the config
         with different values → update_agent_config (PATCH) is called."""
 
         class MyConfig(AgentConfig):
@@ -344,8 +345,8 @@ class TestCreateAgentConfigVersion:
 
         cfg = MyConfig(temp=0.9)
 
-        mock_rest_client.agent_configs.create_agent_config.side_effect = (
-            rest_api_core.ApiError(status_code=400, body="config already exists")
+        mock_rest_client.agent_configs.create_agent_config.side_effect = ConflictError(
+            body="config already exists"
         )
         mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
         mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
