@@ -17,7 +17,7 @@ import CompareExperimentsConfigCell, {
   CompareConfig,
   CompareFiledValue,
 } from "@/v1/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/shared/Loader/Loader";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";

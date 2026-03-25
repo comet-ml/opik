@@ -6,6 +6,8 @@ export interface OptimizationPublic {
     id?: string;
     name?: string;
     datasetName: string;
+    /** Project ID. Takes precedence over project_name when both are provided. */
+    projectId?: string;
     objectiveName: string;
     status: OpikApi.OptimizationPublicStatus;
     metadata?: OpikApi.JsonListStringPublic;

@@ -7,6 +7,7 @@ import { CommentPublic } from "./CommentPublic.js";
 import { ErrorInfoPublic } from "./ErrorInfoPublic.js";
 import { FeedbackScorePublic } from "./FeedbackScorePublic.js";
 import { JsonListStringPublic } from "./JsonListStringPublic.js";
+import { SpanPublicSource } from "./SpanPublicSource.js";
 import { SpanPublicType } from "./SpanPublicType.js";
 
 export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.Raw, OpikApi.SpanPublic> =
@@ -44,6 +45,7 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
         ),
         duration: core.serialization.number().optional(),
         ttft: core.serialization.number().optional(),
+        source: SpanPublicSource.optional(),
     });
 
 export declare namespace SpanPublic {
@@ -75,5 +77,6 @@ export declare namespace SpanPublic {
         total_estimated_cost_version?: string | null;
         duration?: number | null;
         ttft?: number | null;
+        source?: SpanPublicSource.Raw | null;
     }
 }

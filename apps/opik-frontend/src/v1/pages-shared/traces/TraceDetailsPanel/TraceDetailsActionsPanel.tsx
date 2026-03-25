@@ -47,12 +47,12 @@ import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
 import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { TREE_FILTER_COLUMNS } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
 import { getJSONPaths } from "@/lib/utils";
 import NetworkOff from "@/icons/network-off.svg?react";
-import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
+import { getSpanTypeFilterConfig } from "@/v1/pages-shared/traces/spanTypeFilter";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,

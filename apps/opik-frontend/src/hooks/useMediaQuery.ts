@@ -12,7 +12,9 @@ import { useState, useEffect } from "react";
  * const isPortrait = useMediaQuery('(orientation: portrait)');
  */
 export const useMediaQuery = (query: string): boolean => {
-  const [matches, setMatches] = useState(false);
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches,
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(query);

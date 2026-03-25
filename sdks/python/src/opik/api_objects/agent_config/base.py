@@ -3,6 +3,7 @@ import logging
 import typing
 
 from opik.exceptions import AgentConfigNotFound
+from opik.rest_api import core as rest_api_core
 from . import type_helpers
 from . import cache as cache_mod
 from .context import get_active_config_mask
@@ -180,17 +181,37 @@ class AgentConfig:
 
         latest = manager.get_blueprint(field_types=field_types)
 
-        is_first_blueprint = latest is None
         if latest is not None and self._matches_blueprint(latest, fields_with_values):
             bp = latest
-        else:
-            bp = manager.create_blueprint(
+        elif latest is not None:
+            # There's another blueprint and the values don't match
+            bp = manager.update_blueprint(
                 fields_with_values=fields_with_values,
                 description=description,
                 field_types=field_types,
             )
-            if is_first_blueprint:
-                manager.tag_blueprint_with_env(env="prod", blueprint_id=bp.id)
+        else:
+            try:
+                bp = manager.create_blueprint(
+                    fields_with_values=fields_with_values,
+                    description=description,
+                    field_types=field_types,
+                )
+            except rest_api_core.ApiError as e:
+                if e.status_code != 409:
+                    raise
+                # A parallel caller created the config first — re-fetch and compare.
+                latest = manager.get_blueprint(field_types=field_types)
+                if latest is not None and self._matches_blueprint(
+                    latest, fields_with_values
+                ):
+                    bp = latest
+                else:
+                    bp = manager.update_blueprint(
+                        fields_with_values=fields_with_values,
+                        description=description,
+                        field_types=field_types,
+                    )
 
         self._state.manager = manager
         self._state.blueprint_id = bp.id

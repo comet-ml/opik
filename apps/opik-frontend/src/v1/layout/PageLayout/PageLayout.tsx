@@ -7,7 +7,7 @@ import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
 import WelcomeWizardDialog from "@/v1/pages-shared/WelcomeWizard/WelcomeWizardDialog";
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import QuickstartDialog from "@/v1/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 

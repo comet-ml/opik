@@ -12,6 +12,7 @@ from opik.api_objects.agent_config.context import agent_config_context
 from opik.api_objects.span import span_data as span_data_mod
 from opik.exceptions import AgentConfigNotFound, OpikException
 from opik.rest_api import core as rest_api_core
+from opik.rest_api.errors import ConflictError
 from opik.rest_api.core.request_options import RequestOptions
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
 from opik.rest_api.types.agent_config_value_public import AgentConfigValuePublic
@@ -222,7 +223,7 @@ class TestCreateAgentConfigVersion:
         mock_rest_client.agent_configs.create_agent_config.assert_not_called()
         assert result == "v1"
 
-    def test_different_values__creates_new_version__happyflow(
+    def test_different_values__updates_existing_config__happyflow(
         self, mock_rest_client, mock_opik_client
     ):
         class MyConfig(AgentConfig):
@@ -258,38 +259,9 @@ class TestCreateAgentConfigVersion:
 
         result = mock_opik_client.create_agent_config_version(cfg)
 
-        mock_rest_client.agent_configs.create_agent_config.assert_called_once()
+        mock_rest_client.agent_configs.update_agent_config.assert_called_once()
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
         assert result == "v2"
-
-    def test_first_blueprint__auto_tagged_as_prod(
-        self, mock_rest_client, mock_opik_client
-    ):
-        class MyConfig(AgentConfig):
-            temp: float
-
-        cfg = MyConfig(temp=0.7)
-
-        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            AgentBlueprintPublic(
-                id="bp-1",
-                name="v1",
-                type="blueprint",
-                values=[
-                    AgentConfigValuePublic(
-                        key="MyConfig.temp", type="float", value="0.7"
-                    ),
-                ],
-            )
-        )
-
-        mock_opik_client.create_agent_config_version(cfg)
-
-        mock_rest_client.agent_configs.create_or_update_envs.assert_called_once()
-        call_kwargs = (
-            mock_rest_client.agent_configs.create_or_update_envs.call_args.kwargs
-        )
-        assert call_kwargs["envs"][0].env_name == "prod"
-        assert call_kwargs["envs"][0].blueprint_id == "bp-1"
 
     def test_subsequent_blueprint__not_auto_tagged_as_prod(
         self, mock_rest_client, mock_opik_client
@@ -328,6 +300,84 @@ class TestCreateAgentConfigVersion:
         mock_opik_client.create_agent_config_version(cfg)
 
         mock_rest_client.agent_configs.create_or_update_envs.assert_not_called()
+
+    def test_race_condition_409__parallel_create__values_match__reuses_existing(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """POST returns 409 because a parallel caller already created the config.
+        The re-fetched blueprint matches local values → no update, reuse existing."""
+
+        class MyConfig(AgentConfig):
+            temp: float
+
+        cfg = MyConfig(temp=0.7)
+
+        mock_rest_client.agent_configs.create_agent_config.side_effect = ConflictError(
+            body="config already exists"
+        )
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key="MyConfig.temp", type="float", value="0.7"
+                    ),
+                ],
+            )
+        )
+
+        result = mock_opik_client.create_agent_config_version(cfg)
+
+        mock_rest_client.agent_configs.update_agent_config.assert_not_called()
+        assert result == "v1"
+
+    def test_race_condition_409__parallel_create__values_differ__updates(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """POST returns 409 because a parallel caller already created the config
+        with different values → update_agent_config (PATCH) is called."""
+
+        class MyConfig(AgentConfig):
+            temp: float
+
+        cfg = MyConfig(temp=0.9)
+
+        mock_rest_client.agent_configs.create_agent_config.side_effect = ConflictError(
+            body="config already exists"
+        )
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key="MyConfig.temp", type="float", value="0.7"
+                    ),
+                ],
+            )
+        )
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            AgentBlueprintPublic(
+                id="bp-2",
+                name="v2",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key="MyConfig.temp", type="float", value="0.9"
+                    ),
+                ],
+            )
+        )
+
+        result = mock_opik_client.create_agent_config_version(cfg)
+
+        mock_rest_client.agent_configs.update_agent_config.assert_called_once()
+        assert result == "v2"
 
     def test_non_agentconfig__raises_type_error(self, mock_opik_client):
         with pytest.raises(TypeError, match="AgentConfig subclass"):

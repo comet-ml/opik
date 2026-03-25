@@ -4,6 +4,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
@@ -1687,6 +1688,105 @@ class ExperimentAggregatesIntegrationTest {
 
         assertPageNotEmpty(afterAggregation);
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
+    @Test
+    @DisplayName("Pass rate aggregation reads from assertion_results (not feedback_scores) for evaluation suite experiments")
+    void passRateAggregationReadsFromAssertionResults() {
+        var project = createProject(API_KEY, TEST_WORKSPACE);
+        var dataset = createDataset(API_KEY, TEST_WORKSPACE);
+
+        // Create an evaluation_suite experiment
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetId(dataset.id())
+                .datasetName(dataset.name())
+                .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                .build();
+        experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+        // Create experiment items with data (traces, spans, feedback scores)
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        var experimentItems = createExperimentItemWithData(
+                experiment.id(), dataset.id(), project.name(),
+                feedbackScores, API_KEY, TEST_WORKSPACE);
+
+        // Log assertion scores with category_name="suite_assertion" on the first trace
+        var traceId = experimentItems.getFirst().traceId();
+        var assertionScores = List.of(
+                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traceId)
+                        .projectName(project.name())
+                        .name("assertion-grounded")
+                        .categoryName("suite_assertion")
+                        .value(BigDecimal.ONE)
+                        .source(ScoreSource.SDK)
+                        .build(),
+                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traceId)
+                        .projectName(project.name())
+                        .name("assertion-concise")
+                        .categoryName("suite_assertion")
+                        .value(BigDecimal.ZERO)
+                        .source(ScoreSource.SDK)
+                        .build());
+
+        traceResourceClient.feedbackScores(assertionScores, API_KEY, TEST_WORKSPACE);
+
+        // Query from ExperimentDAO (raw) - uses assertion_results_final correctly
+        var searchCriteria = ExperimentSearchCriteria.builder()
+                .experimentIds(Set.of(experiment.id()))
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build();
+
+        var rawResult = experimentService.find(1, 10, searchCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        assertThat(rawResult).isNotNull();
+        assertThat(rawResult.content()).hasSize(1);
+        var rawExperiment = rawResult.content().getFirst();
+
+        // Populate aggregates (this exercises GET_PASS_RATE_AGGREGATION)
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        var aggregatedExperiment = experimentAggregatesService
+                .getExperimentFromAggregates(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        assertThat(aggregatedExperiment)
+                .as("Experiment from aggregates should not be null after populateAggregations")
+                .isNotNull();
+
+        // The assertion "assertion-concise" has value=0, so the run should FAIL.
+        // pass_rate must NOT be 1.0 (which was the bug - reading feedback_scores found nothing -> defaulted to 100%)
+        assertThat(aggregatedExperiment.passRate())
+                .as("Pass rate from aggregates should match raw calculation (not always 100%%)")
+                .usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(rawExperiment.passRate());
+
+        assertThat(aggregatedExperiment.passedCount())
+                .as("Passed count from aggregates should match raw")
+                .isEqualTo(rawExperiment.passedCount());
+
+        assertThat(aggregatedExperiment.totalCount())
+                .as("Total count from aggregates should match raw")
+                .isEqualTo(rawExperiment.totalCount());
+
+        // Verify the pass rate is actually 0 (the single item failed because one assertion failed)
+        assertThat(aggregatedExperiment.passRate())
+                .as("Pass rate should be 0 because the run has a failing assertion")
+                .usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(BigDecimal.ZERO);
     }
 
     @ParameterizedTest(name = "{0}")

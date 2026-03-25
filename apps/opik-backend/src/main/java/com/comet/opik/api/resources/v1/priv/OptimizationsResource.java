@@ -99,6 +99,7 @@ public class OptimizationsResource {
             @QueryParam("name") @Schema(description = "Filter optimizations by name (partial match, case insensitive)") String name,
             @QueryParam("dataset_name") @Schema(description = "Filter optimizations by dataset name (partial match)") String datasetName,
             @QueryParam("dataset_deleted") Boolean datasetDeleted,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters) {
 
         List<OptimizationFilter> parsedFilters = (List<OptimizationFilter>) filtersFactory.newFilters(filters,
@@ -111,6 +112,7 @@ public class OptimizationsResource {
                 .datasetDeleted(datasetDeleted)
                 .filters(parsedFilters)
                 .entityType(EntityType.TRACE)
+                .projectId(projectId)
                 .build();
 
         log.info("Finding optimizations by '{}', page '{}', size '{}'", searchCriteria, page, size);

@@ -141,8 +141,9 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                     log.info("Could not acquire lock for trace threads closing job, skipping execution");
                     return null;
                 }),
-                traceThreadConfig.getCloseTraceThreadJobLockTime().toJavaDuration(), // Timeout to release the lock
-                traceThreadConfig.getCloseTraceThreadJobLockWaitTime().toJavaDuration()); // Timeout to acquiring the lock
+                traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration(), // Lock TTL = interval, held until expiry to prevent other pods from running
+                traceThreadConfig.getCloseTraceThreadJobLockWaitTime().toJavaDuration(), // Timeout to acquiring the lock
+                true); // holdUntilExpiry — don't release lock on completion, let TTL expire naturally
     }
 
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {

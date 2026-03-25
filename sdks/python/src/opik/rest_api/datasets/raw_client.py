@@ -369,11 +369,15 @@ class RawDatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
-        Create/update dataset items based on dataset item id
+        Create/update dataset items based on dataset item id.
+        Each item's 'id' field is the stable identifier and upsert key.
+        Provide it to update an existing item, or omit it to create a new one.
 
         Parameters
         ----------
@@ -384,6 +388,12 @@ class RawDatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        project_name : typing.Optional[str]
+            Optional. Associates the batch with a project by name. Ignored if project_id is provided.
+
+        project_id : typing.Optional[str]
+            Optional. Associates the batch with a project by ID. Takes precedence over project_name.
 
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
@@ -401,6 +411,8 @@ class RawDatasetsClient:
             json={
                 "dataset_name": dataset_name,
                 "dataset_id": dataset_id,
+                "project_name": project_name,
+                "project_id": project_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
@@ -1322,6 +1334,10 @@ class RawDatasetsClient:
         data : JsonNode
 
         id : typing.Optional[str]
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
 
         trace_id : typing.Optional[str]
 
@@ -2413,11 +2429,15 @@ class AsyncRawDatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
-        Create/update dataset items based on dataset item id
+        Create/update dataset items based on dataset item id.
+        Each item's 'id' field is the stable identifier and upsert key.
+        Provide it to update an existing item, or omit it to create a new one.
 
         Parameters
         ----------
@@ -2428,6 +2448,12 @@ class AsyncRawDatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        project_name : typing.Optional[str]
+            Optional. Associates the batch with a project by name. Ignored if project_id is provided.
+
+        project_id : typing.Optional[str]
+            Optional. Associates the batch with a project by ID. Takes precedence over project_name.
 
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
@@ -2445,6 +2471,8 @@ class AsyncRawDatasetsClient:
             json={
                 "dataset_name": dataset_name,
                 "dataset_id": dataset_id,
+                "project_name": project_name,
+                "project_id": project_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
@@ -3369,6 +3397,10 @@ class AsyncRawDatasetsClient:
         data : JsonNode
 
         id : typing.Optional[str]
+            Stable item identifier.
+            On write, used as the upsert key.
+            If omitted, a new ID is generated.
+            Remains the same across dataset versions
 
         trace_id : typing.Optional[str]
 

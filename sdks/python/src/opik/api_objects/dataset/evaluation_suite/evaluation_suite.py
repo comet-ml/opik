@@ -17,6 +17,7 @@ from opik.api_objects.prompt import base_prompt
 from opik.api_objects.dataset import dataset, dataset_item
 
 from . import types as suite_types
+from .report_processors import displayer, file_writer
 from .. import validators, execution_policy, rest_operations
 
 
@@ -105,6 +106,11 @@ class EvaluationSuite:
     def dataset(self) -> dataset.Dataset:
         """The underlying dataset storing suite items."""
         return self._dataset
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The project name associated with the evaluation suite."""
+        return self._dataset.project_name
 
     def get_tags(self) -> List[str]:
         """
@@ -395,6 +401,8 @@ class EvaluationSuite:
         verbose: int = 2,
         worker_threads: int = 16,
         model: Optional[str] = None,
+        generate_report: bool = True,
+        report_output_path: Optional[str] = None,
     ) -> suite_types.EvaluationSuiteResult:
         """
         Run the evaluation suite against a task function.
@@ -417,6 +425,10 @@ class EvaluationSuite:
             worker_threads: Number of threads for parallel task execution.
             model: Optional model name to use for checking assertions.
                 If not provided, uses the default model (gpt-5-nano).
+            generate_report: Whether to generate a structured JSON report file
+                after the evaluation completes. Defaults to True.
+            report_output_path: Optional file path for the report. If not
+                provided, a default path is generated under ``opik_evaluation_suite_reports/``.
 
         Returns:
             EvaluationSuiteResult with pass/fail status based on execution policy.
@@ -430,6 +442,7 @@ class EvaluationSuite:
             >>> print(f"Suite passed: {result.passed}")
             >>> print(f"Items passed: {result.items_passed}/{result.items_total}")
         """
+        project_name = project_name or self.project_name
         return self.__internal_api__run_optimization_suite__(
             task=task,
             experiment_name_prefix=experiment_name_prefix,
@@ -441,6 +454,8 @@ class EvaluationSuite:
             verbose=verbose,
             worker_threads=worker_threads,
             model=model,
+            generate_report=generate_report,
+            report_output_path=report_output_path,
         )
 
     def __internal_api__run_optimization_suite__(
@@ -461,6 +476,8 @@ class EvaluationSuite:
         dataset_item_ids: Optional[List[str]] = None,
         dataset_filter_string: Optional[str] = None,
         client: Optional[Any] = None,
+        generate_report: bool = True,
+        report_output_path: Optional[str] = None,
     ) -> suite_types.EvaluationSuiteResult:
         """
         Run the evaluation suite with optimization-specific parameters.
@@ -487,6 +504,11 @@ class EvaluationSuite:
             dataset_item_ids: Subset of dataset item IDs to evaluate.
             dataset_filter_string: OQL filter string to filter dataset items.
             client: Opik client instance. If not provided, uses the cached client.
+            generate_report: Whether to generate a structured JSON report file
+                after the evaluation completes. Defaults to True.
+            report_output_path: Optional file path for the report. If not
+                provided, a default path is generated under
+                ``opik_evaluation_suite_reports/``.
 
         Returns:
             EvaluationSuiteResult with pass/fail status based on execution policy.
@@ -497,7 +519,7 @@ class EvaluationSuite:
         def _validated_task(data: Dict[str, Any]) -> Any:
             return validate_task_result(task(data))
 
-        return opik_evaluator.evaluate_suite(
+        suite_result = opik_evaluator.evaluate_suite(
             dataset=self._dataset,
             task=_validated_task,
             client=client,
@@ -515,3 +537,25 @@ class EvaluationSuite:
             optimization_id=optimization_id,
             experiment_type=experiment_type,
         )
+
+        report_path: Optional[str] = None
+        if generate_report:
+            try:
+                report_path = file_writer.save_report(
+                    suite_result,
+                    output_path=report_output_path,
+                )
+            except Exception:
+                LOGGER.warning(
+                    "Failed to save evaluation suite report file.",
+                    exc_info=True,
+                )
+
+        if verbose >= 1:
+            displayer.display_suite_results(
+                suite_result,
+                verbose=verbose,
+                report_path=report_path,
+            )
+
+        return suite_result

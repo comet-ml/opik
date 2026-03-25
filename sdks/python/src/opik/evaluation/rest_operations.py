@@ -11,9 +11,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 def get_experiment_with_unique_name(
-    client: opik_client.Opik, experiment_name: str
+    client: opik_client.Opik, experiment_name: str, project_name: Optional[str]
 ) -> experiment.Experiment:
-    experiments = client.get_experiments_by_name(name=experiment_name)
+    experiments = client.get_experiments_by_name(
+        name=experiment_name, project_name=project_name
+    )
 
     if len(experiments) == 0:
         raise ValueError(f"Experiment with name {experiment_name} not found")

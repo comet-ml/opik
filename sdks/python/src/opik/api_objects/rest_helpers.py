@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
@@ -72,3 +72,27 @@ def resolve_project_id_by_name(
     """
     project = rest_client.projects.retrieve_project(name=project_name)
     return project.id
+
+
+def resolve_project_id_by_name_optional(
+    rest_client: rest_api_client.OpikApi, project_name: Optional[str]
+) -> Optional[str]:
+    """
+    Resolve the project ID associated with the given project name if provided, otherwise return None.
+
+    This function attempts to resolve the ID of a project by its name using a REST client. If the
+    provided project name is None, the function directly returns None without performing any resolution.
+
+    Args:
+        rest_client: A REST API client instance used to make requests
+            to the backend API for project resolution.
+        project_name: The name of the project for which the ID needs to be resolved,
+            or None if no project name is specified.
+
+    Returns:
+        The resolved project ID as a string if the project name is provided and
+            the resolution succeeds, or None otherwise.
+    """
+    if project_name is None:
+        return None
+    return resolve_project_id_by_name(rest_client, project_name)

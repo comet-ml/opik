@@ -54,15 +54,28 @@ These roles are available in all Opik organizations and serve as the basis for c
 
 The table below shows the default permissions for each role. Custom roles can combine these permissions differently.
 
-| Group | Permission | Manage | Write | Annotate | Read |
-| --- | --- | --- | --- | --- | --- |
-| Admin | Invite users to workspace | Yes | Yes | No | No |
-| Admin | Update user role | Yes | No | No | No |
-| Admin | Delete workspaces | Yes | No | No | No |
-| Experiment management | Change project settings | Yes | No | No | No |
-| Experiment management | Approve and manage models | Yes | No | No | No |
-| Observability | View project data | Yes | Yes | Yes | Yes |
-| Observability | Log trace, span, or thread | Yes | Yes | No | No |
+| Group                 | Permission                      | Manage | Write | Annotate | Read |
+| --------------------- | ------------------------------- | ------ | ----- | -------- | ---- |
+| Admin                 | Invite users to workspace       | Yes    | Yes   | No       | No   |
+| Admin                 | Configure workspace settings    | Yes    | No    | No       | No   |
+| Admin                 | Delete workspaces               | Yes    | No    | No       | No   |
+| Admin                 | Define AI providers             | Yes    | Yes   | No       | No   |
+| Experiment management | Change project settings         | Yes    | No    | No       | No   |
+| Experiment management | Approve and manage models       | Yes    | No    | No       | No   |
+| Observability         | View project data               | Yes    | Yes   | Yes      | Yes  |
+| Observability         | Log trace, span, or thread      | Yes    | Yes   | No       | No   |
+| Observability         | Delete trace                    | Yes    | Yes   | No       | No   |
+| Observability         | Write comments                  | Yes    | Yes   | Yes      | No   |
+| Observability         | Annotate trace, span, or thread | Yes    | Yes   | Yes      | No   |
+| Observability         | Tag trace                       | Yes    | Yes   | Yes      | No   |
+| Observability         | Define online evaluation rule   | Yes    | Yes   | No       | No   |
+| Observability         | Define alert                    | Yes    | Yes   | No       | No   |
+| Observability         | Create annotation queue         | Yes    | Yes   | No       | No   |
+| Dashboards            | View dashboard                  | Yes    | Yes   | No       | Yes  |
+| Experiments           | View experiments                | Yes    | Yes   | No       | Yes  |
+| Datasets              | View datasets                   | Yes    | Yes   | No       | Yes  |
+| Annotation queues     | View annotation queues          | Yes    | Yes   | Yes      | Yes  |
+| Annotation queues     | Annotate trace, span, or thread | Yes    | Yes   | Yes      | Yes  |
 
 ### Custom roles
 

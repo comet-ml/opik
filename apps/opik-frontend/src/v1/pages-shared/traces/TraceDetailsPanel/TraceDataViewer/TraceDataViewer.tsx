@@ -17,7 +17,7 @@ import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
-import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
+import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
@@ -26,16 +26,12 @@ import MessagesTab from "./MessagesTab";
 import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
 import PromptsTab from "./PromptsTab";
-import AgentConfigurationTab, {
-  isAgentConfigurationMetadata,
-} from "./AgentConfigurationTab";
-import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import { formatDuration, formatDate } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDataViewerActionsPanel from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
-import UserCommentHoverList from "@/v1/pages-shared/traces/UserComment/UserCommentHoverList";
+import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,
@@ -46,7 +42,7 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import { detectLLMMessages } from "@/shared/PrettyLLMMessage/llmMessages";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 
@@ -91,23 +87,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const showOptimizerPrompts = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
   );
-  const isAgentConfigurationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
-  );
-
   const hasPrompts = useMemo(() => {
     if (!showOptimizerPrompts) return false;
     const prompts = (data.metadata as Record<string, unknown>)?.opik_prompts;
     return Array.isArray(prompts) && prompts.length > 0;
   }, [data.metadata, showOptimizerPrompts]);
-
-  const hasAgentConfiguration = useMemo(() => {
-    if (!isAgentConfigurationEnabled) return false;
-    const config = (data.metadata as Record<string, unknown>)?.[
-      AGENT_CONFIGURATION_METADATA_KEY
-    ];
-    return isAgentConfigurationMetadata(config);
-  }, [data.metadata, isAgentConfigurationEnabled]);
 
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
@@ -146,18 +130,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
     if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
     if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
-    if (normalizedTab === "configuration" && !hasAgentConfiguration)
-      return defaultTab;
+    if (normalizedTab === "configuration") return defaultTab;
 
     return normalizedTab;
-  }, [
-    tab,
-    defaultTab,
-    canShowMessagesTab,
-    hasSpanAgentGraph,
-    hasPrompts,
-    hasAgentConfiguration,
-  ]);
+  }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph, hasPrompts]);
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
@@ -378,11 +354,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 Agent graph
               </TabsTrigger>
             )}
-            {hasAgentConfiguration && (
-              <TabsTrigger variant="underline" value="configuration">
-                Configuration
-              </TabsTrigger>
-            )}
           </TabsList>
           {canShowMessagesTab && (
             <TabsContent value="messages">
@@ -448,11 +419,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           {hasSpanAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />
-            </TabsContent>
-          )}
-          {hasAgentConfiguration && (
-            <TabsContent value="configuration">
-              <AgentConfigurationTab data={data} projectId={projectId} />
             </TabsContent>
           )}
         </Tabs>

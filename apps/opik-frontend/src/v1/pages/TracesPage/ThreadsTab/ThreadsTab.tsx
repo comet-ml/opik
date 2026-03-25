@@ -58,7 +58,7 @@ import CostCell from "@/shared/DataTableCells/CostCell";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/v1/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
@@ -75,7 +75,7 @@ import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScores
 import ThreadsFeedbackScoresSelect from "@/v1/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
-import { useTruncationEnabled } from "@/v1/server-sync-provider";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import LogsTypeToggle from "@/v1/pages/TracesPage/LogsTab/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 
