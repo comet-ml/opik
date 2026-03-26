@@ -27,6 +27,10 @@ on:
         paths:
           - 'sdks/python/**'
           - '.github/workflows/sdk-e2e-library-tests.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: True  # unlike other workflows, here we need it for tests
   OPIK_SENTRY_ENABLE: False
