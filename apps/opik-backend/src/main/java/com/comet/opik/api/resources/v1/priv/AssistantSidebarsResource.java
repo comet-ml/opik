@@ -20,13 +20,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-@Path("/v1/private/assistant-sidebar/config")
+@Path("/v1/private/assistant-sidebars/config")
 @Produces(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Assistant Sidebar", description = "Assistant Sidebar configuration")
-public class AssistantSidebarResource {
+@Tag(name = "Assistant Sidebars", description = "Assistant Sidebar configuration")
+public class AssistantSidebarsResource {
 
     private final @NonNull @Config("assistantSidebar") AssistantSidebarConfig config;
     private final @NonNull @Config("serviceToggles") ServiceTogglesConfig toggles;

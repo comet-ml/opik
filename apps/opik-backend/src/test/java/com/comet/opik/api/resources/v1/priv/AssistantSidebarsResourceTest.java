@@ -42,14 +42,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Assistant Sidebar Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 @Slf4j
-class AssistantSidebarResourceTest {
+class AssistantSidebarsResourceTest {
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final String RESOURCE_PATH = "%s/v1/private/assistant-sidebar/config";
+    private static final String RESOURCE_PATH = "%s/v1/private/assistant-sidebars/config";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
