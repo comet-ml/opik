@@ -13,6 +13,7 @@ vi.mock("@/client/Client", () => ({
       },
     },
     config: { projectName: "default" },
+    flush: vi.fn(() => Promise.resolve()),
   })),
 }));
 
