@@ -156,7 +156,8 @@ public class ExperimentDAO {
             SELECT 1 FROM experiments
             WHERE workspace_id = :workspace_id AND project_id = ''
             AND name NOT IN :demo_experiment_names
-            LIMIT 1""";
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'""";
 
     /**
      * The query validates if already exists with this id. Failing if so.
@@ -1738,8 +1739,10 @@ public class ExperimentDAO {
 
     public Mono<Boolean> hasVersion1Experiments(@NonNull String workspaceId,
             @NonNull List<String> demoExperimentNames) {
+        var template = getSTWithLogComment(HAS_VERSION1_EXPERIMENTS,
+                "has_version1_experiments", workspaceId, demoExperimentNames);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> Flux.from(connection.createStatement(HAS_VERSION1_EXPERIMENTS)
+                .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("demo_experiment_names", demoExperimentNames.toArray(String[]::new))
                         .execute())

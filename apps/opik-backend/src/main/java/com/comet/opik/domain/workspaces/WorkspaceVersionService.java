@@ -159,7 +159,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     private Mono<WorkspaceVersion> computeVersion(String workspaceId) {
         var authVersion = getAuthSuggestedVersion(workspaceId);
         if (authVersion.isPresent() && authVersion.get() == OpikVersion.VERSION_2) {
-            log.info("Locked to version_2 via auth one-way gate, workspaceId '{}", workspaceId);
+            log.info("Locked to version_2 via auth one-way gate, workspaceId '{}'", workspaceId);
             return Mono.just(buildResponse(OpikVersion.VERSION_2));
         }
         return Flux.concat(

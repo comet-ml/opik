@@ -110,7 +110,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testForceWorkspaceVersion1() {
+        void workspaceVersion__whenForceVersion1__returnsVersion1() {
             // Empty workspace should point to V2, but the flag forces V2
             assertThat(workspaceClient.getWorkspaceVersion(DEFAULT_WORKSPACE_NAME)).isEqualTo(V1_WORKSPACE_VERSION);
         }
@@ -162,7 +162,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testForceWorkspaceVersion2() {
+        void workspaceVersion__whenForceVersion2__returnsVersion2() {
             // Creating V1 dataset
             datasetClient.createDataset(podamFactory.manufacturePojo(Dataset.class).toBuilder()
                     .projectId(null)
@@ -247,7 +247,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testDatasetWorkspaceVersion() {
+        void workspaceVersion__whenDatasetEntities__returnsExpectedVersion() {
             var workspaceName = mockWorkspace();
 
             // Demo-only datasets do not trigger version_1
@@ -273,7 +273,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testPromptWorkspaceVersion() {
+        void workspaceVersion__whenPromptWithoutProject__returnsVersion1() {
             var workspaceName = mockWorkspace();
 
             // Empty workspace returns version_2
@@ -289,7 +289,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testDashboardWorkspaceVersion() {
+        void workspaceVersion__whenDashboardWithoutProject__returnsVersion1() {
             var workspaceName = mockWorkspace();
 
             // Empty workspace returns version_2
@@ -301,7 +301,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testAutomationRuleWorkspaceVersion() {
+        void workspaceVersion__whenMultiProjectRule__returnsVersion1() {
             var workspaceName = mockWorkspace();
 
             // Single-project rule does not trigger version_1
@@ -322,7 +322,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testExperimentWorkspaceVersion() {
+        void workspaceVersion__whenExperimentWithoutProject__returnsVersion1() {
             var workspaceName = mockWorkspace();
 
             // Project-scoped dataset for the experiment does not trigger V1
@@ -340,7 +340,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testOptimizationWorkspaceVersion() {
+        void workspaceVersion__whenOptimizationWithoutProject__returnsVersion1() {
             var workspaceName = mockWorkspace();
 
             // Project-scoped dataset for the optimization does not trigger V1
@@ -406,7 +406,7 @@ class WorkspaceVersionResourceTest {
         }
 
         @Test
-        void testComputesAndCaches() {
+        void workspaceVersion__whenCacheEnabled__computesAndCachesWithTtl() {
             // First call returns version_2 on empty workspace and caches it
             var response1 = workspaceClient.getWorkspaceVersion(DEFAULT_WORKSPACE_NAME);
             assertThat(response1.opikVersion()).isEqualTo(OpikVersion.VERSION_2);
