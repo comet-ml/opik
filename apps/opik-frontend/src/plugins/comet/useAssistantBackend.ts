@@ -104,7 +104,7 @@ export default function useAssistantBackend(
     }
     const id = setTimeout(() => setIsTimedOut(true), remaining);
     return () => clearTimeout(id);
-  }, [shouldPollHealth]);
+  }, [shouldPollHealth, baseUrl]);
 
   // Phase 2: Poll health endpoint until the pod is ready
   const { data: healthResult } = useQuery<{ ready: boolean }>({
