@@ -1,7 +1,6 @@
 import React from "react";
-import usePluginsStore from "@/store/PluginsStore";
 import { Outlet } from "@tanstack/react-router";
-import Logo from "@/v1/layout/Logo/Logo";
+import Logo from "@/shared/Logo/Logo";
 import SettingsMenu from "@/v1/layout/SettingsMenu/SettingsMenu";
 
 export const SMEPageLayout = ({
@@ -9,13 +8,7 @@ export const SMEPageLayout = ({
 }: {
   children?: React.ReactNode;
 }) => {
-  const LogoComponent = usePluginsStore((state) => state.Logo);
-
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={true} />
-  ) : (
-    <Logo expanded={false} />
-  );
+  const logo = <Logo expanded={false} />;
 
   return (
     <section className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden">

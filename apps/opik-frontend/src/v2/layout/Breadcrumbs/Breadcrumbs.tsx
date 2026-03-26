@@ -81,15 +81,9 @@ const Breadcrumbs = () => {
 
   const renderWorkspaceItem = () => {
     return (
-      <BreadcrumbLink asChild>
-        <Link
-          className="pl-0.5"
-          to="/$workspaceName"
-          params={{ workspaceName }}
-        >
-          {calculateWorkspaceName(workspaceName)}
-        </Link>
-      </BreadcrumbLink>
+      <span className="comet-body-s cursor-default pl-0.5 text-muted-slate">
+        {calculateWorkspaceName(workspaceName)}
+      </span>
     );
   };
 
