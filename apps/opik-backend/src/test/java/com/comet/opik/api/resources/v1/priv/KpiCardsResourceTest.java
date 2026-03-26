@@ -3,6 +3,14 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.SpanField;
+import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardRequest.EntityType;
 import com.comet.opik.api.metrics.KpiCardResponse;
@@ -24,6 +32,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -34,7 +43,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -52,6 +63,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +90,9 @@ class KpiCardsResourceTest {
     private static final double COST_2 = 3.0;
     private static final double COST_3 = 5.0;
     private static final double COST_4 = 7.0;
+
+    private static final long FILTER_DURATION_MS = 100;
+    private static final double FILTER_COST = 1.0;
 
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -268,6 +284,516 @@ class KpiCardsResourceTest {
         }
     }
 
+    // === Span Filter Tests ===
+
+    @ParameterizedTest
+    @MethodSource("spanFilterArguments")
+    @DisplayName("span filters narrow current period KPI metrics")
+    void spanFiltersCurrentPeriod(Function<Span, SpanFilter> filterFn,
+            int expectedMatchCount, int expectedNonMatchCount,
+            int expectedMatchErrors, int expectedNonMatchErrors) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        createSpansWithTraces(projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        var currentSpans = createSpansWithTraces(projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        var filter = filterFn.apply(currentSpans.getFirst());
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.SPANS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.SPANS,
+                expectedMatchCount, expectedNonMatchCount,
+                expectedMatchErrors, expectedNonMatchErrors);
+    }
+
+    @ParameterizedTest
+    @MethodSource("spanFilterArguments")
+    @DisplayName("span filters narrow previous period KPI metrics")
+    void spanFiltersPreviousPeriod(Function<Span, SpanFilter> filterFn,
+            int expectedMatchCount, int expectedNonMatchCount,
+            int expectedMatchErrors, int expectedNonMatchErrors) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var previousSpans = createSpansWithTraces(projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        createSpansWithTraces(projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        var filter = filterFn.apply(previousSpans.getFirst());
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.SPANS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.SPANS,
+                expectedNonMatchCount, expectedMatchCount,
+                expectedNonMatchErrors, expectedMatchErrors);
+    }
+
+    static Stream<Arguments> spanFilterArguments() {
+        return Stream.of(
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.NAME)
+                                .operator(Operator.EQUAL)
+                                .value(span.name())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.NAME)
+                                .operator(Operator.NOT_EQUAL)
+                                .value(span.name())
+                                .build(),
+                        2, 3, 0, 1),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.ID)
+                                .operator(Operator.EQUAL)
+                                .value(span.id().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.START_TIME)
+                                .operator(Operator.EQUAL)
+                                .value(span.startTime().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.END_TIME)
+                                .operator(Operator.EQUAL)
+                                .value(span.endTime().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.INPUT)
+                                .operator(Operator.EQUAL)
+                                .value(span.input().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.OUTPUT)
+                                .operator(Operator.EQUAL)
+                                .value(span.output().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.MODEL)
+                                .operator(Operator.EQUAL)
+                                .value(span.model())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.PROVIDER)
+                                .operator(Operator.EQUAL)
+                                .value(span.provider())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.METADATA)
+                                .operator(Operator.EQUAL)
+                                .value(span.metadata().propertyStream().toList().getFirst().getValue().asText())
+                                .key(span.metadata().propertyStream().toList().getFirst().getKey())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.TAGS)
+                                .operator(Operator.CONTAINS)
+                                .value(span.tags().stream().findFirst().orElse(""))
+                                .build(),
+                        1, 0, 1, 0));
+    }
+
+    // === Trace Filter Tests ===
+
+    @ParameterizedTest
+    @MethodSource("traceFilterArguments")
+    @DisplayName("trace filters narrow current period KPI metrics")
+    void traceFiltersCurrentPeriod(Function<Trace, TraceFilter> filterFn,
+            int expectedMatchCount, int expectedNonMatchCount,
+            int expectedMatchErrors, int expectedNonMatchErrors) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        createTracesWithSpans(projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        var currentTraces = createTracesWithSpans(projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        var filter = filterFn.apply(currentTraces.getFirst());
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.TRACES)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.TRACES,
+                expectedMatchCount, expectedNonMatchCount,
+                expectedMatchErrors, expectedNonMatchErrors);
+    }
+
+    @ParameterizedTest
+    @MethodSource("traceFilterArguments")
+    @DisplayName("trace filters narrow previous period KPI metrics")
+    void traceFiltersPreviousPeriod(Function<Trace, TraceFilter> filterFn,
+            int expectedMatchCount, int expectedNonMatchCount,
+            int expectedMatchErrors, int expectedNonMatchErrors) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var previousTraces = createTracesWithSpans(projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        createTracesWithSpans(projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        var filter = filterFn.apply(previousTraces.getFirst());
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.TRACES)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.TRACES,
+                expectedNonMatchCount, expectedMatchCount,
+                expectedNonMatchErrors, expectedMatchErrors);
+    }
+
+    static Stream<Arguments> traceFilterArguments() {
+        return Stream.of(
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.NAME)
+                                .operator(Operator.EQUAL)
+                                .value(trace.name())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.NAME)
+                                .operator(Operator.NOT_EQUAL)
+                                .value(trace.name())
+                                .build(),
+                        2, 3, 0, 1),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.ID)
+                                .operator(Operator.EQUAL)
+                                .value(trace.id().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.START_TIME)
+                                .operator(Operator.EQUAL)
+                                .value(trace.startTime().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.END_TIME)
+                                .operator(Operator.EQUAL)
+                                .value(trace.endTime().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.INPUT)
+                                .operator(Operator.EQUAL)
+                                .value(trace.input().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.OUTPUT)
+                                .operator(Operator.EQUAL)
+                                .value(trace.output().toString())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.METADATA)
+                                .operator(Operator.EQUAL)
+                                .value(trace.metadata().propertyStream().toList().getFirst().getValue().asText())
+                                .key(trace.metadata().propertyStream().toList().getFirst().getKey())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.TAGS)
+                                .operator(Operator.CONTAINS)
+                                .value(trace.tags().stream().findFirst().orElse(""))
+                                .build(),
+                        1, 0, 1, 0));
+    }
+
+    private List<Trace> createTracesWithSpans(String projectName, int count) {
+        List<Trace> traces = new ArrayList<>();
+        List<Span> spans = new ArrayList<>();
+
+        for (int i = 0; i < count; i++) {
+            Instant now = Instant.now();
+            boolean hasError = (i == 0);
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(now))
+                    .projectName(projectName)
+                    .startTime(now)
+                    .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                    .errorInfo(hasError ? buildErrorInfo() : null)
+                    .build();
+            traces.add(trace);
+
+            spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                    .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
+                    .traceId(trace.id())
+                    .projectName(projectName)
+                    .startTime(now)
+                    .endTime(now.plus(50, ChronoUnit.MILLIS))
+                    .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
+                    .errorInfo(null)
+                    .build());
+        }
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        return traces;
+    }
+
+    // === Span Filter Helpers ===
+
+    private List<Span> createSpansWithTraces(String projectName, int count) {
+        List<Trace> traces = new ArrayList<>();
+        List<Span> spans = new ArrayList<>();
+
+        for (int i = 0; i < count; i++) {
+            Instant now = Instant.now();
+            boolean hasError = (i == 0);
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(now))
+                    .projectName(projectName)
+                    .startTime(now)
+                    .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                    .errorInfo(null)
+                    .build();
+            traces.add(trace);
+
+            spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                    .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
+                    .traceId(trace.id())
+                    .projectName(projectName)
+                    .startTime(now)
+                    .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                    .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
+                    .errorInfo(hasError ? buildErrorInfo() : null)
+                    .build());
+        }
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        return spans;
+    }
+
+    // === Thread Filter Tests ===
+
+    @ParameterizedTest
+    @MethodSource("threadFilterArguments")
+    @DisplayName("thread filters narrow current period KPI metrics")
+    void threadFiltersCurrentPeriod(Function<TraceThread, TraceThreadFilter> filterFn,
+            int expectedMatchCount, int expectedNonMatchCount) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        createThreads(projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        var currentThreadIds = createThreads(projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        var thread = traceResourceClient.getTraceThread(
+                currentThreadIds.getFirst(), projectId, API_KEY, WORKSPACE_NAME);
+        var filter = filterFn.apply(thread);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS,
+                expectedMatchCount, expectedNonMatchCount, 0, 0);
+    }
+
+    @ParameterizedTest
+    @MethodSource("threadFilterArguments")
+    @DisplayName("thread filters narrow previous period KPI metrics")
+    void threadFiltersPreviousPeriod(Function<TraceThread, TraceThreadFilter> filterFn,
+            int expectedMatchCount, int expectedNonMatchCount) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var previousThreadIds = createThreads(projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        createThreads(projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        var thread = traceResourceClient.getTraceThread(
+                previousThreadIds.getFirst(), projectId, API_KEY, WORKSPACE_NAME);
+        var filter = filterFn.apply(thread);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS,
+                expectedNonMatchCount, expectedMatchCount, 0, 0);
+    }
+
+    static Stream<Arguments> threadFilterArguments() {
+        return Stream.of(
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.ID)
+                                .operator(Operator.EQUAL)
+                                .value(thread.id())
+                                .build(),
+                        1, 0),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.ID)
+                                .operator(Operator.NOT_EQUAL)
+                                .value(thread.id())
+                                .build(),
+                        2, 3),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.START_TIME)
+                                .operator(Operator.EQUAL)
+                                .value(thread.startTime().toString())
+                                .build(),
+                        1, 0),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.END_TIME)
+                                .operator(Operator.EQUAL)
+                                .value(thread.endTime().toString())
+                                .build(),
+                        1, 0),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.DURATION)
+                                .operator(Operator.GREATER_THAN)
+                                .value("0")
+                                .build(),
+                        3, 3),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.CREATED_AT)
+                                .operator(Operator.GREATER_THAN)
+                                .value(thread.createdAt().minusSeconds(1).toString())
+                                .build(),
+                        3, 3),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.LAST_UPDATED_AT)
+                                .operator(Operator.GREATER_THAN)
+                                .value(thread.lastUpdatedAt().minusSeconds(1).toString())
+                                .build(),
+                        3, 3));
+    }
+
+    private List<String> createThreads(String projectName, int count) {
+        List<String> threadIds = new ArrayList<>();
+        List<Trace> traces = new ArrayList<>();
+        List<Span> spans = new ArrayList<>();
+
+        for (int i = 0; i < count; i++) {
+            Instant now = Instant.now();
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+            threadIds.add(threadId);
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(now))
+                    .projectName(projectName)
+                    .startTime(now)
+                    .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                    .errorInfo(null)
+                    .threadId(threadId)
+                    .build();
+            traces.add(trace);
+
+            spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                    .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
+                    .traceId(trace.id())
+                    .projectName(projectName)
+                    .startTime(now)
+                    .endTime(now.plus(50, ChronoUnit.MILLIS))
+                    .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
+                    .errorInfo(null)
+                    .build());
+        }
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        Mono.delay(Duration.ofMillis(100)).block();
+        traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+
+        return threadIds;
+    }
+
     // === Entity Creation Helper ===
 
     private void createEntities(EntityType entityType, String projectName,
@@ -362,6 +888,24 @@ class KpiCardsResourceTest {
                     .as("previous value for '%s'", type)
                     .isCloseTo(expectedPrevious, TOLERANCE);
         }
+    }
+
+    private void assertFilteredMetrics(KpiCardResponse response, EntityType entityType,
+            int currentCount, int previousCount,
+            int currentErrors, int previousErrors) {
+        assertMetric(response, KpiMetricType.COUNT, (double) currentCount, (double) previousCount);
+
+        if (entityType != EntityType.THREADS) {
+            assertMetric(response, KpiMetricType.ERRORS, (double) currentErrors, (double) previousErrors);
+        }
+
+        assertMetric(response, KpiMetricType.AVG_DURATION,
+                currentCount > 0 ? (double) FILTER_DURATION_MS : null,
+                previousCount > 0 ? (double) FILTER_DURATION_MS : null);
+
+        assertMetric(response, KpiMetricType.AVG_COST,
+                currentCount > 0 ? FILTER_COST : null,
+                previousCount > 0 ? FILTER_COST : null);
     }
 
     private void assertNoMetric(KpiCardResponse response, KpiMetricType type) {
