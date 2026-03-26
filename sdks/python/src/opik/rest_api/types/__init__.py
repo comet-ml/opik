@@ -54,6 +54,7 @@ from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
+from .assistant_sidebar_config_response import AssistantSidebarConfigResponse
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
 from .audio_url import AudioUrl
@@ -705,6 +706,7 @@ __all__ = [
     "AssertionScoreAveragePublic",
     "AssistantMessage",
     "AssistantMessageRole",
+    "AssistantSidebarConfigResponse",
     "Attachment",
     "AttachmentPage",
     "AudioUrl",
