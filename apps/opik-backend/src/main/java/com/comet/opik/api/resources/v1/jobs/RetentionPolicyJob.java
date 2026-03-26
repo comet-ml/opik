@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.jobs;
 
+import com.comet.opik.domain.retention.RetentionCatchUpService;
 import com.comet.opik.domain.retention.RetentionPolicyService;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -28,6 +29,7 @@ public class RetentionPolicyJob implements Managed {
     private static final Lock RUN_LOCK = new Lock("retention_policy:run_lock");
 
     private final RetentionPolicyService retentionPolicyService;
+    private final RetentionCatchUpService catchUpService;
     private final LockService lockService;
     private final RetentionConfig config;
 
@@ -37,9 +39,11 @@ public class RetentionPolicyJob implements Managed {
     @Inject
     public RetentionPolicyJob(
             @NonNull RetentionPolicyService retentionPolicyService,
+            @NonNull RetentionCatchUpService catchUpService,
             @NonNull LockService lockService,
             @NonNull @Config("retention") RetentionConfig config) {
         this.retentionPolicyService = retentionPolicyService;
+        this.catchUpService = catchUpService;
         this.lockService = lockService;
         this.config = config;
     }
@@ -66,7 +70,7 @@ public class RetentionPolicyJob implements Managed {
                             }))
                     .subscribe();
 
-            log.info("Retention policy job started: interval={}, executionsPerDay={}, fractions={}",
+            log.info("Retention policy job started: interval='{}', executionsPerDay='{}', fractions='{}'",
                     interval, config.getExecutionsPerDay(), config.getTotalFractions());
         }
     }
@@ -93,7 +97,14 @@ public class RetentionPolicyJob implements Managed {
                         return Mono.empty();
                     }
 
+                    // Phase 1: Regular sliding-window retention
+                    // Phase 2: Catch-up for historical data (applyToPast rules)
                     return retentionPolicyService.executeRetentionCycle(fraction, now)
+                            .then(catchUpService.executeCatchUpCycle(now)
+                                    .onErrorResume(e -> {
+                                        log.warn("Catch-up cycle failed, will retry next interval", e);
+                                        return Mono.empty();
+                                    }))
                             .doFinally(__ -> lockService.unlockUsingToken(RUN_LOCK).subscribe());
                 });
     }

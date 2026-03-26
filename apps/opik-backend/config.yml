@@ -673,6 +673,26 @@ retention:
   workspaceBatchSize: ${RETENTION_WORKSPACE_BATCH_SIZE:-1000}
   slidingWindowDays: ${RETENTION_SLIDING_WINDOW_DAYS:-3}
   lockTimeoutSeconds: ${RETENTION_LOCK_TIMEOUT_SECONDS:-1800}
+  # Progressive catch-up for apply-to-past rules. Deletes historical data older than the sliding window.
+  # At rule creation, estimates workspace span velocity (spans/week) to triage into tiers:
+  #   small  (<smallThreshold/week): batch one-shot delete, up to smallBatchSize workspaces per cycle
+  #   medium (smallThreshold..largeThreshold/week): 10 most outdated, mediumChunkDays per cycle each
+  #   large  (>=largeThreshold/week or estimation hit row limit): 1 most outdated, largeChunkDays per cycle
+  catchUp:
+    enabled: ${RETENTION_CATCH_UP_ENABLED:-true}
+    # Velocity thresholds (spans/week). Free tier ~6K/week, so 10K keeps them in the small (fast) path.
+    smallThreshold: ${RETENTION_CATCH_UP_SMALL_THRESHOLD:-10000}
+    largeThreshold: ${RETENTION_CATCH_UP_LARGE_THRESHOLD:-100000}
+    # Max workspaces processed per cycle per tier
+    smallBatchSize: ${RETENTION_CATCH_UP_SMALL_BATCH_SIZE:-200}
+    mediumBatchSize: ${RETENTION_CATCH_UP_MEDIUM_BATCH_SIZE:-10}
+    # Time window (days) deleted per cycle for medium and large workspaces
+    mediumChunkDays: ${RETENTION_CATCH_UP_MEDIUM_CHUNK_DAYS:-7}
+    largeChunkDays: ${RETENTION_CATCH_UP_LARGE_CHUNK_DAYS:-1}
+    # Assumed velocity when the estimation query fails with TOO_MANY_ROWS (>20M rows)
+    defaultVelocity: ${RETENTION_CATCH_UP_DEFAULT_VELOCITY:-1000000}
+    # Earliest date for catch-up cursor start (service launch date)
+    serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
 
 # LLM providers client configuration
 llmProviderClient:
