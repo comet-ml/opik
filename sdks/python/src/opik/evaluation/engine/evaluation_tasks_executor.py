@@ -5,11 +5,10 @@ from collections import defaultdict
 from concurrent import futures
 from typing import Any, Dict, List, Optional, TypeVar, Generic
 
-LOGGER = logging.getLogger(__name__)
-
 from ..metrics.score_result import ScoreResult
-
 from .types import EvaluationTask
+
+LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -179,7 +178,11 @@ class StreamingExecutor(Generic[T]):
         wait_start = time.monotonic()
         futures.wait(self._submitted_futures)
         elapsed = time.monotonic() - wait_start
-        LOGGER.debug("[executor] All %d futures completed in %.1fs", len(self._submitted_futures), elapsed)
+        LOGGER.debug(
+            "[executor] All %d futures completed in %.1fs",
+            len(self._submitted_futures),
+            elapsed,
+        )
 
         # Re-raise first exception if any task failed
         for future in self._submitted_futures:
