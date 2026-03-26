@@ -82,7 +82,7 @@ public class RetentionConfig {
 
         /** Interval in minutes between catch-up cycles. */
         @JsonProperty
-        @Min(1) @Max(1440) private int intervalMinutes = 60;
+        @Min(1) @Max(1440) private int intervalMinutes = 45;
 
         /** Max time (seconds) the catch-up job can hold the distributed lock. */
         @JsonProperty

@@ -691,8 +691,8 @@ retention:
     largeChunkDays: ${RETENTION_CATCH_UP_LARGE_CHUNK_DAYS:-1}
     # Assumed velocity when the estimation query fails with TOO_MANY_ROWS (>20M rows)
     defaultVelocity: ${RETENTION_CATCH_UP_DEFAULT_VELOCITY:-1000000}
-    # Interval in minutes between catch-up cycles (default: 60 = hourly)
-    intervalMinutes: ${RETENTION_CATCH_UP_INTERVAL_MINUTES:-60}
+    # Interval in minutes between catch-up cycles (default: 45)
+    intervalMinutes: ${RETENTION_CATCH_UP_INTERVAL_MINUTES:-45}
     # Max time (seconds) the catch-up job can hold the distributed lock
     lockTimeoutSeconds: ${RETENTION_CATCH_UP_LOCK_TIMEOUT_SECONDS:-1800}
     # Earliest date for catch-up cursor start (service launch date)
