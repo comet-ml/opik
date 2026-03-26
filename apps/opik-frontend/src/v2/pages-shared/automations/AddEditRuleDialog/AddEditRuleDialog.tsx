@@ -47,7 +47,6 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
 import RuleFilteringSection, {
   TRACE_FILTER_COLUMNS,
   THREAD_FILTER_COLUMNS,
@@ -138,7 +137,7 @@ const DEFAULT_PYTHON_CODE_DATA: Record<
 type AddEditRuleDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  projectId?: string;
+  projectId: string;
   rule?: EvaluatorsRule;
   projectName?: string; // Optional: project name for pre-selected projects
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
@@ -264,9 +263,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       // For clone mode, reset the form with cloned rule data and append " (Copy)" to name
       const cloneFormData = {
         ruleName: `${defaultRule.name} (Copy)`,
-        projectIds:
-          defaultRule.projects?.map((p) => p.project_id) ||
-          (projectId ? [projectId] : []),
+        projectIds: projectId ? [projectId] : [],
         samplingRate: defaultRule.sampling_rate ?? 1,
         uiType: formUIRuleType,
         scope: formScope,
@@ -527,37 +524,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   }}
                 />
                 <div className="flex gap-4">
-                  <FormField
-                    control={form.control}
-                    name="projectIds"
-                    render={({ field, formState }) => {
-                      const validationErrors = get(formState.errors, [
-                        "projectIds",
-                      ]);
-
-                      return (
-                        <FormItem className="min-w-0 flex-1">
-                          <Label>Projects</Label>
-                          <FormControl>
-                            <ProjectsSelectBox
-                              align="start"
-                              value={field.value}
-                              onValueChange={field.onChange}
-                              className={cn({
-                                "border-destructive": Boolean(
-                                  validationErrors?.message,
-                                ),
-                              })}
-                              multiselect
-                              showSelectAll
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
-
                   {!hideScopeSelector && (
                     <FormField
                       control={form.control}
