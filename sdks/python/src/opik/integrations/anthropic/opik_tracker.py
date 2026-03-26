@@ -1,7 +1,17 @@
 from typing import Optional
 import logging
+import warnings
 
 import anthropic
+
+# Suppress Pydantic serialization warnings triggered by Anthropic SDK's
+# ParsedTextBlock type not matching the Message.content discriminated union.
+# These are harmless — the data serializes correctly, but Pydantic warns
+# because ParsedTextBlock (from messages.parse()) isn't a registered variant.
+warnings.filterwarnings(
+    "ignore",
+    message="Pydantic serializer warnings",
+)
 from . import messages_create_decorator
 from . import messages_batch_decorator
 from typing import TypeVar, Dict, Any
