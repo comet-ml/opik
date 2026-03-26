@@ -79,6 +79,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_CREATE),
+    [checkNullablePermission],
+  );
+
   const canEditDatasets = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.DATASET_EDIT),
     [checkNullablePermission],
@@ -222,6 +227,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canEditDashboards,
     canDeleteDashboards,
     canViewDatasets,
+    canCreateDatasets,
     canEditDatasets,
     canDeleteDatasets,
     canCreateProjects,
