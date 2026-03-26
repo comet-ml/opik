@@ -67,9 +67,6 @@ class DatasetItem(pydantic.BaseModel):
     execution_policy: Optional[ExecutionPolicyItem] = None
     """Execution policy for this dataset item."""
 
-    project_name: Optional[str] = None
-    """The name of the project associated with this dataset item."""
-
     def get_content(
         self,
         include_id: bool = False,
@@ -102,9 +99,6 @@ class DatasetItem(pydantic.BaseModel):
 
         if self.execution_policy is not None:
             content["execution_policy"] = self.execution_policy.model_dump()
-
-        if self.project_name is not None:
-            content["project_name"] = self.project_name
 
         json_string = json.dumps(content, sort_keys=True)
         hash_object = hashlib.sha256(json_string.encode())

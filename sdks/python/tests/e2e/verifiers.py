@@ -739,10 +739,6 @@ def verify_dataset_filtered_items(
         assert inputs == expected_inputs, (
             f"Input mismatch: {inputs} != {expected_inputs}"
         )
-        if project_name is not None:
-            assert all(
-                item["project_name"] == project_name for item in filtered_items
-            ), "Project name mismatch in dataset items"
 
 
 def verify_traces_annotation_queue(
