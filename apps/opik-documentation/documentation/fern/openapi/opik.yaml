@@ -4484,6 +4484,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/projects/{projectId}/alerts:
+    get:
+      tags:
+      - Projects
+      summary: Find alerts by project
+      description: Find alerts scoped to a project
+      operationId: findAlertsByProject
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Alerts page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/projects/{projectId}/dashboards:
     get:
       tags:
@@ -7941,6 +7990,14 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        project_id:
+          type: string
+          description: "Optional project scope for this alert. When set, the alert\
+            \ is scoped to the specified project. Do NOT also provide a 'scope:project'\
+            \ trigger config — the system will create it automatically from this field.\
+            \ Sending both project_id and a scope:project trigger config will result\
+            \ in an error."
+          format: uuid
     AlertTrigger:
       required:
       - event_type
@@ -8125,6 +8182,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AlertTrigger_Write"
+        project_id:
+          type: string
+          description: "Optional project scope for this alert. When set, the alert\
+            \ is scoped to the specified project. Do NOT also provide a 'scope:project'\
+            \ trigger config — the system will create it automatically from this field.\
+            \ Sending both project_id and a scope:project trigger config will result\
+            \ in an error."
+          format: uuid
     Webhook_Write:
       required:
       - url
@@ -8297,6 +8362,14 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        project_id:
+          type: string
+          description: "Optional project scope for this alert. When set, the alert\
+            \ is scoped to the specified project. Do NOT also provide a 'scope:project'\
+            \ trigger config — the system will create it automatically from this field.\
+            \ Sending both project_id and a scope:project trigger config will result\
+            \ in an error."
+          format: uuid
     Webhook_Public:
       required:
       - url

@@ -1,7 +1,8 @@
+import { z } from "zod";
 import {
-  inferBackendType,
   serializeValue,
   deserializeValue,
+  getSchemaPrefix,
 } from "@/agent-config/typeHelpers";
 import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
@@ -24,175 +25,144 @@ function makePromptVersion(commit: string): PromptVersion {
   });
 }
 
-describe("inferBackendType", () => {
-  it('should return "string" for string values', () => {
-    expect(inferBackendType("hello")).toBe("string");
-    expect(inferBackendType("")).toBe("string");
-  });
-
-  it('should return "boolean" for boolean values', () => {
-    expect(inferBackendType(true)).toBe("boolean");
-    expect(inferBackendType(false)).toBe("boolean");
-  });
-
-  it('should return "integer" for integer numbers', () => {
-    expect(inferBackendType(42)).toBe("integer");
-    expect(inferBackendType(0)).toBe("integer");
-    expect(inferBackendType(-10)).toBe("integer");
-  });
-
-  it('should return "float" for non-integer numbers', () => {
-    expect(inferBackendType(3.14)).toBe("float");
-    expect(inferBackendType(-0.5)).toBe("float");
-  });
-
-  it('should return "integer" for 1.0 (JS treats as integer)', () => {
-    expect(inferBackendType(1.0)).toBe("integer");
-  });
-
-  it('should return "prompt" for BasePrompt instances', () => {
-    expect(inferBackendType(makePromptLike("abc123de"))).toBe("prompt");
-  });
-
-  it('should return "prompt_commit" for PromptVersion instances', () => {
-    expect(inferBackendType(makePromptVersion("abc123de"))).toBe(
-      "prompt_commit"
-    );
-  });
-
-  it('should return "string" for arrays', () => {
-    expect(inferBackendType([1, 2, 3])).toBe("string");
-    expect(inferBackendType([])).toBe("string");
-  });
-
-  it('should return "string" for plain objects', () => {
-    expect(inferBackendType({ a: 1, b: "two" })).toBe("string");
-    expect(inferBackendType({})).toBe("string");
-  });
-});
-
 describe("serializeValue", () => {
-  it("should serialize strings as-is", () => {
-    expect(serializeValue("hello")).toBe("hello");
-    expect(serializeValue("")).toBe("");
+  it.each([
+    ["hello", "hello"],
+    ["", ""],
+  ])("serializes string %j as-is", (input, expected) => {
+    expect(serializeValue(input)).toBe(expected);
   });
 
-  it('should serialize booleans as "true"/"false"', () => {
-    expect(serializeValue(true)).toBe("true");
-    expect(serializeValue(false)).toBe("false");
+  it.each([
+    [true, "true"],
+    [false, "false"],
+  ])("serializes boolean %s as %j", (input, expected) => {
+    expect(serializeValue(input)).toBe(expected);
   });
 
-  it("should serialize numbers to strings", () => {
-    expect(serializeValue(42)).toBe("42");
-    expect(serializeValue(3.14)).toBe("3.14");
-    expect(serializeValue(0)).toBe("0");
-    expect(serializeValue(-10)).toBe("-10");
+  it.each([
+    [42, "42"],
+    [3.14, "3.14"],
+    [0, "0"],
+    [-10, "-10"],
+  ])("serializes number %s to string", (input, expected) => {
+    expect(serializeValue(input)).toBe(expected);
   });
 
-  it("should throw for NaN", () => {
-    expect(() => serializeValue(NaN)).toThrow("non-finite");
+  it.each([NaN, Infinity, -Infinity])(
+    "throws for non-finite number %s",
+    (input) => {
+      expect(() => serializeValue(input)).toThrow("non-finite");
+    }
+  );
+
+  it("serializes BasePrompt using commit", () => {
+    expect(serializeValue(makePromptLike("abc123de"))).toBe("abc123de");
   });
 
-  it("should throw for Infinity", () => {
-    expect(() => serializeValue(Infinity)).toThrow("non-finite");
-    expect(() => serializeValue(-Infinity)).toThrow("non-finite");
-  });
-
-  it("should serialize BasePrompt using commit", () => {
-    const prompt = makePromptLike("abc123de");
-    expect(serializeValue(prompt)).toBe("abc123de");
-  });
-
-  it("should throw for BasePrompt without commit", () => {
+  it("throws for BasePrompt without commit", () => {
     const prompt = makePromptLike(undefined as unknown as string);
     (prompt as { commit: unknown }).commit = undefined;
     expect(() => serializeValue(prompt)).toThrow("without a commit");
   });
 
-  it("should serialize PromptVersion using commit", () => {
-    const version = makePromptVersion("xyz789ab");
-    expect(serializeValue(version)).toBe("xyz789ab");
+  it("serializes PromptVersion using commit", () => {
+    expect(serializeValue(makePromptVersion("xyz789ab"))).toBe("xyz789ab");
   });
 
-  it("should serialize arrays as JSON", () => {
-    expect(serializeValue([1, 2, 3])).toBe("[1,2,3]");
-    expect(serializeValue(["a", "b"])).toBe('["a","b"]');
+  it.each([
+    [[1, 2, 3], "[1,2,3]"],
+    [["a", "b"], '["a","b"]'],
+  ])("serializes array %j as JSON", (input, expected) => {
+    expect(serializeValue(input)).toBe(expected);
   });
 
-  it("should serialize plain objects as JSON", () => {
+  it("serializes plain objects as JSON", () => {
     expect(serializeValue({ a: 1 })).toBe('{"a":1}');
   });
 });
 
 describe("deserializeValue", () => {
-  it("should deserialize booleans", () => {
-    expect(deserializeValue("true", "boolean")).toBe(true);
-    expect(deserializeValue("false", "boolean")).toBe(false);
+  it.each([
+    ["true", true],
+    ["false", false],
+    ["TRUE", true],
+    ["False", false],
+  ])("deserializes boolean string %j to %s", (input, expected) => {
+    expect(deserializeValue(input, "boolean")).toBe(expected);
   });
 
-  it("should deserialize booleans case-insensitively", () => {
-    expect(deserializeValue("TRUE", "boolean")).toBe(true);
-    expect(deserializeValue("False", "boolean")).toBe(false);
+  it.each([
+    ["42", 42],
+    ["0", 0],
+    ["-10", -10],
+    ["42.7", 42],
+    ["42.3", 42],
+  ])("deserializes integer string %j to %s", (input, expected) => {
+    expect(deserializeValue(input, "integer")).toBe(expected);
   });
 
-  it("should deserialize integers", () => {
-    expect(deserializeValue("42", "integer")).toBe(42);
-    expect(deserializeValue("0", "integer")).toBe(0);
-    expect(deserializeValue("-10", "integer")).toBe(-10);
+  it.each([
+    ["3.14", 3.14],
+    ["0.0", 0],
+    ["-0.5", -0.5],
+  ])("deserializes float string %j to %s", (input, expected) => {
+    expect(deserializeValue(input, "float")).toBe(expected);
   });
 
-  it("should truncate floats when deserializing as integer", () => {
-    expect(deserializeValue("42.7", "integer")).toBe(42);
-    expect(deserializeValue("42.3", "integer")).toBe(42);
+  it.each([
+    ["hello", "hello"],
+    ["", ""],
+  ])("returns string %j as-is", (input, expected) => {
+    expect(deserializeValue(input, "string")).toBe(expected);
   });
 
-  it("should deserialize floats", () => {
-    expect(deserializeValue("3.14", "float")).toBe(3.14);
-    expect(deserializeValue("0.0", "float")).toBe(0);
-    expect(deserializeValue("-0.5", "float")).toBe(-0.5);
+  it.each(["prompt", "prompt_commit"] as const)(
+    "returns %s values as strings (commit hash)",
+    (type) => {
+      expect(deserializeValue("abc123de", type)).toBe("abc123de");
+    }
+  );
+});
+
+describe("serializeValue — explicit backendType for prompt types", () => {
+  it('serializes BasePrompt with backendType "prompt" → returns commit', () => {
+    const prompt = makePromptLike("commit-abc123");
+    expect(serializeValue(prompt, "prompt")).toBe("commit-abc123");
   });
 
-  it("should return strings as-is", () => {
-    expect(deserializeValue("hello", "string")).toBe("hello");
-    expect(deserializeValue("", "string")).toBe("");
+  it('throws when serializing BasePrompt without commit and backendType "prompt"', () => {
+    const prompt = makePromptLike(undefined as unknown as string);
+    (prompt as { commit: unknown }).commit = undefined;
+    expect(() => serializeValue(prompt, "prompt")).toThrow("without a commit");
   });
 
-  it("should return prompt values as strings (commit hash)", () => {
-    expect(deserializeValue("abc123de", "prompt")).toBe("abc123de");
+  it('serializes PromptVersion with backendType "prompt_commit" → returns commit', () => {
+    const pv = makePromptVersion("commit-xyz789");
+    expect(serializeValue(pv, "prompt_commit")).toBe("commit-xyz789");
+  });
+});
+
+describe("getSchemaPrefix", () => {
+  it("throws TypeError when schema is missing .describe()", () => {
+    const Schema = z.object({ x: z.number() });
+    expect(() => getSchemaPrefix(Schema)).toThrow(TypeError);
   });
 
-  it("should return prompt_commit values as strings (commit hash)", () => {
-    expect(deserializeValue("abc123de", "prompt_commit")).toBe("abc123de");
+  it("returns the schema description as prefix", () => {
+    const Schema = z.object({ x: z.number() }).describe("MyConfig");
+    expect(getSchemaPrefix(Schema)).toBe("MyConfig");
   });
 });
 
 describe("round-trip: serialize then deserialize", () => {
-  it("round-trips strings", () => {
-    const val = "hello world";
-    const backendType = inferBackendType(val);
-    const serialized = serializeValue(val);
-    expect(deserializeValue(serialized, backendType)).toBe(val);
-  });
-
-  it("round-trips integers", () => {
-    const val = 42;
-    const backendType = inferBackendType(val);
-    const serialized = serializeValue(val);
-    expect(deserializeValue(serialized, backendType)).toBe(val);
-  });
-
-  it("round-trips floats", () => {
-    const val = 3.14;
-    const backendType = inferBackendType(val);
-    const serialized = serializeValue(val);
-    expect(deserializeValue(serialized, backendType)).toBe(val);
-  });
-
-  it("round-trips booleans", () => {
-    for (const val of [true, false]) {
-      const backendType = inferBackendType(val);
-      const serialized = serializeValue(val);
-      expect(deserializeValue(serialized, backendType)).toBe(val);
-    }
+  it.each([
+    ["hello world", "string"],
+    [42, "integer"],
+    [3.14, "float"],
+    [true, "boolean"],
+    [false, "boolean"],
+  ] as const)("round-trips %j as %s", (val, type) => {
+    expect(deserializeValue(serializeValue(val, type), type)).toBe(val);
   });
 });

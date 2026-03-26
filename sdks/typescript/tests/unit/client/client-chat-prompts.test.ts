@@ -73,6 +73,7 @@ describe("OpikClient - Chat Prompts", () => {
             type: "mustache",
           },
           templateStructure: PromptTemplateStructure.Chat,
+          projectName: "Default Project",
         },
         {}
       );
@@ -309,7 +310,7 @@ describe("OpikClient - Chat Prompts", () => {
 
       expect(chatPrompt).toBeInstanceOf(ChatPrompt);
       expect(mockRetrievePromptVersion).toHaveBeenCalledWith(
-        { name: "test-chat-prompt", commit: "abc123" },
+        { name: "test-chat-prompt", commit: "abc123", projectName: "Default Project" },
         {}
       );
     });
