@@ -26,10 +26,18 @@ const FiltersContent = <TColumnData,>({
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
     if (!el) return;
-    if (el.scrollHeight > el.clientHeight) {
-      e.stopPropagation();
-      el.scrollTop += e.deltaY;
-    }
+    if (el.scrollHeight <= el.clientHeight) return;
+
+    const atTop = el.scrollTop === 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight;
+    const scrollingDown = e.deltaY > 0;
+    const scrollingUp = e.deltaY < 0;
+
+    if ((atTop && scrollingUp) || (atBottom && scrollingDown)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    el.scrollTop += e.deltaY;
   }, []);
 
   const onRemoveRow = useCallback(
