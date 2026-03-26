@@ -1,210 +1,133 @@
-import type { OpikClient } from "@/client/Client";
-import { OpikApiError } from "@/rest_api";
-import * as OpikApi from "@/rest_api/api";
-import { generateId } from "@/utils/generateId";
-import { logger } from "@/utils/logger";
-import { Blueprint } from "./Blueprint";
-import {
-  inferBackendType,
-  serializeValue,
-  type SupportedValue,
-} from "./typeHelpers";
+import { getTrackContext } from "@/decorators/track";
+import { z } from "zod";
+import type { FieldMeta, SupportedValue } from "./typeHelpers";
+import { serializeValue } from "./typeHelpers";
 
-export interface CreateBlueprintOptions {
-  values: Record<string, SupportedValue>;
-  description?: string;
+function toMetadataValue(value: unknown, backendType: string): unknown {
+  if (value === null || value === undefined) return undefined;
+  if (backendType === "prompt" || backendType === "prompt_commit") {
+    return serializeValue(value as SupportedValue, backendType);
+  }
+  return value;
 }
 
-export interface GetBlueprintOptions {
-  id?: string;
-  env?: string;
-  maskId?: string;
+interface AgentConfigMeta {
+  readonly blueprintId: string | undefined;
+  readonly blueprintVersion: string | undefined;
+  readonly envs: string[] | undefined;
+  readonly isFallback: boolean;
+  deployTo(env: string): Promise<void>;
 }
 
-export class AgentConfig {
-  private readonly projectName: string;
-  private readonly opik: OpikClient;
+export type AgentConfig<T> = Readonly<T> & AgentConfigMeta;
 
-  constructor(projectName: string, opik: OpikClient) {
-    this.projectName = projectName;
-    this.opik = opik;
-  }
+const META_KEYS = new Set<string>([
+  "blueprintId",
+  "blueprintVersion",
+  "envs",
+  "isFallback",
+  "deployTo",
+]);
 
-  private async getProjectId(): Promise<string> {
-    const project = await this.opik.api.projects.retrieveProject({
-      name: this.projectName,
-    });
-    if (!project?.id) {
-      throw new Error(`Project "${this.projectName}" not found`);
-    }
-    return project.id;
-  }
+export interface AgentConfigOptions<S extends z.ZodObject<z.ZodRawShape>> {
+  schema: S;
+  values: z.infer<S>;
+  fieldMeta: Map<string, FieldMeta>;
+  blueprintId: string | undefined;
+  blueprintVersion: string | undefined;
+  envs: string[] | undefined;
+  isFallback: boolean;
+  maskId: string | undefined;
+  deployTo: (env: string) => Promise<void>;
+}
 
-  private buildBlueprintValues(
-    values: Record<string, SupportedValue>
-  ): OpikApi.AgentConfigValueWrite[] {
-    return Object.entries(values)
-      .filter(([, v]) => v != null)
-      .map(([key, value]) => ({
-        key,
-        value: serializeValue(value),
-        type: inferBackendType(value),
-      }));
-  }
+export function createTypedAgentConfig<S extends z.ZodObject<z.ZodRawShape>>(
+  options: AgentConfigOptions<S>
+): AgentConfig<z.infer<S>> {
+  const {
+    schema,
+    values,
+    fieldMeta,
+    blueprintId,
+    blueprintVersion,
+    envs,
+    isFallback,
+    maskId,
+    deployTo,
+  } = options;
 
-  /**
-   * Creates a new blueprint for the project and returns it.
-   *
-   * A blueprint is a versioned snapshot of config key/value pairs. Each call
-   * creates a new version; use `getBlueprint()` to retrieve the latest.
-   */
-  async createBlueprint(options: CreateBlueprintOptions): Promise<Blueprint> {
-    const id = generateId();
-    const values = this.buildBlueprintValues(options.values);
+  const schemaFieldNames = new Set(Object.keys(schema.shape));
 
-    logger.debug(`Creating blueprint for project "${this.projectName}"`);
+  const base = { ...(values as Record<string, unknown>) };
 
-    await this.opik.api.agentConfigs.createAgentConfig({
-      id,
-      projectName: this.projectName,
-      blueprint: {
-        id,
-        type: OpikApi.AgentBlueprintWriteType.Blueprint,
-        description: options.description,
-        values,
-      },
-    });
+  Object.defineProperties(base, {
+    blueprintId: { value: blueprintId, enumerable: false, writable: false },
+    blueprintVersion: { value: blueprintVersion, enumerable: false, writable: false },
+    envs: { value: envs, enumerable: false, writable: false },
+    isFallback: { value: isFallback, enumerable: false, writable: false },
+    deployTo: { value: deployTo, enumerable: false, writable: false },
+  });
 
-    const response = await this.opik.api.agentConfigs.getBlueprintById(id);
-    return await Blueprint.fromApiResponse(response, this.opik);
-  }
+  const proxy = new Proxy(base, {
+    get(target, prop: string | symbol) {
+      if (typeof prop !== "string") return Reflect.get(target, prop);
 
-  /**
-   * Adds a new blueprint version to an existing config and returns it.
-   *
-   * Use this when a config already exists and you want to publish updated values.
-   */
-  async updateBlueprint(options: CreateBlueprintOptions): Promise<Blueprint> {
-    const id = generateId();
-    const values = this.buildBlueprintValues(options.values);
+      if (META_KEYS.has(prop)) {
+        return Reflect.get(target, prop);
+      }
 
-    logger.debug(`Updating blueprint for project "${this.projectName}"`);
-
-    await this.opik.api.agentConfigs.updateAgentConfig({
-      projectName: this.projectName,
-      blueprint: {
-        id,
-        type: OpikApi.AgentBlueprintWriteType.Blueprint,
-        description: options.description,
-        values,
-      },
-    });
-
-    const response = await this.opik.api.agentConfigs.getBlueprintById(id);
-    return await Blueprint.fromApiResponse(response, this.opik);
-  }
-
-  /**
-   * Creates a mask — a partial override of config values used for A/B testing
-   * or feature flags. Returns the mask ID.
-   *
-   * Masks always sit on top of an existing config. Pass the returned mask ID
-   * to `getBlueprint({ maskId })` to retrieve a blueprint with the mask's
-   * values overlaid on top of the base blueprint.
-   *
-   * @throws OpikApiError with status 404 if no config exists yet for this project.
-   *   Call `createBlueprint()` first to initialize the config.
-   */
-  async createMask(options: CreateBlueprintOptions): Promise<string> {
-    const id = generateId();
-    const values = this.buildBlueprintValues(options.values);
-
-    logger.debug(`Creating mask for project "${this.projectName}"`);
-
-    await this.opik.api.agentConfigs.updateAgentConfig({
-      projectName: this.projectName,
-      blueprint: {
-        id,
-        type: OpikApi.AgentBlueprintWriteType.Mask,
-        description: options.description,
-        values,
-      },
-    });
-
-    return id;
-  }
-
-  /**
-   * Retrieves a blueprint. Returns `null` if none is found (no error thrown).
-   *
-   * Resolution order:
-   * - `id` — fetches the blueprint with that exact ID.
-   * - `env` — fetches the blueprint pinned to that environment label.
-   * - neither — fetches the latest blueprint for the project.
-   *
-   * Pass `maskId` to overlay a mask's values on top of the resolved blueprint.
-   */
-  async getBlueprint(
-    options: GetBlueprintOptions = {}
-  ): Promise<Blueprint | null> {
-    const { id, env, maskId } = options;
-
-    try {
-      let response: OpikApi.AgentBlueprintPublic;
-
-      if (id) {
-        logger.debug(
-          `Getting blueprint by ID "${id}" for project "${this.projectName}"`
-        );
-        response = await this.opik.api.agentConfigs.getBlueprintById(id, {
+      if (schemaFieldNames.has(prop)) {
+        injectTraceMetadata({
+          blueprintId,
+          blueprintVersion,
           maskId,
+          fieldMeta,
+          values: values as Record<string, unknown>,
         });
-      } else if (env) {
-        const projectId = await this.getProjectId();
-        logger.debug(
-          `Getting blueprint by env "${env}" for project "${this.projectName}"`
-        );
-        response = await this.opik.api.agentConfigs.getBlueprintByEnv(
-          env,
-          projectId,
-          { maskId }
-        );
-      } else {
-        const projectId = await this.getProjectId();
-        logger.debug(`Getting latest blueprint for project "${this.projectName}"`);
-        response = await this.opik.api.agentConfigs.getLatestBlueprint(
-          projectId,
-          { maskId }
-        );
       }
 
-      return await Blueprint.fromApiResponse(response, this.opik);
-    } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
-        return null;
-      }
-      logger.error(`Failed to get blueprint for project "${this.projectName}"`, {
-        error,
-      });
-      throw error;
-    }
+      return Reflect.get(target, prop);
+    },
+  });
+
+  return proxy as AgentConfig<z.infer<S>>;
+}
+
+function injectTraceMetadata(opts: {
+  blueprintId: string | undefined;
+  blueprintVersion: string | undefined;
+  maskId: string | undefined;
+  fieldMeta: Map<string, FieldMeta>;
+  values: Record<string, unknown>;
+}): void {
+  const ctx = getTrackContext();
+  if (!ctx) return;
+
+  const { blueprintId, blueprintVersion, maskId, fieldMeta, values } = opts;
+
+  const valuesMetadata: Record<
+    string,
+    { value: unknown; type: string; description?: string }
+  > = {};
+
+  for (const [fieldName, meta] of fieldMeta.entries()) {
+    valuesMetadata[meta.prefixedKey] = {
+      value: toMetadataValue(values[fieldName], meta.backendType),
+      type: meta.backendType,
+      description: meta.description,
+    };
   }
 
-  /**
-   * Associates a blueprint with an environment label (e.g. `"prod"`, `"staging"`).
-   * After tagging, `getBlueprint({ env })` will return this blueprint.
-   */
-  async tagBlueprintWithEnv(
-    blueprintId: string,
-    env: string
-  ): Promise<void> {
-    const projectId = await this.getProjectId();
-    logger.debug(
-      `Tagging blueprint "${blueprintId}" with env "${env}" for project "${this.projectName}"`
-    );
-    await this.opik.api.agentConfigs.createOrUpdateEnvs({
-      projectId,
-      envs: [{ envName: env, blueprintId }],
-    });
+  const agentConfiguration: Record<string, unknown> = {
+    _blueprint_id: blueprintId,
+    blueprint_version: blueprintVersion,
+    values: valuesMetadata,
+  };
+  if (maskId !== undefined) {
+    agentConfiguration["_mask_id"] = maskId;
   }
+  const metadata = { agent_configuration: agentConfiguration };
+
+  ctx.span.update({ metadata });
+  ctx.trace.update({ metadata });
 }
