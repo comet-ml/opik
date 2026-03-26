@@ -4,9 +4,11 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 import { useHotkeys } from "react-hotkeys-hook";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { usePortalContainer } from "@/lib/portal-container";
 
 const INITIAL_WIDTH = 0.75;
 const MIN_LEFT_POSITION = 0.1;
@@ -41,14 +43,15 @@ const LEFT_HOTKEYS = ["←"];
 const RIGHT_HOTKEYS = ["→"];
 const ESC_HOTKEYS = ["Esc"];
 
-const calculateLeftPosition = (percentage: number, minWidth?: number) => {
+const calculateLeftPosition = (
+  percentage: number,
+  containerWidth: number,
+  minWidth?: number,
+) => {
   if (minWidth) {
-    return Math.min(
-      window.innerWidth * percentage,
-      window.innerWidth - minWidth,
-    );
+    return Math.min(containerWidth * percentage, containerWidth - minWidth);
   } else {
-    return window.innerWidth * percentage;
+    return containerWidth * percentage;
   }
 };
 
@@ -66,25 +69,37 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   horizontalNavigation,
   verticalNavigation,
 }) => {
+  const portalContainer = usePortalContainer();
   const localStorageKey = `${panelId}-side-panel-width`;
+
+  const getContainerWidth = useCallback(() => {
+    return portalContainer?.clientWidth ?? window.innerWidth;
+  }, [portalContainer]);
 
   const width = parseFloat(
     localStorage.getItem(localStorageKey) ?? `${1 - initialWidth}`,
   );
   const resizeHandleRef = useRef<null | HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const containerLeftRef = useRef<number>(0);
   const leftRef = useRef<number>(width);
   const [left, setLeft] = useState<number>(
-    calculateLeftPosition(leftRef.current, minWidth),
+    calculateLeftPosition(leftRef.current, getContainerWidth(), minWidth),
   );
 
-  const startResizing = useCallback((event: MouseEvent) => {
-    resizeHandleRef.current = event.target as HTMLDivElement;
-    resizeHandleRef.current.setAttribute("data-resize-handle-active", "true");
-    resizeHandleRef.current.parentElement!.style.setProperty(
-      "transition",
-      `unset`,
-    );
-  }, []);
+  const startResizing = useCallback(
+    (event: MouseEvent) => {
+      resizeHandleRef.current = event.target as HTMLDivElement;
+      resizeHandleRef.current.setAttribute("data-resize-handle-active", "true");
+      resizeHandleRef.current.parentElement!.style.setProperty(
+        "transition",
+        `unset`,
+      );
+      containerLeftRef.current =
+        portalContainer?.getBoundingClientRect().left ?? 0;
+    },
+    [portalContainer],
+  );
 
   useHotkeys(
     "ArrowUp,ArrowDown,ArrowLeft,ArrowRight,Escape",
@@ -124,13 +139,16 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
-      if (resizeHandleRef.current) {
-        leftRef.current = event.pageX / window.innerWidth;
-        const left = Math.max(
-          MIN_LEFT_POSITION,
-          Math.min(MAX_LEFT_POSITION, leftRef.current),
-        );
-        setLeft(calculateLeftPosition(left, minWidth));
+      if (!resizeHandleRef.current) return;
+      const cw = getContainerWidth();
+      leftRef.current = (event.pageX - containerLeftRef.current) / cw;
+      const clamped = Math.max(
+        MIN_LEFT_POSITION,
+        Math.min(MAX_LEFT_POSITION, leftRef.current),
+      );
+      const leftPx = calculateLeftPosition(clamped, cw, minWidth);
+      if (panelRef.current) {
+        panelRef.current.style.left = leftPx + "px";
       }
     };
 
@@ -142,26 +160,41 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         );
         resizeHandleRef.current = null;
         localStorage.setItem(localStorageKey, leftRef.current.toString());
+        const cw = getContainerWidth();
+        const clamped = Math.max(
+          MIN_LEFT_POSITION,
+          Math.min(MAX_LEFT_POSITION, leftRef.current),
+        );
+        setLeft(calculateLeftPosition(clamped, cw, minWidth));
       }
     };
 
-    const handleResize = () => {
-      const left = Math.max(
+    const recalcLeft = () => {
+      const cw = getContainerWidth();
+      const clamped = Math.max(
         MIN_LEFT_POSITION,
         Math.min(MAX_LEFT_POSITION, leftRef.current),
       );
-      setLeft(calculateLeftPosition(left, minWidth));
+      setLeft(calculateLeftPosition(clamped, cw, minWidth));
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-    window.addEventListener("resize", handleResize);
+    window.addEventListener("resize", recalcLeft);
+
+    let ro: ResizeObserver | undefined;
+    if (portalContainer) {
+      ro = new ResizeObserver(recalcLeft);
+      ro.observe(portalContainer);
+    }
+
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", recalcLeft);
+      ro?.disconnect();
     };
-  }, [localStorageKey, minWidth]);
+  }, [localStorageKey, minWidth, getContainerWidth, portalContainer]);
 
   const renderNavigation = () => {
     if (!horizontalNavigation && !verticalNavigation) return null;
@@ -244,12 +277,15 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   };
 
   return createPortal(
-    <div className="relative z-10">
+    <div
+      className={cn("absolute inset-0 z-10", !open && "pointer-events-none")}
+    >
       {open && closeOnClickOutside && (
-        <div className="fixed inset-0 bg-black/10" onClick={onClose} />
+        <div className="absolute inset-0 bg-black/10" onClick={onClose} />
       )}
       <div
-        className="fixed inset-0 bg-background shadow-xl transition-transform duration-150 will-change-transform"
+        ref={panelRef}
+        className="absolute inset-0 bg-background shadow-xl transition-transform duration-150 will-change-transform"
         style={{
           left: left + "px",
           transform: open ? "translateX(0)" : "translateX(100%)",
@@ -290,7 +326,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         )}
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
     "resizable-side-panel",
   );
 };
