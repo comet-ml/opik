@@ -115,8 +115,10 @@ def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
                 type="general",
                 spans=[],
                 error_info=None,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -156,8 +158,10 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
                 type="general",
                 spans=[],
                 error_info=None,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

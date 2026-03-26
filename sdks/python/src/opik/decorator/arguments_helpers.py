@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from .. import datetime_helpers, llm_usage
 from ..api_objects import helpers, span, attachment
-from ..types import ErrorInfoDict, SpanType, DistributedTraceHeadersDict
+from ..types import ErrorInfoDict, SpanType, DistributedTraceHeadersDict, TraceSource
 
 
 @dataclasses.dataclass
@@ -73,12 +73,14 @@ class TrackOptions(BaseArguments):
     flush: bool
     project_name: Optional[str]
     create_duplicate_root_span: bool
+    source: Optional[TraceSource]
 
 
 def create_span_data(
     start_span_arguments: StartSpanParameters,
     trace_id: str,
     parent_span_id: Optional[str] = None,
+    source: Optional[TraceSource] = None,
 ) -> span.SpanData:
     span_data = span.SpanData(
         id=helpers.generate_id(),
@@ -93,6 +95,7 @@ def create_span_data(
         project_name=start_span_arguments.project_name,
         model=start_span_arguments.model,
         provider=start_span_arguments.provider,
+        source=source if source is not None else "sdk",
     )
     return span_data
 

@@ -15,7 +15,7 @@ from opik.rest_api.types import (
     span_public,
     trace_public,
 )
-from opik.types import ErrorInfoDict, FeedbackScoreDict
+from opik.types import ErrorInfoDict, FeedbackScoreDict, TraceSource
 from opik import url_helpers
 from .. import testlib
 
@@ -58,6 +58,7 @@ def verify_trace(
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     thread_id: Optional[str] = mock.ANY,  # type: ignore
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
+    source: Optional[TraceSource] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: opik_client.get_trace_content(id=trace_id) is not None,
@@ -71,6 +72,7 @@ def verify_trace(
     testlib.assert_equal(input, trace.input)
     testlib.assert_equal(output, trace.output)
     testlib.assert_equal(metadata, trace.metadata)
+    testlib.assert_equal(source, trace.source)
 
     if tags is not mock.ANY:
         testlib.assert_equal(_try_build_set(tags), _try_build_set(trace.tags))
@@ -138,6 +140,7 @@ def verify_span(
     provider: Optional[str] = mock.ANY,  # type: ignore
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     total_cost: Optional[float] = mock.ANY,  # type: ignore
+    source: Optional[TraceSource] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: opik_client.get_span_content(id=span_id) is not None,
@@ -162,6 +165,7 @@ def verify_span(
     testlib.assert_equal(input, span.input)
     testlib.assert_equal(output, span.output)
     testlib.assert_equal(metadata, span.metadata)
+    testlib.assert_equal(source, span.source)
 
     if tags is not mock.ANY:
         testlib.assert_equal(_try_build_set(tags), _try_build_set(span.tags))
