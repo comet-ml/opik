@@ -64,6 +64,12 @@ const InsightsPage: React.FunctionComponent = () => {
     scope: DASHBOARD_SCOPE.INSIGHTS,
   });
 
+  useEffect(() => {
+    if (!isPending && dashboardId && !dashboard) {
+      setDashboardId(DEFAULT_TEMPLATE_ID);
+    }
+  }, [isPending, dashboardId, dashboard, setDashboardId]);
+
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 
   const { dateRange, handleDateRangeChange, minDate, maxDate, dateRangeValue } =
@@ -129,24 +135,6 @@ const InsightsPage: React.FunctionComponent = () => {
 
       <div className="px-6 pb-4 pt-1">
         {isPending && <Loader />}
-
-        {!isPending && !dashboardId && (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground">
-              No view selected. Please select or create a view.
-            </p>
-          </div>
-        )}
-
-        {!isPending && dashboardId && !dashboard && (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground">
-              View could not be loaded. Please select another view from the
-              dropdown.
-            </p>
-          </div>
-        )}
-
         {!isPending && dashboard && <DashboardContent />}
       </div>
     </PageBodyScrollContainer>
