@@ -8,7 +8,6 @@ export { disableLogger, logger, setLoggerLevel } from "@/utils/logger";
 
 export type { Span } from "@/tracer/Span";
 export type { Trace } from "@/tracer/Trace";
-export type { TraceSource } from "@/tracer/types";
 export type { ErrorInfo } from "@/rest_api/api/types/ErrorInfo";
 export type { SpanType } from "@/rest_api/api/types/SpanType";
 export { SpanType as OpikSpanType } from "@/rest_api/api/types/SpanType";
