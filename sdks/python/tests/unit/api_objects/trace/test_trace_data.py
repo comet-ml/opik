@@ -12,6 +12,7 @@ def test_trace_data__as_start_parameters__expected_parameters_are_set():
         input={"input": "input"},
         tags=["one", "two"],
         created_by="evaluation",
+        source="sdk",
     )
 
     expected_parameters = {
@@ -22,6 +23,7 @@ def test_trace_data__as_start_parameters__expected_parameters_are_set():
         "metadata": {"foo": "bar"},
         "input": {"input": "input"},
         "tags": ["one", "two"],
+        "source": "sdk",
     }
 
     assert_equal(expected_parameters, trace_data.as_start_parameters)
@@ -41,6 +43,7 @@ def test_trace_data__as_parameters__expected_parameters_are_set():
         thread_id="thread_id",
         attachments=[],
         created_by="evaluation",
+        source="sdk",
     )
 
     expected_parameters = {
@@ -57,6 +60,7 @@ def test_trace_data__as_parameters__expected_parameters_are_set():
         "error_info": ANY_BUT_NONE,
         "thread_id": ANY_BUT_NONE,
         "attachments": ANY_BUT_NONE,
+        "source": "sdk",
     }
 
     assert_equal(expected_parameters, trace_data.as_parameters)

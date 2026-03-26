@@ -6,6 +6,10 @@ on:
       - "deployment/helm_chart/opik/**"
     types: [opened, synchronize, reopened, labeled]
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   update-readme:
     runs-on: ubuntu-latest

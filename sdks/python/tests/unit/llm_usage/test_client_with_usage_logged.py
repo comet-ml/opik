@@ -40,8 +40,10 @@ def test_span__provider_supported__usage_format_is_correct__usage_converted_to_o
                 },
                 spans=[],
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -84,8 +86,10 @@ def test_span__provider_not_passed__usage_format_is_correct_for_some_provider__u
                     "original_usage.output_tokens": 20,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -130,8 +134,10 @@ def test_span__unknown_provider_passed__usage_format_is_correct_for_some_provide
                 },
                 provider="my-llm-provider",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -178,8 +184,10 @@ def test_span__unknown_provider_passed__usage_format_is_also_unknown__usage_flat
                 },
                 provider="my-llm-provider",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -230,8 +238,10 @@ def test_span__user_added_openai_keys_to_unknown_usage_themselves__they_are_incl
                 },
                 provider="my-llm-provider",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
