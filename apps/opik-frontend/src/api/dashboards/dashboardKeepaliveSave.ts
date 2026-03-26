@@ -1,9 +1,13 @@
 import noop from "lodash/noop";
-
-import api, { BASE_API_URL, DASHBOARDS_REST_ENDPOINT } from "@/api/api";
+import api, {
+  BASE_API_URL,
+  DASHBOARDS_REST_ENDPOINT,
+  INSIGHTS_VIEWS_REST_ENDPOINT,
+} from "@/api/api";
 import { DashboardState } from "@/types/dashboard";
 
-export const keepaliveSaveDashboard = (
+const keepaliveSave = (
+  endpoint: string,
   dashboardId: string,
   config: DashboardState,
 ): void => {
@@ -16,11 +20,25 @@ export const keepaliveSaveDashboard = (
     headers["Comet-Workspace"] = workspace;
   }
 
-  fetch(`${BASE_API_URL}${DASHBOARDS_REST_ENDPOINT}${dashboardId}`, {
+  fetch(`${BASE_API_URL}${endpoint}${dashboardId}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify({ id: dashboardId, config }),
     credentials: "include",
     keepalive: true,
   }).catch(noop);
+};
+
+export const keepaliveSaveDashboard = (
+  dashboardId: string,
+  config: DashboardState,
+): void => {
+  keepaliveSave(DASHBOARDS_REST_ENDPOINT, dashboardId, config);
+};
+
+export const keepaliveSaveInsightsView = (
+  dashboardId: string,
+  config: DashboardState,
+): void => {
+  keepaliveSave(INSIGHTS_VIEWS_REST_ENDPOINT, dashboardId, config);
 };

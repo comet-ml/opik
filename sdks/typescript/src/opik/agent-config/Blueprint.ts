@@ -7,6 +7,7 @@ import { deserializeValue } from "./typeHelpers";
 
 export interface BlueprintData {
   id: string;
+  name?: string;
   type: OpikApi.AgentBlueprintPublicType;
   description?: string;
   envs?: string[];
@@ -18,6 +19,7 @@ export interface BlueprintData {
 
 export class Blueprint {
   readonly id: string;
+  readonly name?: string;
   readonly type: OpikApi.AgentBlueprintPublicType;
   readonly description?: string;
   readonly envs?: string[];
@@ -29,6 +31,7 @@ export class Blueprint {
 
   constructor(data: BlueprintData) {
     this.id = data.id;
+    this.name = data.name;
     this.type = data.type;
     this.description = data.description;
     this.envs = data.envs;
@@ -52,6 +55,7 @@ export class Blueprint {
     }
     const blueprint = new Blueprint({
       id: response.id,
+      name: response.name,
       type: response.type,
       description: response.description,
       envs: response.envs,
@@ -118,5 +122,16 @@ export class Blueprint {
 
   keys(): string[] {
     return this._rawValues.map((v) => v.key);
+  }
+
+  getRawValue(key: string): string | undefined {
+    const entry = this._rawValues.find((v) => v.key === key);
+    return entry?.value ?? undefined;
+  }
+
+  getRawEntry(key: string): { value?: string | null; type: string } | undefined {
+    const entry = this._rawValues.find((v) => v.key === key);
+    if (!entry) return undefined;
+    return { value: entry.value, type: entry.type };
   }
 }

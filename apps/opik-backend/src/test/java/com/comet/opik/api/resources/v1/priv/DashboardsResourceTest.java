@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
+import com.comet.opik.api.resources.utils.resources.DashboardTestDataFactory;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
@@ -150,20 +151,19 @@ class DashboardsResourceTest {
         @ParameterizedTest
         @MethodSource
         @DisplayName("Create dashboard with all fields")
-        void createDashboardWithAllFields(DashboardType type, DashboardScope scope) {
+        void createDashboardWithAllFields(DashboardType type) {
             var uniqueName = "Test Dashboard " + UUID.randomUUID();
             var dashboard = dashboardResourceClient.createPartialDashboard()
                     .name(uniqueName)
                     .description("This is a test dashboard")
                     .type(type)
-                    .scope(scope)
                     .build();
 
             var createdDashboard = dashboardResourceClient.createAndGet(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
             var expectedDashboard = dashboard.toBuilder()
                     .type(Optional.ofNullable(type).orElse(DashboardType.MULTI_PROJECT))
-                    .scope(Optional.ofNullable(scope).orElse(DashboardScope.WORKSPACE))
+                    .scope(DashboardScope.WORKSPACE)
                     .build();
             assertDashboard(expectedDashboard, createdDashboard);
             assertThat(createdDashboard.id()).isNotNull();
@@ -172,14 +172,14 @@ class DashboardsResourceTest {
             assertThat(createdDashboard.createdBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedAt()).isNotNull();
+            assertThat(createdDashboard.scope()).isEqualTo(DashboardScope.WORKSPACE);
         }
 
         static Stream<Arguments> createDashboardWithAllFields() {
             var randomType = RandomTestUtils.randomEnumValue(DashboardType.class);
-            var randomScope = RandomTestUtils.randomEnumValue(DashboardScope.class);
             return Stream.of(
-                    Arguments.of(randomType, randomScope),
-                    Arguments.of(null, null));
+                    Arguments.of(randomType),
+                    Arguments.of((DashboardType) null));
         }
 
         @Test
@@ -408,15 +408,9 @@ class DashboardsResourceTest {
             var dashboards = List.of(
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.MULTI_PROJECT)
-                            .scope(DashboardScope.WORKSPACE)
                             .build(),
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.EXPERIMENTS)
-                            .scope(DashboardScope.INSIGHTS)
-                            .build(),
-                    dashboardResourceClient.createPartialDashboard()
-                            .type(DashboardType.MULTI_PROJECT)
-                            .scope(DashboardScope.INSIGHTS)
                             .build());
 
             var created = dashboards.stream()
@@ -437,7 +431,7 @@ class DashboardsResourceTest {
 
         static Stream<Arguments> findDashboardsWithFilters() {
             return Stream.of(
-                    // Filter by type
+                    // Filter by type MULTI_PROJECT
                     Arguments.of(
                             (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
@@ -446,32 +440,27 @@ class DashboardsResourceTest {
                                             .value(DashboardType.MULTI_PROJECT.getValue())
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2), dashboards.get(0))),
-                    // Filter by scope
-                    Arguments.of(
-                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
-                                    DashboardFilter.builder()
-                                            .field(DashboardField.SCOPE)
-                                            .operator(Operator.EQUAL)
-                                            .value(DashboardScope.INSIGHTS.getValue())
-                                            .build()),
-                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2), dashboards.get(1))),
-                    // Filter by type and scope
+                                    dashboards.get(0))),
+                    // Filter by type EXPERIMENTS
                     Arguments.of(
                             (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
                                             .field(DashboardField.TYPE)
                                             .operator(Operator.EQUAL)
-                                            .value(DashboardType.MULTI_PROJECT.getValue())
-                                            .build(),
+                                            .value(DashboardType.EXPERIMENTS.getValue())
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(1))),
+                    // Filter by scope WORKSPACE (all dashboards created via this endpoint have WORKSPACE scope)
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
                                             .field(DashboardField.SCOPE)
                                             .operator(Operator.EQUAL)
-                                            .value(DashboardScope.INSIGHTS.getValue())
+                                            .value(DashboardScope.WORKSPACE.getValue())
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2))));
+                                    dashboards.get(1), dashboards.get(0))));
         }
 
         @Test
@@ -488,7 +477,7 @@ class DashboardsResourceTest {
                     .build();
             var dashboard2 = dashboardResourceClient.createPartialDashboard()
                     .type(DashboardType.EXPERIMENTS)
-                    .scope(DashboardScope.INSIGHTS)
+                    .scope(DashboardScope.WORKSPACE)
                     .build();
 
             dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
@@ -690,7 +679,7 @@ class DashboardsResourceTest {
             var dashboard = dashboardResourceClient.createPartialDashboard().build();
             var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
-            var newConfig = dashboardResourceClient.createValidConfig();
+            var newConfig = DashboardTestDataFactory.createValidConfig();
             var update = DashboardUpdate.builder()
                     .config(newConfig)
                     .build();
@@ -701,44 +690,23 @@ class DashboardsResourceTest {
             assertThat(updatedDashboard.lastUpdatedAt()).isNotNull();
         }
 
-        @ParameterizedTest
-        @MethodSource
-        @DisplayName("Update dashboard type and scope")
-        void updateDashboardTypeAndScope(DashboardType initialType, DashboardScope initialScope,
-                DashboardType updatedType, DashboardScope updatedScope) {
+        @Test
+        @DisplayName("Update dashboard type")
+        void updateDashboardType() {
+            var initialType = DashboardType.MULTI_PROJECT;
             var dashboard = dashboardResourceClient.createPartialDashboard()
                     .type(initialType)
-                    .scope(initialScope)
                     .build();
             var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
-            var updateBuilder = DashboardUpdate.builder();
-            if (updatedType != null) {
-                updateBuilder.type(updatedType);
-            }
-            if (updatedScope != null) {
-                updateBuilder.scope(updatedScope);
-            }
-            var update = updateBuilder.build();
+            var update = DashboardUpdate.builder()
+                    .type(DashboardType.EXPERIMENTS)
+                    .build();
 
             var updatedDashboard = dashboardResourceClient.updateAndGet(id, update, API_KEY, TEST_WORKSPACE_NAME);
 
-            assertThat(updatedDashboard.type()).isEqualTo(updatedType != null ? updatedType : initialType);
-            assertThat(updatedDashboard.scope()).isEqualTo(updatedScope != null ? updatedScope : initialScope);
-        }
-
-        static Stream<Arguments> updateDashboardTypeAndScope() {
-            var initialType = RandomTestUtils.randomEnumValue(DashboardType.class);
-            var initialScope = RandomTestUtils.randomEnumValue(DashboardScope.class);
-            var differentType = initialType == DashboardType.MULTI_PROJECT
-                    ? DashboardType.EXPERIMENTS
-                    : DashboardType.MULTI_PROJECT;
-            var differentScope = initialScope == DashboardScope.WORKSPACE
-                    ? DashboardScope.INSIGHTS
-                    : DashboardScope.WORKSPACE;
-            return Stream.of(
-                    Arguments.of(initialType, initialScope, differentType, null),
-                    Arguments.of(initialType, initialScope, null, differentScope));
+            assertThat(updatedDashboard.type()).isEqualTo(DashboardType.EXPERIMENTS);
+            assertThat(updatedDashboard.scope()).isEqualTo(DashboardScope.WORKSPACE);
         }
 
         @Test
