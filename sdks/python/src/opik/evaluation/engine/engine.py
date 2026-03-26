@@ -198,7 +198,9 @@ class EvaluationEngine:
 
                 raise
             task_execution_time = time.perf_counter() - task_start
-            LOGGER.debug("[engine] Task done for item %s in %.1fs", item.id, task_execution_time)
+            LOGGER.debug(
+                "[engine] Task done for item %s in %.1fs", item.id, task_execution_time
+            )
 
             opik_context.update_current_trace(output=task_output_)
 
@@ -220,7 +222,11 @@ class EvaluationEngine:
             )
             test_result_.task_execution_time = task_execution_time
             test_result_.scoring_time = time.perf_counter() - scoring_start
-            LOGGER.debug("[engine] Scoring done for item %s in %.1fs", item.id, test_result_.scoring_time)
+            LOGGER.debug(
+                "[engine] Scoring done for item %s in %.1fs",
+                item.id,
+                test_result_.scoring_time,
+            )
 
         return test_result_
 
