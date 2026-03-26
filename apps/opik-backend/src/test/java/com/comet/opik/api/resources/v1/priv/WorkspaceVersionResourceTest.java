@@ -111,7 +111,7 @@ class WorkspaceVersionResourceTest {
 
         @Test
         void workspaceVersion__whenForceVersion1__returnsVersion1() {
-            // Empty workspace should point to V2, but the flag forces V2
+            // Empty workspace should point to V2, but the flag forces V1
             assertThat(workspaceClient.getWorkspaceVersion(DEFAULT_WORKSPACE_NAME)).isEqualTo(V1_WORKSPACE_VERSION);
         }
     }
