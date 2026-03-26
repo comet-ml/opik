@@ -82,7 +82,7 @@ async function _run(): Promise<void> {
   const shutdownHandler = () => {
     logger.info("Received shutdown signal, stopping runner...");
     loop.shutdown();
-    process.exit(0);
+    client.flush().catch(() => {}).finally(() => process.exit(0));
   };
 
   process.once("SIGTERM", shutdownHandler);
