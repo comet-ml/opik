@@ -41,8 +41,7 @@ const PageLayout = () => {
   const { data: assistantConfig } = useAssistantSidebarConfig({
     enabled: !!AssistantSidebar,
   });
-  const showAssistantSidebar =
-    !!AssistantSidebar && !!assistantConfig?.enabled;
+  const showAssistantSidebar = !!AssistantSidebar && !!assistantConfig?.enabled;
 
   const isMobile = useMediaQuery("(max-width: 1023px)");
   const pinned = isMobile ? false : storedPinned;
