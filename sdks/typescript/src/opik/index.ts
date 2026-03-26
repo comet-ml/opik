@@ -31,5 +31,9 @@ export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_
 export { Blueprint, agentConfigContext } from "@/agent-config";
 export type { CreateBlueprintOptions, GetBlueprintOptions, AgentConfig, FieldMeta } from "@/agent-config";
 
+// Runner exports
+export { activateRunner } from "@/runner/activate";
+export type { RegistryEntry, Param } from "@/runner/registry";
+
 // Re-export Zod to ensure consumers use the same version as the SDK
 export { z } from "zod";
