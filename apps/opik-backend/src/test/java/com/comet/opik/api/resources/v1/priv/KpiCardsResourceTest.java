@@ -4,6 +4,7 @@ import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
@@ -284,6 +285,56 @@ class KpiCardsResourceTest {
         } else {
             assertNoMetric(response, KpiMetricType.ERRORS);
         }
+    }
+
+    // === Validation Tests ===
+
+    @ParameterizedTest
+    @MethodSource("invalidRequestArguments")
+    @DisplayName("returns 422 for invalid requests")
+    void invalidRequest(KpiCardRequest request, String expectedError) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        try (var response = projectResourceClient.getKpiCardsRaw(projectId, request, API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(422);
+            var error = response.readEntity(ErrorMessage.class);
+            assertThat(error.errors()).anyMatch(e -> e.contains(expectedError));
+        }
+    }
+
+    static Stream<Arguments> invalidRequestArguments() {
+        Instant now = Instant.now();
+        return Stream.of(
+                Arguments.of(
+                        KpiCardRequest.builder()
+                                .entityType(EntityType.TRACES)
+                                .intervalStart(now.plus(1, ChronoUnit.HOURS))
+                                .intervalEnd(now)
+                                .build(),
+                        "intervalStart must be before intervalEnd"),
+                Arguments.of(
+                        KpiCardRequest.builder()
+                                .entityType(null)
+                                .intervalStart(now)
+                                .intervalEnd(now.plus(1, ChronoUnit.HOURS))
+                                .build(),
+                        "entityType must not be null"),
+                Arguments.of(
+                        KpiCardRequest.builder()
+                                .entityType(EntityType.SPANS)
+                                .intervalStart(null)
+                                .intervalEnd(now.plus(1, ChronoUnit.HOURS))
+                                .build(),
+                        "intervalStart must not be null"),
+                Arguments.of(
+                        KpiCardRequest.builder()
+                                .entityType(EntityType.SPANS)
+                                .intervalStart(now)
+                                .intervalEnd(null)
+                                .build(),
+                        "intervalEnd must not be null"));
     }
 
     // === Span Filter Tests ===
@@ -661,7 +712,8 @@ class KpiCardsResourceTest {
                             .name("score2")
                             .value(BigDecimal.valueOf(2.0))
                             .projectName(projectName)
-                            .build()), API_KEY, WORKSPACE_NAME);
+                            .build()),
+                    API_KEY, WORKSPACE_NAME);
         } else if (entityType == EntityType.SPANS) {
             spanResourceClient.feedbackScores(List.of(
                     factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
@@ -675,7 +727,8 @@ class KpiCardsResourceTest {
                             .name("score2")
                             .value(BigDecimal.valueOf(2.0))
                             .projectName(projectName)
-                            .build()), API_KEY, WORKSPACE_NAME);
+                            .build()),
+                    API_KEY, WORKSPACE_NAME);
         } else {
             traceResourceClient.feedbackScores(List.of(
                     factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
@@ -689,7 +742,8 @@ class KpiCardsResourceTest {
                             .name("score2")
                             .value(BigDecimal.valueOf(2.0))
                             .projectName(projectName)
-                            .build()), API_KEY, WORKSPACE_NAME);
+                            .build()),
+                    API_KEY, WORKSPACE_NAME);
         }
 
         return new FilterEntities(traces, spans, threadIds);

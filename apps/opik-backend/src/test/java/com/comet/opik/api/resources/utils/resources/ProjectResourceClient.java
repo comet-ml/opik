@@ -154,6 +154,16 @@ public class ProjectResourceClient {
         }
     }
 
+    public Response getKpiCardsRaw(UUID projectId, KpiCardRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("kpi-cards")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
     public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
             @NonNull String workspaceName) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))

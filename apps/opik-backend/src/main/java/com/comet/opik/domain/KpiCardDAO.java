@@ -194,6 +194,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 SELECT trace_id, sum(total_estimated_cost) AS cost
                 FROM spans FINAL
                 WHERE workspace_id = :workspace_id AND project_id = :project_id
+                  AND id >= :uuid_from_time AND id \\<= :uuid_to_time
                   AND trace_id IN (SELECT id FROM traces_filtered)
                 GROUP BY trace_id
             )
@@ -351,6 +352,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
+                  AND id >= :uuid_from_time AND id \\<= :uuid_to_time
                   AND thread_id \\<> ''
             ), trace_threads_final AS (
                 SELECT
@@ -500,6 +502,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     SELECT trace_id, total_estimated_cost
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
+                      AND id >= :uuid_from_time AND id \\<= :uuid_to_time
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id

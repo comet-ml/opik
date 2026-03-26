@@ -1,6 +1,7 @@
 package com.comet.opik.api.metrics;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -23,8 +24,9 @@ public record KpiCardRequest(
         @NotNull Instant intervalStart,
         @NotNull Instant intervalEnd) {
 
+    @JsonIgnore
     @AssertTrue(message = "intervalStart must be before intervalEnd") public boolean isStartBeforeEnd() {
-        return intervalStart.isBefore(intervalEnd);
+        return intervalStart == null || intervalEnd == null || intervalStart.isBefore(intervalEnd);
     }
 
     @Getter
