@@ -12,7 +12,7 @@ import reactor.core.publisher.Mono;
 @ImplementedBy(KpiCardServiceImpl.class)
 public interface KpiCardService {
 
-    Mono<KpiCardResponse> getKpiCards(@NonNull KpiCardCriteria criteria);
+    Mono<KpiCardResponse> getKpiCards(KpiCardCriteria criteria);
 }
 
 @Slf4j
