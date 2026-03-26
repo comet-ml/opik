@@ -158,6 +158,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experiment_ids
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
             )
             <endif>
             SELECT DISTINCT
@@ -195,6 +198,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND id IN :experiment_ids
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
