@@ -50,7 +50,7 @@ import {
 } from "@/shared/DataTable/utils";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import useAppStore from "@/store/AppStore";
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 import {
@@ -215,7 +215,7 @@ const FILTERS_CONFIG = {
 
 export const AnnotationQueuesPage: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const projectId = useProjectIdFromURL();
+  const projectId = useActiveProjectId()!;
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -396,6 +396,7 @@ export const AnnotationQueuesPage: React.FC = () => {
           key={resetDialogKeyRef.current}
           open={openDialog}
           setOpen={setOpenDialog}
+          projectId={projectId}
         />
       </>
     );

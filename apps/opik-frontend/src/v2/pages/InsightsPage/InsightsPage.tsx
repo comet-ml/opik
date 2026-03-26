@@ -26,7 +26,7 @@ import {
 } from "@/lib/dashboard/templates";
 import { Separator } from "@/ui/separator";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useActiveProjectId } from "@/store/AppStore";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
@@ -35,7 +35,7 @@ const DEFAULT_TEMPLATE = PROJECT_TEMPLATE_LIST[0];
 const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 
 const InsightsPage: React.FunctionComponent = () => {
-  const projectId = useProjectIdFromURL();
+  const projectId = useActiveProjectId()!;
   const workspaceName = useActiveWorkspaceName();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
