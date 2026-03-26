@@ -48,6 +48,7 @@ export class Trace {
     const spanWithId: SavedSpan = {
       id: generateId(),
       startTime: new Date(),
+      source: this.data.source,
       ...spanData,
       projectName,
       traceId: this.data.id,

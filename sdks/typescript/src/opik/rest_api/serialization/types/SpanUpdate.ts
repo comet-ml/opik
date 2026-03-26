@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { ErrorInfo } from "./ErrorInfo.js";
 import { JsonListString } from "./JsonListString.js";
+import { SpanUpdateSource } from "./SpanUpdateSource.js";
 import { SpanUpdateType } from "./SpanUpdateType.js";
 
 export const SpanUpdate: core.serialization.ObjectSchema<serializers.SpanUpdate.Raw, OpikApi.SpanUpdate> =
@@ -34,6 +35,7 @@ export const SpanUpdate: core.serialization.ObjectSchema<serializers.SpanUpdate.
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
         ttft: core.serialization.number().optional(),
+        source: SpanUpdateSource.optional(),
     });
 
 export declare namespace SpanUpdate {
@@ -57,5 +59,6 @@ export declare namespace SpanUpdate {
         total_estimated_cost?: number | null;
         error_info?: ErrorInfo.Raw | null;
         ttft?: number | null;
+        source?: SpanUpdateSource.Raw | null;
     }
 }

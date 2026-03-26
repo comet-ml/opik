@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
+import { usePortalContainer } from "@/lib/portal-container";
 
 const Sheet = SheetPrimitive.Root;
 
@@ -55,27 +56,30 @@ interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
-  <SheetPortal>
-    <SheetOverlay />
-    <SheetPrimitive.Content
-      ref={ref}
-      className={cn(sheetVariants({ side }), className)}
-      {...props}
-    >
-      <div className="flex h-[60px] items-center border-b border-b-border px-6">
-        <Button asChild size="icon-sm" variant="outline">
-          <SheetPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
-            <X />
+>(({ side = "right", className, children, ...props }, ref) => {
+  const container = usePortalContainer();
+  return (
+    <SheetPortal container={container}>
+      <SheetOverlay />
+      <SheetPrimitive.Content
+        ref={ref}
+        className={cn(sheetVariants({ side }), className)}
+        {...props}
+      >
+        <div className="flex h-[60px] items-center border-b border-b-border px-6">
+          <Button asChild size="icon-sm" variant="outline">
+            <SheetPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+              <X />
 
-            <span className="sr-only">Close</span>
-          </SheetPrimitive.Close>
-        </Button>
-      </div>
-      <div className="max-h-full overflow-y-auto p-6">{children}</div>
-    </SheetPrimitive.Content>
-  </SheetPortal>
-));
+              <span className="sr-only">Close</span>
+            </SheetPrimitive.Close>
+          </Button>
+        </div>
+        <div className="max-h-full overflow-y-auto p-6">{children}</div>
+      </SheetPrimitive.Content>
+    </SheetPortal>
+  );
+});
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 
 const SheetHeader = ({

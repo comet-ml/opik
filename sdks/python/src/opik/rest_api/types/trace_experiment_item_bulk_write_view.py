@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info_experiment_item_bulk_write_view import ErrorInfoExperimentItemBulkWriteView
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
+from .trace_experiment_item_bulk_write_view_source import TraceExperimentItemBulkWriteViewSource
 
 
 class TraceExperimentItemBulkWriteView(UniversalBaseModel):
@@ -35,6 +36,7 @@ class TraceExperimentItemBulkWriteView(UniversalBaseModel):
     """
 
     thread_id: typing.Optional[str] = None
+    source: typing.Optional[TraceExperimentItemBulkWriteViewSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

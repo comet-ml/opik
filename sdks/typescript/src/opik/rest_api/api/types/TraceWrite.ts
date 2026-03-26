@@ -18,4 +18,5 @@ export interface TraceWrite {
     /** Time to first token in milliseconds */
     ttft?: number;
     threadId?: string;
+    source?: OpikApi.TraceWriteSource;
 }

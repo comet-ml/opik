@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -73,12 +75,6 @@ jobs:
           else
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
-
-      - name: Create branch
-        if: steps.check_changes.outputs.has_changes == 'true'
-        uses: JosiahSiegel/remote-branch-action@v1.2.0
-        with:
-          branch: ${{ env.BRANCH_NAME }}
 
       - name: Commit files
         if: steps.check_changes.outputs.has_changes == 'true'

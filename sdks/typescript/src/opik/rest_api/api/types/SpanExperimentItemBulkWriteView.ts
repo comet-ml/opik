@@ -22,4 +22,5 @@ export interface SpanExperimentItemBulkWriteView {
     totalEstimatedCostVersion?: string;
     /** Time to first token in milliseconds */
     ttft?: number;
+    source?: OpikApi.SpanExperimentItemBulkWriteViewSource;
 }

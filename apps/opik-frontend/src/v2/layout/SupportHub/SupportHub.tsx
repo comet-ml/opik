@@ -17,7 +17,7 @@ import {
 import { buildDocsUrl } from "@/lib/utils";
 import { SLACK_LINK } from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/HelpLinks";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-import ProvideFeedbackDialog from "@/v2/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
+import ProvideFeedbackDialog from "@/v2/layout/SupportHub/FeedbackDialog/ProvideFeedbackDialog";
 
 const SupportHub = () => {
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
@@ -27,8 +27,8 @@ const SupportHub = () => {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm">
-            <LifeBuoy className="size-4" />
+          <Button variant="ghost" size="icon-2xs">
+            <LifeBuoy />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

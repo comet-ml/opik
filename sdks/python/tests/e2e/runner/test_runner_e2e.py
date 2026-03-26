@@ -136,6 +136,7 @@ def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
     job = wait_for_completed_job(api_client, runner_process.runner_id, message)
     assert job.result is not None, "Completed job should have a result"
     assert f"echo: {message}" in str(job.result)
+    assert job.trace_id is not None, "Completed job should have a trace_id"
 
     trace = find_trace_by_input(api_client, OPIK_E2E_TESTS_PROJECT_NAME, message)
     assert f"echo: {message}" in str(trace.output)
@@ -166,6 +167,7 @@ def test_runner_with_mask(
     job = wait_for_completed_job(api_client, runner_process.runner_id, message)
     assert job.result is not None, "Completed job should have a result"
     assert custom_greeting in str(job.result)
+    assert job.trace_id is not None, "Completed job should have a trace_id"
 
     trace = find_trace_by_input(api_client, OPIK_E2E_TESTS_PROJECT_NAME, message)
     assert custom_greeting in str(trace.output), (
