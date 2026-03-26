@@ -330,11 +330,18 @@ class WorkspaceVersionResourceTest {
                     .projectId(null)
                     .build();
             datasetClient.createDataset(dataset, API_KEY, workspaceName);
+            // Demo experiment without project does not trigger V1
+            experimentClient.create(experimentClient.createPartialExperiment()
+                    .name("Demo evaluation")
+                    .datasetName(dataset.name())
+                    .build(),
+                    API_KEY, workspaceName);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
 
-            // Workspace level experiment triggers V1
+            // Non-demo experiment without project triggers V1
             experimentClient.create(experimentClient.createPartialExperiment()
-                    .datasetName(dataset.name()).build(),
+                    .datasetName(dataset.name())
+                    .build(),
                     API_KEY, workspaceName);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
         }

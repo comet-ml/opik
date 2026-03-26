@@ -82,9 +82,6 @@ public interface DashboardDAO {
     Optional<Dashboard> findByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name,
             @Define("project_id") @Bind("projectId") UUID projectId);
 
-    @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND slug = :slug")
-    Optional<Dashboard> findBySlug(@Bind("workspaceId") String workspaceId, @Bind("slug") String slug);
-
     @SqlUpdate("""
             DELETE FROM dashboards WHERE id = :id AND workspace_id = :workspaceId
             <if(scope)> AND scope = :scope <endif>

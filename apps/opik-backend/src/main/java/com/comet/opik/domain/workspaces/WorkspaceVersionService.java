@@ -42,8 +42,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *       was created post-launch ({@code version_2}), always return {@code version_2}.
  *       Prevents V2 to V1 demotion.
  *       <br><i>Not yet implemented — requires OPIK-5170 (auth response metadata).</i></li>
- *   <li><b>Version 1 entity check</b> (primary signal, all modes) — queries MySQL and ClickHouse for
- *       entities without {@code project_id}. If any exist, returns {@code version_1}.
+ *   <li><b>Version 1 entity check</b> (primary signal, all modes) — queries the state database and
+ *       analytics database for entities without {@code project_id}. If any exist, returns {@code version_1}.
  *       If none, returns {@code version_2}. Demo data is excluded from the check.</li>
  *   <li><b>Fallback on check failure</b> — if the DB queries error out:
  *       authenticated mode falls back to auth suggestion (not yet available, defaults to {@code version_1});
@@ -52,8 +52,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Entity Types Checked:</h3>
  * <ul>
- *   <li>MySQL: datasets (excl. demo), prompts, dashboards, automation_rules (multi-project check)</li>
- *   <li>ClickHouse: experiments (excl. demo), optimizations</li>
+ *   <li>State database: datasets (excl. demo), prompts, automation_rules (multi-project check), dashboards etc.</li>
+ *   <li>Analytics database: experiments (excl. demo), optimizations etc.</li>
  *   <li>Not yet checked: alerts (no project_id column yet)</li>
  * </ul>
  *
@@ -163,7 +163,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
             return Mono.just(buildResponse(OpikVersion.VERSION_2));
         }
         return Flux.concat(
-                Mono.fromCallable(() -> hasMySqlVersion1Entities(workspaceId))
+                Mono.fromCallable(() -> hasStateDbVersion1Entities(workspaceId))
                         .subscribeOn(Schedulers.boundedElastic()),
                 experimentDAO.hasVersion1Experiments(workspaceId, DemoData.EXPERIMENTS),
                 optimizationDAO.hasVersion1Optimizations(workspaceId))
@@ -189,13 +189,13 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     }
 
     /**
-     * Checks MySQL entity types for version 1 entities (missing project_id).
+     * Checks state database entity types for version 1 entities (missing project_id).
      * Short-circuits on the first positive result.
      *
      * <p>Uses a single READ_ONLY transaction — one connection acquisition
      * is more efficient than multiple transactions for independent EXISTS queries.</p>
      */
-    private boolean hasMySqlVersion1Entities(String workspaceId) {
+    private boolean hasStateDbVersion1Entities(String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             if (handle.attach(DatasetDAO.class).hasVersion1Datasets(workspaceId, DemoData.DATASETS)) {
                 log.info("Found version_1 datasets in workspace '{}'", workspaceId);
