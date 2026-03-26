@@ -60,6 +60,8 @@ tags:
   description: Feedback definitions related resources
 - name: Guardrails
   description: Guardrails related resources
+- name: Insights Views
+  description: Insights View resources
 - name: LLM Models
   description: LLM model registry resources
 - name: LlmProviderKey
@@ -3396,6 +3398,162 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/insights-views:
+    get:
+      tags:
+      - Insights Views
+      summary: Find insights views
+      description: Find insights views in a workspace
+      operationId: findInsightsViews
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter insights views by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Insights view page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPage_Public"
+    post:
+      tags:
+      - Insights Views
+      summary: Create insights view
+      description: Create a new insights view in a workspace
+      operationId: createInsightsView
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dashboard_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/insights-views/{insightsViewId}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+  /v1/private/insights-views/{insightsViewId}:
+    get:
+      tags:
+      - Insights Views
+      summary: Get insights view by id
+      description: Get insights view by id
+      operationId: getInsightsViewById
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Insights view resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Insights view not found
+    delete:
+      tags:
+      - Insights Views
+      summary: Delete insights view
+      description: Delete insights view by id
+      operationId: deleteInsightsView
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+    patch:
+      tags:
+      - Insights Views
+      summary: Update insights view
+      description: Update insights view by id. Partial updates are supported - only
+        provided fields will be updated.
+      operationId: updateInsightsView
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardUpdate_Public"
+      responses:
+        "200":
+          description: Updated insights view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Insights view not found
+        "409":
+          description: Conflict - insights view with this name already exists
+  /v1/private/insights-views/delete-batch:
+    post:
+      tags:
+      - Insights Views
+      summary: Delete insights views
+      description: Delete insights views batch
+      operationId: deleteInsightsViewsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No content
   /v1/private/llm/models:
     get:
       tags:
@@ -10756,6 +10914,7 @@ components:
           - experiments
         scope:
           type: string
+          readOnly: true
           enum:
           - workspace
           - insights
@@ -10806,11 +10965,6 @@ components:
           enum:
           - multi_project
           - experiments
-        scope:
-          type: string
-          enum:
-          - workspace
-          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -10850,11 +11004,6 @@ components:
           enum:
           - multi_project
           - experiments
-        scope:
-          type: string
-          enum:
-          - workspace
-          - insights
         description:
           maxLength: 1000
           minLength: 0

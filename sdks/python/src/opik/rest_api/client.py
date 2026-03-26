@@ -18,6 +18,7 @@ from .environment import OpikApiEnvironment
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
+from .insights_views.client import AsyncInsightsViewsClient, InsightsViewsClient
 from .llm_models.client import AsyncLlmModelsClient, LlmModelsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient, LlmProviderKeyClient
 from .manual_evaluation.client import AsyncManualEvaluationClient, ManualEvaluationClient
@@ -112,6 +113,7 @@ class OpikApi:
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
+        self.insights_views = InsightsViewsClient(client_wrapper=self._client_wrapper)
         self.llm_models = LlmModelsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = LlmProviderKeyClient(client_wrapper=self._client_wrapper)
         self.runners = RunnersClient(client_wrapper=self._client_wrapper)
@@ -257,6 +259,7 @@ class AsyncOpikApi:
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
+        self.insights_views = AsyncInsightsViewsClient(client_wrapper=self._client_wrapper)
         self.llm_models = AsyncLlmModelsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = AsyncLlmProviderKeyClient(client_wrapper=self._client_wrapper)
         self.runners = AsyncRunnersClient(client_wrapper=self._client_wrapper)
