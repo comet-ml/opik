@@ -92,20 +92,19 @@ interface RetentionRuleDAO {
      */
     @SqlQuery("SELECT * FROM retention_rules" +
             " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
-            " AND catch_up_velocity \\< :smallThreshold" +
+            " AND catch_up_velocity IS NOT NULL AND catch_up_velocity < :smallThreshold" +
             " ORDER BY catch_up_cursor ASC" +
             " LIMIT :limit")
-    @UseStringTemplateEngine
     List<RetentionRule> findSmallCatchUpRules(@Bind("smallThreshold") long smallThreshold,
             @Bind("limit") int limit);
 
     /** Find medium workspaces needing catch-up (velocity between thresholds), ordered by cursor. */
     @SqlQuery("SELECT * FROM retention_rules" +
             " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
-            " AND catch_up_velocity >= :smallThreshold AND catch_up_velocity \\< :largeThreshold" +
+            " AND catch_up_velocity IS NOT NULL" +
+            " AND catch_up_velocity >= :smallThreshold AND catch_up_velocity < :largeThreshold" +
             " ORDER BY catch_up_cursor ASC" +
             " LIMIT :limit")
-    @UseStringTemplateEngine
     List<RetentionRule> findMediumCatchUpRules(@Bind("smallThreshold") long smallThreshold,
             @Bind("largeThreshold") long largeThreshold,
             @Bind("limit") int limit);
@@ -113,10 +112,9 @@ interface RetentionRuleDAO {
     /** Find the single most outdated large workspace needing catch-up (velocity at or above threshold). */
     @SqlQuery("SELECT * FROM retention_rules" +
             " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
-            " AND catch_up_velocity >= :largeThreshold" +
+            " AND catch_up_velocity IS NOT NULL AND catch_up_velocity >= :largeThreshold" +
             " ORDER BY catch_up_cursor ASC" +
             " LIMIT 1")
-    @UseStringTemplateEngine
     Optional<RetentionRule> findLargeCatchUpRule(@Bind("largeThreshold") long largeThreshold);
 
     /** Advance the catch-up cursor for a rule. */

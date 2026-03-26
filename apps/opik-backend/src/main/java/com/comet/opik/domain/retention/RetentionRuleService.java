@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.domain.retention.RetentionUtils.extractInstant;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -233,7 +234,7 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
             var estimate = spanDAO.estimateVelocityForRetention(workspaceId, cutoffId).block();
             if (estimate == null || estimate.spansPerWeek() == 0) {
                 log.info("Retention velocity estimated for workspace '{}': no data found", workspaceId);
-                return new VelocityEstimation(0L, fallbackCursor);
+                return new VelocityEstimation(0L, null);
             }
 
             // Use the actual oldest span time as cursor start
@@ -304,15 +305,6 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
 
         log.info("Scouting found no data for workspace '{}', no catch-up needed", workspaceId);
         return null;
-    }
-
-    /**
-     * Extract the timestamp from a UUID v7's MSB.
-     */
-    private static Instant extractInstant(UUID uuid) {
-        long msb = uuid.getMostSignificantBits();
-        long epochMilli = msb >>> 16;
-        return Instant.ofEpochMilli(epochMilli);
     }
 
     /**

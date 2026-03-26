@@ -2828,9 +2828,9 @@ public class SpanDAO {
 
     /**
      * Estimate the span velocity (spans/week) for a workspace in the catch-up range.
-     * Also returns the oldest span ID to use as the catch-up cursor start.
+     * Also returns the oldest span timestamp to use as the catch-up cursor start.
      *
-     * @return velocity estimate with oldest span ID, or empty Mono if no data exists
+     * @return velocity estimate with oldest span time, or empty Mono if no data exists
      * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
      */
     public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {

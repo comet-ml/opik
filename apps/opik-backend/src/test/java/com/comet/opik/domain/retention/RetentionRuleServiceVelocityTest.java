@@ -195,17 +195,16 @@ class RetentionRuleServiceVelocityTest {
         }
 
         @Test
-        @DisplayName("Empty workspace returns velocity 0 and fallback cursor")
-        void emptyWorkspaceReturnsZero() {
+        @DisplayName("Empty workspace returns velocity 0 and null cursor (catch-up marked done)")
+        void emptyWorkspaceReturnsZeroAndNullCursor() {
             when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
                     .thenReturn(Mono.just(new VelocityEstimate(0L, null)));
 
             var result = service.estimateVelocity(WORKSPACE_ID, PERIOD, NOW);
 
+            // No data found — velocity 0, null cursor signals catch-up should be marked done
             assertThat(result.velocity()).isZero();
-            Instant cursorTime = extractInstant(result.startCursor());
-            assertThat(cursorTime).isEqualTo(
-                    LocalDate.of(2024, 9, 1).atStartOfDay(ZoneOffset.UTC).toInstant());
+            assertThat(result.startCursor()).isNull();
         }
     }
 

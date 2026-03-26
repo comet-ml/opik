@@ -491,17 +491,22 @@ class RetentionPolicyServiceTest {
         void smallWorkspace_oneShotCatchUp() {
             Instant now = Instant.now();
 
-            // Insert old data (30 days ago — beyond 14d retention + 3d sliding window)
-            Instant oldTime = now.minus(30, ChronoUnit.DAYS);
-            UUID oldTraceId = idGenerator.generateId(oldTime);
-            UUID oldSpanId1 = idGenerator.generateId(oldTime);
-            UUID oldSpanId2 = idGenerator.generateId(oldTime.plusMillis(1));
-            UUID oldSpanId3 = idGenerator.generateId(oldTime.plusMillis(2));
+            // Insert old data (18 days ago — beyond 14d retention + 3d sliding window)
+            // Needs enough spans for non-zero velocity: uniq(id)/weeks >= 1
+            Instant oldTime = now.minus(18, ChronoUnit.DAYS);
+            UUID oldTraceId1 = idGenerator.generateId(oldTime);
+            UUID oldTraceId2 = idGenerator.generateId(oldTime.plusSeconds(1));
 
-            createTestTrace(oldTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
-            createTestSpan(oldSpanId1, oldTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
-            createTestSpan(oldSpanId2, oldTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
-            createTestSpan(oldSpanId3, oldTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
+            createTestTrace(oldTraceId1, WS_SMALL_API_KEY, WS_SMALL_NAME);
+            createTestTrace(oldTraceId2, WS_SMALL_API_KEY, WS_SMALL_NAME);
+            for (int i = 0; i < 5; i++) {
+                createTestSpan(idGenerator.generateId(oldTime.plusMillis(i)), oldTraceId1,
+                        WS_SMALL_API_KEY, WS_SMALL_NAME);
+            }
+            for (int i = 0; i < 5; i++) {
+                createTestSpan(idGenerator.generateId(oldTime.plusSeconds(1).plusMillis(i)), oldTraceId2,
+                        WS_SMALL_API_KEY, WS_SMALL_NAME);
+            }
 
             // Insert recent data (5 days ago — within retention period, should survive)
             Instant recentTime = now.minus(5, ChronoUnit.DAYS);
@@ -511,8 +516,8 @@ class RetentionPolicyServiceTest {
             createTestTrace(recentTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
             createTestSpan(recentSpanId, recentTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
 
-            waitForRows("traces", WS_SMALL, 2);
-            waitForRows("spans", WS_SMALL, 4);
+            waitForRows("traces", WS_SMALL, 3);
+            waitForRows("spans", WS_SMALL, 11);
 
             // Create rule with applyToPast=true — velocity estimation runs during creation
             var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.SHORT_14D)
@@ -530,7 +535,8 @@ class RetentionPolicyServiceTest {
             assertThat(countRows("traces", WS_SMALL)).isEqualTo(1);
             assertThat(countRows("spans", WS_SMALL)).isEqualTo(1);
             assertThat(countRowsById("traces", recentTraceId)).isEqualTo(1);
-            assertThat(countRowsById("traces", oldTraceId)).isZero();
+            assertThat(countRowsById("traces", oldTraceId1)).isZero();
+            assertThat(countRowsById("traces", oldTraceId2)).isZero();
 
             // Catch-up should be marked done
             var updated = retentionClient.get(created.id(), WS_SMALL_API_KEY, WS_SMALL_NAME, 200);

@@ -21,11 +21,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.domain.retention.RetentionUtils.compareUUID;
+import static com.comet.opik.domain.retention.RetentionUtils.extractInstant;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -33,8 +36,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * Progressive catch-up service for historical data deletion.
  * Processes rules with applyToPast=true that have data older than the sliding window.
  *
- * Priority order: small workspaces first (batch one-shot), then medium (7-day chunks),
- * then large (2-day chunks). Only one tier is processed per cycle.
+ * All three tiers run independently per cycle (no starvation):
+ * - Small workspaces: batch one-shot delete
+ * - Medium workspaces: 7-day chunks (configurable)
+ * - Large workspaces: 1-day chunks (configurable)
  */
 @Slf4j
 @Singleton
@@ -61,24 +66,25 @@ public class RetentionCatchUpService {
     }
 
     /**
-     * Execute one catch-up cycle. Processes rules in priority order:
-     * small → medium → large. Only one tier per cycle.
+     * Execute one catch-up cycle. All three tiers run independently per cycle
+     * to prevent starvation of medium/large workspaces.
      */
-    public Mono<Void> executeCatchUpCycle(Instant now) {
+    public Mono<Void> executeCatchUpCycle(@NonNull Instant now) {
         var catchUpConfig = config.getCatchUp();
         if (!catchUpConfig.isEnabled()) {
+            log.info("Catch-up cycle skipped: catch-up is disabled");
             return Mono.empty();
         }
 
-        return processSmall(catchUpConfig, now)
-                .switchIfEmpty(processMedium(catchUpConfig, now))
-                .switchIfEmpty(processLarge(catchUpConfig, now))
+        return Flux.concat(
+                processSmall(catchUpConfig, now),
+                processMedium(catchUpConfig, now),
+                processLarge(catchUpConfig, now))
                 .then();
     }
 
     /**
      * Process small workspaces: batch up to N rules, one-shot delete entire catch-up range.
-     * Returns non-empty Mono if any small rules were found and processed.
      */
     private Mono<Long> processSmall(CatchUpConfig catchUpConfig, Instant now) {
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
@@ -136,11 +142,10 @@ public class RetentionCatchUpService {
     }
 
     /**
-     * One-shot delete for small workspaces. Groups rules by retention period to batch DELETE.
-     * Deletes from catch_up_cursor to cutoff-slidingWindowDays in a single pass.
+     * One-shot delete for small workspaces. Uses per-workspace cursors via deleteForRetentionBounded
+     * so each workspace only scans from its own cursor position, not the group minimum.
      */
     private Mono<Long> deleteSmallBatch(List<RetentionRule> rules, Instant now) {
-        // Group by retention period to compute cutoffs
         var grouped = rules.stream().collect(Collectors.groupingBy(RetentionRule::retention));
 
         return Flux.fromIterable(grouped.entrySet())
@@ -148,23 +153,32 @@ public class RetentionCatchUpService {
                     RetentionPeriod period = entry.getKey();
                     List<RetentionRule> rulesForPeriod = entry.getValue();
 
-                    // cutoffId = where catch-up ends (sliding window boundary)
-                    // fromId   = where catch-up starts (oldest cursor across the batch)
-                    UUID cutoffId = computeSlidingWindowLowerBound(period, now);
-                    var workspaceIds = rulesForPeriod.stream().map(RetentionRule::workspaceId).toList();
+                    Instant slidingWindowStart = computeSlidingWindowStart(period, now);
+                    UUID cutoffId = uuidMapper.toLowerBound(slidingWindowStart);
 
-                    UUID fromId = rulesForPeriod.stream()
-                            .map(RetentionRule::catchUpCursor)
-                            .filter(Objects::nonNull)
-                            .min(RetentionCatchUpService::compareUUID)
-                            .orElse(cutoffId); // no valid cursors → empty range, no-op
+                    // Build per-workspace bounds from each rule's own cursor
+                    Map<String, UUID> workspaceMinIds = new HashMap<>();
+                    UUID globalLowerBound = cutoffId; // track the overall minimum for experiment subquery
+                    for (var rule : rulesForPeriod) {
+                        UUID cursor = rule.catchUpCursor();
+                        if (cursor != null) {
+                            workspaceMinIds.put(rule.workspaceId(), cursor);
+                            if (compareUUID(cursor, globalLowerBound) < 0) {
+                                globalLowerBound = cursor;
+                            }
+                        }
+                    }
 
-                    log.info("Catch-up small batch: '{}' workspaces, period='{}', range=['{}', '{}')",
-                            workspaceIds.size(), period, fromId, cutoffId);
+                    if (workspaceMinIds.isEmpty()) {
+                        return Flux.empty();
+                    }
+
+                    log.info("Catch-up small batch: '{}' workspaces, period='{}'",
+                            workspaceMinIds.size(), period);
 
                     return Flux.concat(
-                            spanDAO.deleteForRetention(workspaceIds, cutoffId, fromId),
-                            traceDAO.deleteForRetention(workspaceIds, cutoffId, fromId));
+                            spanDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, globalLowerBound),
+                            traceDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, globalLowerBound));
                 })
                 .reduce(0L, Long::sum)
                 .flatMap(totalDeleted -> markBatchDoneAsync(rules)
@@ -193,19 +207,20 @@ public class RetentionCatchUpService {
             return Mono.just(0L);
         }
 
-        UUID upperBound = computeSlidingWindowLowerBound(rule.retention(), now);
+        // Compute the boundary once (not per-rule in a loop)
+        Instant slidingWindowStart = computeSlidingWindowStart(rule.retention(), now);
+        UUID upperBound = uuidMapper.toLowerBound(slidingWindowStart);
 
-        // Cursor already past the boundary (e.g., retention period shortened) — just mark done
+        // Cursor already past the boundary — just mark done
         if (compareUUID(cursor, upperBound) >= 0) {
             return markDoneAsync(rule.id()).thenReturn(0L);
         }
 
-        // Advance cursor by chunkDays, but don't exceed the sliding window boundary
+        // Advance cursor by chunkDays, preserving the Instant to avoid UUID round-trip precision loss
         Instant cursorInstant = extractInstant(cursor);
         Instant chunkEndInstant = cursorInstant.plus(chunkDays, ChronoUnit.DAYS);
-        Instant upperBoundInstant = extractInstant(upperBound);
 
-        boolean isLastChunk = !chunkEndInstant.isBefore(upperBoundInstant);
+        boolean isLastChunk = !chunkEndInstant.isBefore(slidingWindowStart);
         UUID chunkEnd = isLastChunk ? upperBound : uuidMapper.toLowerBound(chunkEndInstant);
 
         log.info("Catch-up chunk: workspace='{}', range=['{}', '{}'), lastChunk='{}'",
@@ -228,33 +243,16 @@ public class RetentionCatchUpService {
     }
 
     /**
-     * Compute the UUID v7 lower bound of the sliding window for a retention period.
+     * Compute the start of the sliding window for a retention period.
      * This is where the regular retention job starts, so catch-up stops here.
-     * = cutoff - slidingWindowDays = now - retentionDays - slidingWindowDays
+     * = now - retentionDays - slidingWindowDays, normalized to start-of-day UTC.
      */
-    private UUID computeSlidingWindowLowerBound(RetentionPeriod period, Instant now) {
+    private Instant computeSlidingWindowStart(RetentionPeriod period, Instant now) {
         Instant cutoff = LocalDate.ofInstant(now, ZoneOffset.UTC)
                 .minusDays(period.getDays())
                 .atStartOfDay(ZoneOffset.UTC)
                 .toInstant();
-        Instant slidingWindowStart = cutoff.minus(config.getSlidingWindowDays(), ChronoUnit.DAYS);
-        return uuidMapper.toLowerBound(slidingWindowStart);
-    }
-
-    /**
-     * Extract the timestamp from a UUID v7's MSB.
-     */
-    private static Instant extractInstant(UUID uuid) {
-        long msb = uuid.getMostSignificantBits();
-        long epochMilli = msb >>> 16; // top 48 bits are the timestamp
-        return Instant.ofEpochMilli(epochMilli);
-    }
-
-    /**
-     * Compare two UUID v7 values by their MSB (timestamp portion).
-     */
-    static int compareUUID(UUID a, UUID b) {
-        return Long.compareUnsigned(a.getMostSignificantBits(), b.getMostSignificantBits());
+        return cutoff.minus(config.getSlidingWindowDays(), ChronoUnit.DAYS);
     }
 
     private Mono<Void> markDoneAsync(UUID ruleId) {

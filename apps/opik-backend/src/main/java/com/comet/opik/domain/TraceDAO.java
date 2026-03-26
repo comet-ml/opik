@@ -1792,7 +1792,7 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SCOUT_FIRST_DAY_WITH_DATA = """
-            SELECT toDate(UUIDv7ToDateTime(toUUID(id))) AS day, count() AS cnt
+            SELECT toDate(UUIDv7ToDateTime(toUUID(id))) AS day
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id >= :range_start AND id \\< :range_end
