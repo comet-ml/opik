@@ -51,7 +51,7 @@ public class AlertResourceClient {
      * so Jersey serializes the ObjectNode directly (not as a quoted JSON string).
      */
     private ObjectNode toRequestNode(Alert alert) {
-        var node = (ObjectNode) JsonUtils.getMapper().valueToTree(alert);
+        var node = (ObjectNode) JsonUtils.valueToTree(alert);
         if (alert.webhook() != null && alert.webhook().secretToken() != null) {
             var webhookNode = node.get("webhook");
             if (webhookNode instanceof ObjectNode webhookObjectNode) {

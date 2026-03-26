@@ -96,9 +96,9 @@ const SidebarWorkspaceSelector: React.FC = () => {
 
       <DropdownMenuContent
         className="w-[240px] p-1"
-        side="right"
-        align="end"
-        sideOffset={8}
+        side="top"
+        align="start"
+        sideOffset={4}
       >
         <div className="flex items-center justify-between gap-2 px-3 py-2">
           <TooltipWrapper content={currentOrganization.name}>

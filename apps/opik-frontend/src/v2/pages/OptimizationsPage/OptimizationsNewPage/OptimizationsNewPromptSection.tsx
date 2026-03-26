@@ -20,6 +20,7 @@ import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPrompt
 import OptimizationModelSelect from "@/v2/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
 import OptimizationTemperatureConfig from "@/v2/pages-shared/optimizations/OptimizationConfigForm/OptimizationTemperatureConfig";
 import { OPTIMIZATION_MESSAGE_TYPE_OPTIONS } from "@/constants/optimizations";
+import { useActiveProjectId } from "@/store/AppStore";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -47,6 +48,7 @@ const OptimizationsNewPromptSection: React.FC<
   onModelChange,
   onModelConfigChange,
 }) => {
+  const activeProjectId = useActiveProjectId();
   const [selectedChatPromptId, setSelectedChatPromptId] = useState<
     string | undefined
   >(undefined);
@@ -115,6 +117,7 @@ const OptimizationsNewPromptSection: React.FC<
             >
               <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
                 <PromptsSelectBox
+                  projectId={activeProjectId!}
                   value={selectedChatPromptId}
                   onValueChange={(value) =>
                     value && handleImportChatPrompt(value)
