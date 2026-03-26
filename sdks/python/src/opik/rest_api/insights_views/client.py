@@ -10,28 +10,28 @@ from ..types.dashboard_update_public_type import DashboardUpdatePublicType
 from ..types.dashboard_write_type import DashboardWriteType
 from ..types.json_node_public import JsonNodePublic
 from ..types.json_node_write import JsonNodeWrite
-from .raw_client import AsyncRawDashboardsClient, RawDashboardsClient
+from .raw_client import AsyncRawInsightsViewsClient, RawInsightsViewsClient
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
 
 
-class DashboardsClient:
+class InsightsViewsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
-        self._raw_client = RawDashboardsClient(client_wrapper=client_wrapper)
+        self._raw_client = RawInsightsViewsClient(client_wrapper=client_wrapper)
 
     @property
-    def with_raw_response(self) -> RawDashboardsClient:
+    def with_raw_response(self) -> RawInsightsViewsClient:
         """
         Retrieves a raw implementation of this client that returns raw responses.
 
         Returns
         -------
-        RawDashboardsClient
+        RawInsightsViewsClient
         """
         return self._raw_client
 
-    def find_dashboards(
+    def find_insights_views(
         self,
         *,
         page: typing.Optional[int] = None,
@@ -43,7 +43,7 @@ class DashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPagePublic:
         """
-        Find dashboards in a workspace
+        Find insights views in a workspace
 
         Parameters
         ----------
@@ -65,15 +65,15 @@ class DashboardsClient:
         Returns
         -------
         DashboardPagePublic
-            Dashboard page
+            Insights view page
 
         Examples
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.dashboards.find_dashboards()
+        client.insights_views.find_insights_views()
         """
-        _response = self._raw_client.find_dashboards(
+        _response = self._raw_client.find_insights_views(
             page=page,
             size=size,
             name=name,
@@ -84,7 +84,7 @@ class DashboardsClient:
         )
         return _response.data
 
-    def create_dashboard(
+    def create_insights_view(
         self,
         *,
         name: str,
@@ -96,7 +96,7 @@ class DashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPublic:
         """
-        Create a new dashboard in a workspace
+        Create a new insights view in a workspace
 
         Parameters
         ----------
@@ -126,10 +126,10 @@ class DashboardsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.dashboards.create_dashboard(name='name', config={'key': 'value'
+        client.insights_views.create_insights_view(name='name', config={'key': 'value'
         }, )
         """
-        _response = self._raw_client.create_dashboard(
+        _response = self._raw_client.create_insights_view(
             name=name,
             config=config,
             project_id=project_id,
@@ -140,15 +140,15 @@ class DashboardsClient:
         )
         return _response.data
 
-    def get_dashboard_by_id(
-        self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    def get_insights_view_by_id(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> DashboardPublic:
         """
-        Get dashboard by id
+        Get insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -156,24 +156,26 @@ class DashboardsClient:
         Returns
         -------
         DashboardPublic
-            Dashboard resource
+            Insights view resource
 
         Examples
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.dashboards.get_dashboard_by_id(dashboard_id='dashboardId', )
+        client.insights_views.get_insights_view_by_id(insights_view_id='insightsViewId', )
         """
-        _response = self._raw_client.get_dashboard_by_id(dashboard_id, request_options=request_options)
+        _response = self._raw_client.get_insights_view_by_id(insights_view_id, request_options=request_options)
         return _response.data
 
-    def delete_dashboard(self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_insights_view(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
-        Delete dashboard by id
+        Delete insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -186,14 +188,14 @@ class DashboardsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.dashboards.delete_dashboard(dashboard_id='dashboardId', )
+        client.insights_views.delete_insights_view(insights_view_id='insightsViewId', )
         """
-        _response = self._raw_client.delete_dashboard(dashboard_id, request_options=request_options)
+        _response = self._raw_client.delete_insights_view(insights_view_id, request_options=request_options)
         return _response.data
 
-    def update_dashboard(
+    def update_insights_view(
         self,
-        dashboard_id: str,
+        insights_view_id: str,
         *,
         name: typing.Optional[str] = OMIT,
         type: typing.Optional[DashboardUpdatePublicType] = OMIT,
@@ -202,11 +204,11 @@ class DashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPublic:
         """
-        Update dashboard by id. Partial updates are supported - only provided fields will be updated.
+        Update insights view by id. Partial updates are supported - only provided fields will be updated.
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         name : typing.Optional[str]
 
@@ -222,24 +224,29 @@ class DashboardsClient:
         Returns
         -------
         DashboardPublic
-            Updated dashboard
+            Updated insights view
 
         Examples
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.dashboards.update_dashboard(dashboard_id='dashboardId', )
+        client.insights_views.update_insights_view(insights_view_id='insightsViewId', )
         """
-        _response = self._raw_client.update_dashboard(
-            dashboard_id, name=name, type=type, description=description, config=config, request_options=request_options
+        _response = self._raw_client.update_insights_view(
+            insights_view_id,
+            name=name,
+            type=type,
+            description=description,
+            config=config,
+            request_options=request_options,
         )
         return _response.data
 
-    def delete_dashboards_batch(
+    def delete_insights_views_batch(
         self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
-        Delete dashboards batch
+        Delete insights views batch
 
         Parameters
         ----------
@@ -256,28 +263,28 @@ class DashboardsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.dashboards.delete_dashboards_batch(ids=['ids'], )
+        client.insights_views.delete_insights_views_batch(ids=['ids'], )
         """
-        _response = self._raw_client.delete_dashboards_batch(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_insights_views_batch(ids=ids, request_options=request_options)
         return _response.data
 
 
-class AsyncDashboardsClient:
+class AsyncInsightsViewsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
-        self._raw_client = AsyncRawDashboardsClient(client_wrapper=client_wrapper)
+        self._raw_client = AsyncRawInsightsViewsClient(client_wrapper=client_wrapper)
 
     @property
-    def with_raw_response(self) -> AsyncRawDashboardsClient:
+    def with_raw_response(self) -> AsyncRawInsightsViewsClient:
         """
         Retrieves a raw implementation of this client that returns raw responses.
 
         Returns
         -------
-        AsyncRawDashboardsClient
+        AsyncRawInsightsViewsClient
         """
         return self._raw_client
 
-    async def find_dashboards(
+    async def find_insights_views(
         self,
         *,
         page: typing.Optional[int] = None,
@@ -289,7 +296,7 @@ class AsyncDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPagePublic:
         """
-        Find dashboards in a workspace
+        Find insights views in a workspace
 
         Parameters
         ----------
@@ -311,7 +318,7 @@ class AsyncDashboardsClient:
         Returns
         -------
         DashboardPagePublic
-            Dashboard page
+            Insights view page
 
         Examples
         --------
@@ -319,10 +326,10 @@ class AsyncDashboardsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.dashboards.find_dashboards()
+            await client.insights_views.find_insights_views()
         asyncio.run(main())
         """
-        _response = await self._raw_client.find_dashboards(
+        _response = await self._raw_client.find_insights_views(
             page=page,
             size=size,
             name=name,
@@ -333,7 +340,7 @@ class AsyncDashboardsClient:
         )
         return _response.data
 
-    async def create_dashboard(
+    async def create_insights_view(
         self,
         *,
         name: str,
@@ -345,7 +352,7 @@ class AsyncDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPublic:
         """
-        Create a new dashboard in a workspace
+        Create a new insights view in a workspace
 
         Parameters
         ----------
@@ -377,11 +384,11 @@ class AsyncDashboardsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.dashboards.create_dashboard(name='name', config={'key': 'value'
+            await client.insights_views.create_insights_view(name='name', config={'key': 'value'
             }, )
         asyncio.run(main())
         """
-        _response = await self._raw_client.create_dashboard(
+        _response = await self._raw_client.create_insights_view(
             name=name,
             config=config,
             project_id=project_id,
@@ -392,15 +399,15 @@ class AsyncDashboardsClient:
         )
         return _response.data
 
-    async def get_dashboard_by_id(
-        self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    async def get_insights_view_by_id(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> DashboardPublic:
         """
-        Get dashboard by id
+        Get insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -408,7 +415,7 @@ class AsyncDashboardsClient:
         Returns
         -------
         DashboardPublic
-            Dashboard resource
+            Insights view resource
 
         Examples
         --------
@@ -416,21 +423,21 @@ class AsyncDashboardsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.dashboards.get_dashboard_by_id(dashboard_id='dashboardId', )
+            await client.insights_views.get_insights_view_by_id(insights_view_id='insightsViewId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_dashboard_by_id(dashboard_id, request_options=request_options)
+        _response = await self._raw_client.get_insights_view_by_id(insights_view_id, request_options=request_options)
         return _response.data
 
-    async def delete_dashboard(
-        self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    async def delete_insights_view(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
-        Delete dashboard by id
+        Delete insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -445,15 +452,15 @@ class AsyncDashboardsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.dashboards.delete_dashboard(dashboard_id='dashboardId', )
+            await client.insights_views.delete_insights_view(insights_view_id='insightsViewId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_dashboard(dashboard_id, request_options=request_options)
+        _response = await self._raw_client.delete_insights_view(insights_view_id, request_options=request_options)
         return _response.data
 
-    async def update_dashboard(
+    async def update_insights_view(
         self,
-        dashboard_id: str,
+        insights_view_id: str,
         *,
         name: typing.Optional[str] = OMIT,
         type: typing.Optional[DashboardUpdatePublicType] = OMIT,
@@ -462,11 +469,11 @@ class AsyncDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPublic:
         """
-        Update dashboard by id. Partial updates are supported - only provided fields will be updated.
+        Update insights view by id. Partial updates are supported - only provided fields will be updated.
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         name : typing.Optional[str]
 
@@ -482,7 +489,7 @@ class AsyncDashboardsClient:
         Returns
         -------
         DashboardPublic
-            Updated dashboard
+            Updated insights view
 
         Examples
         --------
@@ -490,19 +497,24 @@ class AsyncDashboardsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.dashboards.update_dashboard(dashboard_id='dashboardId', )
+            await client.insights_views.update_insights_view(insights_view_id='insightsViewId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.update_dashboard(
-            dashboard_id, name=name, type=type, description=description, config=config, request_options=request_options
+        _response = await self._raw_client.update_insights_view(
+            insights_view_id,
+            name=name,
+            type=type,
+            description=description,
+            config=config,
+            request_options=request_options,
         )
         return _response.data
 
-    async def delete_dashboards_batch(
+    async def delete_insights_views_batch(
         self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
-        Delete dashboards batch
+        Delete insights views batch
 
         Parameters
         ----------
@@ -521,8 +533,8 @@ class AsyncDashboardsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.dashboards.delete_dashboards_batch(ids=['ids'], )
+            await client.insights_views.delete_insights_views_batch(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_dashboards_batch(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_insights_views_batch(ids=ids, request_options=request_options)
         return _response.data

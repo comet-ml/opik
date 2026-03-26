@@ -10,41 +10,41 @@ import * as errors from "../../../../errors/index.js";
 import * as serializers from "../../../../serialization/index.js";
 import * as OpikApi from "../../../index.js";
 
-export declare namespace DashboardsClient {
+export declare namespace InsightsViewsClient {
     export type Options = BaseClientOptions;
 
     export interface RequestOptions extends BaseRequestOptions {}
 }
 
 /**
- * Workspace Dashboard resources
+ * Insights View resources
  */
-export class DashboardsClient {
-    protected readonly _options: NormalizedClientOptions<DashboardsClient.Options>;
+export class InsightsViewsClient {
+    protected readonly _options: NormalizedClientOptions<InsightsViewsClient.Options>;
 
-    constructor(options: DashboardsClient.Options = {}) {
+    constructor(options: InsightsViewsClient.Options = {}) {
         this._options = normalizeClientOptions(options);
     }
 
     /**
-     * Find dashboards in a workspace
+     * Find insights views in a workspace
      *
-     * @param {OpikApi.FindDashboardsRequest} request
-     * @param {DashboardsClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {OpikApi.FindInsightsViewsRequest} request
+     * @param {InsightsViewsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.dashboards.findDashboards()
+     *     await client.insightsViews.findInsightsViews()
      */
-    public findDashboards(
-        request: OpikApi.FindDashboardsRequest = {},
-        requestOptions?: DashboardsClient.RequestOptions,
+    public findInsightsViews(
+        request: OpikApi.FindInsightsViewsRequest = {},
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.DashboardPagePublic> {
-        return core.HttpResponsePromise.fromPromise(this.__findDashboards(request, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__findInsightsViews(request, requestOptions));
     }
 
-    private async __findDashboards(
-        request: OpikApi.FindDashboardsRequest = {},
-        requestOptions?: DashboardsClient.RequestOptions,
+    private async __findInsightsViews(
+        request: OpikApi.FindInsightsViewsRequest = {},
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DashboardPagePublic>> {
         const { page, size, name, projectId, sorting, filters } = request;
         const _queryParams: Record<string, unknown> = {
@@ -67,7 +67,7 @@ export class DashboardsClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                "v1/private/dashboards",
+                "v1/private/insights-views",
             ),
             method: "GET",
             headers: _headers,
@@ -100,33 +100,33 @@ export class DashboardsClient {
             });
         }
 
-        return handleNonStatusCodeError(_response.error, _response.rawResponse, "GET", "/v1/private/dashboards");
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "GET", "/v1/private/insights-views");
     }
 
     /**
-     * Create a new dashboard in a workspace
+     * Create a new insights view in a workspace
      *
      * @param {OpikApi.DashboardWrite} request
-     * @param {DashboardsClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {InsightsViewsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.dashboards.createDashboard({
+     *     await client.insightsViews.createInsightsView({
      *         name: "name",
      *         config: {
      *             "key": "value"
      *         }
      *     })
      */
-    public createDashboard(
+    public createInsightsView(
         request: OpikApi.DashboardWrite,
-        requestOptions?: DashboardsClient.RequestOptions,
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.DashboardPublic> {
-        return core.HttpResponsePromise.fromPromise(this.__createDashboard(request, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__createInsightsView(request, requestOptions));
     }
 
-    private async __createDashboard(
+    private async __createInsightsView(
         request: OpikApi.DashboardWrite,
-        requestOptions?: DashboardsClient.RequestOptions,
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DashboardPublic>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -140,7 +140,7 @@ export class DashboardsClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                "v1/private/dashboards",
+                "v1/private/insights-views",
             ),
             method: "POST",
             headers: _headers,
@@ -179,33 +179,35 @@ export class DashboardsClient {
             });
         }
 
-        return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/v1/private/dashboards");
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/v1/private/insights-views");
     }
 
     /**
-     * Get dashboard by id
+     * Get insights view by id
      *
-     * @param {string} dashboardId
-     * @param {OpikApi.GetDashboardByIdRequest} request
-     * @param {DashboardsClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {string} insightsViewId
+     * @param {OpikApi.GetInsightsViewByIdRequest} request
+     * @param {InsightsViewsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.dashboards.getDashboardById("dashboardId")
+     *     await client.insightsViews.getInsightsViewById("insightsViewId")
      */
-    public getDashboardById(
-        dashboardId: string,
-        request: OpikApi.GetDashboardByIdRequest = {},
-        requestOptions?: DashboardsClient.RequestOptions,
+    public getInsightsViewById(
+        insightsViewId: string,
+        request: OpikApi.GetInsightsViewByIdRequest = {},
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.DashboardPublic> {
-        return core.HttpResponsePromise.fromPromise(this.__getDashboardById(dashboardId, request, requestOptions));
+        return core.HttpResponsePromise.fromPromise(
+            this.__getInsightsViewById(insightsViewId, request, requestOptions),
+        );
     }
 
-    private async __getDashboardById(
-        dashboardId: string,
-        _request: OpikApi.GetDashboardByIdRequest = {},
-        requestOptions?: DashboardsClient.RequestOptions,
+    private async __getInsightsViewById(
+        insightsViewId: string,
+        _request: OpikApi.GetInsightsViewByIdRequest = {},
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DashboardPublic>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -219,7 +221,7 @@ export class DashboardsClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                `v1/private/dashboards/${core.url.encodePathParam(dashboardId)}`,
+                `v1/private/insights-views/${core.url.encodePathParam(insightsViewId)}`,
             ),
             method: "GET",
             headers: _headers,
@@ -261,32 +263,32 @@ export class DashboardsClient {
             _response.error,
             _response.rawResponse,
             "GET",
-            "/v1/private/dashboards/{dashboardId}",
+            "/v1/private/insights-views/{insightsViewId}",
         );
     }
 
     /**
-     * Delete dashboard by id
+     * Delete insights view by id
      *
-     * @param {string} dashboardId
-     * @param {OpikApi.DeleteDashboardRequest} request
-     * @param {DashboardsClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {string} insightsViewId
+     * @param {OpikApi.DeleteInsightsViewRequest} request
+     * @param {InsightsViewsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.dashboards.deleteDashboard("dashboardId")
+     *     await client.insightsViews.deleteInsightsView("insightsViewId")
      */
-    public deleteDashboard(
-        dashboardId: string,
-        request: OpikApi.DeleteDashboardRequest = {},
-        requestOptions?: DashboardsClient.RequestOptions,
+    public deleteInsightsView(
+        insightsViewId: string,
+        request: OpikApi.DeleteInsightsViewRequest = {},
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): core.HttpResponsePromise<void> {
-        return core.HttpResponsePromise.fromPromise(this.__deleteDashboard(dashboardId, request, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__deleteInsightsView(insightsViewId, request, requestOptions));
     }
 
-    private async __deleteDashboard(
-        dashboardId: string,
-        _request: OpikApi.DeleteDashboardRequest = {},
-        requestOptions?: DashboardsClient.RequestOptions,
+    private async __deleteInsightsView(
+        insightsViewId: string,
+        _request: OpikApi.DeleteInsightsViewRequest = {},
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -300,7 +302,7 @@ export class DashboardsClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                `v1/private/dashboards/${core.url.encodePathParam(dashboardId)}`,
+                `v1/private/insights-views/${core.url.encodePathParam(insightsViewId)}`,
             ),
             method: "DELETE",
             headers: _headers,
@@ -328,37 +330,37 @@ export class DashboardsClient {
             _response.error,
             _response.rawResponse,
             "DELETE",
-            "/v1/private/dashboards/{dashboardId}",
+            "/v1/private/insights-views/{insightsViewId}",
         );
     }
 
     /**
-     * Update dashboard by id. Partial updates are supported - only provided fields will be updated.
+     * Update insights view by id. Partial updates are supported - only provided fields will be updated.
      *
-     * @param {string} dashboardId
-     * @param {OpikApi.UpdateDashboardRequest} request
-     * @param {DashboardsClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {string} insightsViewId
+     * @param {OpikApi.UpdateInsightsViewRequest} request
+     * @param {InsightsViewsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      * @throws {@link OpikApi.ConflictError}
      *
      * @example
-     *     await client.dashboards.updateDashboard("dashboardId", {
+     *     await client.insightsViews.updateInsightsView("insightsViewId", {
      *         body: {}
      *     })
      */
-    public updateDashboard(
-        dashboardId: string,
-        request: OpikApi.UpdateDashboardRequest,
-        requestOptions?: DashboardsClient.RequestOptions,
+    public updateInsightsView(
+        insightsViewId: string,
+        request: OpikApi.UpdateInsightsViewRequest,
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.DashboardPublic> {
-        return core.HttpResponsePromise.fromPromise(this.__updateDashboard(dashboardId, request, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__updateInsightsView(insightsViewId, request, requestOptions));
     }
 
-    private async __updateDashboard(
-        dashboardId: string,
-        request: OpikApi.UpdateDashboardRequest,
-        requestOptions?: DashboardsClient.RequestOptions,
+    private async __updateInsightsView(
+        insightsViewId: string,
+        request: OpikApi.UpdateInsightsViewRequest,
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DashboardPublic>> {
         const { body: _body } = request;
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
@@ -373,7 +375,7 @@ export class DashboardsClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                `v1/private/dashboards/${core.url.encodePathParam(dashboardId)}`,
+                `v1/private/insights-views/${core.url.encodePathParam(insightsViewId)}`,
             ),
             method: "PATCH",
             headers: _headers,
@@ -423,31 +425,31 @@ export class DashboardsClient {
             _response.error,
             _response.rawResponse,
             "PATCH",
-            "/v1/private/dashboards/{dashboardId}",
+            "/v1/private/insights-views/{insightsViewId}",
         );
     }
 
     /**
-     * Delete dashboards batch
+     * Delete insights views batch
      *
      * @param {OpikApi.BatchDelete} request
-     * @param {DashboardsClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {InsightsViewsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.dashboards.deleteDashboardsBatch({
+     *     await client.insightsViews.deleteInsightsViewsBatch({
      *         ids: ["ids"]
      *     })
      */
-    public deleteDashboardsBatch(
+    public deleteInsightsViewsBatch(
         request: OpikApi.BatchDelete,
-        requestOptions?: DashboardsClient.RequestOptions,
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): core.HttpResponsePromise<void> {
-        return core.HttpResponsePromise.fromPromise(this.__deleteDashboardsBatch(request, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__deleteInsightsViewsBatch(request, requestOptions));
     }
 
-    private async __deleteDashboardsBatch(
+    private async __deleteInsightsViewsBatch(
         request: OpikApi.BatchDelete,
-        requestOptions?: DashboardsClient.RequestOptions,
+        requestOptions?: InsightsViewsClient.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -461,7 +463,7 @@ export class DashboardsClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                "v1/private/dashboards/delete-batch",
+                "v1/private/insights-views/delete-batch",
             ),
             method: "POST",
             headers: _headers,
@@ -495,7 +497,7 @@ export class DashboardsClient {
             _response.error,
             _response.rawResponse,
             "POST",
-            "/v1/private/dashboards/delete-batch",
+            "/v1/private/insights-views/delete-batch",
         );
     }
 }
