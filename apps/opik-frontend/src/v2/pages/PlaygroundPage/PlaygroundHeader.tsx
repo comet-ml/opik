@@ -236,6 +236,7 @@ const PlaygroundHeader = ({
       experimentNamePrefix: string;
       filters: Filters;
     }) => {
+      resetOutputMap();
       if (params.versionId) {
         setDatasetVersionKey(`${params.datasetId}::${params.versionId}`);
         onChangeDatasetId(`${params.datasetId}::${params.versionId}`);
@@ -249,6 +250,7 @@ const PlaygroundHeader = ({
       setExperimentNamePrefix(params.experimentNamePrefix);
     },
     [
+      resetOutputMap,
       setDatasetVersionKey,
       setLocalStorageDatasetId,
       onChangeDatasetId,
