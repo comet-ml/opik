@@ -658,5 +658,15 @@
       "severity": "info",
       "name": "no-orphans"
     }
+  },
+  {
+    "type": "dependency",
+    "from": "src/v2/layout/PageLayout/PageLayout.tsx",
+    "to": "src/plugins/comet/AssistantSidebar.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-project-importing-plugins"
+    },
+    "comment": "TODO: move fallback loading into PluginsStore in next iteration"
   }
 ]
