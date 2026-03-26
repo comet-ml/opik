@@ -509,6 +509,7 @@ component:
       # Child frames/workers
       child-src:
         - "'self'"
+        - https://cdn.comet.com
       # Form submission targets
       form-action:
         - "'self'"

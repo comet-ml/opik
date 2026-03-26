@@ -7,12 +7,15 @@ import com.fasterxml.jackson.databind.SerializerProvider;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.util.Objects;
 
 @Slf4j
 public class MaskedSecretTokenSerializer extends JsonSerializer<String> {
 
     @Override
     public void serialize(String value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        Objects.requireNonNull(gen, "gen must not be null");
+
         if (value == null) {
             gen.writeNull();
             return;
@@ -20,8 +23,8 @@ public class MaskedSecretTokenSerializer extends JsonSerializer<String> {
 
         try {
             gen.writeString(EncryptionUtils.maskApiKey(EncryptionUtils.decrypt(value)));
-        } catch (Exception e) {
-            log.debug("Failed to decrypt secret token, falling back to masked raw value", e);
+        } catch (SecurityException e) {
+            log.debug("Failed to decrypt API key for masking, returning masked value directly.", e);
             gen.writeString(EncryptionUtils.maskApiKey(value));
         }
     }

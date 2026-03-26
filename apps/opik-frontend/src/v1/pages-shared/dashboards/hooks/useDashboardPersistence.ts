@@ -4,8 +4,13 @@ import { debounce } from "lodash";
 import { useDashboardStore } from "@/store/DashboardStore";
 import useDashboardById from "@/api/dashboards/useDashboardById";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
-import { keepaliveSaveDashboard } from "@/api/dashboards/dashboardKeepaliveSave";
-import { Dashboard, DashboardState } from "@/types/dashboard";
+import {
+  keepaliveSaveDashboard,
+  keepaliveSaveInsightsView,
+} from "@/api/dashboards/dashboardKeepaliveSave";
+import useInsightsViewById from "@/api/insights-views/useInsightsViewById";
+import useInsightsViewUpdateMutation from "@/api/insights-views/useInsightsViewUpdateMutation";
+import { Dashboard, DASHBOARD_SCOPE, DashboardState } from "@/types/dashboard";
 import { isDashboardChanged } from "@/lib/dashboard/utils";
 import {
   loadLocal,
@@ -18,9 +23,35 @@ export type DashboardSaveStatus = "idle" | "saving" | "saved" | "error";
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 const SAVED_STATUS_DISPLAY_MS = 3000;
 
+interface ApiConfig {
+  useByIdHook: typeof useDashboardById;
+  useUpdateMutationHook: typeof useDashboardUpdateMutation;
+  keepaliveSaveFn: typeof keepaliveSaveDashboard;
+}
+
+const DASHBOARD_API_CONFIG: ApiConfig = {
+  useByIdHook: useDashboardById,
+  useUpdateMutationHook: useDashboardUpdateMutation,
+  keepaliveSaveFn: keepaliveSaveDashboard,
+};
+
+const INSIGHTS_API_CONFIG: ApiConfig = {
+  useByIdHook: useInsightsViewById,
+  useUpdateMutationHook: useInsightsViewUpdateMutation,
+  keepaliveSaveFn: keepaliveSaveInsightsView,
+};
+
+const getApiConfig = (scope?: DASHBOARD_SCOPE): ApiConfig => {
+  if (scope === DASHBOARD_SCOPE.INSIGHTS) {
+    return INSIGHTS_API_CONFIG;
+  }
+  return DASHBOARD_API_CONFIG;
+};
+
 interface UseDashboardPersistenceParams {
   dashboardId: string;
   enabled?: boolean;
+  scope?: DASHBOARD_SCOPE;
 }
 
 interface UseDashboardPersistenceReturn {
@@ -33,13 +64,16 @@ interface UseDashboardPersistenceReturn {
 export const useDashboardPersistence = ({
   dashboardId,
   enabled = true,
+  scope,
 }: UseDashboardPersistenceParams): UseDashboardPersistenceReturn => {
-  const { data: dashboard, isPending } = useDashboardById(
+  const apiConfig = getApiConfig(scope);
+
+  const { data: dashboard, isPending } = apiConfig.useByIdHook(
     { dashboardId },
     { enabled },
   );
 
-  const { mutate: syncToServer } = useDashboardUpdateMutation({
+  const { mutate: syncToServer } = apiConfig.useUpdateMutationHook({
     skipDefaultError: true,
   });
 
@@ -93,7 +127,7 @@ export const useDashboardPersistence = ({
   const [saveStatus, setSaveStatus] = useState<DashboardSaveStatus>("idle");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const { mutate: updateDashboard } = useDashboardUpdateMutation({
+  const { mutate: updateDashboard } = apiConfig.useUpdateMutationHook({
     skipDefaultError: true,
     retry: 1,
     retryDelay: AUTOSAVE_DEBOUNCE_MS * 2,
@@ -131,6 +165,8 @@ export const useDashboardPersistence = ({
     [updateDashboard],
   );
 
+  const keepaliveSaveFn = apiConfig.keepaliveSaveFn;
+
   useEffect(() => {
     if (!enabled || !dashboard?.id || !resolvedConfig) return;
 
@@ -166,7 +202,7 @@ export const useDashboardPersistence = ({
       const config = useDashboardStore.getState().getDashboard();
       if (isDashboardChanged(config, lastSavedConfigRef.current)) {
         saveLocal(dashboardId, config);
-        keepaliveSaveDashboard(dashboardId, config);
+        keepaliveSaveFn(dashboardId, config);
       }
     };
 
@@ -186,7 +222,14 @@ export const useDashboardPersistence = ({
       lastSavedConfigRef.current = null;
       clearTimeout(savedTimerRef.current);
     };
-  }, [enabled, dashboard?.id, resolvedConfig, dashboardId, performSave]);
+  }, [
+    enabled,
+    dashboard?.id,
+    resolvedConfig,
+    dashboardId,
+    performSave,
+    keepaliveSaveFn,
+  ]);
 
   return {
     dashboard,

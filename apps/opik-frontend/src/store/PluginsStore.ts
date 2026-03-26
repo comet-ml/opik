@@ -8,7 +8,6 @@ import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevBut
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 
 type PluginStore = {
-  Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
   InviteUsersForm: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
@@ -29,13 +28,13 @@ type PluginStore = {
   AssistantSidebar: React.ComponentType<{
     onWidthChange: (width: number) => void;
   }> | null;
+  UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
 
 const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
 const PLUGIN_NAMES = [
-  "Logo",
   "UserMenu",
   "InviteUsersForm",
   "GetStartedPage",
@@ -50,11 +49,11 @@ const PLUGIN_NAMES = [
   "WorkspaceSelector",
   "SidebarWorkspaceSelector",
   "AssistantSidebar",
+  "UpgradeButton",
   "init",
 ];
 
 const usePluginsStore = create<PluginStore>((set) => ({
-  Logo: null,
   UserMenu: null,
   InviteUsersForm: null,
   GetStartedPage: null,
@@ -69,6 +68,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   WorkspaceSelector: null,
   SidebarWorkspaceSelector: null,
   AssistantSidebar: null,
+  UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

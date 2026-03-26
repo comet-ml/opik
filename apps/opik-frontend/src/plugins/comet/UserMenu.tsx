@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useMatches } from "@tanstack/react-router";
 import copy from "clipboard-copy";
 import {
   Book,
@@ -13,7 +12,6 @@ import {
   Settings2,
   Shield,
   UserPlus,
-  Zap,
 } from "lucide-react";
 
 import { useOpenQuickStartDialog } from "@/hooks/useOpenQuickStartDialog";
@@ -42,11 +40,11 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
-import { ORGANIZATION_PLAN_ENTERPRISE, ORGANIZATION_ROLE_TYPE } from "./types";
+import { ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
-import { buildUrl, isOnPremise, isProduction } from "./utils";
+import { buildUrl } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
@@ -54,15 +52,11 @@ import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const UserMenu = () => {
-  const matches = useMatches();
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const hideUpgradeButton = matches.some(
-    (match) => match.staticData?.hideUpgradeButton,
-  );
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -125,51 +119,16 @@ const UserMenu = () => {
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
-  const isAcademic = organization?.academic;
-
-  const isEnterpriseCustomer =
-    organization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
-
   const isLLMOnlyOrganization =
     organization?.role === ORGANIZATION_ROLE_TYPE.opik;
 
   const renderAvatar = (clickable = false) => {
     return (
-      <Avatar className={cn(clickable ? "cursor-pointer" : "")}>
+      <Avatar className={cn("size-6", clickable && "cursor-pointer")}>
         <AvatarImage src={user.profileImages.small} />
         <AvatarFallback>{user.userName.charAt(0).toUpperCase()}</AvatarFallback>
       </Avatar>
     );
-  };
-
-  const renderUpgradeButton = () => {
-    if (
-      isProduction() &&
-      !isOnPremise() &&
-      isOrganizationAdmin &&
-      !isAcademic &&
-      !isEnterpriseCustomer &&
-      !hideUpgradeButton
-    ) {
-      return (
-        <a
-          href={buildUrl(
-            `organizations/${organization.id}/billing`,
-            workspaceName,
-            "&initialOpenUpgradeCard=true",
-          )}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <Button size="sm" variant="special">
-            <Zap className="mr-1.5 size-3.5 shrink-0" />
-            Upgrade
-          </Button>
-        </a>
-      );
-    }
-
-    return null;
   };
 
   const renderAppSelector = () => {
@@ -180,8 +139,8 @@ const UserMenu = () => {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon">
-            <Grip className="size-4" />
+          <Button variant="ghost" size="icon-2xs">
+            <Grip />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -416,7 +375,6 @@ const UserMenu = () => {
 
   return (
     <div className="flex shrink-0 items-center gap-3">
-      {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
     </div>
