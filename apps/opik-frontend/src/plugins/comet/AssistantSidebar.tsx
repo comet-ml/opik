@@ -31,6 +31,8 @@ function useLatestRef<T>(value: T): React.MutableRefObject<T> {
 interface AssistantManifest {
   js: string;
   css?: string;
+  shell: string;
+  ver: string;
 }
 
 type HostListeners = {
@@ -148,6 +150,8 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
 interface AssistantMeta {
   scriptUrl: string;
   cssUrl?: string;
+  shellUrl: string;
+  version: string;
 }
 
 function useAssistantMeta(): AssistantMeta | null {
@@ -171,6 +175,8 @@ function useAssistantMeta(): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
+        shellUrl: IS_DEV ? "/assistant/shell" : `/assistant/${manifest.shell}`,
+        version: manifest.ver,
       };
     },
     enabled: !!resolvedManifestUrl && !!config?.enabled,
@@ -278,7 +284,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   return (
     <iframe
       ref={setIframeRef}
-      src="/assistant/shell"
+      src={meta.shellUrl}
       className="size-full border-none"
       // Radix's DismissableLayer sets pointer-events:none on the body when a
       // modal dialog is open — this keeps the iframe clickable.
