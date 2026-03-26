@@ -530,6 +530,11 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
+  assistantSidebarEnabled: "false"
+
+# Assistant Sidebar CDN configuration
+assistantSidebar:
+  manifestUrl: "https://cdn.comet.com/ollie/v1/manifest.json"
 
 # Local Runner configuration
 localRunner:
