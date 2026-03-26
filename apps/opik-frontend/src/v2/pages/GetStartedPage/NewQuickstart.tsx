@@ -1,10 +1,10 @@
 import React from "react";
 import { Navigate } from "@tanstack/react-router";
-import AgentOnboardingOverlay from "@/v2/pages-shared/AgentOnboarding/AgentOnboardingOverlay";
+import AgentOnboardingOverlay from "./AgentOnboarding/AgentOnboardingOverlay";
 import {
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
-} from "@/v2/pages-shared/AgentOnboarding/AgentOnboardingContext";
+} from "./AgentOnboarding/AgentOnboardingContext";
 import useLocalStorageState from "use-local-storage-state";
 import useAppStore from "@/store/AppStore";
 

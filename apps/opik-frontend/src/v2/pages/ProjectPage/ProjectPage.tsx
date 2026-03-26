@@ -3,7 +3,7 @@ import last from "lodash/last";
 import { Link, Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import useProjectById from "@/api/projects/useProjectById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
 import Loader from "@/shared/Loader/Loader";
@@ -14,6 +14,8 @@ const ProjectPage = () => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const projectId = useProjectIdFromURL();
   const workspaceName = useActiveWorkspaceName();
+
+  const activeProjectId = useActiveProjectId();
 
   useEffect(() => {
     setActiveProject(workspaceName, projectId);
@@ -33,7 +35,7 @@ const ProjectPage = () => {
     select: (location) => location.pathname,
   });
 
-  if (isPending) {
+  if (isPending || activeProjectId !== projectId) {
     return <Loader />;
   }
 

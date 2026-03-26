@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
+import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardUpdate;
 import com.comet.opik.api.filter.DashboardFilter;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -79,7 +80,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating dashboard with name '{}' in workspace '{}'", dashboard.name(), workspaceId);
 
-        Dashboard savedDashboard = service.create(dashboard);
+        Dashboard savedDashboard = service.create(dashboard, DashboardScope.WORKSPACE);
 
         log.info("Created dashboard with id '{}', name '{}', slug '{}' in workspace '{}'",
                 savedDashboard.id(), savedDashboard.name(), savedDashboard.slug(), workspaceId);
@@ -101,7 +102,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Finding dashboard by id '{}' in workspace '{}'", id, workspaceId);
 
-        Dashboard dashboard = service.findById(id);
+        Dashboard dashboard = service.findById(id, DashboardScope.WORKSPACE);
 
         log.info("Found dashboard by id '{}', name '{}' in workspace '{}'", id, dashboard.name(), workspaceId);
         return Response.ok().entity(dashboard).build();
@@ -128,7 +129,8 @@ public class DashboardsResource {
         log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}', sorting '{}'",
                 workspaceId, page, size, name, sorting);
 
-        DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters);
+        DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters,
+                DashboardScope.WORKSPACE);
 
         log.info("Found '{}' dashboards in workspace '{}'", dashboardPage.total(), workspaceId);
 
@@ -151,7 +153,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Updating dashboard by id '{}' in workspace '{}'", id, workspaceId);
 
-        Dashboard updatedDashboard = service.update(id, dashboardUpdate);
+        Dashboard updatedDashboard = service.update(id, dashboardUpdate, DashboardScope.WORKSPACE);
 
         log.info("Updated dashboard by id '{}', name '{}' in workspace '{}'",
                 id, updatedDashboard.name(), workspaceId);
@@ -169,7 +171,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Deleting dashboard by id '{}' in workspace '{}'", id, workspaceId);
 
-        service.delete(id);
+        service.delete(id, DashboardScope.WORKSPACE);
 
         log.info("Deleted dashboard by id '{}' in workspace '{}'", id, workspaceId);
         return Response.noContent().build();
@@ -186,7 +188,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Deleting dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
-        service.delete(batchDelete.ids());
+        service.delete(batchDelete.ids(), DashboardScope.WORKSPACE);
         log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
 
         return Response.noContent().build();

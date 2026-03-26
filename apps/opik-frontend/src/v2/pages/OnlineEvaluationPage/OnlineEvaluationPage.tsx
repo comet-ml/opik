@@ -55,7 +55,7 @@ import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useActiveProjectId } from "@/store/AppStore";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -148,7 +148,7 @@ const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
-  const projectId = useProjectIdFromURL();
+  const projectId = useActiveProjectId()!;
   const {
     permissions: { canUpdateOnlineEvaluationRules },
   } = usePermissions();

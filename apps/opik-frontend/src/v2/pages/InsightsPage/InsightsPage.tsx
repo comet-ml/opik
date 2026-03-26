@@ -12,6 +12,7 @@ import InsightsViewSelector from "@/v2/pages/InsightsPage/InsightsViewSelector";
 import ShareDashboardButton from "@/v2/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/v2/pages-shared/dashboards/hooks/useDashboardLifecycle";
+import { DASHBOARD_SCOPE } from "@/types/dashboard";
 import {
   useDashboardStore,
   selectSetRuntimeConfig,
@@ -25,7 +26,7 @@ import {
 } from "@/lib/dashboard/templates";
 import { Separator } from "@/ui/separator";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useActiveProjectId } from "@/store/AppStore";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
@@ -34,7 +35,7 @@ const DEFAULT_TEMPLATE = PROJECT_TEMPLATE_LIST[0];
 const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 
 const InsightsPage: React.FunctionComponent = () => {
-  const projectId = useProjectIdFromURL();
+  const projectId = useActiveProjectId()!;
   const workspaceName = useActiveWorkspaceName();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
@@ -60,7 +61,14 @@ const InsightsPage: React.FunctionComponent = () => {
   const { dashboard, isPending, saveStatus } = useDashboardLifecycle({
     dashboardId: dashboardId || null,
     enabled: Boolean(dashboardId),
+    scope: DASHBOARD_SCOPE.INSIGHTS,
   });
+
+  useEffect(() => {
+    if (!isPending && dashboardId && !dashboard) {
+      setDashboardId(DEFAULT_TEMPLATE_ID);
+    }
+  }, [isPending, dashboardId, dashboard, setDashboardId]);
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 
@@ -127,24 +135,6 @@ const InsightsPage: React.FunctionComponent = () => {
 
       <div className="px-6 pb-4 pt-1">
         {isPending && <Loader />}
-
-        {!isPending && !dashboardId && (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground">
-              No view selected. Please select or create a view.
-            </p>
-          </div>
-        )}
-
-        {!isPending && dashboardId && !dashboard && (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground">
-              View could not be loaded. Please select another view from the
-              dropdown.
-            </p>
-          </div>
-        )}
-
         {!isPending && dashboard && <DashboardContent />}
       </div>
     </PageBodyScrollContainer>
