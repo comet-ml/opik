@@ -3369,6 +3369,132 @@ def test_evaluate_optimization_trial__with_filter_string__passes_to_streaming(
     )
 
 
+def test_evaluate_optimization_trial__traces_and_spans__have_source_optimization(
+    fake_backend,
+):
+    """evaluate_optimization_trial always passes source='optimization' → all traces carry it."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                input={"message": "say bye"},
+                reference="bye",
+            ),
+        ]
+    )
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            scoring_metrics=[metrics.Equals()],
+            experiment_name="the-experiment-name",
+            task_threads=1,
+            verbose=0,
+        )
+
+    assert len(fake_backend.trace_trees) == 2
+    for trace in fake_backend.trace_trees:
+        assert trace.source == "optimization", (
+            f"Expected trace source 'optimization', got '{trace.source}'"
+        )
+
+        for span in trace.spans:
+            assert span.source == "optimization", (
+                f"Expected span source 'optimization', got '{span.source}'"
+            )
+
+
+def test_evaluate_optimization_trial__trace_tree_source_experiment_and_spans_source_experiment(
+    fake_backend,
+):
+    """Full trace tree assertion: source='optimization' on the trace and both task/scoring spans."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+        ]
+    )
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-789",
+            dataset=mock_dataset,
+            task=say_task,
+            scoring_metrics=[metrics.Equals()],
+            experiment_name="the-experiment-name",
+            task_threads=1,
+            verbose=0,
+        )
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="evaluation_task",
+        input=ANY_BUT_NONE,
+        output=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        source="optimization",
+        feedback_scores=ANY_LIST,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="say_task",
+                type="general",
+                input=ANY_BUT_NONE,
+                output=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="optimization",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="metrics_calculation",
+                type="general",
+                input=ANY_BUT_NONE,
+                output=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=ANY_LIST,
+                source="optimization",
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
 def test_evaluate__verbose_zero__progress_bar_disabled(fake_backend):
     """Test that verbose=0 disables the progress bar."""
     mock_dataset = create_mock_dataset(

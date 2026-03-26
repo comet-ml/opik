@@ -13,6 +13,7 @@ from opik.api_objects.dataset import execution_policy as dataset_execution_polic
 from opik.evaluation import rest_operations, test_case, test_result
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
+from opik.types import TraceSource
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
 from .types import EvaluationTask
@@ -72,11 +73,13 @@ class EvaluationEngine:
         project_name: Optional[str],
         workers: int,
         verbose: int,
+        source: TraceSource,
     ) -> None:
         self._client = client
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
+        self._source = source
 
     # --- Private: metrics & scoring ---
 
@@ -87,7 +90,6 @@ class EvaluationEngine:
             "scoring_key_mapping",
             "evaluator_model",
         ],
-        source="experiment",
     )
     def _compute_test_result_for_test_case(
         self,
@@ -125,7 +127,6 @@ class EvaluationEngine:
     @opik.track(  # type: ignore[attr-defined,has-type]
         name="task_span_metrics_calculation",
         ignore_arguments=["test_case_", "task_span_evaluator"],
-        source="experiment",
     )
     def _compute_scores_for_test_case_with_task_span(
         self,
@@ -166,7 +167,7 @@ class EvaluationEngine:
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
-            task = opik.track(name=name, source="experiment")(task)  # type: ignore[attr-defined,has-type]
+            task = opik.track(name=name, source=self._source)(task)  # type: ignore[attr-defined,has-type]
 
         item_content = item.get_content(include_id=True)
         trace_data = trace.TraceData(
@@ -174,7 +175,7 @@ class EvaluationEngine:
             name=EVALUATION_TASK_NAME,
             created_by="evaluation",
             project_name=self._project_name,
-            source="experiment",
+            source=self._source,
         )
 
         execution_policy_dict = None
@@ -325,7 +326,7 @@ class EvaluationEngine:
                 created_by="evaluation",
                 error_info=task_trace.error_info,
                 thread_id=task_trace.thread_id,
-                source="experiment",
+                source=self._source,
             ),
             client=self._client,
         ):
