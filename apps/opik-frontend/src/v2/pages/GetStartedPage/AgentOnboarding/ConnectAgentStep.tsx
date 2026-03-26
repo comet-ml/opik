@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { ChevronLeft, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
+import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
+import useProjectByName from "@/api/projects/useProjectByName";
+import useTracesList from "@/api/traces/useTracesList";
 import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
@@ -17,12 +19,44 @@ import {
   VIDEO_TUTORIAL_LINK,
 } from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/HelpLinks";
 
+const TRACE_POLL_INTERVAL = 5000;
+
 const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const [activeTab, setActiveTab] = useState("install-with-ai");
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<
     string | null
   >(null);
+
+  const { data: project } = useProjectByName(
+    { projectName: agentName },
+    { enabled: !!agentName },
+  );
+  const projectId = project?.id;
+
+  const { data: tracesData } = useTracesList(
+    {
+      projectId: projectId ?? "",
+      page: 1,
+      size: 1,
+      sorting: [{ id: "created_at", desc: false }],
+    },
+    {
+      enabled: !!projectId,
+      refetchInterval: (query) =>
+        query.state.data?.total ? false : TRACE_POLL_INTERVAL,
+    },
+  );
+
+  const firstTraceId = tracesData?.content?.[0]?.id;
+  const traceReceived = !!firstTraceId;
+
+  const handleViewTraces = () => {
+    goToStep(AGENT_ONBOARDING_STEPS.DONE, {
+      agentName,
+      traceId: firstTraceId,
+    });
+  };
 
   const selectedIntegration = selectedIntegrationId
     ? INTEGRATIONS.find((i) => i.id === selectedIntegrationId)
@@ -31,10 +65,6 @@ const ConnectAgentStep: React.FC = () => {
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     setSelectedIntegrationId(null);
-  };
-
-  const handleBack = () => {
-    goToStep(AGENT_ONBOARDING_STEPS.AGENT_NAME, { agentName });
   };
 
   const handleSkip = () => {
@@ -71,18 +101,20 @@ const ConnectAgentStep: React.FC = () => {
             <div className="flex gap-2.5">
               <Button
                 variant="outline"
+                size="2xs"
                 className="flex-1"
                 asChild
                 id="onboarding-slack"
                 data-fs-element="OnboardingSlack"
               >
                 <a href={SLACK_LINK} target="_blank" rel="noopener noreferrer">
-                  <Slack className="mr-2 size-4" />
+                  <Slack className="mr-1.5 size-3" />
                   Get help in Slack
                 </a>
               </Button>
               <Button
                 variant="outline"
+                size="2xs"
                 className="flex-1"
                 asChild
                 id="onboarding-watch-tutorial"
@@ -93,7 +125,7 @@ const ConnectAgentStep: React.FC = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <MonitorPlay className="mr-2 size-4" />
+                  <MonitorPlay className="mr-1.5 size-3" />
                   Watch our tutorial
                 </a>
               </Button>
@@ -112,28 +144,27 @@ const ConnectAgentStep: React.FC = () => {
       description="Follow these steps to start sending traces to Opik."
       showFooterSeparator
       footer={
-        <>
+        traceReceived ? (
           <Button
-            variant="link"
-            onClick={handleBack}
-            className="comet-body-s mr-auto text-muted-slate"
-            id="onboarding-step2-back"
-            data-fs-element="onboarding-step2-back"
+            onClick={handleViewTraces}
+            id="onboarding-step2-view-traces"
+            data-fs-element="onboarding-step2-view-traces"
           >
-            <ChevronLeft className="size-3.5" />
-            Back
+            View traces & start optimizing
+            <ArrowRight className="size-3.5" />
           </Button>
+        ) : (
           <Button
             variant="link"
             onClick={handleSkip}
-            className="comet-body-s text-muted-slate"
+            className="comet-body-s px-0 text-muted-slate"
             id="onboarding-step2-skip"
             data-fs-element="onboarding-step2-skip"
           >
             Skip for now
             <ChevronsRight className="size-3.5" />
           </Button>
-        </>
+        )
       }
     >
       <Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -147,7 +178,7 @@ const ConnectAgentStep: React.FC = () => {
         </TabsList>
 
         <TabsContent value="install-with-ai">
-          <InstallWithAITab />
+          <InstallWithAITab traceReceived={traceReceived} />
         </TabsContent>
 
         <TabsContent value="manual-integration">
