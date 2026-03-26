@@ -40,6 +40,10 @@ on:
         - 'sdks/code_generation/fern/openapi/openapi.yaml'
         - 'tests_end_to_end/**'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 run-name: Application E2E Tests (TypeScript) - ${{ github.event.inputs.suite || 'fullregression' }}
 
 permissions:

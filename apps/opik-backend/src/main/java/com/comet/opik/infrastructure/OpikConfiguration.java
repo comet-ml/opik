@@ -130,4 +130,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private OllieStateConfig ollieStateConfig = new OllieStateConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AssistantSidebarConfig assistantSidebar = new AssistantSidebarConfig();
 }

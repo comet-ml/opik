@@ -792,6 +792,13 @@ ollieStateConfig:
   # Description: Maximum upload size in bytes for ollie state persistence
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
+# Assistant Sidebar CDN configuration (runtime)
+# Full URL to the ollie-console manifest on CDN
+assistantSidebar:
+  # Default: https://cdn.comet.com/ollie/v1/manifest.json (always latest version)
+  # Description: Full CDN URL to the ollie-console manifest. Override to pin a specific version.
+  manifestUrl: ${ASSISTANT_SIDEBAR_MANIFEST_URL:-"https://cdn.comet.com/ollie/v1/manifest.json"}
+
 # Attachments configuration
 attachmentsConfig:
   # Description: Minimum size (bytes) for base64 strings to be considered attachments
@@ -880,6 +887,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the Assistant Sidebar feature is enabled
+  assistantSidebarEnabled: ${TOGGLE_ASSISTANT_SIDEBAR_ENABLED:-"false"}
 
 # Local Runner configuration
 localRunner:
