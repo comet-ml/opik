@@ -123,7 +123,7 @@ const PlaygroundPrompt = ({
     if (prompt?.skipInitialPromptLoad) {
       updatePrompt(promptId, { skipInitialPromptLoad: undefined });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prompt?.skipInitialPromptLoad, promptId, updatePrompt]);
 
   const provider = providerResolver(model);
 
