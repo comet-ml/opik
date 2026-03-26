@@ -11,6 +11,9 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
@@ -19,6 +22,7 @@ import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.KpiCardCriteria;
 import com.comet.opik.domain.KpiCardService;
 import com.comet.opik.domain.ProjectCriteria;
 import com.comet.opik.domain.ProjectMetricsService;
@@ -273,7 +277,21 @@ public class ProjectsResource {
         log.info("Retrieve KPI cards for projectId '{}', on workspace_id '{}', entity type '{}'", projectId,
                 workspaceId, request.entityType());
 
-        KpiCardResponse response = kpiCardService.getKpiCards(projectId, request)
+        var filters = switch (request.entityType()) {
+            case TRACES -> filtersFactory.newFilters(request.filters(), TraceFilter.LIST_TYPE_REFERENCE);
+            case SPANS -> filtersFactory.newFilters(request.filters(), SpanFilter.LIST_TYPE_REFERENCE);
+            case THREADS -> filtersFactory.newFilters(request.filters(), TraceThreadFilter.LIST_TYPE_REFERENCE);
+        };
+
+        var criteria = KpiCardCriteria.builder()
+                .projectId(projectId)
+                .entityType(request.entityType())
+                .filters(filters)
+                .intervalStart(request.intervalStart())
+                .intervalEnd(request.intervalEnd())
+                .build();
+
+        KpiCardResponse response = kpiCardService.getKpiCards(criteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

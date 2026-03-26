@@ -36,11 +36,11 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(KpiCardDAOImpl.class)
 public interface KpiCardDAO {
 
-    Mono<KpiCardResponse> getTraceKpiCards(@NonNull KpiCardCriteria criteria);
+    Mono<KpiCardResponse> getTraceKpiCards(KpiCardCriteria criteria);
 
-    Mono<KpiCardResponse> getSpanKpiCards(@NonNull KpiCardCriteria criteria);
+    Mono<KpiCardResponse> getSpanKpiCards(KpiCardCriteria criteria);
 
-    Mono<KpiCardResponse> getThreadKpiCards(@NonNull KpiCardCriteria criteria);
+    Mono<KpiCardResponse> getThreadKpiCards(KpiCardCriteria criteria);
 }
 
 @Slf4j
