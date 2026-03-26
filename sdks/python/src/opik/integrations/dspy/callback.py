@@ -152,7 +152,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             self._opik_client.config.log_start_trace_span
             and tracing_runtime_config.is_tracing_active()
         ):
-            self._opik_client.span(**span_data.as_start_parameters)
+            self._opik_client.__internal_api__span__(**span_data.as_start_parameters)
 
     def _start_trace(
         self,
@@ -173,7 +173,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             self._opik_client.config.log_start_trace_span
             and tracing_runtime_config.is_tracing_active()
         ):
-            self._opik_client.trace(**trace_data.as_start_parameters)
+            self._opik_client.__internal_api__trace__(**trace_data.as_start_parameters)
 
     def on_module_end(
         self,
@@ -192,7 +192,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         if trace_data := self._map_call_id_to_trace_data.pop(call_id, None):
             if tracing_runtime_config.is_tracing_active():
                 trace_data.init_end_time()
-                self._opik_client.trace(**trace_data.as_parameters)
+                self._opik_client.__internal_api__trace__(**trace_data.as_parameters)
 
             self._context_storage.pop_trace_data(ensure_id=trace_data.id)
 
@@ -250,7 +250,7 @@ class OpikCallback(dspy_callback.BaseCallback):
 
             span_data.update(**update_kwargs).init_end_time()
             if tracing_runtime_config.is_tracing_active():
-                self._opik_client.span(**span_data.as_parameters)
+                self._opik_client.__internal_api__span__(**span_data.as_parameters)
 
             # remove span data from context
             self._context_storage.pop_span_data(ensure_id=span_data.id)

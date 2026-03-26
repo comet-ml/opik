@@ -58,6 +58,7 @@ def test_process_non_attachment_supporting_message_skips_processing(processor):
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     # Process should return immediately without doing anything
@@ -91,6 +92,7 @@ def test_process_attachment_support_message_with_no_attachments(
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     # Wrap in AttachmentSupportingMessage
@@ -134,6 +136,7 @@ def test_process_span_message_extracts_from_input(
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -207,6 +210,7 @@ def test_process_span_message_extracts_from_output(
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -266,6 +270,7 @@ def test_process_span_message_extracts_from_metadata(
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -319,6 +324,7 @@ def test_process_trace_message_extracts_attachments(
         error_info=None,
         thread_id=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -383,6 +389,7 @@ def test_process_update_span_message(processor, mock_streamer, temp_file_15kb):
         provider=None,
         error_info=None,
         total_cost=None,
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -432,6 +439,7 @@ def test_process_update_trace_message(processor, mock_streamer, temp_file_15kb):
         tags=None,
         error_info=None,
         thread_id=None,
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -492,6 +500,7 @@ def test_process_multiple_attachments_from_different_contexts(
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -586,6 +595,7 @@ def test_process_with_null_input_output_metadata(processor, mock_streamer):
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -624,6 +634,7 @@ def test_process_inactive_processor_skips_extraction(inactive_processor, mock_st
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -667,6 +678,7 @@ def test_process_handles_extraction_exception_gracefully(processor, mock_streame
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     wrapped_message = messages.AttachmentSupportingMessage(
@@ -712,6 +724,7 @@ def test_process_message_already_marked_returns_early(processor):
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     # Mark the message as already processed
@@ -752,6 +765,7 @@ def test_entity_type_from_attachment_message_span():
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     result = attachments_extraction_processor.entity_type_from_attachment_message(
@@ -779,6 +793,7 @@ def test_entity_type_from_attachment_message_trace():
         error_info=None,
         thread_id=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     result = attachments_extraction_processor.entity_type_from_attachment_message(

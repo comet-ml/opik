@@ -167,8 +167,10 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
                 spans=[],
                 model=VIDEO_MODEL,
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     EXPECTED_OPERATIONS_GET_TRACE = TraceModel(
@@ -205,8 +207,10 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
                 end_time=ANY_BUT_NONE,
                 project_name="genai-video-test",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     EXPECTED_SAVE_TRACE = TraceModel(
@@ -252,8 +256,10 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
                         content_type="video/mp4",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     # Find traces by name
@@ -366,8 +372,10 @@ async def test_genai_client__generate_videos_and_save__async__happyflow(fake_bac
                 spans=[],
                 model=VIDEO_MODEL,
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     EXPECTED_OPERATIONS_GET_TRACE = TraceModel(
@@ -404,8 +412,10 @@ async def test_genai_client__generate_videos_and_save__async__happyflow(fake_bac
                 end_time=ANY_BUT_NONE,
                 project_name="genai-video-test",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     EXPECTED_SAVE_TRACE = TraceModel(
@@ -451,8 +461,10 @@ async def test_genai_client__generate_videos_and_save__async__happyflow(fake_bac
                         content_type="video/mp4",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     # Find traces by name
@@ -546,8 +558,10 @@ def test_genai_client__generate_videos__error_handling(fake_backend):
                     "traceback": ANY_BUT_NONE,
                 },
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -648,8 +662,10 @@ def test_genai_client__generate_videos_with_upload_videos_disabled__no_attachmen
                 project_name="genai-video-test-no-upload",
                 spans=[],
                 attachments=[],  # No attachments when upload_videos=False
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_SAVE_TRACE, save_trace)

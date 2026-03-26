@@ -55,8 +55,10 @@ def test_litellm_chat_model_generate_string__happyflow(fake_backend, monkeypatch
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -117,10 +119,13 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(
                         spans=[],
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider="openai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -168,8 +173,10 @@ async def test_litellm_chat_model_agenerate_string__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -219,8 +226,10 @@ def test_litellm_chat_model_with_response_format__structured_output(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
