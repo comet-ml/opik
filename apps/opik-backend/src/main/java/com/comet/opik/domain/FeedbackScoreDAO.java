@@ -522,7 +522,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_experiments_feedback_score_names",
                     workspaceId, experimentIds != null ? experimentIds.size() : 0);
 
-            List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
+            List<UUID> projectIds = projectId == null ? null : List.of(projectId);
             bindTemplateParam(projectIds, experimentIds, template);
 
             var statement = connection.createStatement(template.render())
