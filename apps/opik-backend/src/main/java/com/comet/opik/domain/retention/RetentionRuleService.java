@@ -74,8 +74,9 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
         // Catch-up scheduling: when applyToPast=true, mark rule as pending estimation.
         // The RetentionEstimationJob will pick it up, estimate velocity + cursor,
         // and the RetentionCatchUpJob will then process it by tier.
+        // Note: we intentionally ignore catchUp.enabled here — the operator may temporarily
+        // disable catch-up jobs but still want rules to be processed when re-enabled.
         final boolean needsCatchUp = applyToPast
-                && config.getCatchUp().isEnabled()
                 && rule.retention() != RetentionPeriod.UNLIMITED;
         final boolean catchUpDone = !needsCatchUp;
 

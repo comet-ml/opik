@@ -2879,7 +2879,7 @@ public class SpanDAO {
      * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
      */
     public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
-        log.info("Estimating retention velocity for workspace '{}'", workspaceId);
+        log.debug("Estimating retention velocity for workspace '{}'", workspaceId);
 
         var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
                 "retention_estimate_velocity", workspaceId, "");

@@ -118,9 +118,11 @@ interface RetentionRuleDAO {
     Optional<RetentionRule> findLargeCatchUpRule(@Bind("largeThreshold") long largeThreshold);
 
     /** Find rules pending velocity estimation (newly created with applyToPast=true, not yet estimated). */
-    @SqlQuery("SELECT * FROM retention_rules" +
-            " WHERE catch_up_done = false AND enabled = true AND apply_to_past = true" +
-            " AND catch_up_velocity IS NULL")
+    @SqlQuery("""
+            SELECT * FROM retention_rules
+            WHERE catch_up_done = false AND enabled = true AND apply_to_past = true
+            AND catch_up_velocity IS NULL
+            """)
     List<RetentionRule> findUnestimatedCatchUpRules();
 
     /** Set velocity and cursor after estimation. */

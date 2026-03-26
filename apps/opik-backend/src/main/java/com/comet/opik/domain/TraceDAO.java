@@ -3938,7 +3938,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Mono<Instant> scoutFirstDayWithData(@NonNull String workspaceId,
             @NonNull UUID rangeStart, @NonNull UUID rangeEnd) {
-        log.info("Scouting first day with data for workspace '{}', range=['{}', '{}')",
+        log.debug("Scouting first day with data for workspace '{}', range=['{}', '{}')",
                 workspaceId, rangeStart, rangeEnd);
 
         var template = getSTWithLogComment(SCOUT_FIRST_DAY_WITH_DATA,
