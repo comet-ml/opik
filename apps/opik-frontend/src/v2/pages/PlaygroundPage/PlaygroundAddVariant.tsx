@@ -60,9 +60,7 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
     if (!lastPrompt) return;
 
     const newPrompt = generateDefaultPrompt({
-      // Clear library link so useLoadChatPrompt doesn't overwrite
-      // the duplicated messages with the saved library version
-      initPrompt: { ...lastPrompt, loadedChatPromptId: undefined },
+      initPrompt: { ...lastPrompt, skipInitialPromptLoad: true },
       setupProviders: providerKeys,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,

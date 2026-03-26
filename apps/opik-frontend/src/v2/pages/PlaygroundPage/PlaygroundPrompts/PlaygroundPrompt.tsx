@@ -115,7 +115,15 @@ const PlaygroundPrompt = ({
     selectedChatPromptId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
+    skipInitialLoad: prompt?.skipInitialPromptLoad,
   });
+
+  // Clear the one-time flag so it doesn't persist to localStorage
+  useEffect(() => {
+    if (prompt?.skipInitialPromptLoad) {
+      updatePrompt(promptId, { skipInitialPromptLoad: undefined });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const provider = providerResolver(model);
 
