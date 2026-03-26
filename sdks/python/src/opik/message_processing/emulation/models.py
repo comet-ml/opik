@@ -171,9 +171,9 @@ class TraceModel:
 
     id: str
     start_time: datetime.datetime
-    source: TraceSource
     name: Optional[str]
     project_name: str
+    source: TraceSource
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
