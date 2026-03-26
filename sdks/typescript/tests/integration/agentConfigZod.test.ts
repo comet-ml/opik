@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { z } from "zod";
 import { Opik, track, agentConfigContext, Prompt } from "@/index";
 import { AgentConfigManager } from "@/agent-config";
-import { getTrackContext } from "@/decorators/track";
+import { getTrackContext, getTrackOpikClient } from "@/decorators/track";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -294,7 +294,7 @@ describe.skipIf(!shouldRunApiTests)(
 
         const cfg = await run();
         expect(cfg.temperature).toBeCloseTo(0.7);
-        await client.flush();
+        await getTrackOpikClient().flush();
 
         expect(traceId).toBeDefined();
         expect(spanId).toBeDefined();
@@ -451,7 +451,7 @@ describe.skipIf(!shouldRunApiTests)(
           "You are a helpful assistant. Think step by step."
         );
 
-        await client.flush();
+        await getTrackOpikClient().flush();
         expect(traceId).toBeDefined();
 
         const agentMeta = await fetchAgentConfigMeta(traceId!, projectName);
