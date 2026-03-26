@@ -392,7 +392,7 @@ def evaluate_suite(
         evaluator_model=evaluator_model,
         dataset_item_ids=dataset_item_ids,
         dataset_filter_string=dataset_filter_string,
-        source=source,
+        source=source,  # type: ignore[arg-type]
     )
 
     return suite_result_constructor.build_suite_result(
@@ -664,6 +664,7 @@ def evaluate_experiment(
             project_name=project_name,
             workers=scoring_threads,
             verbose=verbose,
+            source="experiment",
         )
         test_results = evaluation_engine.score_test_cases(
             test_cases=test_cases,
