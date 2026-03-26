@@ -177,6 +177,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           ...(finalMetadata && { metadata: finalMetadata }),
           ...(templateStructure && { templateStructure }),
           ...(promptType && { type: promptType }),
+          projectId: activeProjectId ?? undefined,
           onSuccess: (data) =>
             onSave(data, selectedPrompt?.name, selectedPrompt?.id),
         });
@@ -192,6 +193,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             template_structure: templateStructure,
             ...(finalMetadata && { metadata: finalMetadata }),
             ...(description && { description }),
+            project_id: activeProjectId,
           },
           withResponse: true,
         },
@@ -236,6 +238,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             <div className="flex flex-col gap-2 pb-4">
               <Label>Prompt</Label>
               <PromptsSelectBox
+                projectId={activeProjectId!}
                 onValueChange={setPromptId}
                 value={promptId}
                 clearable={false}

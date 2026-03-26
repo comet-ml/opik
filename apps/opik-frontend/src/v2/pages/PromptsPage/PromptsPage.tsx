@@ -26,7 +26,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import usePromptsList from "@/api/prompts/usePromptsList";
+import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/v2/pages/PromptsPage/PromptRowActionsCell";
 import AddEditPromptDialog from "@/v2/pages/PromptsPage/AddEditPromptDialog";
@@ -229,20 +229,21 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending, isPlaceholderData, isFetching } = usePromptsList(
-    {
-      workspaceName,
-      filters,
-      sorting: sortedColumns,
-      search: search!,
-      page,
-      size,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: 30000,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useProjectPromptsList(
+      {
+        projectId: activeProjectId!,
+        filters,
+        sorting: sortedColumns,
+        search: search!,
+        page,
+        size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
 
   const prompts = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(
