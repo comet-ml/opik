@@ -24,4 +24,5 @@ export interface ServiceTogglesConfig {
     ollamaProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
     assistantSidebarEnabled: boolean;
+    forceWorkspaceVersion: string;
 }

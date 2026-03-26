@@ -608,6 +608,8 @@ from .types import (
     WorkspaceSpansCount,
     WorkspaceTraceCount,
     WorkspaceUserPermissions,
+    WorkspaceVersion,
+    WorkspaceVersionOpikVersion,
 )
 from .errors import (
     BadGatewayError,
@@ -1336,6 +1338,8 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
     "agent_configs",
     "alerts",
     "annotation_queues",

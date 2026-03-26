@@ -7523,6 +7523,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
       deprecated: true
+  /v1/private/workspaces/versions:
+    get:
+      tags:
+      - Workspaces
+      summary: Get workspace version
+      description: |-
+        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+        or Opik V2 (project-first) navigation. The backend is the single authority for this
+        determination, clients must never derive the version themselves.
+
+        Determination logic (priority order):
+        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        2) Auth one-way V2 gate (authenticated mode only, not yet implemented)
+        3) Version 1 entity check (entities without project_id)
+        4) Fallback on failure
+
+        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+        Called by the frontend on workspace load.
+      operationId: getWorkspaceVersion
+      responses:
+        "200":
+          description: Workspace version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceVersion"
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
@@ -9295,9 +9321,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -9740,9 +9766,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10195,9 +10221,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -17471,6 +17497,7 @@ components:
       - datasetExportEnabled
       - datasetVersioningEnabled
       - exportEnabled
+      - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
@@ -17532,6 +17559,9 @@ components:
           type: boolean
         assistantSidebarEnabled:
           type: boolean
+        forceWorkspaceVersion:
+          minLength: 1
+          type: string
     SpanBatchUpdate:
       required:
       - ids
@@ -18935,6 +18965,22 @@ components:
               \ values (e.g. #FF0000). Max 10000 entries."
           description: "Workspace-level color map. Maps label names to hex color values\
             \ (e.g. #FF0000). Max 10000 entries."
+    WorkspaceVersion:
+      type: object
+      properties:
+        opik_version:
+          type: string
+          description: |-
+            The determined Opik navigation version for this workspace.
+            'version_1' = legacy workspace-scoped navigation,
+            'version_2' = new project-first navigation.
+          enum:
+          - version_1
+          - version_2
+      description: |-
+        Workspace version response.
+        The opik_version field indicates which navigation mode the frontend should render:
+        'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

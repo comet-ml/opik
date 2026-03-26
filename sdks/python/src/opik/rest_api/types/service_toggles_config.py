@@ -36,6 +36,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
     collaborators_tab_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="collaboratorsTabEnabled")]
     assistant_sidebar_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="assistantSidebarEnabled")]
+    force_workspace_version: typing_extensions.Annotated[str, FieldMetadata(alias="forceWorkspaceVersion")]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

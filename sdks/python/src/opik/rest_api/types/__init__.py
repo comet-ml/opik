@@ -652,6 +652,8 @@ from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
+from .workspace_version import WorkspaceVersion
+from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -1259,4 +1261,6 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
 ]
