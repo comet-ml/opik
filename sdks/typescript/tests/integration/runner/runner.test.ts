@@ -104,7 +104,7 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
     runnerProcess = spawn("npx", ["tsx", ECHO_APP], {
       env,
       cwd: path.resolve(__dirname, "../../.."),
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     runnerProcess.stdout?.on("data", (chunk: Buffer) => {
@@ -126,6 +126,7 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
       const registeredNames = new Set<string>();
       if (runnersPage.content) {
         for (const runner of runnersPage.content) {
+          if (runner.id !== runnerId) continue;
           if (runner.agents) {
             for (const agent of runner.agents) {
               if (agent.name) registeredNames.add(agent.name);
@@ -147,7 +148,7 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
         const timeout = setTimeout(() => {
           runnerProcess.kill("SIGKILL");
           resolve();
-        }, 10_000);
+        }, 3_000);
         runnerProcess.on("exit", () => {
           clearTimeout(timeout);
           resolve();
@@ -178,12 +179,13 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
         });
         if (page.content) {
           for (const job of page.content) {
-            if (
-              job.status === "completed" &&
-              job.inputs &&
-              JSON.stringify(job.inputs).includes(message)
-            ) {
-              return job;
+            if (job.inputs && JSON.stringify(job.inputs).includes(message)) {
+              if (job.status === "failed") {
+                throw new Error(`Job failed: ${JSON.stringify(job.error ?? job)}`);
+              }
+              if (job.status === "completed") {
+                return job;
+              }
             }
           }
         }
@@ -256,12 +258,13 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
         });
         if (page.content) {
           for (const job of page.content) {
-            if (
-              job.status === "completed" &&
-              job.inputs &&
-              JSON.stringify(job.inputs).includes(message)
-            ) {
-              return job;
+            if (job.inputs && JSON.stringify(job.inputs).includes(message)) {
+              if (job.status === "failed") {
+                throw new Error(`Job failed: ${JSON.stringify(job.error ?? job)}`);
+              }
+              if (job.status === "completed") {
+                return job;
+              }
             }
           }
         }

@@ -1,4 +1,5 @@
 import { logger } from "@/utils/logger";
+import { OpikClient } from "@/client/Client";
 import { getAll, onRegister, type RegistryEntry } from "./registry";
 import { InProcessRunnerLoop } from "./InProcessRunnerLoop";
 import { installPrefixedOutput } from "./prefixedOutput";
@@ -27,7 +28,6 @@ async function _run(): Promise<void> {
   printBanner(runnerId, projectName);
   installPrefixedOutput();
 
-  const { OpikClient } = await import("@/client/Client");
   const client = new OpikClient();
   const api = client.api;
 
@@ -40,20 +40,24 @@ async function _run(): Promise<void> {
     };
   }
 
-  function syncAgent(name: string): void {
+  function syncAgent(_name: string): void {
     const all = getAll();
-    const entry = all.get(name);
-    if (!entry) return;
+    const body: Record<string, unknown> = {};
+    for (const [name, entry] of all) {
+      body[name] = toPayload(entry);
+    }
     api.runners
-      .registerAgents(runnerId, {
-        body: { [name]: toPayload(entry) },
-      })
+      .registerAgents(runnerId, { body })
       .catch(() => {
-        logger.debug(`Failed to register agent '${name}'`);
+        logger.debug("Failed to sync agents after new registration");
       });
   }
 
-  onRegister(syncAgent);
+  // Defer until after all synchronous module-level track() calls have run.
+  // Promises (microtasks) can interleave with remaining synchronous code, but
+  // setImmediate fires only after the current call stack and all microtasks
+  // are drained — by which point the user's module has fully loaded.
+  await new Promise<void>((resolve) => setImmediate(resolve));
 
   const entrypoints = getAll();
   if (entrypoints.size > 0) {
@@ -67,6 +71,8 @@ async function _run(): Promise<void> {
       logger.debug("Failed to register agents on startup");
     }
   }
+
+  onRegister(syncAgent);
 
   logger.info("Runner activated");
 

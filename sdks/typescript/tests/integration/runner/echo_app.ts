@@ -38,18 +38,9 @@ const echo_config = track(
   }
 );
 
-// Keep the process alive (simulates a running server like Express/Fastify)
-const keepAlive = setInterval(() => {}, 60_000);
-
-process.on("SIGTERM", () => {
-  clearInterval(keepAlive);
-  process.exit(0);
-});
-
-process.on("SIGINT", () => {
-  clearInterval(keepAlive);
-  process.exit(0);
-});
+// Keep the process alive until killed by the test harness (SIGTERM via afterAll).
+// process.stdin.resume() holds the event loop open regardless of timer unref state.
+process.stdin.resume();
 
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled rejection in echo_app:", err);
