@@ -673,6 +673,100 @@ class TestGetAgentConfig:
             request_options=None,
         )
 
+    def test_blueprint_missing_field__raises_key_error(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        # Config version only has "temp", "name" is absent.
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            name="v3",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
+            ],
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        with pytest.raises(KeyError, match="v3"):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
+    def test_blueprint_missing_field__error_names_missing_fields(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            name="v3",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
+            ],
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        with pytest.raises(KeyError, match="MyConfig.name"):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
+    def test_blueprint_missing_all_fields__raises_key_error_listing_all(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        # Config version has no values at all.
+        bp = AgentBlueprintPublic(id="bp-1", name="v1", type="blueprint", values=[])
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        with pytest.raises(KeyError, match="v1"):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
+    def test_blueprint_missing_field__fallback_not_used(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Fallback values must NOT silently fill in missing config version fields."""
+
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            name="v2",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
+            ],
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        # Must raise, not return a result with fallback.name == "default"
+        with pytest.raises(KeyError):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
 
 # ---------------------------------------------------------------------------
 # Live instance tests

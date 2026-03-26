@@ -116,16 +116,6 @@ export const generateExperimentIdFilter = (experimentId?: string) => {
   ];
 };
 
-export const generateDashboardScopeFilter = (scope: string): Filter[] => [
-  createFilter({
-    id: `dashboard-scope-filter-${scope}`,
-    field: "scope",
-    type: COLUMN_TYPE.string,
-    operator: "=",
-    value: scope,
-  }),
-];
-
 export const generateDashboardTypeFilter = (
   dashboardType: string,
 ): Filter[] => [

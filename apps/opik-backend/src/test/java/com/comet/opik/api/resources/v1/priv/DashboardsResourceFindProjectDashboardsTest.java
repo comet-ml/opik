@@ -196,17 +196,10 @@ class DashboardsResourceFindProjectDashboardsTest {
         var dashboards = List.of(
                 dashboardResourceClient.createPartialDashboard()
                         .type(DashboardType.MULTI_PROJECT)
-                        .scope(DashboardScope.WORKSPACE)
                         .projectId(projectId)
                         .build(),
                 dashboardResourceClient.createPartialDashboard()
                         .type(DashboardType.EXPERIMENTS)
-                        .scope(DashboardScope.INSIGHTS)
-                        .projectId(projectId)
-                        .build(),
-                dashboardResourceClient.createPartialDashboard()
-                        .type(DashboardType.MULTI_PROJECT)
-                        .scope(DashboardScope.INSIGHTS)
                         .projectId(projectId)
                         .build());
 
@@ -228,7 +221,7 @@ class DashboardsResourceFindProjectDashboardsTest {
 
     static Stream<Arguments> findProjectDashboardsWithFilters() {
         return Stream.of(
-                // Filter by type
+                // Filter by type MULTI_PROJECT
                 Arguments.of(
                         (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                 DashboardFilter.builder()
@@ -237,32 +230,27 @@ class DashboardsResourceFindProjectDashboardsTest {
                                         .value(DashboardType.MULTI_PROJECT.getValue())
                                         .build()),
                         (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                dashboards.get(2), dashboards.get(0))),
-                // Filter by scope
-                Arguments.of(
-                        (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
-                                DashboardFilter.builder()
-                                        .field(DashboardField.SCOPE)
-                                        .operator(Operator.EQUAL)
-                                        .value(DashboardScope.INSIGHTS.getValue())
-                                        .build()),
-                        (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                dashboards.get(2), dashboards.get(1))),
-                // Filter by type and scope
+                                dashboards.get(0))),
+                // Filter by type EXPERIMENTS
                 Arguments.of(
                         (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                 DashboardFilter.builder()
                                         .field(DashboardField.TYPE)
                                         .operator(Operator.EQUAL)
-                                        .value(DashboardType.MULTI_PROJECT.getValue())
-                                        .build(),
+                                        .value(DashboardType.EXPERIMENTS.getValue())
+                                        .build()),
+                        (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                dashboards.get(1))),
+                // Filter by scope WORKSPACE (all project dashboards have WORKSPACE scope)
+                Arguments.of(
+                        (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                 DashboardFilter.builder()
                                         .field(DashboardField.SCOPE)
                                         .operator(Operator.EQUAL)
-                                        .value(DashboardScope.INSIGHTS.getValue())
+                                        .value(DashboardScope.WORKSPACE.getValue())
                                         .build()),
                         (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                dashboards.get(2))));
+                                dashboards.get(1), dashboards.get(0))));
     }
 
     @Test
@@ -282,7 +270,7 @@ class DashboardsResourceFindProjectDashboardsTest {
                 .build();
         var dashboard2 = dashboardResourceClient.createPartialDashboard()
                 .type(DashboardType.EXPERIMENTS)
-                .scope(DashboardScope.INSIGHTS)
+                .scope(DashboardScope.WORKSPACE)
                 .projectId(projectId)
                 .build();
 
