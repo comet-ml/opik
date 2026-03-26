@@ -66,6 +66,8 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -290,21 +292,21 @@ class KpiCardsResourceTest {
     @MethodSource("spanFilterArguments")
     @DisplayName("span filters narrow current period KPI metrics")
     void spanFiltersCurrentPeriod(Function<Span, SpanFilter> filterFn,
-            int expectedMatchCount, int expectedNonMatchCount,
-            int expectedMatchErrors, int expectedNonMatchErrors) {
+            int expectedCurrentCount, int expectedPreviousCount,
+            int expectedCurrentErrors, int expectedPreviousErrors) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        createSpansWithTraces(projectName, 3);
+        createFilterEntities(EntityType.SPANS, projectName, 3);
 
         Instant intervalStart = Instant.now();
 
-        var currentSpans = createSpansWithTraces(projectName, 3);
+        var currentEntities = createFilterEntities(EntityType.SPANS, projectName, 3);
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
-        var filter = filterFn.apply(currentSpans.getFirst());
+        var filter = filterFn.apply(currentEntities.spans().getFirst());
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(EntityType.SPANS)
@@ -314,29 +316,29 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertFilteredMetrics(response, EntityType.SPANS,
-                expectedMatchCount, expectedNonMatchCount,
-                expectedMatchErrors, expectedNonMatchErrors);
+                expectedCurrentCount, expectedPreviousCount,
+                expectedCurrentErrors, expectedPreviousErrors);
     }
 
     @ParameterizedTest
     @MethodSource("spanFilterArguments")
     @DisplayName("span filters narrow previous period KPI metrics")
     void spanFiltersPreviousPeriod(Function<Span, SpanFilter> filterFn,
-            int expectedMatchCount, int expectedNonMatchCount,
-            int expectedMatchErrors, int expectedNonMatchErrors) {
+            int expectedCurrentCount, int expectedPreviousCount,
+            int expectedCurrentErrors, int expectedPreviousErrors) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        var previousSpans = createSpansWithTraces(projectName, 3);
+        var previousEntities = createFilterEntities(EntityType.SPANS, projectName, 3);
 
         Instant intervalStart = Instant.now();
 
-        createSpansWithTraces(projectName, 3);
+        createFilterEntities(EntityType.SPANS, projectName, 3);
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
-        var filter = filterFn.apply(previousSpans.getFirst());
+        var filter = filterFn.apply(previousEntities.spans().getFirst());
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(EntityType.SPANS)
@@ -346,8 +348,8 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertFilteredMetrics(response, EntityType.SPANS,
-                expectedNonMatchCount, expectedMatchCount,
-                expectedNonMatchErrors, expectedMatchErrors);
+                expectedPreviousCount, expectedCurrentCount,
+                expectedPreviousErrors, expectedCurrentErrors);
     }
 
     static Stream<Arguments> spanFilterArguments() {
@@ -429,7 +431,23 @@ class KpiCardsResourceTest {
                                 .operator(Operator.CONTAINS)
                                 .value(span.tags().stream().findFirst().orElse(""))
                                 .build(),
-                        1, 0, 1, 0));
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.FEEDBACK_SCORES)
+                                .operator(Operator.EQUAL)
+                                .key("score1")
+                                .value("1.0")
+                                .build(),
+                        1, 1, 1, 1),
+                Arguments.of(
+                        (Function<Span, SpanFilter>) span -> SpanFilter.builder()
+                                .field(SpanField.FEEDBACK_SCORES)
+                                .operator(Operator.IS_EMPTY)
+                                .key("score2")
+                                .value("")
+                                .build(),
+                        2, 2, 0, 0));
     }
 
     // === Trace Filter Tests ===
@@ -438,21 +456,21 @@ class KpiCardsResourceTest {
     @MethodSource("traceFilterArguments")
     @DisplayName("trace filters narrow current period KPI metrics")
     void traceFiltersCurrentPeriod(Function<Trace, TraceFilter> filterFn,
-            int expectedMatchCount, int expectedNonMatchCount,
-            int expectedMatchErrors, int expectedNonMatchErrors) {
+            int expectedCurrentCount, int expectedPreviousCount,
+            int expectedCurrentErrors, int expectedPreviousErrors) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        createTracesWithSpans(projectName, 3);
+        createFilterEntities(EntityType.TRACES, projectName, 3);
 
         Instant intervalStart = Instant.now();
 
-        var currentTraces = createTracesWithSpans(projectName, 3);
+        var currentEntities = createFilterEntities(EntityType.TRACES, projectName, 3);
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
-        var filter = filterFn.apply(currentTraces.getFirst());
+        var filter = filterFn.apply(currentEntities.traces().getFirst());
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(EntityType.TRACES)
@@ -462,29 +480,29 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertFilteredMetrics(response, EntityType.TRACES,
-                expectedMatchCount, expectedNonMatchCount,
-                expectedMatchErrors, expectedNonMatchErrors);
+                expectedCurrentCount, expectedPreviousCount,
+                expectedCurrentErrors, expectedPreviousErrors);
     }
 
     @ParameterizedTest
     @MethodSource("traceFilterArguments")
     @DisplayName("trace filters narrow previous period KPI metrics")
     void traceFiltersPreviousPeriod(Function<Trace, TraceFilter> filterFn,
-            int expectedMatchCount, int expectedNonMatchCount,
-            int expectedMatchErrors, int expectedNonMatchErrors) {
+            int expectedCurrentCount, int expectedPreviousCount,
+            int expectedCurrentErrors, int expectedPreviousErrors) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        var previousTraces = createTracesWithSpans(projectName, 3);
+        var previousEntities = createFilterEntities(EntityType.TRACES, projectName, 3);
 
         Instant intervalStart = Instant.now();
 
-        createTracesWithSpans(projectName, 3);
+        createFilterEntities(EntityType.TRACES, projectName, 3);
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
-        var filter = filterFn.apply(previousTraces.getFirst());
+        var filter = filterFn.apply(previousEntities.traces().getFirst());
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(EntityType.TRACES)
@@ -494,8 +512,8 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertFilteredMetrics(response, EntityType.TRACES,
-                expectedNonMatchCount, expectedMatchCount,
-                expectedNonMatchErrors, expectedMatchErrors);
+                expectedPreviousCount, expectedCurrentCount,
+                expectedPreviousErrors, expectedCurrentErrors);
     }
 
     static Stream<Arguments> traceFilterArguments() {
@@ -563,10 +581,30 @@ class KpiCardsResourceTest {
                                 .operator(Operator.CONTAINS)
                                 .value(trace.tags().stream().findFirst().orElse(""))
                                 .build(),
-                        1, 0, 1, 0));
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.FEEDBACK_SCORES)
+                                .operator(Operator.EQUAL)
+                                .key("score1")
+                                .value("1.0")
+                                .build(),
+                        1, 1, 1, 1),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.FEEDBACK_SCORES)
+                                .operator(Operator.IS_EMPTY)
+                                .key("score2")
+                                .value("")
+                                .build(),
+                        2, 2, 0, 0));
     }
 
-    private List<Trace> createTracesWithSpans(String projectName, int count) {
+    record FilterEntities(List<Trace> traces, List<Span> spans, List<String> threadIds) {
+    }
+
+    private FilterEntities createFilterEntities(EntityType entityType, String projectName, int count) {
+        List<String> threadIds = new ArrayList<>();
         List<Trace> traces = new ArrayList<>();
         List<Span> spans = new ArrayList<>();
 
@@ -574,12 +612,22 @@ class KpiCardsResourceTest {
             Instant now = Instant.now();
             boolean hasError = (i == 0);
 
+            String threadId = entityType == EntityType.THREADS
+                    ? RandomStringUtils.secure().nextAlphabetic(10)
+                    : null;
+            if (threadId != null) {
+                threadIds.add(threadId);
+            }
+
+            long spanDurationMs = entityType == EntityType.SPANS ? FILTER_DURATION_MS : 50;
+
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .id(idGenerator.generateId(now))
                     .projectName(projectName)
                     .startTime(now)
                     .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
-                    .errorInfo(hasError ? buildErrorInfo() : null)
+                    .errorInfo(entityType == EntityType.TRACES && hasError ? buildErrorInfo() : null)
+                    .threadId(threadId)
                     .build();
             traces.add(trace);
 
@@ -588,52 +636,63 @@ class KpiCardsResourceTest {
                     .traceId(trace.id())
                     .projectName(projectName)
                     .startTime(now)
-                    .endTime(now.plus(50, ChronoUnit.MILLIS))
+                    .endTime(now.plus(spanDurationMs, ChronoUnit.MILLIS))
                     .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
-                    .errorInfo(null)
+                    .errorInfo(entityType == EntityType.SPANS && hasError ? buildErrorInfo() : null)
                     .build());
         }
 
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        return traces;
-    }
+        if (entityType == EntityType.THREADS) {
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
-    // === Span Filter Helpers ===
-
-    private List<Span> createSpansWithTraces(String projectName, int count) {
-        List<Trace> traces = new ArrayList<>();
-        List<Span> spans = new ArrayList<>();
-
-        for (int i = 0; i < count; i++) {
-            Instant now = Instant.now();
-            boolean hasError = (i == 0);
-
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(idGenerator.generateId(now))
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
-                    .errorInfo(null)
-                    .build();
-            traces.add(trace);
-
-            spans.add(factory.manufacturePojo(Span.class).toBuilder()
-                    .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
-                    .traceId(trace.id())
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
-                    .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
-                    .errorInfo(hasError ? buildErrorInfo() : null)
-                    .build());
+            traceResourceClient.threadFeedbackScores(List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
+                            .threadId(threadIds.getFirst())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
+                            .threadId(threadIds.getFirst())
+                            .name("score2")
+                            .value(BigDecimal.valueOf(2.0))
+                            .projectName(projectName)
+                            .build()), API_KEY, WORKSPACE_NAME);
+        } else if (entityType == EntityType.SPANS) {
+            spanResourceClient.feedbackScores(List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score2")
+                            .value(BigDecimal.valueOf(2.0))
+                            .projectName(projectName)
+                            .build()), API_KEY, WORKSPACE_NAME);
+        } else {
+            traceResourceClient.feedbackScores(List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(traces.getFirst().id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(traces.getFirst().id())
+                            .name("score2")
+                            .value(BigDecimal.valueOf(2.0))
+                            .projectName(projectName)
+                            .build()), API_KEY, WORKSPACE_NAME);
         }
 
-        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-
-        return spans;
+        return new FilterEntities(traces, spans, threadIds);
     }
 
     // === Thread Filter Tests ===
@@ -642,21 +701,21 @@ class KpiCardsResourceTest {
     @MethodSource("threadFilterArguments")
     @DisplayName("thread filters narrow current period KPI metrics")
     void threadFiltersCurrentPeriod(Function<TraceThread, TraceThreadFilter> filterFn,
-            int expectedMatchCount, int expectedNonMatchCount) {
+            int expectedCurrentCount, int expectedPreviousCount) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        createThreads(projectName, 3);
+        createFilterEntities(EntityType.THREADS, projectName, 3);
 
         Instant intervalStart = Instant.now();
 
-        var currentThreadIds = createThreads(projectName, 3);
+        var currentEntities = createFilterEntities(EntityType.THREADS, projectName, 3);
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
         var thread = traceResourceClient.getTraceThread(
-                currentThreadIds.getFirst(), projectId, API_KEY, WORKSPACE_NAME);
+                currentEntities.threadIds().getFirst(), projectId, API_KEY, WORKSPACE_NAME);
         var filter = filterFn.apply(thread);
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
@@ -667,28 +726,28 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertFilteredMetrics(response, EntityType.THREADS,
-                expectedMatchCount, expectedNonMatchCount, 0, 0);
+                expectedCurrentCount, expectedPreviousCount, 0, 0);
     }
 
     @ParameterizedTest
     @MethodSource("threadFilterArguments")
     @DisplayName("thread filters narrow previous period KPI metrics")
     void threadFiltersPreviousPeriod(Function<TraceThread, TraceThreadFilter> filterFn,
-            int expectedMatchCount, int expectedNonMatchCount) {
+            int expectedCurrentCount, int expectedPreviousCount) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        var previousThreadIds = createThreads(projectName, 3);
+        var previousEntities = createFilterEntities(EntityType.THREADS, projectName, 3);
 
         Instant intervalStart = Instant.now();
 
-        createThreads(projectName, 3);
+        createFilterEntities(EntityType.THREADS, projectName, 3);
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
         var thread = traceResourceClient.getTraceThread(
-                previousThreadIds.getFirst(), projectId, API_KEY, WORKSPACE_NAME);
+                previousEntities.threadIds().getFirst(), projectId, API_KEY, WORKSPACE_NAME);
         var filter = filterFn.apply(thread);
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
@@ -699,7 +758,7 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         assertFilteredMetrics(response, EntityType.THREADS,
-                expectedNonMatchCount, expectedMatchCount, 0, 0);
+                expectedPreviousCount, expectedCurrentCount, 0, 0);
     }
 
     static Stream<Arguments> threadFilterArguments() {
@@ -752,46 +811,23 @@ class KpiCardsResourceTest {
                                 .operator(Operator.GREATER_THAN)
                                 .value(thread.lastUpdatedAt().minusSeconds(1).toString())
                                 .build(),
-                        3, 3));
-    }
-
-    private List<String> createThreads(String projectName, int count) {
-        List<String> threadIds = new ArrayList<>();
-        List<Trace> traces = new ArrayList<>();
-        List<Span> spans = new ArrayList<>();
-
-        for (int i = 0; i < count; i++) {
-            Instant now = Instant.now();
-            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
-            threadIds.add(threadId);
-
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .id(idGenerator.generateId(now))
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
-                    .errorInfo(null)
-                    .threadId(threadId)
-                    .build();
-            traces.add(trace);
-
-            spans.add(factory.manufacturePojo(Span.class).toBuilder()
-                    .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
-                    .traceId(trace.id())
-                    .projectName(projectName)
-                    .startTime(now)
-                    .endTime(now.plus(50, ChronoUnit.MILLIS))
-                    .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
-                    .errorInfo(null)
-                    .build());
-        }
-
-        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-        Mono.delay(Duration.ofMillis(100)).block();
-        traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
-
-        return threadIds;
+                        3, 3),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.FEEDBACK_SCORES)
+                                .operator(Operator.EQUAL)
+                                .key("score1")
+                                .value("1.0")
+                                .build(),
+                        1, 1),
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.FEEDBACK_SCORES)
+                                .operator(Operator.IS_EMPTY)
+                                .key("score2")
+                                .value("")
+                                .build(),
+                        2, 2));
     }
 
     // === Entity Creation Helper ===
