@@ -1160,4 +1160,3 @@ llmModelRegistry:
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
   remoteEnabled: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-false}
   remoteUrl: ${LLM_MODEL_REGISTRY_REMOTE_URL:-}
-  refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}

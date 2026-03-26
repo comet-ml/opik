@@ -277,14 +277,18 @@ class LlmModelRegistryServiceTest {
 
     @Test
     void remoteFetchDisabledDoesNotCallRemote() {
+        var client = mockHttpClient(200, "openai:\n  - id: \"should-not-appear\"\n");
+
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
         config.setRemoteEnabled(false);
+        config.setRemoteUrl("https://cdn.example.com/models.yaml");
 
-        var service = new LlmModelRegistryService(config);
+        var service = new LlmModelRegistryService(config, client);
 
         assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
         assertThat(service.getRegistry().get("openai")).hasSize(3);
+        org.mockito.Mockito.verifyNoInteractions(client);
     }
 
     private static Client mockHttpClient(int statusCode, String responseBody) {
