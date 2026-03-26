@@ -91,6 +91,37 @@ describe("track with entrypoint", () => {
     }).toThrow(/entrypoint functions must have a name/);
   });
 
+  it("uses explicit params when provided, ignoring function source", () => {
+    const fn = track(
+      {
+        entrypoint: true,
+        name: "explicit-params-agent",
+        params: [
+          { name: "query", type: "string" },
+          { name: "limit", type: "number" },
+        ],
+      },
+      async (a: string, b: number) => `${a}:${b}`
+    );
+
+    expect(typeof fn).toBe("function");
+    const entry = getAll().get("explicit-params-agent");
+    expect(entry!.params).toEqual([
+      { name: "query", type: "string" },
+      { name: "limit", type: "number" },
+    ]);
+  });
+
+  it("falls back to extractParams when params not provided", () => {
+    track(
+      { entrypoint: true, name: "fallback-params-agent" },
+      async (userId: string) => userId
+    );
+
+    const entry = getAll().get("fallback-params-agent");
+    expect(entry!.params).toEqual([{ name: "userId", type: "string" }]);
+  });
+
   it("does not register when entrypoint is not set", () => {
     const _fn = track(
       { name: "not-an-entrypoint" },

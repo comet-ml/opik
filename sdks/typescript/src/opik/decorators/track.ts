@@ -6,7 +6,7 @@ import { Span } from "@/tracer/Span";
 import { Trace } from "@/tracer/Trace";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { getPresetTraceId } from "@/runner/context";
-import { register, extractParams } from "@/runner/registry";
+import { register, extractParams, type Param } from "@/runner/registry";
 import { activateRunner } from "@/runner/activate";
 
 type TrackContext =
@@ -281,6 +281,12 @@ type TrackOptions = {
    * Only effective when used with the function wrapper syntax: track({ entrypoint: true }, fn)
    */
   entrypoint?: boolean;
+  /**
+   * Explicit parameter descriptors for the entrypoint function.
+   * Use this when the SDK is bundled/minified (parameter names are mangled at build time).
+   * If omitted, parameter names are extracted from the function source at runtime.
+   */
+  params?: Param[];
 };
 
 type OriginalFunction = (...args: any[]) => any;
@@ -353,7 +359,7 @@ function applyEntrypoint(
   }
   const agentProject =
     options.projectName || getTrackOpikClient().config.projectName;
-  const params = extractParams(originalFn);
+  const params = options.params ?? extractParams(originalFn);
 
   register({
     func: wrappedFn,

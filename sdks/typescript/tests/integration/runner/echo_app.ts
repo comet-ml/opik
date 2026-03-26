@@ -13,7 +13,7 @@ import { OpikClient as Opik } from "@/client/Client";
 import { track } from "@/decorators/track";
 
 const echo = track(
-  { entrypoint: true, name: "echo" },
+  { entrypoint: true, name: "echo", params: [{ name: "message", type: "string" }] },
   async (message: string): Promise<string> => {
     return `echo: ${message}`;
   }
@@ -24,7 +24,7 @@ const EchoConfig = z
   .describe("EchoConfig");
 
 const echo_config = track(
-  { entrypoint: true, name: "echo_config" },
+  { entrypoint: true, name: "echo_config", params: [{ name: "message", type: "string" }] },
   async (message: string): Promise<string> => {
     const client = new Opik();
     await client.createAgentConfig(EchoConfig, {
