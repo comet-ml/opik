@@ -282,12 +282,18 @@ export class InProcessRunnerLoop {
   private pruneCancelledJobs(now: number): void {
     const cutoff = now - CANCELLED_JOBS_TTL_MS;
     for (const [key, timestamp] of this.cancelledJobs) {
-      if (timestamp > cutoff) break;
-      this.cancelledJobs.delete(key);
+      if (timestamp <= cutoff) {
+        this.cancelledJobs.delete(key);
+      }
     }
-    while (this.cancelledJobs.size > CANCELLED_JOBS_MAX_SIZE) {
-      const firstKey = this.cancelledJobs.keys().next().value;
-      if (firstKey !== undefined) this.cancelledJobs.delete(firstKey);
+    if (this.cancelledJobs.size > CANCELLED_JOBS_MAX_SIZE) {
+      const sorted = [...this.cancelledJobs.entries()].sort(
+        (a, b) => a[1] - b[1]
+      );
+      const toRemove = sorted.length - CANCELLED_JOBS_MAX_SIZE;
+      for (let i = 0; i < toRemove; i++) {
+        this.cancelledJobs.delete(sorted[i][0]);
+      }
     }
   }
 
