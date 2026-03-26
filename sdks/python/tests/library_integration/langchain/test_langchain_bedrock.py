@@ -93,6 +93,7 @@ def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__ha
                 project_name=ANY_STRING,
                 metadata={"created_from": "langchain"},
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -108,8 +109,10 @@ def test_langchain__bedrock_chat_is_used__token_usage_and_provider_is_logged__ha
                 spans=[],
                 provider="bedrock",
                 model=BEDROCK_MODEL_FOR_TESTS,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(fake_backend.trace_trees[0], EXPECTED_TRACE_TREE)
@@ -158,6 +161,7 @@ def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_and_provid
                 project_name=ANY_STRING,
                 metadata={"created_from": "langchain"},
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -173,8 +177,10 @@ def test_langchain__bedrock_chat_is_used__streaming_mode__token_usage_and_provid
                 spans=[],
                 provider="bedrock",
                 model=BEDROCK_MODEL_FOR_TESTS,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -225,6 +231,7 @@ async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_and_p
                 project_name=ANY_STRING,
                 metadata={"created_from": "langchain"},
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -240,8 +247,10 @@ async def test_langchain__bedrock_chat_is_used__async_ainvoke__token_usage_and_p
                 spans=[],
                 provider="bedrock",
                 model=BEDROCK_MODEL_FOR_TESTS,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -294,6 +303,7 @@ async def test_langchain__bedrock_chat_is_used__async_astream__token_usage_and_p
                 project_name=ANY_STRING,
                 metadata={"created_from": "langchain"},
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -309,8 +319,10 @@ async def test_langchain__bedrock_chat_is_used__async_astream__token_usage_and_p
                 spans=[],
                 provider="bedrock",
                 model=BEDROCK_MODEL_FOR_TESTS,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

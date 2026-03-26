@@ -239,7 +239,7 @@ def _patch_step_class() -> None:
                     usage = None
                 total_cost = getattr(self.metrics, "cost_usd", None)
 
-            client.span(
+            client.__internal_api__span__(
                 id=id_helpers.generate_id(),
                 trace_id=trace_data.id,
                 parent_span_id=parent_span_id,

@@ -66,6 +66,7 @@ def start_as_current_span(
         opik_args_data=None,
         tracing_active=True,
         create_duplicate_root_span=True,
+        source="sdk",
     )
 
     end_arguments = arguments_helpers.EndSpanParameters(
@@ -107,13 +108,15 @@ def start_as_current_span(
         span_creation_result.span_data.init_end_time().update(
             **end_arguments.to_kwargs(ignore_keys=["attachments"]),
         )
-        client.span(**span_creation_result.span_data.as_parameters)
+        client.__internal_api__span__(**span_creation_result.span_data.as_parameters)
 
         if span_creation_result.trace_data is not None:
             span_creation_result.trace_data.init_end_time().update(
                 **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
             )
-            client.trace(**span_creation_result.trace_data.as_parameters)
+            client.__internal_api__trace__(
+                **span_creation_result.trace_data.as_parameters
+            )
 
         # Clean up span and trace from context
         opik_context_storage = context_storage.get_current_context_instance()

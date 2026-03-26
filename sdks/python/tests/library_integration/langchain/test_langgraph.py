@@ -110,10 +110,13 @@ def test_langgraph__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -222,14 +225,19 @@ def test_langgraph__invoked_from_tracked_function__langgraph_span_is_kept(
                                         start_time=ANY_BUT_NONE,
                                         end_time=ANY_BUT_NONE,
                                         spans=[],
+                                        source="sdk",
                                     ),
                                 ],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -313,10 +321,13 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
                         provider="openai",
                         type="llm",
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -428,14 +439,19 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
                                         provider="openai",
                                         type="llm",
                                         spans=[],
+                                        source="sdk",
                                     ),
                                 ],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -630,10 +646,13 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     opik.flush_tracker()
@@ -680,7 +699,7 @@ def test_langgraph__distributed_headers__langgraph_span_is_kept(
     span_data.init_end_time().update(
         output={"output": "custom-distributed-headers--output"},
     )
-    client.span(**span_data.as_parameters)
+    client.__internal_api__span__(**span_data.as_parameters)
 
     distributed_headers = DistributedTraceHeadersDict(
         opik_trace_id=span_data.trace_id,
@@ -798,18 +817,23 @@ def test_langgraph__distributed_headers__langgraph_span_is_kept(
                                         end_time=ANY_BUT_NONE,
                                         project_name="langgraph-integration-test--distributed-headers",
                                         last_updated_at=ANY_BUT_NONE,
+                                        source="sdk",
                                     )
                                 ],
                                 last_updated_at=ANY_BUT_NONE,
+                                source="sdk",
                             )
                         ],
                         last_updated_at=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
@@ -853,7 +877,7 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
         },
     )
     trace_data.init_end_time()
-    client.trace(**trace_data.as_parameters)
+    client.__internal_api__trace__(**trace_data.as_parameters)
 
     span_data = span.SpanData(
         trace_id=trace_data.id,
@@ -877,7 +901,7 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.__internal_api__span__(**span_data.__dict__)
 
     callback.flush()
 
@@ -947,18 +971,23 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
                                         end_time=ANY_BUT_NONE,
                                         project_name="Default Project",
                                         last_updated_at=ANY_BUT_NONE,
+                                        source="sdk",
                                     )
                                 ],
                                 last_updated_at=ANY_BUT_NONE,
+                                source="sdk",
                             )
                         ],
                         last_updated_at=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1077,15 +1106,19 @@ def test_langgraph__used_when_there_was_already_existing_trace_without_span__lan
                                 end_time=ANY_BUT_NONE,
                                 project_name="Default Project",
                                 last_updated_at=ANY_BUT_NONE,
+                                source="sdk",
                             )
                         ],
                         last_updated_at=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1244,8 +1277,10 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                         end_time=ANY_BUT_NONE,
                         error_info=None,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1264,8 +1299,10 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                 end_time=ANY_BUT_NONE,
                 error_info=None,
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     # Build expected trace tree for second trace (resumed)
@@ -1297,6 +1334,7 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                 end_time=ANY_BUT_NONE,
                 error_info=None,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1318,8 +1356,10 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                         end_time=ANY_BUT_NONE,
                         error_info=None,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1333,8 +1373,10 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
                 end_time=ANY_BUT_NONE,
                 error_info=None,
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_FIRST_TRACE, fake_backend.trace_trees[0])

@@ -80,8 +80,10 @@ def test_bedrock_converse__happyflow(fake_backend, project_name, expected_projec
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 
@@ -147,8 +149,10 @@ def test_bedrock_converse__create_raises_an_error__span_and_trace_finished_grace
                     }
                 ),
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 
@@ -215,10 +219,13 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
                         usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                         provider="bedrock",
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 
@@ -302,8 +309,10 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 
@@ -402,8 +411,10 @@ def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_corre
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(expected_trace, trace_tree)
@@ -471,8 +482,10 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     # Verify second trace
@@ -503,8 +516,10 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(expected_trace1, fake_backend.trace_trees[0])
@@ -585,8 +600,10 @@ def test_bedrock_converse__opik_args__happyflow(
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 

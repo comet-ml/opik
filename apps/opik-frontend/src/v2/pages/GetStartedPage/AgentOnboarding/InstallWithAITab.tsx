@@ -1,8 +1,12 @@
 import React from "react";
-import { LoaderCircle } from "lucide-react";
+import { Check, LoaderCircle } from "lucide-react";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey } from "@/store/AppStore";
-import { buildDocsUrl, maskAPIKey } from "@/lib/utils";
+import {
+  buildDocsUrl,
+  maskAPIKey,
+  MASKED_API_KEY_PLACEHOLDER,
+} from "@/lib/utils";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import claudeCodeLogo from "/images/integrations/claude_code.svg";
 import codexLogo from "/images/integrations/codex.svg";
@@ -13,20 +17,28 @@ const INSTALL_COMMAND = "npx skills add comet-ml/opik-skills -g";
 const TimelineStep: React.FC<{
   number?: number;
   isLast?: boolean;
+  completed?: boolean;
   children: React.ReactNode;
-}> = ({ number, isLast, children }) => (
+}> = ({ number, isLast, completed, children }) => (
   <div className="flex gap-3">
     <div className="flex flex-col items-center">
       {number != null ? (
-        <div className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-[10px] font-medium text-muted-slate">
+        <div className="flex size-4 shrink-0 items-center justify-center rounded-full border border-[var(--timeline-connector)] text-[8px] font-semibold text-[var(--timeline-connector)]">
           {number}
         </div>
+      ) : completed ? (
+        <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary">
+          <Check className="size-2.5 text-primary-foreground" />
+        </div>
       ) : (
-        <div className="flex size-5 shrink-0 items-center justify-center">
-          <LoaderCircle className="size-4 animate-spin text-primary" />
+        <div className="relative flex size-4 shrink-0 items-center justify-center">
+          <div className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
+          <LoaderCircle className="relative size-3.5 animate-spin text-primary" />
         </div>
       )}
-      {!isLast && <div className="mt-1 w-px flex-1 bg-border" />}
+      {!isLast && (
+        <div className="w-px flex-1 bg-[var(--timeline-connector)] opacity-50" />
+      )}
     </div>
     <div className="flex-1 pb-6">{children}</div>
   </div>
@@ -38,26 +50,32 @@ const CodeBlockWithHeader: React.FC<{
   copyText?: string;
 }> = ({ title, code, copyText }) => (
   <div className="overflow-hidden rounded-md border bg-primary-foreground">
-    <div className="flex items-center justify-between border-b px-3 py-1.5">
+    <div className="flex items-center justify-between border-b px-2.5 py-1">
       <span className="comet-body-xs text-muted-slate">{title}</span>
       <CopyButton
         text={copyText ?? code}
         message="Successfully copied"
         tooltipText="Copy"
-        size="icon-xs"
+        size="icon-3xs"
       />
     </div>
-    <pre className="whitespace-pre-wrap break-words p-2 font-code text-[13px] leading-snug">
+    <pre className="whitespace-pre-wrap break-words px-2.5 py-2 font-code text-[13px] leading-snug">
       {code}
     </pre>
   </div>
 );
 
-const InstallWithAITab: React.FC = () => {
+interface InstallWithAITabProps {
+  traceReceived: boolean;
+}
+
+const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
+  traceReceived,
+}) => {
   const { agentName } = useAgentOnboarding();
   const apiKey = useUserApiKey();
 
-  const fallbackApiKey = "opk-***-your-api-key";
+  const fallbackApiKey = MASKED_API_KEY_PLACEHOLDER;
 
   const buildPrompt = (key: string) =>
     `Instrument my agent with Opik, use project name "${agentName}" and API key "${key}".`;
@@ -68,7 +86,7 @@ const InstallWithAITab: React.FC = () => {
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 px-1">
       <div className="flex flex-wrap items-center gap-2">
         <span className="comet-body-s-accented">Works with</span>
         <div className="flex items-center gap-1.5 rounded border px-2 py-1">
@@ -88,7 +106,7 @@ const InstallWithAITab: React.FC = () => {
 
       <div className="flex flex-col">
         <TimelineStep number={1}>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2.5">
             <h4 className="comet-body-s-accented">Add the Opik skill</h4>
             <p className="comet-body-xs text-muted-slate">
               Install the Opik skill so it&apos;s available in Claude Code,
@@ -99,7 +117,7 @@ const InstallWithAITab: React.FC = () => {
         </TimelineStep>
 
         <TimelineStep number={2}>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2.5">
             <h4 className="comet-body-s-accented">
               Open your coding agent and paste this prompt
             </h4>
@@ -115,22 +133,30 @@ const InstallWithAITab: React.FC = () => {
           </div>
         </TimelineStep>
 
-        <TimelineStep isLast>
+        <TimelineStep isLast completed={traceReceived}>
           <div className="flex flex-col gap-1">
             <h4 className="comet-body-s-accented text-primary">
-              Waiting for first trace…
+              {traceReceived
+                ? "First trace received! You're all set."
+                : "Waiting for first trace…"}
             </h4>
             <p className="comet-body-xs text-muted-slate">
-              Connect your agent to Opik for observability, evaluation and
-              optimization.{" "}
-              <a
-                href={buildDocsUrl("/faq#troubleshooting")}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                Why isn&apos;t my trace showing?
-              </a>
+              {traceReceived ? (
+                "Traces are flowing. You can now debug, evaluate, and optimize."
+              ) : (
+                <>
+                  Connect your agent to Opik for observability, evaluation and
+                  optimization.{" "}
+                  <a
+                    href={buildDocsUrl("/faq#troubleshooting")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    Why isn&apos;t my trace showing?
+                  </a>
+                </>
+              )}
             </p>
           </div>
         </TimelineStep>

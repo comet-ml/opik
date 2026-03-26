@@ -6,7 +6,7 @@ import opik.datetime_helpers as datetime_helpers
 import opik.llm_usage as llm_usage
 import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
-from opik.types import ErrorInfoDict, SpanType, LLMProvider
+from opik.types import ErrorInfoDict, SpanType, LLMProvider, TraceSource
 from .. import constants, span
 
 LOGGER = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ class Trace:
         message_streamer: streamer.Streamer,
         project_name: str,
         url_override: str,
+        source: TraceSource,
     ):
         """
         A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
@@ -27,6 +28,7 @@ class Trace:
         self._streamer = message_streamer
         self._project_name = project_name
         self._url_override = url_override
+        self.source = source
 
     def end(
         self,
@@ -108,6 +110,7 @@ class Trace:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            source=self.source,
         )
 
     def span(
@@ -179,6 +182,7 @@ class Trace:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=self.source,
         )
 
     def log_feedback_score(
@@ -221,6 +225,7 @@ def update_trace(
     trace_id: str,
     project_name: str,
     message_streamer: streamer.Streamer,
+    source: TraceSource,
     end_time: Optional[datetime.datetime] = None,
     metadata: Optional[Dict[str, Any]] = None,
     input: Optional[Dict[str, Any]] = None,
@@ -246,6 +251,7 @@ def update_trace(
         tags: List of tags to associate with the trace. Defaults to None.
         error_info: Error information related to the trace. Defaults to None.
         thread_id : The thread ID associated with the trace. Defaults to None.
+        source: The source of the update. This can be either "sdk", "experiment", "optimization".
     Returns:
         None
     Usage Notes:
@@ -263,5 +269,6 @@ def update_trace(
         tags=tags,
         error_info=error_info,
         thread_id=thread_id,
+        source=source,
     )
     message_streamer.put(update_trace_message)

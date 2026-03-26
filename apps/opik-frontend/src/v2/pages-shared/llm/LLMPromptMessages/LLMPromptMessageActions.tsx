@@ -18,6 +18,7 @@ import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptById from "@/api/prompts/usePromptById";
+import { useActiveProjectId } from "@/store/AppStore";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
@@ -69,6 +70,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   improvePromptConfig,
   disabled = false,
 }) => {
+  const activeProjectId = useActiveProjectId();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
   const selectedPromptIdRef = useRef<string | undefined>();
@@ -344,6 +346,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         )}
         <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
           <PromptsSelectBox
+            projectId={activeProjectId!}
             value={promptId}
             onValueChange={(id) => {
               if (id !== promptId) {

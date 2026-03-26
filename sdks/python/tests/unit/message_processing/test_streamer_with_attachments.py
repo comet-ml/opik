@@ -86,6 +86,7 @@ def test_streamer__create_span_message__attachments_enabled__does_not_wrap_witho
         error_info=None,
         total_cost=None,
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     tested.put(span_message)
@@ -120,6 +121,7 @@ def test_streamer__create_trace_message__attachments_enabled__does_not_wrap_with
         error_info=None,
         thread_id=None,
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     tested.put(trace_message)
@@ -159,6 +161,7 @@ def test_streamer__create_span_message__attachments_disabled__does_not_wrap(
         error_info=None,
         total_cost=None,
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     tested.put(span_message)
@@ -192,6 +195,7 @@ def test_streamer__create_trace_message__attachments_disabled__does_not_wrap(
         error_info=None,
         thread_id=None,
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     tested.put(trace_message)
@@ -227,6 +231,7 @@ def test_streamer__update_span_message__attachments_enabled__wraps_in_attachment
         provider=None,
         error_info=None,
         total_cost=None,
+        source="sdk",
     )
 
     tested.put(update_span_message)
@@ -257,6 +262,7 @@ def test_streamer__update_trace_message__attachments_enabled__wraps_in_attachmen
         tags=None,
         error_info=None,
         thread_id=None,
+        source="sdk",
     )
 
     tested.put(update_trace_message)
@@ -297,6 +303,7 @@ def test_streamer__multiple_span_messages__attachments_enabled__not_wrapped_with
             error_info=None,
             total_cost=None,
             last_updated_at=datetime.now(),
+            source="sdk",
         )
         for i in range(3)
     ]
@@ -341,6 +348,7 @@ def test_streamer__span_with_all_fields_populated__attachments_enabled__wraps_co
         error_info=None,
         total_cost=0.05,
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     tested.put(span_message)
@@ -380,6 +388,7 @@ def test_streamer__trace_with_all_fields_populated__attachments_enabled__wraps_c
         error_info=None,
         thread_id="thread-123",
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     tested.put(trace_message)
@@ -426,6 +435,7 @@ def test_streamer__message_already_marked__attachments_enabled__does_not_wrap_tw
         error_info=None,
         total_cost=None,
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     # Mark the message as already processed
@@ -468,6 +478,7 @@ def test_streamer__null_input_output_metadata__attachments_enabled__doesnt_wraps
         error_info=None,
         total_cost=None,
         last_updated_at=datetime.now(),
+        source="sdk",
     )
 
     tested.put(span_message)

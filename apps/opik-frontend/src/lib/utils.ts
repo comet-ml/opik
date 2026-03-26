@@ -192,6 +192,8 @@ export const getTextWidth = (
 export const toString = (value?: string | number | boolean | null) =>
   isUndefined(value) ? "" : String(value);
 
+export const MASKED_API_KEY_PLACEHOLDER = "opik-****";
+
 export const maskAPIKey = (apiKey: string = "") =>
   `${apiKey.substring(0, 6)}*****************`;
 
