@@ -82,10 +82,11 @@ async function _run(): Promise<void> {
   const shutdownHandler = () => {
     logger.info("Received shutdown signal, stopping runner...");
     loop.shutdown();
+    process.exit(0);
   };
 
-  process.on("SIGTERM", shutdownHandler);
-  process.on("SIGINT", shutdownHandler);
+  process.once("SIGTERM", shutdownHandler);
+  process.once("SIGINT", shutdownHandler);
 }
 
 function printBanner(runnerId: string, projectName: string): void {
