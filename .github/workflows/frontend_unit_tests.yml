@@ -13,6 +13,10 @@ on:
       - "apps/opik-frontend/**"
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   tests:
     name: Test on Node ${{ matrix.node-version }}

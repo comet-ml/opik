@@ -179,6 +179,10 @@ from .types import (
     DashboardPublic,
     DashboardPublicScope,
     DashboardPublicType,
+    DashboardUpdatePublic,
+    DashboardUpdatePublicType,
+    DashboardWrite,
+    DashboardWriteType,
     DataPointDouble,
     DataPointNumberPublic,
     Dataset,
@@ -631,6 +635,7 @@ from . import (
     experiments,
     feedback_definitions,
     guardrails,
+    insights_views,
     llm_models,
     llm_provider_key,
     manual_evaluation,
@@ -659,7 +664,6 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
-from .dashboards import DashboardUpdatePublicScope, DashboardUpdatePublicType, DashboardWriteScope, DashboardWriteType
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
@@ -865,9 +869,9 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
-    "DashboardUpdatePublicScope",
+    "DashboardUpdatePublic",
     "DashboardUpdatePublicType",
-    "DashboardWriteScope",
+    "DashboardWrite",
     "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
@@ -1341,6 +1345,7 @@ __all__ = [
     "experiments",
     "feedback_definitions",
     "guardrails",
+    "insights_views",
     "llm_models",
     "llm_provider_key",
     "manual_evaluation",

@@ -12,6 +12,7 @@ import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
 import { ExperimentsClient } from "./api/resources/experiments/client/Client.js";
 import { FeedbackDefinitionsClient } from "./api/resources/feedbackDefinitions/client/Client.js";
 import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
+import { InsightsViewsClient } from "./api/resources/insightsViews/client/Client.js";
 import { LlmModelsClient } from "./api/resources/llmModels/client/Client.js";
 import { LlmProviderKeyClient } from "./api/resources/llmProviderKey/client/Client.js";
 import { ManualEvaluationClient } from "./api/resources/manualEvaluation/client/Client.js";
@@ -60,6 +61,7 @@ export class OpikApiClient {
     protected _experiments: ExperimentsClient | undefined;
     protected _feedbackDefinitions: FeedbackDefinitionsClient | undefined;
     protected _guardrails: GuardrailsClient | undefined;
+    protected _insightsViews: InsightsViewsClient | undefined;
     protected _llmModels: LlmModelsClient | undefined;
     protected _llmProviderKey: LlmProviderKeyClient | undefined;
     protected _runners: RunnersClient | undefined;
@@ -133,6 +135,10 @@ export class OpikApiClient {
 
     public get guardrails(): GuardrailsClient {
         return (this._guardrails ??= new GuardrailsClient(this._options));
+    }
+
+    public get insightsViews(): InsightsViewsClient {
+        return (this._insightsViews ??= new InsightsViewsClient(this._options));
     }
 
     public get llmModels(): LlmModelsClient {

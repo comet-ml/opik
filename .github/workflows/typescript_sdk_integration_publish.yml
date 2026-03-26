@@ -43,6 +43,10 @@ on:
         required: false
         default: false
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest

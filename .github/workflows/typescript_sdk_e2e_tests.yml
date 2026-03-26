@@ -14,6 +14,10 @@ on:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False

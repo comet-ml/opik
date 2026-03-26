@@ -185,11 +185,12 @@ class EvaluationEngine:
             client=self._client,
             execution_policy=execution_policy_dict or None,
         ):
-            LOGGER.debug("Task started, input: %s", item_content)
+            LOGGER.debug("[engine] Task started for item %s", item.id)
             task_start = time.perf_counter()
             try:
                 task_output_ = task(item_content)
             except Exception as exception:
+                LOGGER.error("[engine] Task failed for item %s: %s", item.id, exception)
                 if exception_analyzer.is_llm_provider_rate_limit_error(exception):
                     LOGGER.error(
                         logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
@@ -197,7 +198,9 @@ class EvaluationEngine:
 
                 raise
             task_execution_time = time.perf_counter() - task_start
-            LOGGER.debug("Task finished, output: %s", task_output_)
+            LOGGER.debug(
+                "[engine] Task done for item %s in %.1fs", item.id, task_execution_time
+            )
 
             opik_context.update_current_trace(output=task_output_)
 
@@ -208,6 +211,7 @@ class EvaluationEngine:
                 dataset_item_content=item_content,
                 dataset_item=item,
             )
+            LOGGER.debug("[engine] Scoring started for item %s", item.id)
             scoring_start = time.perf_counter()
             test_result_ = self._compute_test_result_for_test_case(
                 test_case_=test_case_,
@@ -218,6 +222,11 @@ class EvaluationEngine:
             )
             test_result_.task_execution_time = task_execution_time
             test_result_.scoring_time = time.perf_counter() - scoring_start
+            LOGGER.debug(
+                "[engine] Scoring done for item %s in %.1fs",
+                item.id,
+                test_result_.scoring_time,
+            )
 
         return test_result_
 
