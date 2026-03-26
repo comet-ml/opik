@@ -10,18 +10,14 @@ import {
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
+import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import { BASE_API_URL } from "@/api/api";
+import useAssistantSidebarConfig from "@/api/assistant-sidebar/useAssistantSidebarConfig";
 
 const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
-
-const ASSISTANT_BRIDGE_VERSION = 1;
-const PROD_BASE = import.meta.env.VITE_ASSISTANT_SIDEBAR_CDN_URL;
-const FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
-const FAILURE_KEY = "assistant_load_failure_ts";
 const IS_DEV = import.meta.env.DEV;
-const ASSISTANT_BACKEND_URL =
-  import.meta.env.VITE_ASSISTANT_BACKEND_URL || "/assistant-api";
+const BRIDGE_PROTOCOL_VERSION = 1;
 
 const stopPropagation = (e: Event) => e.stopPropagation();
 
@@ -35,34 +31,6 @@ function useLatestRef<T>(value: T): React.MutableRefObject<T> {
 interface AssistantManifest {
   js: string;
   css?: string;
-}
-
-const isInCooldown = (): boolean => {
-  const ts = sessionStorage.getItem(FAILURE_KEY);
-  if (!ts) return false;
-  return Date.now() - Number(ts) < FAILURE_COOLDOWN_MS;
-};
-
-const markFailure = (): void => {
-  sessionStorage.setItem(FAILURE_KEY, String(Date.now()));
-};
-
-const clearFailure = (): void => {
-  sessionStorage.removeItem(FAILURE_KEY);
-};
-
-async function fetchManifest(
-  baseUrl: string,
-  retry = true,
-): Promise<AssistantManifest> {
-  try {
-    const res = await fetch(`${baseUrl}/manifest.json`);
-    if (!res.ok) throw new Error(`manifest ${res.status}`);
-    return (await res.json()) as AssistantManifest;
-  } catch (err) {
-    if (retry) return fetchManifest(baseUrl, false);
-    throw err;
-  }
 }
 
 type HostListeners = {
@@ -88,7 +56,7 @@ interface BridgeRefs {
 }
 
 const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
-  version: ASSISTANT_BRIDGE_VERSION,
+  version: BRIDGE_PROTOCOL_VERSION,
   getContext: () => refs.context.current,
   subscribe: (event, callback) => {
     const set = refs.listeners.current[event as keyof HostEventMap] as
@@ -101,23 +69,31 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
     };
   },
   emit: (event, data) => {
-    if (event === "navigate") {
-      refs.navigate.current((data as SidebarEventMap["navigate"]).path);
-    } else if (event === "sidebar:resized") {
-      refs.onWidthChange.current(
-        (data as SidebarEventMap["sidebar:resized"]).width,
-      );
-    } else if (event === "notification") {
-      refs.onNotification.current(data as SidebarEventMap["notification"]);
-    } else if (event === "sidebar:request-open") {
-      refs.onRequestVisibility.current(true);
-    } else if (event === "sidebar:request-close") {
-      refs.onRequestVisibility.current(false);
-    } else if (IS_DEV) {
-      console.warn(
-        `[AssistantBridge] Unhandled sidebar event: "${event}"`,
-        data,
-      );
+    switch (event) {
+      case "navigate":
+        refs.navigate.current((data as SidebarEventMap["navigate"]).path);
+        break;
+      case "sidebar:resized":
+        refs.onWidthChange.current(
+          (data as SidebarEventMap["sidebar:resized"]).width,
+        );
+        break;
+      case "notification":
+        refs.onNotification.current(data as SidebarEventMap["notification"]);
+        break;
+      case "sidebar:request-open":
+        refs.onRequestVisibility.current(true);
+        break;
+      case "sidebar:request-close":
+        refs.onRequestVisibility.current(false);
+        break;
+      default:
+        if (IS_DEV) {
+          console.warn(
+            `[AssistantBridge] Unhandled sidebar event: "${event}"`,
+            data,
+          );
+        }
     }
   },
 });
@@ -133,7 +109,7 @@ function emitHostEvent<E extends keyof HostEventMap>(
   }
 }
 
-function useBridgeContext(): BridgeContext {
+function useBridgeContext(assistantBackendUrl: string): BridgeContext {
   const workspaceName = useActiveWorkspaceName();
   const workspace = useWorkspace();
 
@@ -156,10 +132,16 @@ function useBridgeContext(): BridgeContext {
       projectId: resolvedProjectId,
       projectName,
       baseApiUrl: BASE_API_URL,
-      assistantBackendUrl: ASSISTANT_BACKEND_URL,
+      assistantBackendUrl,
       theme: "light",
     }),
-    [workspaceId, workspaceName, resolvedProjectId, projectName],
+    [
+      workspaceId,
+      workspaceName,
+      resolvedProjectId,
+      projectName,
+      assistantBackendUrl,
+    ],
   );
 }
 
@@ -169,32 +151,32 @@ interface AssistantMeta {
 }
 
 function useAssistantMeta(): AssistantMeta | null {
-  const versionBase = `${PROD_BASE}/v${ASSISTANT_BRIDGE_VERSION}`;
+  const { data: config } = useAssistantSidebarConfig();
+
+  // Local env var overrides the manifest base URL from the config endpoint
+  const resolvedManifestUrl = DEV_BASE_URL
+    ? `${DEV_BASE_URL}/manifest.json`
+    : config?.manifest_url || null;
+
+  const manifestBase = resolvedManifestUrl
+    ? resolvedManifestUrl.substring(0, resolvedManifestUrl.lastIndexOf("/"))
+    : null;
 
   const { data } = useQuery<AssistantMeta>({
-    queryKey: ["assistant-manifest", versionBase],
+    queryKey: ["assistant-manifest", resolvedManifestUrl],
     queryFn: async () => {
-      try {
-        const manifest = await fetchManifest(versionBase);
-        clearFailure();
-        return {
-          scriptUrl: `${versionBase}/${manifest.js}`,
-          cssUrl: manifest.css ? `${versionBase}/${manifest.css}` : undefined,
-        };
-      } catch (err) {
-        markFailure();
-        throw err;
-      }
+      const res = await fetch(resolvedManifestUrl!);
+      if (!res.ok) throw new Error(`manifest ${res.status}`);
+      const manifest: AssistantManifest = await res.json();
+      return {
+        scriptUrl: `${manifestBase}/${manifest.js}`,
+        cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
+      };
     },
-    enabled: !IS_DEV && !!PROD_BASE && !isInCooldown(),
+    enabled: !!resolvedManifestUrl && !!config?.enabled,
     staleTime: Infinity,
-    retry: false,
+    retry: 1,
   });
-
-  // In dev mode, return meta directly from env var — no fetch needed
-  if (IS_DEV && DEV_BASE_URL) {
-    return { scriptUrl: `${DEV_BASE_URL}/assistant.js` };
-  }
 
   return data ?? null;
 }
@@ -207,7 +189,11 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   onWidthChange,
 }) => {
   const meta = useAssistantMeta();
-  const context = useBridgeContext();
+  const { data: sidebarConfig } = useAssistantSidebarConfig();
+  const { backendUrl, isReady: isBackendReady } = useAssistantBackend({
+    enabled: sidebarConfig?.enabled,
+  });
+  const context = useBridgeContext(backendUrl ?? "");
   const router = useRouter();
 
   const { toast } = useToast();
@@ -287,7 +273,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     }
   }, []);
 
-  if (!meta) return null;
+  if (!meta || !isBackendReady) return null;
 
   return (
     <iframe
