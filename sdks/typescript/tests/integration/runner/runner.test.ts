@@ -158,6 +158,9 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
     if (client) {
       await client.flush();
     }
+    if (client && projectId) {
+      await client.api.projects.deleteProjectById(projectId).catch(() => {});
+    }
   });
 
   it(
