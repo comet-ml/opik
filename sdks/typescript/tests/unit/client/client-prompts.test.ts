@@ -122,6 +122,7 @@ describe("Opik prompt operations", () => {
             type: PromptType.MUSTACHE,
           },
           templateStructure: PromptTemplateStructure.Text,
+          projectName: "opik-sdk-typescript",
         },
         client.api.requestOptions
       );
@@ -216,6 +217,7 @@ describe("Opik prompt operations", () => {
             type: PromptType.MUSTACHE,
           },
           templateStructure: PromptTemplateStructure.Text,
+          projectName: "opik-sdk-typescript",
         },
         client.api.requestOptions
       );
@@ -433,7 +435,7 @@ describe("Opik prompt operations", () => {
         client.api.requestOptions
       );
       expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
-        { name: "test-prompt" },
+        { name: "test-prompt", projectName: "opik-sdk-typescript" },
         client.api.requestOptions
       );
       expect(result).toBeInstanceOf(Prompt);
@@ -477,7 +479,7 @@ describe("Opik prompt operations", () => {
       });
 
       expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
-        { name: "test-prompt", commit: "specific-commit" },
+        { name: "test-prompt", commit: "specific-commit", projectName: "opik-sdk-typescript" },
         client.api.requestOptions
       );
       expect(result).toBeInstanceOf(Prompt);

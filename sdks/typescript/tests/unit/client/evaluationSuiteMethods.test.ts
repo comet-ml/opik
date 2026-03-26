@@ -186,6 +186,7 @@ describe("EvaluationSuite static methods", () => {
       expect(suite.name).toBe("test-suite");
       expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
         datasetName: "test-suite",
+        projectName: "opik-sdk-typescript-test",
       });
       expect(syncHashesSpy).toHaveBeenCalled();
     });
