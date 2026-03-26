@@ -2,11 +2,12 @@ import React, { useMemo, useState } from "react";
 import { BookOpen } from "lucide-react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import IntegrationCard from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey } from "@/store/AppStore";
+import { maskAPIKey, MASKED_API_KEY_PLACEHOLDER } from "@/lib/utils";
 import {
   INTEGRATION_CATEGORIES,
   getIntegrationsByCategory,
@@ -48,8 +49,8 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
           <span className="comet-body-s-accented px-0.5 pb-0.5">
             Project name
           </span>
-          <div className="flex items-center gap-1 rounded border bg-primary-foreground px-2 py-1">
-            <code className="comet-body-xs text-muted-slate">{agentName}</code>
+          <div className="flex h-8 items-center gap-1 rounded border bg-primary-foreground px-2.5">
+            <code className="comet-body-s text-muted-slate">{agentName}</code>
             <CopyButton
               text={agentName}
               message="Project name copied"
@@ -61,9 +62,9 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <span className="comet-body-s-accented px-0.5 pb-0.5">API key</span>
-          <div className="flex items-center gap-1 rounded border bg-primary-foreground px-2 py-1">
-            <code className="comet-body-xs text-muted-slate">
-              opk-***-your-api-key
+          <div className="flex h-8 items-center gap-1 rounded border bg-primary-foreground px-2.5">
+            <code className="comet-body-s text-muted-slate">
+              {apiKey ? maskAPIKey(apiKey) : MASKED_API_KEY_PLACEHOLDER}
             </code>
             <CopyButton
               text={apiKey || ""}
@@ -76,65 +77,74 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
         </div>
       </div>
 
-      <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-        <TabsList variant="underline">
+      <div className="flex flex-col gap-4">
+        <ToggleGroup
+          type="single"
+          value={activeCategory}
+          onValueChange={(v) => v && setActiveCategory(v)}
+          variant="secondary"
+          size="sm"
+          className="justify-start"
+        >
           {CATEGORY_TABS.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} variant="underline">
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent value={activeCategory}>
-          <div className="grid grid-cols-4 gap-2">
-            {integrations.map((integration) => (
-              <div key={integration.id} title={integration.title}>
-                <IntegrationCard
-                  title={integration.title}
-                  icon={
-                    <img
-                      alt={integration.title}
-                      src={
-                        themeMode === THEME_MODE.DARK && integration.whiteIcon
-                          ? integration.whiteIcon
-                          : integration.icon
-                      }
-                      className="size-4 shrink-0"
-                    />
-                  }
-                  className="h-8 gap-1 overflow-hidden p-[0.375rem_0.5rem] [&>div:last-child]:min-w-0 [&_h3]:truncate"
-                  iconClassName="min-w-0"
-                  onClick={() => onSelectIntegration(integration.id)}
-                  id={`onboarding-integration-card-${integration.id}`}
-                  data-fs-element={`OnboardingIntegrationCard-${integration.id}`}
-                />
-              </div>
-            ))}
-
-            <a
-              href={buildDocsUrl(
-                "/integrations/overview",
-                "&utm_source=opik_frontend&utm_medium=onboarding&utm_campaign=integrations_docs",
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
+            <ToggleGroupItem
+              key={tab.value}
+              value={tab.value}
+              className="text-muted-slate"
             >
+              {tab.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+
+        <div className="grid grid-cols-4 gap-2">
+          {integrations.map((integration) => (
+            <div key={integration.id} title={integration.title}>
               <IntegrationCard
-                title="View all"
+                title={integration.title}
                 icon={
-                  <div className="flex size-4 items-center justify-center rounded bg-primary/10">
-                    <BookOpen className="size-3 text-primary" />
-                  </div>
+                  <img
+                    alt={integration.title}
+                    src={
+                      themeMode === THEME_MODE.DARK && integration.whiteIcon
+                        ? integration.whiteIcon
+                        : integration.icon
+                    }
+                    className="size-4 shrink-0"
+                  />
                 }
-                className="h-8 gap-1 overflow-hidden p-[0.375rem_0.5rem] [&>div:last-child]:min-w-0 [&_h3]:truncate"
+                className="h-8 gap-1 overflow-hidden p-[0.375rem_0.5rem] [&>div:last-child]:min-w-0 [&_h3]:truncate [&_h3]:font-normal"
                 iconClassName="min-w-0"
-                id="onboarding-integration-view-all"
-                data-fs-element="OnboardingIntegrationViewAll"
+                onClick={() => onSelectIntegration(integration.id)}
+                id={`onboarding-integration-card-${integration.id}`}
+                data-fs-element={`OnboardingIntegrationCard-${integration.id}`}
               />
-            </a>
-          </div>
-        </TabsContent>
-      </Tabs>
+            </div>
+          ))}
+
+          <a
+            href={buildDocsUrl(
+              "/integrations/overview",
+              "&utm_source=opik_frontend&utm_medium=onboarding&utm_campaign=integrations_docs",
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <IntegrationCard
+              title="View all"
+              icon={
+                <div className="flex size-4 items-center justify-center rounded bg-primary/10">
+                  <BookOpen className="size-3 text-primary" />
+                </div>
+              }
+              className="h-8 gap-1 overflow-hidden p-[0.375rem_0.5rem] [&>div:last-child]:min-w-0 [&_h3]:truncate"
+              iconClassName="min-w-0"
+              id="onboarding-integration-view-all"
+              data-fs-element="OnboardingIntegrationViewAll"
+            />
+          </a>
+        </div>
+      </div>
     </div>
   );
 };
