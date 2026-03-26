@@ -70,6 +70,7 @@ export enum ManagementPermissionsNames {
   DASHBOARD_EDIT = "dashboard_edit",
   DASHBOARD_DELETE = "dashboard_delete",
   DATASET_VIEW = "dataset_view",
+  DATASET_CREATE = "dataset_create",
   DATASET_EDIT = "dataset_edit",
   DATASET_DELETE = "dataset_delete",
   ANNOTATION_QUEUE_CREATE = "annotation_queue_create",

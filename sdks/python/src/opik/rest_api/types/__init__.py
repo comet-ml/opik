@@ -214,6 +214,10 @@ from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
 from .dashboard_public_type import DashboardPublicType
+from .dashboard_update_public import DashboardUpdatePublic
+from .dashboard_update_public_type import DashboardUpdatePublicType
+from .dashboard_write import DashboardWrite
+from .dashboard_write_type import DashboardWriteType
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -825,6 +829,10 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
+    "DashboardUpdatePublic",
+    "DashboardUpdatePublicType",
+    "DashboardWrite",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",

@@ -25,6 +25,9 @@ type PluginStore = {
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
   SidebarWorkspaceSelector: React.ComponentType | null;
+  AssistantSidebar: React.ComponentType<{
+    onWidthChange: (width: number) => void;
+  }> | null;
   UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
@@ -45,6 +48,7 @@ const PLUGIN_NAMES = [
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
   "SidebarWorkspaceSelector",
+  "AssistantSidebar",
   "UpgradeButton",
   "init",
 ];
@@ -63,6 +67,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
   SidebarWorkspaceSelector: null,
+  AssistantSidebar: null,
   UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {

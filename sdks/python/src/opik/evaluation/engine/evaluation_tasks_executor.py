@@ -1,11 +1,14 @@
+import logging
 import threading
+import time
 from collections import defaultdict
 from concurrent import futures
 from typing import Any, Dict, List, Optional, TypeVar, Generic
 
 from ..metrics.score_result import ScoreResult
-
 from .types import EvaluationTask
+
+LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -98,7 +101,15 @@ class StreamingExecutor(Generic[T]):
 
     def _on_future_done(self, future: futures.Future[T]) -> None:
         """Callback fired by worker thread when a task completes."""
-        if future.exception() is not None:
+        exc = future.exception()
+        if exc is not None:
+            group_id = self._future_to_group.get(future)
+            LOGGER.warning(
+                "Evaluation task failed (group=%s): %s: %s",
+                group_id,
+                type(exc).__name__,
+                exc,
+            )
             return
 
         result = future.result()
@@ -160,7 +171,18 @@ class StreamingExecutor(Generic[T]):
                 self._progress_bar.total = self._task_count
 
         # Wait for all futures to complete
+        LOGGER.debug(
+            "[executor] Waiting for %d futures to complete...",
+            len(self._submitted_futures),
+        )
+        wait_start = time.monotonic()
         futures.wait(self._submitted_futures)
+        elapsed = time.monotonic() - wait_start
+        LOGGER.debug(
+            "[executor] All %d futures completed in %.1fs",
+            len(self._submitted_futures),
+            elapsed,
+        )
 
         # Re-raise first exception if any task failed
         for future in self._submitted_futures:

@@ -592,8 +592,11 @@
   }
 
   .comet-content-inset {
-    --comet-content-width: calc(100vw - var(--sidebar-width));
+    --comet-content-width: calc(
+      100vw - var(--sidebar-width) - var(--assistant-sidebar-width, 0px)
+    );
     left: var(--sidebar-width);
+    right: 0;
   }
 
   .comet-table-row-best td {
