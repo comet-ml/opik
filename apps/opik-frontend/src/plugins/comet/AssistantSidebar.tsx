@@ -32,6 +32,7 @@ interface AssistantManifest {
   js: string;
   css?: string;
   shell: string;
+  ver: string;
 }
 
 type HostListeners = {
@@ -150,6 +151,7 @@ interface AssistantMeta {
   scriptUrl: string;
   cssUrl?: string;
   shellUrl: string;
+  version: string;
 }
 
 function useAssistantMeta(): AssistantMeta | null {
@@ -173,9 +175,8 @@ function useAssistantMeta(): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: IS_DEV
-          ? "/assistant/shell"
-          : `${manifestBase}/${manifest.shell}`,
+        shellUrl: IS_DEV ? "/assistant/shell" : `/assistant/${manifest.shell}`,
+        version: manifest.ver,
       };
     },
     enabled: !!resolvedManifestUrl && !!config?.enabled,

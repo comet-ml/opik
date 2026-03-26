@@ -46,6 +46,11 @@ declare global {
       unmount: (element: HTMLElement) => void;
     };
     opikBridge?: AssistantSidebarBridge;
-    __opikAssistantMeta__?: { scriptUrl: string; cssUrl?: string };
+    __opikAssistantMeta__?: {
+      scriptUrl: string;
+      cssUrl?: string;
+      shellUrl: string;
+      version: string;
+    };
   }
 }
