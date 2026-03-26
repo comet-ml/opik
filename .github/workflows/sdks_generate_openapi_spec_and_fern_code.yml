@@ -1,8 +1,6 @@
 name: SDKs Generate OpenAPI spec and Fern code
 
 on:
-  schedule:
-    - cron: '0 0 * * 1-5' # Runs at midnight UTC, Monday to Friday
   push:
     branches: ['main']
     paths:
