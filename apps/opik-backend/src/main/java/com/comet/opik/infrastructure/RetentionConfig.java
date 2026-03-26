@@ -80,8 +80,21 @@ public class RetentionConfig {
         @JsonProperty
         @Min(1) private long defaultVelocity = 1_000_000;
 
+        /** Interval in minutes between catch-up cycles. */
+        @JsonProperty
+        @Min(1) @Max(1440) private int intervalMinutes = 60;
+
+        /** Max time (seconds) the catch-up job can hold the distributed lock. */
+        @JsonProperty
+        @Min(1) @Max(7200) private int lockTimeoutSeconds = 1800;
+
         /** Earliest possible date for catch-up cursor start (service launch date). */
         @JsonProperty
         private LocalDate serviceStartDate = LocalDate.of(2024, 9, 1);
+
+        /** Derived: interval between catch-up executions. */
+        public Duration getInterval() {
+            return Duration.ofMinutes(intervalMinutes);
+        }
     }
 }

@@ -4,10 +4,13 @@ import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
 import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
+import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
+import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
@@ -48,6 +51,8 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setMetricsAlertJob();
                 setExperimentDenormalizationJob();
                 setLocalRunnerReaperJob();
+                setRetentionSlidingWindowJob();
+                setRetentionCatchUpJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
 
@@ -131,6 +136,28 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(LocalRunnerReaperJob.class,
                 localRunnerConfig.getReaperJobInterval().toJavaDuration(), null);
+    }
+
+    private void setRetentionSlidingWindowJob() {
+        RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
+
+        if (!retentionConfig.isEnabled()) {
+            log.info("Retention sliding window job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(RetentionSlidingWindowJob.class, retentionConfig.getInterval(), null);
+    }
+
+    private void setRetentionCatchUpJob() {
+        RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
+
+        if (!retentionConfig.isEnabled() || !retentionConfig.getCatchUp().isEnabled()) {
+            log.info("Retention catch-up job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(RetentionCatchUpJob.class, retentionConfig.getCatchUp().getInterval(), null);
     }
 
     private void scheduleRepeatingJob(Class<? extends org.quartz.Job> jobClass, Duration interval,
