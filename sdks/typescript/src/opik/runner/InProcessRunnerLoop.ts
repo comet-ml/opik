@@ -161,7 +161,7 @@ export class InProcessRunnerLoop {
     const entry = getAll().get(agentName);
     if (!entry) {
       logger.error(`Unknown agent '${agentName}' for job ${jobId}`);
-      await this.reportJobResult(jobId, { status: "failed", error: `Unknown agent: ${agentName}` });
+      await this.reportJobResult(jobId, { status: "failed", error: `Unknown agent: ${agentName}`, traceId: job.traceId });
       return;
     }
 

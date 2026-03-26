@@ -169,6 +169,7 @@ describe("InProcessRunnerLoop", () => {
       expect.objectContaining({
         status: "failed",
         error: "Unknown agent: nonexistent-agent",
+        traceId: "trace-1",
       })
     );
   });
