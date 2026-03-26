@@ -124,7 +124,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
                 size="icon-xs"
                 variant="outline"
                 onClick={handleTraceLinkClick}
-                className="absolute right-1 top-1 hidden group-hover:flex"
+                className="absolute right-1 top-1 z-10 hidden group-hover:flex"
               >
                 <ListTree />
               </Button>
