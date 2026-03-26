@@ -2,6 +2,7 @@
 
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import type { LocalRunnerJob } from "@/rest_api/api/types/LocalRunnerJob";
+import type { LocalRunnerJobResultRequest } from "@/rest_api/api/resources/runners/client/requests/LocalRunnerJobResultRequest";
 import { OpikApiError } from "@/rest_api/errors/OpikApiError";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
 import { agentConfigContext } from "@/agent-config/configContext";
@@ -151,93 +152,30 @@ export class InProcessRunnerLoop {
   private async executeJob(job: LocalRunnerJob): Promise<void> {
     const jobId = job.id ?? "";
     const agentName = job.agentName ?? "";
-    const inputs = (job.inputs as Record<string, any>) ?? {};
-    const traceId = job.traceId;
-    const maskId = job.maskId;
 
     if (this.cancelledJobs.has(jobId)) {
       this.cancelledJobs.delete(jobId);
       return;
     }
 
-    const registry = getAll();
-    const entry = registry.get(agentName);
+    const entry = getAll().get(agentName);
     if (!entry) {
       logger.error(`Unknown agent '${agentName}' for job ${jobId}`);
-      try {
-        await this.api.runners.reportJobResult(jobId, {
-          status: "failed",
-          error: `Unknown agent: ${agentName}`,
-        });
-      } catch {
-        logger.debug(`Failed to report error for job ${jobId}`);
-      }
+      await this.reportJobResult(jobId, { status: "failed", error: `Unknown agent: ${agentName}` });
       return;
     }
 
     try {
-      const timeout = job.timeout;
-      const args = entry.params.map((p) => inputs[p.name]);
-
-      const execute = () =>
-        runWithJobContext({ traceId, jobId }, () => {
-          if (maskId) {
-            return agentConfigContext(maskId, () => entry.func(...args));
-          }
-          return entry.func(...args);
-        });
-
-      const rawResult = execute();
-      const resultPromise = rawResult instanceof Promise ? rawResult : Promise.resolve(rawResult);
-
-      let result: any;
-      if (timeout && timeout > 0) {
-        result = await Promise.race([
-          resultPromise,
-          new Promise<never>((_, reject) => {
-            const t = setTimeout(
-              () => reject(new TimeoutError("Job timed out")),
-              timeout * 1000
-            );
-            t.unref();
-          }),
-        ]);
-      } else {
-        result = await resultPromise;
-      }
-
+      const result = await this.invokeAgent(job, jobId);
       await flushAll().catch((err) => {
         logger.debug("Flush error after job execution", { error: err });
       });
-
-      if (
-        result !== null &&
-        result !== undefined &&
-        typeof result !== "string" &&
-        typeof result !== "number" &&
-        typeof result !== "boolean" &&
-        !Array.isArray(result) &&
-        typeof result !== "object"
-      ) {
-        result = String(result);
-      }
-
-      const reportResult =
-        typeof result === "object" && result !== null && !Array.isArray(result)
-          ? result
-          : { result };
-
       await this.sendJobLogs(jobId);
-
-      try {
-        await this.api.runners.reportJobResult(jobId, {
-          status: "completed",
-          result: reportResult,
-          traceId,
-        });
-      } catch {
-        logger.debug(`Failed to report result for job ${jobId}`);
-      }
+      await this.reportJobResult(jobId, {
+        status: "completed",
+        result: this.normalizeResult(result),
+        traceId: job.traceId,
+      });
     } catch (err) {
       await flushAll().catch(() => {});
       await this.sendJobLogs(jobId);
@@ -255,15 +193,68 @@ export class InProcessRunnerLoop {
         logger.error(`Job ${jobId} failed: ${errorMessage}`);
       }
 
-      try {
-        await this.api.runners.reportJobResult(jobId, {
-          status: "failed",
-          error: errorMessage,
-          traceId,
-        });
-      } catch {
-        logger.debug(`Failed to report error for job ${jobId}`);
-      }
+      await this.reportJobResult(jobId, { status: "failed", error: errorMessage, traceId: job.traceId });
+    }
+  }
+
+  private async invokeAgent(job: LocalRunnerJob, jobId: string): Promise<any> {
+    const agentName = job.agentName ?? "";
+    const inputs = (job.inputs as Record<string, any>) ?? {};
+    const traceId = job.traceId;
+    const maskId = job.maskId;
+
+    const entry = getAll().get(agentName)!;
+    const args = entry.params.map((p) => inputs[p.name]);
+
+    const run = () =>
+      runWithJobContext({ traceId, jobId }, () => {
+        if (maskId) {
+          return agentConfigContext(maskId, () => entry.func(...args));
+        }
+        return entry.func(...args);
+      });
+
+    const resultPromise = Promise.resolve(run());
+
+    const timeout = job.timeout;
+    if (timeout && timeout > 0) {
+      return Promise.race([
+        resultPromise,
+        new Promise<never>((_, reject) => {
+          const t = setTimeout(() => reject(new TimeoutError("Job timed out")), timeout * 1000);
+          t.unref();
+        }),
+      ]);
+    }
+
+    return resultPromise;
+  }
+
+  private normalizeResult(result: any): any {
+    if (
+      result !== null &&
+      result !== undefined &&
+      typeof result !== "string" &&
+      typeof result !== "number" &&
+      typeof result !== "boolean" &&
+      !Array.isArray(result) &&
+      typeof result !== "object"
+    ) {
+      result = String(result);
+    }
+    return typeof result === "object" && result !== null && !Array.isArray(result)
+      ? result
+      : { result };
+  }
+
+  private async reportJobResult(
+    jobId: string,
+    payload: LocalRunnerJobResultRequest
+  ): Promise<void> {
+    try {
+      await this.api.runners.reportJobResult(jobId, payload);
+    } catch {
+      logger.debug(`Failed to report result for job ${jobId}`);
     }
   }
 
