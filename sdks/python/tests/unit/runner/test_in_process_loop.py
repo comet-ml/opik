@@ -306,15 +306,13 @@ class TestJobExecution:
                     "span": {"metadata": {"k": "v"}},
                 }
             },
-            trace_id="t-123",
         )
 
         loop = asyncio.new_event_loop()
         loop.run_until_complete(lp._execute_job(job))
         loop.close()
 
-        assert captured_kwargs["opik_args"]["trace"]["id"] != "t-123"
-        assert captured_kwargs["opik_args"]["trace"]["id"]  # non-empty generated id
+        assert len(captured_kwargs["opik_args"]["trace"]["id"]) > 0  # injected trace ID
         assert captured_kwargs["opik_args"]["trace"]["tags"] == ["existing"]
         assert captured_kwargs["opik_args"]["span"]["metadata"] == {"k": "v"}
 
