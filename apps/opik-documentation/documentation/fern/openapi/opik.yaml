@@ -9321,9 +9321,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -9766,9 +9766,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10221,9 +10221,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -17447,6 +17447,15 @@ components:
         last_updated_at:
           type: string
           format: date-time
+          readOnly: true
+        catch_up_cursor:
+          type: string
+          description: Current position of historical data cleanup
+          format: uuid
+          readOnly: true
+        catch_up_done:
+          type: boolean
+          description: Whether historical catch-up is complete
           readOnly: true
     RetentionRule_Write:
       required:
