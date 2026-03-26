@@ -85,6 +85,12 @@ describe("track with entrypoint", () => {
     expect(all.has("myNamedAgent")).toBe(true);
   });
 
+  it("throws when entrypoint=true and no name can be determined", () => {
+    expect(() => {
+      track({ entrypoint: true }, async (x: string) => x);
+    }).toThrow(/entrypoint functions must have a name/);
+  });
+
   it("does not register when entrypoint is not set", () => {
     const _fn = track(
       { name: "not-an-entrypoint" },

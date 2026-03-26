@@ -345,8 +345,14 @@ function applyEntrypoint(
   wrappedFn: OriginalFunction,
   options: TrackOptions
 ): void {
-  const agentName = options.name || originalFn.name || "unnamed_agent";
-  const agentProject = options.projectName || "default";
+  const agentName = options.name || originalFn.name;
+  if (!agentName) {
+    throw new Error(
+      "entrypoint functions must have a name. Provide one via track({ name: '...' }) or use a named function."
+    );
+  }
+  const agentProject =
+    options.projectName || getTrackOpikClient().config.projectName;
   const params = extractParams(originalFn);
 
   register({
