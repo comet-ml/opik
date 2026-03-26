@@ -741,6 +741,12 @@ cacheManager:
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    # Default: PT5M
+    # Description: Cache TTL for workspace version determination results, applied per workspace
+    # Scope: Per workspace (cache key includes workspace ID)
+    # Overrides: Overrides defaultDuration for the workspace_version cache group
+    # Operational impact: Lower values increase DB query frequency on workspace load; higher values delay version transitions after entity changes
+    workspace_version: ${CACHE_MANAGER_WORKSPACE_VERSION_DURATION:-PT5M}
     experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
     # Default: PT30M
     # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
@@ -890,6 +896,13 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the Assistant Sidebar feature is enabled
   assistantSidebarEnabled: ${TOGGLE_ASSISTANT_SIDEBAR_ENABLED:-"false"}
+  # Default: version_1
+  # Description: Forces ALL workspaces to a specific navigation version. Highest priority override.
+  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
+  # Scope: Global — applies to all workspaces regardless of their entity state.
+  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
+  # Operational impact: Set to "version_1" until V2 is ready, then change to "disabled" to enable entity-based determination.
+  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_1"}
 
 # Local Runner configuration
 localRunner:
