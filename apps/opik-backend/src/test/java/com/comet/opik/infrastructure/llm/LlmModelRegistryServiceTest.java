@@ -3,11 +3,17 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.Invocation;
+import jakarta.ws.rs.client.WebTarget;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -15,6 +21,9 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class LlmModelRegistryServiceTest {
 
@@ -216,5 +225,81 @@ class LlmModelRegistryServiceTest {
         service.reload();
 
         assertThat(service.getRegistry().get("openai").stream().anyMatch(m -> m.id().equals("second-model"))).isTrue();
+    }
+
+    @Test
+    void remoteFetchMergesOnTopOfClasspathDefaults() {
+        var remoteYaml = "openai:\n  - id: \"remote-new-model\"\n    structuredOutput: true\n";
+        var client = mockHttpClient(200, remoteYaml);
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setRemoteEnabled(true);
+        config.setRemoteUrl("https://cdn.example.com/models.yaml");
+
+        var service = new LlmModelRegistryService(config, client);
+        var openai = service.getRegistry().get("openai");
+
+        // Classpath default models + remote model merged
+        assertThat(openai.stream().anyMatch(m -> m.id().equals("gpt-4o"))).isTrue();
+        assertThat(openai.stream().anyMatch(m -> m.id().equals("remote-new-model"))).isTrue();
+    }
+
+    @Test
+    void remoteFetchNon200FallsBackToClasspathDefaults() {
+        var client = mockHttpClient(503, "Service Unavailable");
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setRemoteEnabled(true);
+        config.setRemoteUrl("https://cdn.example.com/models.yaml");
+
+        var service = new LlmModelRegistryService(config, client);
+
+        // Should still have classpath defaults
+        assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
+        assertThat(service.getRegistry().get("openai")).hasSize(3);
+    }
+
+    @Test
+    void remoteFetchMalformedYamlFallsBackToClasspathDefaults() {
+        var client = mockHttpClient(200, "not: valid: yaml: [[[");
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setRemoteEnabled(true);
+        config.setRemoteUrl("https://cdn.example.com/models.yaml");
+
+        var service = new LlmModelRegistryService(config, client);
+
+        assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
+    }
+
+    @Test
+    void remoteFetchDisabledDoesNotCallRemote() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setRemoteEnabled(false);
+
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
+        assertThat(service.getRegistry().get("openai")).hasSize(3);
+    }
+
+    private static Client mockHttpClient(int statusCode, String responseBody) {
+        var client = mock(Client.class);
+        var webTarget = mock(WebTarget.class);
+        var builder = mock(Invocation.Builder.class);
+        var response = mock(Response.class);
+
+        when(client.target(any(java.net.URI.class))).thenReturn(webTarget);
+        when(webTarget.request()).thenReturn(builder);
+        when(builder.get()).thenReturn(response);
+        when(response.getStatus()).thenReturn(statusCode);
+        when(response.readEntity(InputStream.class))
+                .thenReturn(new ByteArrayInputStream(responseBody.getBytes(StandardCharsets.UTF_8)));
+
+        return client;
     }
 }

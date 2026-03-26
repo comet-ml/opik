@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -17,19 +19,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Singleton
@@ -38,47 +33,30 @@ public class LlmModelRegistryService {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<Map<String, List<LlmModelDefinition>>> REGISTRY_TYPE = new TypeReference<>() {
     };
-    private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(30);
 
     private final LlmModelRegistryConfig config;
-    private final HttpClient httpClient;
-    private final ScheduledExecutorService scheduler;
-    // volatile: reload() is called from the scheduler thread
+    private final Client httpClient;
+    // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
 
     @Inject
-    public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration) {
-        this(configuration.getLlmModelRegistry());
+    public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
+            @NonNull Client httpClient) {
+        this(configuration.getLlmModelRegistry(), httpClient);
     }
 
     // visible for testing
+    LlmModelRegistryService(@NonNull LlmModelRegistryConfig config, @NonNull Client httpClient) {
+        this.config = config;
+        this.httpClient = httpClient;
+        this.registry = load();
+    }
+
+    // visible for testing (no remote fetch)
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config) {
         this.config = config;
-
-        if (isRemoteConfigured()) {
-            this.httpClient = HttpClient.newBuilder()
-                    .connectTimeout(HTTP_TIMEOUT)
-                    .build();
-            this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-                var t = new Thread(r, "llm-registry-refresh");
-                t.setDaemon(true);
-                return t;
-            });
-        } else {
-            this.httpClient = null;
-            this.scheduler = null;
-        }
-
+        this.httpClient = null;
         this.registry = load();
-
-        if (scheduler != null) {
-            scheduler.scheduleAtFixedRate(this::reload,
-                    config.getRefreshIntervalSeconds(),
-                    config.getRefreshIntervalSeconds(),
-                    TimeUnit.SECONDS);
-            log.info("LLM model registry remote refresh scheduled every '{}' seconds from '{}'",
-                    config.getRefreshIntervalSeconds(), config.getRemoteUrl());
-        }
     }
 
     public record ModelLookupResult(@NonNull LlmProvider provider, @NonNull LlmModelDefinition model) {
@@ -136,6 +114,12 @@ public class LlmModelRegistryService {
         }
     }
 
+    boolean isRemoteConfigured() {
+        return config.isRemoteEnabled()
+                && config.getRemoteUrl() != null
+                && !config.getRemoteUrl().isBlank();
+    }
+
     private Map<String, List<LlmModelDefinition>> load() {
         var result = loadClasspathResource(config.getDefaultResource());
 
@@ -163,12 +147,6 @@ public class LlmModelRegistryService {
 
         var overrides = loadFileResource(path);
         return Map.copyOf(merge(result, overrides));
-    }
-
-    private boolean isRemoteConfigured() {
-        return config.isRemoteEnabled()
-                && config.getRemoteUrl() != null
-                && !config.getRemoteUrl().isBlank();
     }
 
     private static Map<String, List<LlmModelDefinition>> immutable(Map<String, List<LlmModelDefinition>> raw) {
@@ -203,25 +181,14 @@ public class LlmModelRegistryService {
             throw new IllegalArgumentException("Remote registry URL must use http or https scheme: " + url);
         }
 
-        try {
-            var request = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(HTTP_TIMEOUT)
-                    .GET()
-                    .build();
-
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-
-            if (response.statusCode() != 200) {
-                throw new IOException("HTTP %d from '%s'".formatted(response.statusCode(), url));
+        try (Response response = httpClient.target(uri).request().get()) {
+            if (response.getStatus() != 200) {
+                throw new IOException("HTTP %d from '%s'".formatted(response.getStatus(), url));
             }
 
-            try (var body = response.body()) {
+            try (InputStream body = response.readEntity(InputStream.class)) {
                 return YAML_MAPPER.readValue(body, REGISTRY_TYPE);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while fetching remote model registry", e);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to fetch remote model registry from: " + url, e);
         }
