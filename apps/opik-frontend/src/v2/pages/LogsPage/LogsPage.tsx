@@ -1,4 +1,4 @@
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useActiveProjectId } from "@/store/AppStore";
 import useProjectById from "@/api/projects/useProjectById";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -13,7 +13,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
 
 const LogsPage = () => {
-  const projectId = useProjectIdFromURL();
+  const projectId = useActiveProjectId()!;
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
