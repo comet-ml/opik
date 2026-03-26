@@ -48,8 +48,8 @@ async function _run(): Promise<void> {
     }
     api.runners
       .registerAgents(runnerId, { body })
-      .catch(() => {
-        logger.debug("Failed to sync agents after new registration");
+      .catch((err) => {
+        logger.debug("Failed to sync agents after new registration", { error: err });
       });
   }
 

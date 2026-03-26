@@ -253,8 +253,8 @@ export class InProcessRunnerLoop {
   ): Promise<void> {
     try {
       await this.api.runners.reportJobResult(jobId, payload);
-    } catch {
-      logger.debug(`Failed to report result for job ${jobId}`);
+    } catch (err) {
+      logger.debug(`Failed to report result for job ${jobId}`, { error: err });
     }
   }
 
