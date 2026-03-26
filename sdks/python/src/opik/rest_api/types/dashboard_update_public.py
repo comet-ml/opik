@@ -4,16 +4,15 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .llm_as_judge_message_content import LlmAsJudgeMessageContent
-from .llm_as_judge_message_role import LlmAsJudgeMessageRole
+from .dashboard_update_public_type import DashboardUpdatePublicType
+from .json_node_public import JsonNodePublic
 
 
-class LlmAsJudgeMessage(UniversalBaseModel):
-    role: LlmAsJudgeMessageRole
-    content: typing.Optional[str] = None
-    content_array: typing.Optional[typing.List[LlmAsJudgeMessageContent]] = None
-    string_content: typing.Optional[bool] = None
-    structured_content: typing.Optional[bool] = None
+class DashboardUpdatePublic(UniversalBaseModel):
+    name: typing.Optional[str] = None
+    type: typing.Optional[DashboardUpdatePublicType] = None
+    description: typing.Optional[str] = None
+    config: typing.Optional[JsonNodePublic] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -22,11 +22,11 @@ from ..types.json_node_write import JsonNodeWrite
 OMIT = typing.cast(typing.Any, ...)
 
 
-class RawDashboardsClient:
+class RawInsightsViewsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    def find_dashboards(
+    def find_insights_views(
         self,
         *,
         page: typing.Optional[int] = None,
@@ -38,7 +38,7 @@ class RawDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DashboardPagePublic]:
         """
-        Find dashboards in a workspace
+        Find insights views in a workspace
 
         Parameters
         ----------
@@ -60,10 +60,10 @@ class RawDashboardsClient:
         Returns
         -------
         HttpResponse[DashboardPagePublic]
-            Dashboard page
+            Insights view page
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/dashboards",
+            "v1/private/insights-views",
             method="GET",
             params={
                 "page": page,
@@ -90,7 +90,7 @@ class RawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def create_dashboard(
+    def create_insights_view(
         self,
         *,
         name: str,
@@ -102,7 +102,7 @@ class RawDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DashboardPublic]:
         """
-        Create a new dashboard in a workspace
+        Create a new insights view in a workspace
 
         Parameters
         ----------
@@ -129,7 +129,7 @@ class RawDashboardsClient:
             Created
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/dashboards",
+            "v1/private/insights-views",
             method="POST",
             json={
                 "project_id": project_id,
@@ -160,15 +160,15 @@ class RawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def get_dashboard_by_id(
-        self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    def get_insights_view_by_id(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[DashboardPublic]:
         """
-        Get dashboard by id
+        Get insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -176,10 +176,10 @@ class RawDashboardsClient:
         Returns
         -------
         HttpResponse[DashboardPublic]
-            Dashboard resource
+            Insights view resource
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/dashboards/{jsonable_encoder(dashboard_id)}",
+            f"v1/private/insights-views/{jsonable_encoder(insights_view_id)}",
             method="GET",
             request_options=request_options,
         )
@@ -209,15 +209,15 @@ class RawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def delete_dashboard(
-        self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    def delete_insights_view(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
         """
-        Delete dashboard by id
+        Delete insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -227,7 +227,7 @@ class RawDashboardsClient:
         HttpResponse[None]
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/dashboards/{jsonable_encoder(dashboard_id)}",
+            f"v1/private/insights-views/{jsonable_encoder(insights_view_id)}",
             method="DELETE",
             request_options=request_options,
         )
@@ -239,9 +239,9 @@ class RawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def update_dashboard(
+    def update_insights_view(
         self,
-        dashboard_id: str,
+        insights_view_id: str,
         *,
         name: typing.Optional[str] = OMIT,
         type: typing.Optional[DashboardUpdatePublicType] = OMIT,
@@ -250,11 +250,11 @@ class RawDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DashboardPublic]:
         """
-        Update dashboard by id. Partial updates are supported - only provided fields will be updated.
+        Update insights view by id. Partial updates are supported - only provided fields will be updated.
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         name : typing.Optional[str]
 
@@ -270,10 +270,10 @@ class RawDashboardsClient:
         Returns
         -------
         HttpResponse[DashboardPublic]
-            Updated dashboard
+            Updated insights view
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/dashboards/{jsonable_encoder(dashboard_id)}",
+            f"v1/private/insights-views/{jsonable_encoder(insights_view_id)}",
             method="PATCH",
             json={
                 "name": name,
@@ -324,11 +324,11 @@ class RawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def delete_dashboards_batch(
+    def delete_insights_views_batch(
         self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
         """
-        Delete dashboards batch
+        Delete insights views batch
 
         Parameters
         ----------
@@ -342,7 +342,7 @@ class RawDashboardsClient:
         HttpResponse[None]
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/dashboards/delete-batch",
+            "v1/private/insights-views/delete-batch",
             method="POST",
             json={
                 "ids": ids,
@@ -362,11 +362,11 @@ class RawDashboardsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
 
-class AsyncRawDashboardsClient:
+class AsyncRawInsightsViewsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    async def find_dashboards(
+    async def find_insights_views(
         self,
         *,
         page: typing.Optional[int] = None,
@@ -378,7 +378,7 @@ class AsyncRawDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DashboardPagePublic]:
         """
-        Find dashboards in a workspace
+        Find insights views in a workspace
 
         Parameters
         ----------
@@ -400,10 +400,10 @@ class AsyncRawDashboardsClient:
         Returns
         -------
         AsyncHttpResponse[DashboardPagePublic]
-            Dashboard page
+            Insights view page
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/dashboards",
+            "v1/private/insights-views",
             method="GET",
             params={
                 "page": page,
@@ -430,7 +430,7 @@ class AsyncRawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def create_dashboard(
+    async def create_insights_view(
         self,
         *,
         name: str,
@@ -442,7 +442,7 @@ class AsyncRawDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DashboardPublic]:
         """
-        Create a new dashboard in a workspace
+        Create a new insights view in a workspace
 
         Parameters
         ----------
@@ -469,7 +469,7 @@ class AsyncRawDashboardsClient:
             Created
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/dashboards",
+            "v1/private/insights-views",
             method="POST",
             json={
                 "project_id": project_id,
@@ -500,15 +500,15 @@ class AsyncRawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def get_dashboard_by_id(
-        self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    async def get_insights_view_by_id(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[DashboardPublic]:
         """
-        Get dashboard by id
+        Get insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -516,10 +516,10 @@ class AsyncRawDashboardsClient:
         Returns
         -------
         AsyncHttpResponse[DashboardPublic]
-            Dashboard resource
+            Insights view resource
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/dashboards/{jsonable_encoder(dashboard_id)}",
+            f"v1/private/insights-views/{jsonable_encoder(insights_view_id)}",
             method="GET",
             request_options=request_options,
         )
@@ -549,15 +549,15 @@ class AsyncRawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def delete_dashboard(
-        self, dashboard_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    async def delete_insights_view(
+        self, insights_view_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
         """
-        Delete dashboard by id
+        Delete insights view by id
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -567,7 +567,7 @@ class AsyncRawDashboardsClient:
         AsyncHttpResponse[None]
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/dashboards/{jsonable_encoder(dashboard_id)}",
+            f"v1/private/insights-views/{jsonable_encoder(insights_view_id)}",
             method="DELETE",
             request_options=request_options,
         )
@@ -579,9 +579,9 @@ class AsyncRawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def update_dashboard(
+    async def update_insights_view(
         self,
-        dashboard_id: str,
+        insights_view_id: str,
         *,
         name: typing.Optional[str] = OMIT,
         type: typing.Optional[DashboardUpdatePublicType] = OMIT,
@@ -590,11 +590,11 @@ class AsyncRawDashboardsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DashboardPublic]:
         """
-        Update dashboard by id. Partial updates are supported - only provided fields will be updated.
+        Update insights view by id. Partial updates are supported - only provided fields will be updated.
 
         Parameters
         ----------
-        dashboard_id : str
+        insights_view_id : str
 
         name : typing.Optional[str]
 
@@ -610,10 +610,10 @@ class AsyncRawDashboardsClient:
         Returns
         -------
         AsyncHttpResponse[DashboardPublic]
-            Updated dashboard
+            Updated insights view
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/dashboards/{jsonable_encoder(dashboard_id)}",
+            f"v1/private/insights-views/{jsonable_encoder(insights_view_id)}",
             method="PATCH",
             json={
                 "name": name,
@@ -664,11 +664,11 @@ class AsyncRawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def delete_dashboards_batch(
+    async def delete_insights_views_batch(
         self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
         """
-        Delete dashboards batch
+        Delete insights views batch
 
         Parameters
         ----------
@@ -682,7 +682,7 @@ class AsyncRawDashboardsClient:
         AsyncHttpResponse[None]
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/dashboards/delete-batch",
+            "v1/private/insights-views/delete-batch",
             method="POST",
             json={
                 "ids": ids,
