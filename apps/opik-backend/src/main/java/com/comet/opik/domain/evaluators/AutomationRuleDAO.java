@@ -20,6 +20,11 @@ import java.util.UUID;
 @RegisterRowMapper(AutomationRuleRowMapper.class)
 public interface AutomationRuleDAO {
 
+    /**
+     * Automation rules have always been project-scoped (project_id NOT NULL since migration 000009).
+     * Unlike other entities, the V1 signal here is rules assigned to multiple projects via the
+     * junction table — V2's single-project UI can't represent them.
+     */
     @SqlQuery("""
             SELECT EXISTS(
                 SELECT 1 FROM automation_rule_projects

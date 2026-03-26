@@ -52,8 +52,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Entity Types Checked:</h3>
  * <ul>
- *   <li>State database: datasets (excl. demo), prompts, automation_rules (multi-project check), dashboards etc.</li>
- *   <li>Analytics database: experiments (excl. demo), optimizations etc.</li>
+ *   <li>State database (cheapest-first): dashboards, automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
+ *   <li>Analytics database (cheapest-first): optimizations, experiments (excl. demo) etc.</li>
  *   <li>Not yet checked: alerts (no project_id column yet)</li>
  * </ul>
  *
@@ -165,8 +165,8 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         return Flux.concat(
                 Mono.fromCallable(() -> hasStateDbVersion1Entities(workspaceId))
                         .subscribeOn(Schedulers.boundedElastic()),
-                experimentDAO.hasVersion1Experiments(workspaceId, DemoData.EXPERIMENTS),
-                optimizationDAO.hasVersion1Optimizations(workspaceId))
+                optimizationDAO.hasVersion1Optimizations(workspaceId),
+                experimentDAO.hasVersion1Experiments(workspaceId, DemoData.EXPERIMENTS))
                 .any(found -> found)
                 .map(found -> {
                     var version = found ? OpikVersion.VERSION_1 : OpikVersion.VERSION_2;
@@ -197,20 +197,20 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      */
     private boolean hasStateDbVersion1Entities(String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            if (handle.attach(DatasetDAO.class).hasVersion1Datasets(workspaceId, DemoData.DATASETS)) {
-                log.info("Found version_1 datasets in workspace '{}'", workspaceId);
-                return true;
-            }
-            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId)) {
-                log.info("Found version_1 prompts in workspace '{}'", workspaceId);
-                return true;
-            }
             if (handle.attach(DashboardDAO.class).hasVersion1Dashboards(workspaceId)) {
                 log.info("Found version_1 dashboards in workspace '{}'", workspaceId);
                 return true;
             }
             if (handle.attach(AutomationRuleDAO.class).hasVersion1AutomationRules(workspaceId)) {
                 log.info("Found multi-project automation rules in workspace '{}'", workspaceId);
+                return true;
+            }
+            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId)) {
+                log.info("Found version_1 prompts in workspace '{}'", workspaceId);
+                return true;
+            }
+            if (handle.attach(DatasetDAO.class).hasVersion1Datasets(workspaceId, DemoData.DATASETS)) {
+                log.info("Found version_1 datasets in workspace '{}'", workspaceId);
                 return true;
             }
             // TODO: alerts — no project_id column yet. Skipped until column is added.
