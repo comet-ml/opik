@@ -258,7 +258,7 @@ function DatasetVersionSelectBox({
     }
 
     return (
-      <div className="max-h-[40vh] space-y-[3px] overflow-y-auto overflow-x-hidden">
+      <div className="max-h-[30vh] space-y-[3px] overflow-y-auto overflow-x-hidden">
         {renderNestedList()}
         {hasMore && (
           <>
