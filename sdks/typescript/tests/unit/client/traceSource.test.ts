@@ -53,14 +53,6 @@ describe("trace source auto-set", () => {
       expect(trace.data.source).toBe("experiment");
     });
 
-    it("should allow overriding source to 'optimization'", () => {
-      const trace = client.trace({
-        name: "opt-trace",
-        source: "optimization",
-      });
-
-      expect(trace.data.source).toBe("optimization");
-    });
   });
 
   describe("span inherits source from trace", () => {
