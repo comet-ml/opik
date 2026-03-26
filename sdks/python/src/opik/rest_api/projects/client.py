@@ -5,6 +5,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.alert_page_public import AlertPagePublic
 from ..types.breakdown_config_public import BreakdownConfigPublic
 from ..types.dashboard_page_public import DashboardPagePublic
 from ..types.dataset_page_public import DatasetPagePublic
@@ -45,6 +46,50 @@ class ProjectsClient:
         RawProjectsClient
         """
         return self._raw_client
+
+    def find_alerts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AlertPagePublic:
+        """
+        Find alerts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AlertPagePublic
+            Alerts page
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.find_alerts_by_project(project_id='projectId', )
+        """
+        _response = self._raw_client.find_alerts_by_project(
+            project_id, page=page, size=size, sorting=sorting, filters=filters, request_options=request_options
+        )
+        return _response.data
 
     def find_dashboards_by_project(
         self,
@@ -748,6 +793,53 @@ class AsyncProjectsClient:
         AsyncRawProjectsClient
         """
         return self._raw_client
+
+    async def find_alerts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AlertPagePublic:
+        """
+        Find alerts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AlertPagePublic
+            Alerts page
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.find_alerts_by_project(project_id='projectId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_alerts_by_project(
+            project_id, page=page, size=size, sorting=sorting, filters=filters, request_options=request_options
+        )
+        return _response.data
 
     async def find_dashboards_by_project(
         self,

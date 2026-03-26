@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import useAppStore from "@/store/AppStore";
-import usePromptsList from "@/api/prompts/usePromptsList";
+import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import { ExtractedPromptData, OpenAIMessage } from "@/lib/prompt";
 import { convertOptimizationVariableFormat } from "@/lib/optimizations";
 import { PromptWithLatestVersion } from "@/types/prompts";
@@ -12,6 +11,7 @@ export const convertMessages = (messages: OpenAIMessage[]) =>
   }));
 
 interface UseSaveToPromptLibraryOptions {
+  projectId: string;
   promptName: string;
   extractedPrompt: ExtractedPromptData | null;
   optimizationId: string;
@@ -37,19 +37,19 @@ interface UseSaveToPromptLibraryReturn {
 }
 
 export const useSaveToPromptLibrary = ({
+  projectId,
   promptName,
   extractedPrompt,
   optimizationId,
   optimizationName,
   experimentId,
 }: UseSaveToPromptLibraryOptions): UseSaveToPromptLibraryReturn => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const dialogKeyRef = useRef(0);
 
-  const { data: promptsData } = usePromptsList(
+  const { data: promptsData } = useProjectPromptsList(
     {
-      workspaceName,
+      projectId,
       search: promptName,
       page: 1,
       size: 1,

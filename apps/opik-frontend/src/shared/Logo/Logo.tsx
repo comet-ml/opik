@@ -14,9 +14,10 @@ const Logo: React.FunctionComponent<LogoProps> = ({ expanded }) => {
 
   return (
     <img
-      className={cn("h-8 object-cover object-left -ml-[3px] mr-[3px]", {
-        "w-[32px]": !expanded,
-      })}
+      className={cn(
+        "object-cover object-left",
+        expanded ? "h-[18px]" : "h-[18px] w-[18px]",
+      )}
       src={themeMode === THEME_MODE.DARK ? imageLogoInvertedUrl : imageLogoUrl}
       alt="opik logo"
     />

@@ -22,12 +22,14 @@ export interface DatasetData {
   name: string;
   description?: string;
   id?: string;
+  projectName?: string;
 }
 
 export class Dataset<T extends DatasetItemData = DatasetItemData> {
   public readonly id: string;
   public readonly name: string;
   public readonly description?: string;
+  public readonly projectName?: string;
 
   private idToHash: Map<string, string> = new Map();
   private hashes: Set<string> = new Set();
@@ -37,12 +39,13 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * This should not be created directly, use static factory methods instead.
    */
   constructor(
-    { name, description, id }: DatasetData,
+    { name, description, id, projectName }: DatasetData,
     private opik: OpikClient
   ) {
     this.id = id || generateId();
     this.name = name;
     this.description = description;
+    this.projectName = projectName;
   }
 
   /**
@@ -72,6 +75,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
           datasetId: this.id,
           items: batch,
           batchGroupId,
+          projectName: this.projectName,
         });
         totalInserted += batch.length;
         logger.info(
@@ -164,6 +168,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   public async getTags(): Promise<string[]> {
     const datasetInfo = await this.opik.api.datasets.getDatasetByIdentifier({
       datasetName: this.name,
+      projectName: this.projectName,
     });
     return datasetInfo.tags ?? [];
   }
@@ -178,6 +183,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   public async getItems(nbSamples?: number, lastRetrievedId?: string) {
     const datasetItems = await getDatasetItems<T>(this.opik, {
       datasetName: this.name,
+      projectName: this.projectName,
       nbSamples,
       lastRetrievedId,
     });
@@ -194,6 +200,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   public async getRawItems(nbSamples?: number): Promise<DatasetItem<T>[]> {
     return getDatasetItems<T>(this.opik, {
       datasetName: this.name,
+      projectName: this.projectName,
       nbSamples,
     });
   }
@@ -322,6 +329,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     try {
       const allItems = await getDatasetItems<T>(this.opik, {
         datasetName: this.name,
+        projectName: this.projectName,
       });
 
       this.clearHashState();

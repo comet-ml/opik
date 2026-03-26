@@ -6,7 +6,7 @@ import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { cn } from "@/lib/utils";
-import Logo from "@/v1/layout/Logo/Logo";
+import Logo from "@/shared/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/v1/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import { useOpenQuickStartDialog } from "@/v1/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
@@ -41,16 +41,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
-  const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
   );
 
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={expanded} />
-  ) : (
-    <Logo expanded={expanded} />
-  );
+  const logo = <Logo expanded={expanded} />;
 
   const renderBottomItems = () => {
     const bottomItems = [

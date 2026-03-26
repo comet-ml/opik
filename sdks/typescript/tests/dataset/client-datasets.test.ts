@@ -70,6 +70,11 @@ describe("Opik dataset operations", () => {
 
     datasetBatchQueueUpdateSpy = vi.spyOn(client.datasetBatchQueue, "update");
 
+    // Mock projects API for getDatasets (which calls getProjectIdByName)
+    vi.spyOn(client.api.projects, "retrieveProject").mockImplementation(() =>
+      createMockHttpResponsePromise({ id: "project-123", name: "opik-sdk-typescript" })
+    );
+
     // Mock logger methods
     loggerErrorSpy = vi.spyOn(logger, "error");
     loggerInfoSpy = vi.spyOn(logger, "info");
@@ -110,6 +115,7 @@ describe("Opik dataset operations", () => {
 
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "test-dataset",
+      projectName: "opik-sdk-typescript",
     });
     expect(result).toBeInstanceOf(Dataset);
     expect(result.id).toBe(mockDataset.id);
@@ -133,6 +139,7 @@ describe("Opik dataset operations", () => {
 
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "non-existent-dataset",
+      projectName: "opik-sdk-typescript",
     });
   });
 
@@ -149,6 +156,7 @@ describe("Opik dataset operations", () => {
     await expect(client.getDataset("test-dataset")).rejects.toThrowError();
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "test-dataset",
+      projectName: "opik-sdk-typescript",
     });
   });
 
@@ -218,6 +226,7 @@ describe("Opik dataset operations", () => {
 
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "existing-dataset",
+      projectName: "opik-sdk-typescript",
     });
     expect(result).toBeInstanceOf(Dataset);
     expect(result.id).toBe(mockDataset.id);
@@ -244,6 +253,7 @@ describe("Opik dataset operations", () => {
 
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "new-dataset",
+      projectName: "opik-sdk-typescript",
     });
 
     expect(result).toBeInstanceOf(Dataset);
@@ -268,6 +278,7 @@ describe("Opik dataset operations", () => {
 
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "test-dataset",
+      projectName: "opik-sdk-typescript",
     });
     expect(loggerErrorSpy).toHaveBeenCalled();
   });
@@ -297,6 +308,7 @@ describe("Opik dataset operations", () => {
     expect(datasetBatchQueueFlushSpy).toHaveBeenCalled();
     expect(findDatasetsSpy).toHaveBeenCalledWith({
       size: 100, // Default limit
+      projectId: "project-123",
     });
 
     expect(results).toHaveLength(2);
@@ -327,6 +339,7 @@ describe("Opik dataset operations", () => {
     expect(datasetBatchQueueFlushSpy).toHaveBeenCalled();
     expect(findDatasetsSpy).toHaveBeenCalledWith({
       size: 10,
+      projectId: "project-123",
     });
 
     expect(results).toHaveLength(1);
@@ -377,6 +390,7 @@ describe("Opik dataset operations", () => {
 
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "dataset-to-delete",
+      projectName: "opik-sdk-typescript",
     });
 
     expect(datasetBatchQueueDeleteSpy).toHaveBeenCalledWith(mockDataset.id);
@@ -397,6 +411,7 @@ describe("Opik dataset operations", () => {
 
     expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
       datasetName: "non-existent-dataset",
+      projectName: "opik-sdk-typescript",
     });
     expect(loggerErrorSpy).toHaveBeenCalled();
   });

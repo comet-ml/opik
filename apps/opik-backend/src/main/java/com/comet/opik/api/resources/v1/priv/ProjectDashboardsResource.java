@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
+import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.filter.DashboardFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDashboards;
@@ -71,7 +72,8 @@ public class ProjectDashboardsResource {
         log.info("Finding dashboards for project '{}' in workspace '{}', page '{}', size '{}'",
                 projectId, workspaceId, page, size);
 
-        DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters);
+        DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters,
+                DashboardScope.WORKSPACE);
 
         log.info("Found '{}' dashboards for project '{}' in workspace '{}'", dashboardPage.total(), projectId,
                 workspaceId);

@@ -262,6 +262,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       projectName: this.projectName,
       name: "evaluation_task",
       createdBy: "evaluation",
+      source: "experiment",
       input: datasetItem,
     });
     trackStorage.enterWith({ trace });
