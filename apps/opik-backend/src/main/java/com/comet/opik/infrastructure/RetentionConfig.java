@@ -84,6 +84,10 @@ public class RetentionConfig {
         @JsonProperty
         @Min(1) @Max(1440) private int intervalMinutes = 45;
 
+        /** Interval in minutes between estimation cycles for newly created rules. */
+        @JsonProperty
+        @Min(1) @Max(60) private int estimationIntervalMinutes = 5;
+
         /** Max time (seconds) the catch-up job can hold the distributed lock. */
         @JsonProperty
         @Min(1) @Max(7200) private int lockTimeoutSeconds = 1800;

@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
 import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
+import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
@@ -52,6 +53,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setExperimentDenormalizationJob();
                 setLocalRunnerReaperJob();
                 setRetentionSlidingWindowJob();
+                setRetentionEstimationJob();
                 setRetentionCatchUpJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
@@ -147,6 +149,18 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
 
         scheduleRepeatingJob(RetentionSlidingWindowJob.class, retentionConfig.getInterval(), null);
+    }
+
+    private void setRetentionEstimationJob() {
+        RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
+
+        if (!retentionConfig.isEnabled() || !retentionConfig.getCatchUp().isEnabled()) {
+            log.info("Retention estimation job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(RetentionEstimationJob.class,
+                Duration.ofMinutes(retentionConfig.getCatchUp().getEstimationIntervalMinutes()), null);
     }
 
     private void setRetentionCatchUpJob() {

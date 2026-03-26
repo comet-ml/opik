@@ -70,7 +70,7 @@ public class RetentionSlidingWindowJob extends Job implements InterruptableJob {
                 }),
                 Mono.fromRunnable(() -> log.info(
                         "Retention sliding window: could not acquire lock, another instance is running")),
-                Duration.ofSeconds(config.getLockTimeoutSeconds()),
+                config.getInterval(), // Hold lock for the full interval to prevent redundant runs across instances
                 Duration.ZERO)
                 .subscribe(
                         __ -> {
