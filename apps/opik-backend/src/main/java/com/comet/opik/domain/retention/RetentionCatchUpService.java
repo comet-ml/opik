@@ -72,7 +72,7 @@ public class RetentionCatchUpService {
     public Mono<Void> executeCatchUpCycle(@NonNull Instant now) {
         var catchUpConfig = config.getCatchUp();
         if (!catchUpConfig.isEnabled()) {
-            log.info("Catch-up cycle skipped: catch-up is disabled");
+            log.debug("Catch-up cycle skipped: catch-up is disabled");
             return Mono.empty();
         }
 
