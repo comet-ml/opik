@@ -40,7 +40,7 @@ function unwrapZodType(zodField: z.ZodTypeAny): {
   let inner = zodField;
   let isOptional = false;
 
-  if (inner instanceof z.ZodOptional || inner instanceof z.ZodNullable) {
+  if (inner._def.typeName === 'ZodOptional' || inner._def.typeName === 'ZodNullable') {
     inner = (inner as z.ZodOptional<z.ZodTypeAny>).unwrap();
     isOptional = true;
   }
@@ -51,17 +51,17 @@ function unwrapZodType(zodField: z.ZodTypeAny): {
 export function zodTypeToBackendType(zodField: z.ZodTypeAny): string {
   const { inner } = unwrapZodType(zodField);
 
-  if (inner instanceof z.ZodString) return "string";
-  if (inner instanceof z.ZodBoolean) return "boolean";
-  if (inner instanceof z.ZodNumber) {
+  if (inner._def.typeName === 'ZodString') return "string";
+  if (inner._def.typeName === 'ZodBoolean') return "boolean";
+  if (inner._def.typeName === 'ZodNumber') {
     const checks: Array<{ kind: string }> =
       (inner._def as { checks?: Array<{ kind: string }> }).checks ?? [];
     return checks.some((c) => c.kind === "int") ? "integer" : "float";
   }
-  if (inner instanceof z.ZodArray) return "string";
-  if (inner instanceof z.ZodRecord) return "string";
-  if (inner instanceof z.ZodObject) return "string";
-  if (inner instanceof z.ZodEffects) {
+  if (inner._def.typeName === 'ZodArray') return "string";
+  if (inner._def.typeName === 'ZodRecord') return "string";
+  if (inner._def.typeName === 'ZodObject') return "string";
+  if (inner._def.typeName === 'ZodEffects') {
     // Only z.instanceof(Prompt/PromptVersion) is supported. Other ZodEffects (transforms,
     // refines) are intentionally unsupported — map the underlying field to a primitive type
     // before using it in an AgentConfig schema.
@@ -77,7 +77,7 @@ export function zodTypeToBackendType(zodField: z.ZodTypeAny): string {
   // Only a fixed set of Zod primitives are supported in AgentConfig schemas.
   // Unsupported types (z.union, z.enum, z.transform, etc.) must be mapped to a
   // supported primitive before use.
-  throw new TypeError(`Unsupported Zod type: ${inner.constructor.name}`);
+  throw new TypeError(`Unsupported Zod type: ${inner._def.typeName}`);
 }
 
 export function extractFieldMetadata(
@@ -92,9 +92,9 @@ export function extractFieldMetadata(
     const backendType = zodTypeToBackendType(field);
     const description = field._def.description as string | undefined;
     const isJsonEncoded =
-      inner instanceof z.ZodArray ||
-      inner instanceof z.ZodRecord ||
-      inner instanceof z.ZodObject;
+      inner._def.typeName === 'ZodArray' ||
+      inner._def.typeName === 'ZodRecord' ||
+      inner._def.typeName === 'ZodObject';
 
     result.set(fieldName, {
       prefixedKey: `${prefix}.${fieldName}`,
