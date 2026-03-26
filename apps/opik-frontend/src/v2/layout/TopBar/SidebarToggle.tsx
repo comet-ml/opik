@@ -1,11 +1,10 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import { PanelLeftOpen } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import usePluginsStore from "@/store/PluginsStore";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
-import Logo from "@/v2/layout/Logo/Logo";
+import Logo from "@/shared/Logo/Logo";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -17,13 +16,8 @@ const SidebarToggle: React.FunctionComponent<SidebarToggleProps> = ({
   onToggle,
 }) => {
   const workspaceName = useActiveWorkspaceName();
-  const LogoComponent = usePluginsStore((state) => state.Logo);
 
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={false} />
-  ) : (
-    <Logo expanded={false} />
-  );
+  const logo = <Logo expanded={false} />;
 
   return (
     <>
@@ -36,11 +30,11 @@ const SidebarToggle: React.FunctionComponent<SidebarToggleProps> = ({
       </Link>
       <Button
         variant="ghost"
-        size="icon-xs"
+        size="icon-2xs"
         onClick={onToggle}
         className="shrink-0"
       >
-        <PanelLeftOpen className="size-4" />
+        <PanelLeft className="size-4" />
       </Button>
       <Separator orientation="vertical" className="mx-1 h-5" />
     </>

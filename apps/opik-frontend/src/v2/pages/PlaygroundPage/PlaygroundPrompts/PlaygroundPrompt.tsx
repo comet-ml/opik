@@ -44,6 +44,7 @@ import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
+import { useActiveProjectId } from "@/store/AppStore";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
@@ -72,6 +73,7 @@ const PlaygroundPrompt = ({
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const queryClient = useQueryClient();
+  const activeProjectId = useActiveProjectId();
 
   const prompt = usePromptById(promptId);
   const datasetVariables = useDatasetVariables();
@@ -298,6 +300,7 @@ const PlaygroundPrompt = ({
           <TooltipWrapper content={chatPromptData?.name || "Load chat prompt"}>
             <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
               <PromptsSelectBox
+                projectId={activeProjectId!}
                 value={selectedChatPromptId}
                 onValueChange={(value) =>
                   value && handleImportChatPrompt(value)

@@ -37,6 +37,7 @@ export const TRACE_ANALYZER_REST_ENDPOINT = "/trace-analyzer/session/";
 export const PLAYGROUND_EVALUATION_REST_ENDPOINT =
   "/v1/private/playground/evaluations/";
 export const DASHBOARDS_REST_ENDPOINT = "/v1/private/dashboards/";
+export const INSIGHTS_VIEWS_REST_ENDPOINT = "/v1/private/insights-views/";
 export const AGENT_CONFIGS_REST_ENDPOINT = "/v1/private/agent-configs/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
@@ -58,6 +59,8 @@ export const WORKSPACE_CONFIG_KEY = "workspace-config";
 export const TRACE_AI_ASSISTANT_KEY = "trace-analyzer-history";
 export const DASHBOARDS_KEY = "dashboards";
 export const DASHBOARD_KEY = "dashboard";
+export const INSIGHTS_VIEWS_KEY = "insights-views";
+export const INSIGHTS_VIEW_KEY = "insights-view";
 export const AGENT_CONFIGS_KEY = "agent-configs";
 
 // stats for feedback
