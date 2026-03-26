@@ -8,6 +8,5 @@ import lombok.Data;
 public class AssistantSidebarConfig {
 
     @JsonProperty
-    @NotBlank
-    private String manifestUrl = "https://cdn.comet.com/ollie/v1/manifest.json";
+    @NotBlank private String manifestUrl = "https://cdn.comet.com/ollie/v1/manifest.json";
 }
