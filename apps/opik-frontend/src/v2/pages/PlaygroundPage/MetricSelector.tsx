@@ -30,6 +30,7 @@ interface MetricSelectorProps {
   datasetId: string | null;
   onCreateRuleClick: () => void;
   workspaceName: string;
+  projectId?: string;
   canUsePlayground: boolean;
 }
 
@@ -40,6 +41,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   datasetId,
   onCreateRuleClick,
   workspaceName,
+  projectId,
   canUsePlayground,
 }) => {
   const [open, setOpen] = useState(false);
@@ -286,7 +288,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                         asChild
                       >
                         <Link
-                          to={`/${workspaceName}/online-evaluation?${
+                          to={`/${workspaceName}/projects/${projectId}/online-evaluation?${
                             canUpdateOnlineEvaluationRules
                               ? `editRule=${rule.id}&`
                               : ""

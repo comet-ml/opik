@@ -296,6 +296,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 datasetId={datasetId}
                 onCreateRuleClick={handleCreateRuleClick}
                 workspaceName={workspaceName}
+                projectId={playgroundProject?.id}
                 canUsePlayground={canUsePlayground}
               />
             </div>
