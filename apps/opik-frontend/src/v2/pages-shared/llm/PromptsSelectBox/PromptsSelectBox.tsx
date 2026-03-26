@@ -2,13 +2,12 @@ import React, { useCallback, useMemo, useState } from "react";
 import { FileTerminal, Plus } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
-import useAppStore from "@/store/AppStore";
 import { cn } from "@/lib/utils";
 import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import SelectBoxClearWrapper from "@/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
-import usePromptsList from "@/api/prompts/usePromptsList";
+import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useDeepMemo from "@/hooks/useDeepMemo";
 
@@ -17,6 +16,7 @@ const MAX_LOADED_PROMPTS = 10000;
 const NEW_PROMPT_VALUE = "new-prompt";
 
 interface PromptsSelectBoxProps {
+  projectId: string;
   value?: string;
   onValueChange: (value?: string) => void;
   onOpenChange?: (value: boolean) => void;
@@ -28,6 +28,7 @@ interface PromptsSelectBoxProps {
 }
 
 const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
+  projectId,
   value,
   onValueChange,
   onOpenChange,
@@ -38,20 +39,20 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const isClearable = clearable && Boolean(value);
 
-  const { data: promptsData, isLoading: isLoadingPrompts } = usePromptsList(
-    {
-      workspaceName,
-      page: 1,
-      size: !isLoadedMore ? DEFAULT_LOADED_PROMPTS : MAX_LOADED_PROMPTS,
-    },
-    {
-      refetchOnMount,
-    },
-  );
+  const { data: promptsData, isLoading: isLoadingPrompts } =
+    useProjectPromptsList(
+      {
+        projectId,
+        page: 1,
+        size: !isLoadedMore ? DEFAULT_LOADED_PROMPTS : MAX_LOADED_PROMPTS,
+      },
+      {
+        refetchOnMount,
+      },
+    );
 
   const prompts = useDeepMemo(
     () => promptsData?.content ?? [],

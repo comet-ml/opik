@@ -15,7 +15,7 @@ interface CreatePromptTemplate {
 }
 
 type UsePromptCreateMutationParams = {
-  prompt: Partial<Prompt> & CreatePromptTemplate;
+  prompt: Partial<Prompt> & CreatePromptTemplate & { project_id?: string };
   withResponse?: boolean;
 };
 
@@ -86,6 +86,7 @@ const usePromptCreateMutation = () => {
       }
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-prompts"] });
       return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });
