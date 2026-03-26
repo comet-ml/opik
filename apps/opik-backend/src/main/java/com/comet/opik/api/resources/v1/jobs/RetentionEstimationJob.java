@@ -66,7 +66,8 @@ public class RetentionEstimationJob extends Job implements InterruptableJob {
                 Mono.fromRunnable(() -> log.debug(
                         "Retention estimation: could not acquire lock, another instance is running")),
                 Duration.ofMinutes(config.getCatchUp().getEstimationIntervalMinutes()),
-                Duration.ZERO)
+                Duration.ZERO,
+                true) // holdUntilExpiry: prevent redundant runs across instances
                 .subscribe(
                         __ -> {
                         },

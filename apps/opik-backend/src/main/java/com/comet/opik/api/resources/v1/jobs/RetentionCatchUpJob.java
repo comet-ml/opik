@@ -66,8 +66,9 @@ public class RetentionCatchUpJob extends Job implements InterruptableJob {
                 }),
                 Mono.fromRunnable(() -> log.info(
                         "Retention catch-up: could not acquire lock, another instance is running")),
-                config.getCatchUp().getInterval(), // Hold lock for the full interval to prevent redundant runs across instances
-                Duration.ZERO)
+                config.getCatchUp().getInterval(),
+                Duration.ZERO,
+                true) // holdUntilExpiry: prevent redundant runs across instances
                 .subscribe(
                         __ -> {
                         },
