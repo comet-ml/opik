@@ -285,7 +285,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       )}
       <div
         ref={panelRef}
-        className="bg-background absolute inset-0 shadow-xl transition-transform duration-150 will-change-transform"
+        className="absolute inset-0 bg-background shadow-xl transition-transform duration-150 will-change-transform"
         style={{
           left: left + "px",
           transform: open ? "translateX(0)" : "translateX(100%)",

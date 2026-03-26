@@ -1,9 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
@@ -113,9 +108,7 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         (data as SidebarEventMap["sidebar:resized"]).width,
       );
     } else if (event === "notification") {
-      refs.onNotification.current(
-        data as SidebarEventMap["notification"],
-      );
+      refs.onNotification.current(data as SidebarEventMap["notification"]);
     } else if (event === "sidebar:request-open") {
       refs.onRequestVisibility.current(true);
     } else if (event === "sidebar:request-close") {

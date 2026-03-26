@@ -25,7 +25,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="text-foreground group-disabled:text-muted-gray size-4 shrink-0 opacity-50" />
+      <ChevronDown className="size-4 shrink-0 text-foreground opacity-50 group-disabled:text-muted-gray" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -158,7 +158,7 @@ const SelectItem = React.forwardRef<
         </SelectPrimitive.ItemText>
       </div>
       {description && (
-        <div className="comet-body-s text-light-slate mt-0.5 whitespace-pre-wrap">
+        <div className="comet-body-s mt-0.5 whitespace-pre-wrap text-light-slate">
           {description}
         </div>
       )}
