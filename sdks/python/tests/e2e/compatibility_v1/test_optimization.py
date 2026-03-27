@@ -1,7 +1,7 @@
 import opik
 import pytest
 from opik.rest_api import core as rest_api_core
-from . import verifiers
+from .. import verifiers
 
 
 def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name: str):
