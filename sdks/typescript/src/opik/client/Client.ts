@@ -61,7 +61,6 @@ import {
 } from "@/agent-config/typeHelpers";
 import { createTypedAgentConfig, type AgentConfig } from "@/agent-config/AgentConfig";
 import { getActiveConfigMask } from "@/agent-config/configContext";
-import type { PromptClassHint } from "@/agent-config/Blueprint";
 import {
   getCachedBlueprint,
   initBlueprintCacheEntry,
@@ -1831,19 +1830,6 @@ export class OpikClient {
     const { extractFieldMetadata } = await import("@/agent-config/typeHelpers");
     const fieldMeta = extractFieldMetadata(schema, prefix);
 
-    // Derive per-field prompt class hints from the fallback so Blueprint resolves
-    // prompts to the type the user declared rather than relying solely on backend metadata.
-    const promptClassHints: Record<string, PromptClassHint> = {};
-    for (const [fieldName, meta] of fieldMeta.entries()) {
-      if (meta.backendType !== "prompt") continue;
-      const fallbackValue = (options.fallback as Record<string, unknown>)[fieldName];
-      if (fallbackValue instanceof ChatPrompt) {
-        promptClassHints[meta.prefixedKey] = "ChatPrompt";
-      } else if (fallbackValue instanceof Prompt) {
-        promptClassHints[meta.prefixedKey] = "Prompt";
-      }
-    }
-
     // effectiveEnv is null for `latest` and `version` lookups (no env tag involved)
     const effectiveEnv = options.latest || options.version ? null : (options.env ?? "prod");
     const effectiveVersion = options.version ?? null;
@@ -1855,11 +1841,11 @@ export class OpikClient {
     if (cacheEntry.isStale()) {
       try {
         if (options.latest) {
-          blueprint = await agentConfig.getBlueprint({ maskId, promptClassHints });
+          blueprint = await agentConfig.getBlueprint({ maskId });
         } else if (options.version) {
-          blueprint = await agentConfig.getBlueprint({ name: options.version, maskId, promptClassHints });
+          blueprint = await agentConfig.getBlueprint({ name: options.version, maskId });
         } else {
-          blueprint = await agentConfig.getBlueprint({ env: effectiveEnv!, maskId, promptClassHints });
+          blueprint = await agentConfig.getBlueprint({ env: effectiveEnv!, maskId });
         }
       } catch (error) {
         if (error instanceof OpikApiError && error.statusCode === 404) {

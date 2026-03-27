@@ -402,12 +402,12 @@ describe("Blueprint prompt class hints", () => {
           getPromptByCommit: vi.fn().mockResolvedValue({
             id: "prompt-id",
             name: "my-prompt",
+            templateStructure,
             requestedVersion: {
               id: "version-id",
               promptId: "prompt-id",
               commit: "abc12345",
               template,
-              templateStructure,
               type: "mustache",
             },
           }),
@@ -417,27 +417,7 @@ describe("Blueprint prompt class hints", () => {
     return opik as unknown as Parameters<typeof Blueprint.fromApiResponse>[1];
   }
 
-  it("hint=ChatPrompt returns ChatPrompt regardless of templateStructure metadata", async () => {
-    const opik = mockOpikWithPromptCommit("chat");
-    const bp = await Blueprint.fromApiResponse(
-      makePromptResponse("abc12345"),
-      opik,
-      { "MyConfig.p": "ChatPrompt" }
-    );
-    expect(bp.values["MyConfig.p"]).toBeInstanceOf(ChatPrompt);
-  });
-
-  it("hint=Prompt returns Prompt even when templateStructure=chat", async () => {
-    const opik = mockOpikWithPromptCommit("chat");
-    const bp = await Blueprint.fromApiResponse(
-      makePromptResponse("abc12345"),
-      opik,
-      { "MyConfig.p": "Prompt" }
-    );
-    expect(bp.values["MyConfig.p"]).toBeInstanceOf(Prompt);
-  });
-
-  it("no hint uses templateStructure=chat to return ChatPrompt", async () => {
+  it("templateStructure=chat returns ChatPrompt", async () => {
     const opik = mockOpikWithPromptCommit("chat");
     const bp = await Blueprint.fromApiResponse(
       makePromptResponse("abc12345"),
@@ -446,7 +426,7 @@ describe("Blueprint prompt class hints", () => {
     expect(bp.values["MyConfig.p"]).toBeInstanceOf(ChatPrompt);
   });
 
-  it("no hint uses templateStructure=text to return Prompt", async () => {
+  it("templateStructure=text returns Prompt", async () => {
     const opik = mockOpikWithPromptCommit("text");
     const bp = await Blueprint.fromApiResponse(
       makePromptResponse("abc12345"),

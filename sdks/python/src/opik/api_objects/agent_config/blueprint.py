@@ -11,23 +11,11 @@ from . import type_helpers
 
 
 def _resolve_prompt_from_commit(
-    rest_client_: rest_client.OpikApi,
-    commit: str,
-    expected_py_type: typing.Optional[typing.Any] = None,
+    rest_client_: rest_client.OpikApi, commit: str
 ) -> typing.Any:
     prompt_detail = rest_client_.prompts.get_prompt_by_commit(commit)
     version_detail = prompt_detail.requested_version
-
-    if expected_py_type is ChatPrompt:
-        return ChatPrompt.from_fern_prompt_version(
-            name=prompt_detail.name, prompt_version=version_detail
-        )
-    if expected_py_type is Prompt:
-        return Prompt.from_fern_prompt_version(
-            name=prompt_detail.name, prompt_version=version_detail
-        )
-    # expected_py_type is BasePrompt, None, or another subclass — use backend metadata
-    if version_detail.template_structure == "chat":
+    if prompt_detail.template_structure == "chat":
         return ChatPrompt.from_fern_prompt_version(
             name=prompt_detail.name, prompt_version=version_detail
         )
@@ -95,10 +83,7 @@ def _resolve_prompts(
             continue
 
         if _is_prompt_field(param.key, param.type, field_types):
-            expected_py_type = field_types.get(param.key) if field_types else None
-            values[param.key] = _resolve_prompt_from_commit(
-                rest_client_, raw_value, expected_py_type=expected_py_type
-            )
+            values[param.key] = _resolve_prompt_from_commit(rest_client_, raw_value)
         elif _is_prompt_version_field(param.key, param.type, field_types):
             values[param.key] = _resolve_prompt_version_from_commit(
                 rest_client_, raw_value
