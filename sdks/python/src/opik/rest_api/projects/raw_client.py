@@ -21,6 +21,7 @@ from ..types.dashboard_page_public import DashboardPagePublic
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.feedback_score_names import FeedbackScoreNames
+from ..types.kpi_card_response import KpiCardResponse
 from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
@@ -32,6 +33,7 @@ from ..types.span_filter_public import SpanFilterPublic
 from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_thread_filter_public import TraceThreadFilterPublic
+from .types.kpi_card_request_entity_type import KpiCardRequestEntityType
 from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
 from .types.project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
 from .types.project_update_visibility import ProjectUpdateVisibility
@@ -881,6 +883,80 @@ class RawProjectsClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_project_kpi_cards(
+        self,
+        id: str,
+        *,
+        entity_type: KpiCardRequestEntityType,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        filters: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[KpiCardResponse]:
+        """
+        Gets KPI card metrics for a project
+
+        Parameters
+        ----------
+        id : str
+
+        entity_type : KpiCardRequestEntityType
+
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[KpiCardResponse]
+            KPI Card Metrics
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(id)}/kpi-cards",
+            method="POST",
+            json={
+                "entity_type": entity_type,
+                "filters": filters,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    KpiCardResponse,
+                    parse_obj_as(
+                        type_=KpiCardResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1970,6 +2046,80 @@ class AsyncRawProjectsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_project_kpi_cards(
+        self,
+        id: str,
+        *,
+        entity_type: KpiCardRequestEntityType,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        filters: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[KpiCardResponse]:
+        """
+        Gets KPI card metrics for a project
+
+        Parameters
+        ----------
+        id : str
+
+        entity_type : KpiCardRequestEntityType
+
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[KpiCardResponse]
+            KPI Card Metrics
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(id)}/kpi-cards",
+            method="POST",
+            json={
+                "entity_type": entity_type,
+                "filters": filters,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    KpiCardResponse,
+                    parse_obj_as(
+                        type_=KpiCardResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
