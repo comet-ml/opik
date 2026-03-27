@@ -2347,7 +2347,19 @@ class Opik:
         self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
 
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
-        _ = self._rest_client.optimizations.get_optimization_by_id(id)
+        result = self._rest_client.optimizations.get_optimization_by_id(id)
+        try:
+            project = self.get_project(result.project_id)
+            return optimization.Optimization(
+                id=result.id,
+                rest_client=self._rest_client,
+                project_name=project.name,
+            )
+        except Exception as e:
+            LOGGER.debug(
+                f"Failed to get project for optimization with ID: {id}, reason: {e}"
+            )
+
         return optimization.Optimization(id=id, rest_client=self._rest_client)
 
     def get_experiments_client(self) -> experiments_client.ExperimentsClient:

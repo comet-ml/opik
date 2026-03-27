@@ -17,6 +17,8 @@ def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name:
         project_name=project_name,
     )
 
+    assert optimization.project_name == project_name
+
     verifiers.verify_optimization(
         opik_client=opik_client,
         optimization_id=optimization.id,
@@ -38,6 +40,10 @@ def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name:
         objective_name="some-objective-name",
         project_name=project_name,
     )
+
+    # Check project_name propagation
+    optimization = opik_client.get_optimization_by_id(optimization.id)
+    assert optimization.project_name == project_name
 
     opik_client.delete_optimizations([optimization.id])
 
