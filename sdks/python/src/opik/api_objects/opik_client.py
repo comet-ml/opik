@@ -2322,8 +2322,11 @@ class Opik:
         name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         optimization_id: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> optimization.Optimization:
         id = optimization_id or id_helpers.generate_id()
+
+        project_name = self._resolve_project_name(project_name)
 
         self._rest_client.optimizations.create_optimization(
             id=id,
@@ -2332,10 +2335,11 @@ class Opik:
             objective_name=objective_name,
             status="running",
             metadata=metadata,
+            project_name=project_name,
         )
 
         optimization_client = optimization.Optimization(
-            id=id, rest_client=self._rest_client
+            id=id, rest_client=self._rest_client, project_name=project_name
         )
         return optimization_client
 
@@ -2343,7 +2347,19 @@ class Opik:
         self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
 
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
-        _ = self._rest_client.optimizations.get_optimization_by_id(id)
+        result = self._rest_client.optimizations.get_optimization_by_id(id)
+        try:
+            project = self.get_project(result.project_id)
+            return optimization.Optimization(
+                id=result.id,
+                rest_client=self._rest_client,
+                project_name=project.name,
+            )
+        except Exception as e:
+            LOGGER.warning(
+                f"Failed to get project for optimization with ID: {id}, reason: {e}"
+            )
+
         return optimization.Optimization(id=id, rest_client=self._rest_client)
 
     def get_experiments_client(self) -> experiments_client.ExperimentsClient:

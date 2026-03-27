@@ -15,7 +15,10 @@ def _resolve_prompt_from_commit(
 ) -> typing.Any:
     prompt_detail = rest_client_.prompts.get_prompt_by_commit(commit)
     version_detail = prompt_detail.requested_version
-    if version_detail.template_structure == "chat":
+    if (
+        prompt_detail.template_structure == "chat"
+        or version_detail.template_structure == "chat"
+    ):
         return ChatPrompt.from_fern_prompt_version(
             name=prompt_detail.name, prompt_version=version_detail
         )
