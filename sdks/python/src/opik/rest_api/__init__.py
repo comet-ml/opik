@@ -355,6 +355,9 @@ from .types import (
     JsonNodePublic,
     JsonNodeWrite,
     JsonSchema,
+    KpiCardResponse,
+    KpiMetric,
+    KpiMetricType,
     LlmAsJudgeCode,
     LlmAsJudgeCodePublic,
     LlmAsJudgeCodeWrite,
@@ -675,6 +678,7 @@ from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
 from .projects import (
+    KpiCardRequestEntityType,
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
     ProjectUpdateVisibility,
@@ -1064,6 +1068,10 @@ __all__ = [
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
+    "KpiCardRequestEntityType",
+    "KpiCardResponse",
+    "KpiMetric",
+    "KpiMetricType",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
