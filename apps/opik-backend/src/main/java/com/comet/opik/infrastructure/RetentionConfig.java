@@ -27,10 +27,6 @@ public class RetentionConfig {
     @JsonProperty
     @Min(1) @Max(30) private int slidingWindowDays = 3;
 
-    /** Max time (seconds) the job can hold the distributed lock. */
-    @JsonProperty
-    @Min(1) @Max(7200) private int lockTimeoutSeconds = 1800;
-
     /** Catch-up configuration for progressive historical data deletion. */
     @Valid @JsonProperty
     private CatchUpConfig catchUp = new CatchUpConfig();
@@ -87,10 +83,6 @@ public class RetentionConfig {
         /** Interval in minutes between estimation cycles for newly created rules. */
         @JsonProperty
         @Min(1) @Max(60) private int estimationIntervalMinutes = 5;
-
-        /** Max time (seconds) the catch-up job can hold the distributed lock. */
-        @JsonProperty
-        @Min(1) @Max(7200) private int lockTimeoutSeconds = 1800;
 
         /** Earliest possible date for catch-up cursor start (service launch date). */
         @JsonProperty
