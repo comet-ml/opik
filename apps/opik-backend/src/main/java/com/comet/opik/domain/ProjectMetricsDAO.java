@@ -27,6 +27,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -1216,13 +1217,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_TRACE_AVERAGE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   toDecimal64(
-                     greatest(
-                       least(if(isFinite(avg(duration)), avg(duration), 0), 999999999.999999999),
-                       -999999999.999999999
-                     ),
-                     9
-                   ) AS avg_duration
+                   avg(duration) AS avg_duration
             FROM traces_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -1250,13 +1245,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_SPAN_AVERAGE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   toDecimal64(
-                     greatest(
-                       least(if(isFinite(avg(duration)), avg(duration), 0), 999999999.999999999),
-                       -999999999.999999999
-                     ),
-                     9
-                   ) AS avg_duration
+                   avg(duration) AS avg_duration
             FROM spans_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -1298,13 +1287,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_AVERAGE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   toDecimal64(
-                     greatest(
-                       least(if(isFinite(avg(duration)), avg(duration), 0), 999999999.999999999),
-                       -999999999.999999999
-                     ),
-                     9
-                   ) AS avg_duration
+                   avg(duration) AS avg_duration
             FROM threads_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -1631,6 +1614,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .collectList());
     }
 
+    private static BigDecimal toSafeBigDecimal(Double value) {
+        if (value == null || value.isNaN() || value.isInfinite()) {
+            return null;
+        }
+        return BigDecimal.valueOf(value).setScale(9, RoundingMode.HALF_UP);
+    }
+
     private void rejectBreakdown(@NonNull ProjectMetricRequest request) {
         if (request.hasBreakdown()) {
             throw new BadRequestException("Breakdown is not supported for metric type '%s'"
@@ -1644,7 +1634,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_TRACE_AVERAGE_DURATION, "traceAverageDuration")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACE_AVERAGE_DURATION,
-                        row -> row.get("avg_duration", BigDecimal.class)))
+                        row -> toSafeBigDecimal(row.get("avg_duration", Double.class))))
                 .collectList());
     }
 
@@ -1654,7 +1644,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_TRACE_ERROR_RATE, "traceErrorRate")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACE_ERROR_RATE,
-                        row -> row.get("error_rate", BigDecimal.class)))
+                        row -> toSafeBigDecimal(row.get("error_rate", Double.class))))
                 .collectList());
     }
 
@@ -1664,7 +1654,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_SPAN_AVERAGE_DURATION, "spanAverageDuration")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_SPAN_AVERAGE_DURATION,
-                        row -> row.get("avg_duration", BigDecimal.class)))
+                        row -> toSafeBigDecimal(row.get("avg_duration", Double.class))))
                 .collectList());
     }
 
@@ -1684,7 +1674,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_SPAN_ERROR_RATE, "spanErrorRate")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_SPAN_ERROR_RATE,
-                        row -> row.get("error_rate", BigDecimal.class)))
+                        row -> toSafeBigDecimal(row.get("error_rate", Double.class))))
                 .collectList());
     }
 
@@ -1694,7 +1684,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 GET_THREAD_AVERAGE_DURATION, "threadAverageDuration")
                 .flatMapMany(result -> rowToDataPoint(result, row -> NAME_THREAD_AVERAGE_DURATION,
-                        row -> row.get("avg_duration", BigDecimal.class)))
+                        row -> toSafeBigDecimal(row.get("avg_duration", Double.class))))
                 .collectList());
     }
 
