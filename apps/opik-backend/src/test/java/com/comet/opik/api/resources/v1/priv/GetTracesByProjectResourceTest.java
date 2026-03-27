@@ -24,6 +24,7 @@ import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.FilterTestUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -4068,32 +4069,15 @@ class GetTracesByProjectResourceTest {
     }
 
     private String getValidValue(Field field) {
-        return switch (field.getType()) {
-            case STRING, STRING_EXACT, LIST, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, ENUM, STRING_STATE_DB ->
-                RandomStringUtils.secure().nextAlphanumeric(10);
-            case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
-            case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
-            case ERROR_CONTAINER -> "";
-        };
+        return FilterTestUtils.getValidValue(field);
     }
 
     private String getKey(Field field) {
-        return switch (field.getType()) {
-            case STRING, STRING_EXACT, NUMBER, DURATION, MAP, DATE_TIME, LIST, ENUM, ERROR_CONTAINER,
-                    STRING_STATE_DB, DATE_TIME_STATE_DB,
-                    DICTIONARY, DICTIONARY_STATE_DB ->
-                null;
-            case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
-        };
+        return FilterTestUtils.getKey(field);
     }
 
     private String getInvalidValue(Field field) {
-        return switch (field.getType()) {
-            case STRING, STRING_EXACT, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER,
-                    STRING_STATE_DB, DATE_TIME_STATE_DB ->
-                " ";
-            case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
-        };
+        return FilterTestUtils.getInvalidValue(field);
     }
 
     @Nested
