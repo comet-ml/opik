@@ -1,11 +1,10 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/ui/checkbox";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import SideDialog from "@/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
@@ -269,8 +268,6 @@ type AddOptimizationDialogProps = {
 const AddOptimizationDialog: React.FunctionComponent<
   AddOptimizationDialogProps
 > = ({ open, setOpen, projectId }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
   const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(
@@ -289,16 +286,15 @@ const AddOptimizationDialog: React.FunctionComponent<
     datasetName || "your-dataset-name",
   );
 
-  const { data, isLoading } = useDatasetsList(
+  const { data, isLoading } = useProjectDatasetsList(
     {
-      workspaceName,
-      ...(projectId && { projectId }),
+      projectId: projectId!,
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: canViewDatasets,
+      enabled: canViewDatasets && !!projectId,
     },
   );
 

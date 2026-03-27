@@ -8,7 +8,7 @@ import CodeBlockWithHeader from "@/shared/CodeBlockWithHeader/CodeBlockWithHeade
 import CodeSectionTitle from "@/shared/CodeSectionTitle/CodeSectionTitle";
 import InstallOpikSection from "@/shared/InstallOpikSection/InstallOpikSection";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { DATASET_TYPE } from "@/types/datasets";
 import SideDialog from "@/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/ui/sheet";
@@ -198,15 +198,15 @@ const AddExperimentDialog: React.FunctionComponent<
     LLM_JUDGES_MODELS_OPTIONS[0].value,
   ]); // Set the first LLM judge model as checked
 
-  const { data, isLoading } = useDatasetsList(
+  const { data, isLoading } = useProjectDatasetsList(
     {
-      workspaceName,
-      ...(projectId && { projectId }),
+      projectId: projectId!,
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },
     {
       placeholderData: keepPreviousData,
+      enabled: !!projectId,
     },
   );
 
