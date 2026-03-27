@@ -3224,17 +3224,22 @@ class TraceDAOImpl implements TraceDAO {
      * uuidFromTime/uuidToTime are excluded because the if/else fallback applies them directly
      * to each CTE; lastReceivedId is excluded because it's a pagination cursor, not a
      * semantic filter.
+     *
+     * <p>Guardrails filters inject {@code gagg.guardrails_result} into the {@code <filters>}
+     * template variable, which references the guardrails_agg CTE alias. Since the prefilter
+     * CTE only queries the traces table, these references would fail. Guard against them.
      */
     private boolean shouldUseTraceIdPrefilter(TraceSearchCriteria criteria, ST template) {
-        boolean hasFeedbackScoreFilters = template.getAttribute("feedback_scores_filters") != null
+        boolean hasCteDependentFilters = template.getAttribute("feedback_scores_filters") != null
                 || template.getAttribute("feedback_scores_empty_filters") != null
                 || template.getAttribute("span_feedback_scores_filters") != null
-                || template.getAttribute("span_feedback_scores_empty_filters") != null;
+                || template.getAttribute("span_feedback_scores_empty_filters") != null
+                || template.getAttribute("guardrails_filters") != null;
 
         boolean hasNarrowingFilters = criteria.searchText() != null
                 || template.getAttribute("filters") != null;
 
-        return !hasFeedbackScoreFilters && hasNarrowingFilters;
+        return !hasCteDependentFilters && hasNarrowingFilters;
     }
 
     private Mono<? extends Result> getTracesByProjectId(
