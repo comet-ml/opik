@@ -224,6 +224,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
     {
       workspaceName,
+      projectId: activeProjectId,
       filters,
       sorting: sortedColumns,
       search: search!,
@@ -336,14 +337,14 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const handleRowClick = useCallback(
     (row: Dataset) => {
-      if (!row.id) return;
+      if (!row.id || !activeProjectId) return;
 
       navigate({
         to: "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId",
         params: {
           suiteId: row.id,
           workspaceName,
-          projectId: activeProjectId!,
+          projectId: activeProjectId,
         },
       });
     },

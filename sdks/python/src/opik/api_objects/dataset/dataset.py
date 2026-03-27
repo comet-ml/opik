@@ -553,7 +553,10 @@ class Dataset(DatasetExportOperations):
         """
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name, items=batch, batch_group_id=batch_group_id
+                dataset_name=self._name,
+                items=batch,
+                batch_group_id=batch_group_id,
+                project_name=self._project_name,
             )
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))

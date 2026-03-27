@@ -178,11 +178,12 @@ type AddExperimentDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   datasetName?: string;
+  projectId?: string | null;
 };
 
 const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
-> = ({ open, setOpen, datasetName: initialDatasetName = "" }) => {
+> = ({ open, setOpen, datasetName: initialDatasetName = "", projectId }) => {
   const {
     permissions: { canCreateExperiments },
   } = usePermissions();
@@ -200,6 +201,7 @@ const AddExperimentDialog: React.FunctionComponent<
   const { data, isLoading } = useDatasetsList(
     {
       workspaceName,
+      ...(projectId && { projectId }),
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },

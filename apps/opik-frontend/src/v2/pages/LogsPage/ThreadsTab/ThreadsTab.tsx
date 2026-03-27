@@ -33,7 +33,7 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { Thread } from "@/types/traces";
+import { Thread, LOGS_SOURCE } from "@/types/traces";
 import {
   convertColumnDataToColumn,
   injectColumnCallback,
@@ -391,6 +391,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         truncate: truncationEnabled,
         fromTime: intervalStart,
         toTime: intervalEnd,
+        logsSource: LOGS_SOURCE.sdk,
       },
       {
         enabled: isTableDataEnabled,
@@ -411,6 +412,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       truncate: false,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       enabled: false,
@@ -425,6 +427,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       search: search as string,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       refetchInterval: REFETCH_INTERVAL,

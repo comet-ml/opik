@@ -42,6 +42,7 @@ export type UseExperimentsGroupsAndFiltersProps = {
   sortedColumns: ColumnSort[];
   filters: Filters;
   promptId?: string;
+  projectId?: string | null;
 };
 
 export const useExperimentsGroupsAndFilters = ({
@@ -49,6 +50,7 @@ export const useExperimentsGroupsAndFilters = ({
   sortedColumns,
   filters,
   promptId,
+  projectId,
 }: UseExperimentsGroupsAndFiltersProps) => {
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
     localStorageKey: `${storageKeyPrefix}-columns-groups`,
@@ -64,6 +66,7 @@ export const useExperimentsGroupsAndFilters = ({
           keyComponent: DatasetSelectBox,
           keyComponentProps: {
             className: "w-full min-w-72",
+            ...(projectId && { projectId }),
           },
           defaultOperator: "=",
           operators: [{ label: "=", value: "=" }],
@@ -81,7 +84,7 @@ export const useExperimentsGroupsAndFilters = ({
         },
       },
     }),
-    [filters, sortedColumns, promptId],
+    [filters, sortedColumns, promptId, projectId],
   );
 
   return {

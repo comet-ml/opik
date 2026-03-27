@@ -200,13 +200,14 @@ const OptimizationsPage: React.FunctionComponent = () => {
           keyComponent: DatasetSelectBox,
           keyComponentProps: {
             className: "w-full min-w-72",
+            ...(activeProjectId && { projectId: activeProjectId }),
           },
           defaultOperator: "=",
           operators: [{ label: "=", value: "=" }],
         },
       },
     }),
-    [],
+    [activeProjectId],
   );
 
   const noData = !search && filters.length === 0;
@@ -411,6 +412,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        projectId={activeProjectId}
       />
     </div>
   );

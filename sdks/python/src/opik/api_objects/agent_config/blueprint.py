@@ -112,6 +112,9 @@ class Blueprint:
     ) -> None:
         self._raw = raw_blueprint
         self._values = _resolve_values(raw_blueprint, field_types, rest_client_)
+        self._descriptions: typing.Dict[str, typing.Optional[str]] = {
+            param.key: param.description for param in raw_blueprint.values
+        }
 
     @property
     def id(self) -> typing.Optional[str]:
@@ -153,3 +156,6 @@ class Blueprint:
 
     def keys(self) -> typing.KeysView[str]:
         return self._values.keys()
+
+    def get_field_description(self, key: str) -> typing.Optional[str]:
+        return self._descriptions.get(key)

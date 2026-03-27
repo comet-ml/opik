@@ -28,6 +28,7 @@ export class Blueprint {
   private readonly _rawValues: OpikApi.AgentConfigValuePublic[];
   private readonly _opik?: OpikClient;
   private readonly _resolvedValues: Record<string, unknown>;
+  private readonly _descriptions: Record<string, string | undefined>;
 
   constructor(data: BlueprintData) {
     this.id = data.id;
@@ -41,8 +42,10 @@ export class Blueprint {
     this._opik = data.opik;
 
     this._resolvedValues = {};
+    this._descriptions = {};
     for (const v of this._rawValues) {
       this._resolvedValues[v.key] = deserializeValue(v.value, v.type);
+      this._descriptions[v.key] = v.description;
     }
   }
 
@@ -133,5 +136,9 @@ export class Blueprint {
     const entry = this._rawValues.find((v) => v.key === key);
     if (!entry) return undefined;
     return { value: entry.value, type: entry.type };
+  }
+
+  getFieldDescription(key: string): string | undefined {
+    return this._descriptions[key];
   }
 }

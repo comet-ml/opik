@@ -4,7 +4,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { useNavigate } from "@tanstack/react-router";
 
-import useAlertsList from "@/api/alerts/useAlertsList";
+import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";
 import AlertsRowActionsCell from "@/v2/pages/AlertsPage/AlertsRowActionsCell";
 import AlertsEventsCell from "@/v2/pages/AlertsPage/AlertsEventsCell";
 import AlertTypeCell from "@/v2/pages/AlertsPage/AlertTypeCell";
@@ -227,20 +227,21 @@ const AlertsPage: React.FunctionComponent = () => {
     [],
   );
 
-  const { data, isPending, isPlaceholderData, isFetching } = useAlertsList(
-    {
-      workspaceName,
-      search: search!,
-      filters,
-      sorting: sortedColumns,
-      page,
-      size,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: 30000,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useProjectAlertsList(
+      {
+        projectId: activeProjectId!,
+        search: search!,
+        filters,
+        sorting: sortedColumns,
+        page,
+        size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
 
   const alerts = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(

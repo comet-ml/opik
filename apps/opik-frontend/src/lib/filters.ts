@@ -2,7 +2,7 @@ import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter, Filters } from "@/types/filters";
 import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
-import { TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
   makeEndOfMinute,
   makeStartOfMinute,
@@ -69,6 +69,19 @@ export const generateVisibilityFilters = () => {
       operator: "=",
       key: "",
       value: TRACE_VISIBILITY_MODE.default,
+    },
+  ] as Filter[];
+};
+
+export const generateLogsSourceFilter = (source: LOGS_SOURCE) => {
+  return [
+    {
+      id: "logs_source_filter",
+      field: "source",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: source,
     },
   ] as Filter[];
 };

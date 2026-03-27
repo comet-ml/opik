@@ -13,6 +13,7 @@ export type RunStatus = "passed" | "failed";
 
 export interface Dataset {
   id: string;
+  project_id?: string;
   name: string;
   description?: string;
   dataset_items_count: number;
