@@ -419,7 +419,7 @@ const PlaygroundPrompt = ({
           }
         }}
       />
-    </div >
+    </div>
   );
 };
 
