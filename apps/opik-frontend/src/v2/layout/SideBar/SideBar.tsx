@@ -75,7 +75,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         )}
       </div>
 
-      <div className="relative flex h-[calc(100%-var(--header-height))] flex-col px-3 py-4">
+      <div className="relative flex h-[calc(100%-var(--header-height))] flex-col p-3">
         <div className="flex min-h-0 flex-1 flex-col overflow-auto">
           <ProjectSelector />
           <ul className="mt-2 flex flex-col">
