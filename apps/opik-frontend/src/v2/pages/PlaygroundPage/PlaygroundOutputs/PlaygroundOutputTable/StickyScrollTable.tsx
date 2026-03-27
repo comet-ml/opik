@@ -60,8 +60,7 @@ const StickyScrollTable = <TData,>({
     <div>
       <div
         ref={headerScrollRef}
-        className="sticky top-0 z-10 overflow-x-auto overflow-y-hidden"
-        style={{ scrollbarWidth: "none" }}
+        className="comet-no-scrollbar sticky top-0 z-10 overflow-x-auto overflow-y-hidden"
         onScroll={handleHeaderScroll}
       >
         <DataTable

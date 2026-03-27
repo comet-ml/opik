@@ -163,7 +163,12 @@ const PlaygroundHeader = ({
   // Keyboard shortcut: Shift+Enter to run all
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.shiftKey && event.key === "Enter" && !isRunDisabled) {
+      if (
+        event.shiftKey &&
+        event.key === "Enter" &&
+        !isRunDisabled &&
+        !isRunning
+      ) {
         event.preventDefault();
         event.stopPropagation();
         onRunAll();
@@ -171,7 +176,7 @@ const PlaygroundHeader = ({
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [onRunAll, isRunDisabled]);
+  }, [onRunAll, isRunDisabled, isRunning]);
 
   const resetPlayground = useCallback(() => {
     const newPrompt = generateDefaultPrompt({

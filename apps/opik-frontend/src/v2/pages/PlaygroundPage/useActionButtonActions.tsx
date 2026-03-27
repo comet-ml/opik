@@ -211,6 +211,7 @@ const useActionButtonActions = ({
 
   const runAll = useCallback(async () => {
     resetState();
+    isToStopRef.current = false;
     setAllRunning(true);
     clearCreatedExperiments();
 
@@ -260,6 +261,7 @@ const useActionButtonActions = ({
       const prompt = usePlaygroundStore.getState().promptMap[promptId];
       if (!prompt) return;
 
+      isToStopRef.current = false;
       setPromptRunning(promptId, true);
       const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
