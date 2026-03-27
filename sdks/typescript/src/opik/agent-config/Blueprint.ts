@@ -87,7 +87,10 @@ export class Blueprint {
       }
 
       if (v.type === "prompt") {
-        if (promptDetail.templateStructure === "chat") {
+        if (
+          promptDetail.templateStructure === "chat" ||
+          versionDetail.templateStructure === "chat"
+        ) {
           this._resolvedValues[v.key] = ChatPrompt.fromApiResponse(
             promptDetail,
             versionDetail,
