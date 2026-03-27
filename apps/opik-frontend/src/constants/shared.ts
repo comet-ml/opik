@@ -5,7 +5,7 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 
-export const DEMO_PROJECT_NAME = "Opik Demo Agent Observability";
+export const DEMO_PROJECT_NAME = "Demo Project";
 export const PLAYGROUND_PROJECT_NAME = "playground";
 export const USER_FEEDBACK_NAME = "User feedback";
 export const PIP_INSTALL_OPIK_COMMAND = "pip install opik";
