@@ -1,12 +1,15 @@
-import NewQuickstart from "@/v1/pages/GetStartedPage/NewQuickstart";
+import V1NewQuickstart from "@/v1/pages/GetStartedPage/NewQuickstart";
+import V2NewQuickstart from "@/v2/pages/GetStartedPage/NewQuickstart";
 import useUser from "./useUser";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import { ORGANIZATION_PLAN_ENTERPRISE } from "./types";
 import useAppStore from "@/store/AppStore";
+import { useWorkspaceVersion } from "@/store/AppStore";
 
 const GetStartedPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const workspaceVersion = useWorkspaceVersion();
 
   const { data: user } = useUser();
   const { data: organizations } = useOrganizations({
@@ -17,6 +20,10 @@ const GetStartedPage = () => {
   });
 
   if (!user) return;
+
+  if (workspaceVersion === "v2") {
+    return <V2NewQuickstart />;
+  }
 
   const currentWorkspace = allWorkspaces?.find(
     (workspace) => workspace.workspaceName === workspaceName,
@@ -29,7 +36,7 @@ const GetStartedPage = () => {
   const isEnterpriseCustomer =
     currentOrganization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
 
-  return <NewQuickstart shouldSkipQuestions={isEnterpriseCustomer} />;
+  return <V1NewQuickstart shouldSkipQuestions={isEnterpriseCustomer} />;
 };
 
 export default GetStartedPage;
