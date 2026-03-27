@@ -19,7 +19,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/ui/accordion";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import Loader from "@/shared/Loader/Loader";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -89,16 +89,16 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
   const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
 
-  const { data, isPending } = useDatasetsList(
+  const { data, isPending } = useProjectDatasetsList(
     {
-      workspaceName,
-      ...(activeProjectId && { projectId: activeProjectId }),
+      projectId: activeProjectId!,
       search,
       page,
       size,
     },
     {
       placeholderData: keepPreviousData,
+      enabled: !!activeProjectId,
     },
   );
 
