@@ -2,6 +2,9 @@ package com.comet.opik.domain.retention;
 
 import lombok.experimental.UtilityClass;
 
+import java.time.Instant;
+import java.util.UUID;
+
 @UtilityClass
 public class RetentionUtils {
 
@@ -24,5 +27,21 @@ public class RetentionUtils {
                 : String.format("%08x", end);
 
         return new String[]{rangeStart, rangeEnd};
+    }
+
+    /**
+     * Extract the timestamp from a UUID v7's MSB (top 48 bits = epoch millis).
+     */
+    public static Instant extractInstant(UUID uuid) {
+        long msb = uuid.getMostSignificantBits();
+        long epochMilli = msb >>> 16;
+        return Instant.ofEpochMilli(epochMilli);
+    }
+
+    /**
+     * Compare two UUID v7 values by their MSB (timestamp portion).
+     */
+    public static int compareUUID(UUID a, UUID b) {
+        return Long.compareUnsigned(a.getMostSignificantBits(), b.getMostSignificantBits());
     }
 }

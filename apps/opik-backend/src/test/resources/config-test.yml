@@ -531,6 +531,14 @@ serviceToggles:
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
   assistantSidebarEnabled: "false"
+  # Default: version_1
+  # Description: Forces ALL workspaces to a specific navigation version. Highest priority override.
+  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
+  # Scope: Global — applies to all workspaces regardless of their entity state.
+  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
+  # Operational impact: Set to "version_1" until V2 is ready, then change to "disabled" to enable entity-based determination.
+  # For tests, changed to "disabled" as it will be the final state
+  forceWorkspaceVersion: "disabled"
 
 # Assistant Sidebar CDN configuration
 assistantSidebar:

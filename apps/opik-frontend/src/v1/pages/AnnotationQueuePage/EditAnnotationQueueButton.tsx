@@ -4,6 +4,7 @@ import AddEditAnnotationQueueDialog from "@/v1/pages-shared/annotation-queues/Ad
 import { Button } from "@/ui/button";
 import { Pencil } from "lucide-react";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface EditAnnotationQueueButtonProps {
   annotationQueue: AnnotationQueue;
@@ -12,6 +13,10 @@ interface EditAnnotationQueueButtonProps {
 const EditAnnotationQueueButton: React.FunctionComponent<
   EditAnnotationQueueButtonProps
 > = ({ annotationQueue }) => {
+  const {
+    permissions: { canEditAnnotationQueues },
+  } = usePermissions();
+
   const resetKeyRef = useRef(0);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
@@ -19,6 +24,8 @@ const EditAnnotationQueueButton: React.FunctionComponent<
     setIsEditDialogOpen(true);
     resetKeyRef.current = resetKeyRef.current + 1;
   }, []);
+
+  if (!canEditAnnotationQueues) return null;
 
   return (
     <>

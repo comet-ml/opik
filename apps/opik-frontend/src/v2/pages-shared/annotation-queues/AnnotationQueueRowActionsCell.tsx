@@ -33,7 +33,7 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
   const { mutate } = useAnnotationQueueDeleteMutation();
 
   const {
-    permissions: { canDeleteAnnotationQueues },
+    permissions: { canEditAnnotationQueues, canDeleteAnnotationQueues },
   } = usePermissions();
 
   const handleCopySMELink = useCallback(() => {
@@ -95,10 +95,12 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
             <Copy className="mr-2 size-4" />
             Copy sharing link
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleEdit}>
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
+          {canEditAnnotationQueues && (
+            <DropdownMenuItem onClick={handleEdit}>
+              <Pencil className="mr-2 size-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
           {canDeleteAnnotationQueues && (
             <>
               <DropdownMenuSeparator />

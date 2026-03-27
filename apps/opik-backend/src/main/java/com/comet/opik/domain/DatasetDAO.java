@@ -37,6 +37,17 @@ import java.util.UUID;
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 public interface DatasetDAO {
 
+    @SqlQuery("""
+            SELECT EXISTS(
+                SELECT 1 FROM datasets
+                WHERE workspace_id = :workspaceId AND project_id IS NULL
+                AND name NOT IN (<demoDatasetNames>)
+            )""")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    boolean hasVersion1Datasets(@Bind("workspaceId") String workspaceId,
+            @BindList("demoDatasetNames") List<String> demoDatasetNames);
+
     @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, type, workspace_id, project_id, created_by, last_updated_by, tags) "
             +
             "VALUES (:dataset.id, :dataset.name, :dataset.description, COALESCE(:dataset.visibility, 'private'), COALESCE(:dataset.type, 'dataset'), :workspace_id, :dataset.projectId, :dataset.createdBy, :dataset.lastUpdatedBy, :dataset.tags)")

@@ -607,9 +607,10 @@ export class ExperimentsClient {
         request: OpikApi.FindFeedbackScoreNamesRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
-        const { experimentIds } = request;
+        const { experimentIds, projectId } = request;
         const _queryParams: Record<string, unknown> = {
             experiment_ids: experimentIds,
+            project_id: projectId,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,

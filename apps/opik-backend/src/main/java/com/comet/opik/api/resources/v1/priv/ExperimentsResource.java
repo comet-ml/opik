@@ -553,7 +553,8 @@ public class ExperimentsResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(
-            @QueryParam("experiment_ids") String experimentIdsQueryParam) {
+            @QueryParam("experiment_ids") String experimentIdsQueryParam,
+            @QueryParam("project_id") UUID projectId) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .map(ParamsValidator::getIds)
@@ -561,14 +562,14 @@ public class ExperimentsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Find feedback score names by experiment_ids '{}', on workspaceId '{}'",
-                experimentIds, workspaceId);
+        log.info("Find feedback score names by experiment_ids '{}', project_id '{}', on workspaceId '{}'",
+                experimentIds, projectId, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getExperimentsFeedbackScoreNames(experimentIds)
+                .getExperimentsFeedbackScoreNames(experimentIds, projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",
-                feedbackScoreNames.scores().size(), experimentIds, workspaceId);
+        log.info("Found feedback score names '{}' by experiment_ids '{}', project_id '{}', on workspaceId '{}'",
+                feedbackScoreNames.scores().size(), experimentIds, projectId, workspaceId);
 
         return Response.ok(feedbackScoreNames).build();
     }

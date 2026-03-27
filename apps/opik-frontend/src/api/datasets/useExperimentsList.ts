@@ -1,6 +1,10 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import isBoolean from "lodash/isBoolean";
-import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import api, {
+  EXPERIMENTS_REST_ENDPOINT,
+  PROJECTS_REST_ENDPOINT,
+  QueryConfig,
+} from "@/api/api";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
@@ -52,16 +56,20 @@ export const getExperimentsList = async (
     forceSorting,
   }: UseExperimentsListParams,
 ) => {
-  const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
+  const endpoint = projectId
+    ? `${PROJECTS_REST_ENDPOINT}${projectId}/experiments`
+    : EXPERIMENTS_REST_ENDPOINT;
+
+  const { data } = await api.get(endpoint, {
     signal,
     params: {
       ...(workspaceName && { workspace_name: workspaceName }),
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
-      ...(isBoolean(projectDeleted) && { project_deleted: projectDeleted }),
+      ...(!projectId &&
+        isBoolean(projectDeleted) && { project_deleted: projectDeleted }),
       ...processFilters(filters, generatePromptFilters(promptId)),
       ...processSorting(sorting),
       ...(search && { name: search }),
-      ...(projectId && { project_id: projectId }),
       ...(optimizationId && { optimization_id: optimizationId }),
       ...(types && { types: JSON.stringify(types) }),
       ...(experimentIds && { experiment_ids: JSON.stringify(experimentIds) }),

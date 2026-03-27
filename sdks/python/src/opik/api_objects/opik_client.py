@@ -24,8 +24,8 @@ from . import (
     opik_query_language,
     rest_helpers,
     search_helpers,
-    span,
-    trace,
+    span as span_module,
+    trace as trace_module,
 )
 from .annotation_queue import (
     TracesAnnotationQueue,
@@ -84,6 +84,7 @@ from ..types import (
     FeedbackScoreDict,
     LLMProvider,
     SpanType,
+    TraceSource,
 )
 from ..file_upload import upload_manager
 
@@ -293,7 +294,7 @@ class Opik:
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
         **ignored_kwargs: Any,
-    ) -> trace.Trace:
+    ) -> trace_module.Trace:
         """
         Create and log a new trace.
 
@@ -317,6 +318,41 @@ class Opik:
         Returns:
             trace.Trace: The created trace object.
         """
+        return self.__internal_api__trace__(
+            id=id,
+            name=name,
+            start_time=start_time,
+            end_time=end_time,
+            input=input,
+            output=output,
+            metadata=metadata,
+            tags=tags,
+            feedback_scores=feedback_scores,
+            project_name=project_name,
+            error_info=error_info,
+            thread_id=thread_id,
+            attachments=attachments,
+            source="sdk",
+        )
+
+    def __internal_api__trace__(
+        self,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+        start_time: Optional[datetime.datetime] = None,
+        end_time: Optional[datetime.datetime] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+        project_name: Optional[str] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
+        attachments: Optional[List[Attachment]] = None,
+        source: TraceSource = "sdk",
+        **ignored_kwargs: Any,
+    ) -> trace_module.Trace:
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
@@ -339,6 +375,7 @@ class Opik:
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            source=source,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
@@ -363,11 +400,12 @@ class Opik:
                     )
                 )
 
-        return trace.Trace(
+        return trace_module.Trace(
             id=id,
             message_streamer=self._streamer,
             project_name=project_name,
             url_override=self._config.url_override,
+            source=source,
         )
 
     def copy_traces(
@@ -405,13 +443,13 @@ class Opik:
         spans_public = self.search_spans(project_name=project_name)
 
         trace_data = [
-            trace.trace_public_to_trace_data(
+            trace_module.trace_public_to_trace_data(
                 project_name=project_name, trace_public=trace_public_
             )
             for trace_public_ in traces_public
         ]
         span_data = [
-            span.span_public_to_span_data(
+            span_module.span_public_to_span_data(
                 project_name=project_name, span_public_=span_public_
             )
             for span_public_ in spans_public
@@ -424,10 +462,10 @@ class Opik:
         )
 
         for trace_data_ in new_trace_data:
-            self.trace(**trace_data_.as_parameters)
+            self.__internal_api__trace__(**trace_data_.as_parameters)
 
         for span_data_ in new_span_data:
-            self.span(**span_data_.as_parameters)
+            self.__internal_api__span__(**span_data_.as_parameters)
 
         if delete_original_project:
             trace_ids = [trace_.id for trace_ in trace_data]
@@ -458,7 +496,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
         attachments: Optional[List[Attachment]] = None,
-    ) -> span.Span:
+    ) -> span_module.Span:
         """
         Create and log a new span.
 
@@ -492,6 +530,52 @@ class Opik:
         Returns:
             span.Span: The created span object.
         """
+        return self.__internal_api__span__(
+            trace_id=trace_id,
+            id=id,
+            parent_span_id=parent_span_id,
+            name=name,
+            type=type,
+            start_time=start_time,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            feedback_scores=feedback_scores,
+            project_name=project_name,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            attachments=attachments,
+            source="sdk",
+        )
+
+    def __internal_api__span__(
+        self,
+        trace_id: Optional[str] = None,
+        id: Optional[str] = None,
+        parent_span_id: Optional[str] = None,
+        name: Optional[str] = None,
+        type: SpanType = "general",
+        start_time: Optional[datetime.datetime] = None,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+        project_name: Optional[str] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
+        source: TraceSource = "sdk",
+    ) -> span_module.Span:
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
@@ -517,6 +601,7 @@ class Opik:
                 error_info=error_info,
                 thread_id=None,
                 last_updated_at=datetime_helpers.local_timestamp(),
+                source=source,
             )
             self._streamer.put(create_trace_message)
 
@@ -528,7 +613,7 @@ class Opik:
                 cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
             )
 
-        return span.span_client.create_span(
+        return span_module.span_client.create_span(
             trace_id=trace_id,
             project_name=project_name,
             url_override=self._config.url_override,
@@ -549,6 +634,7 @@ class Opik:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=source,
         )
 
     def update_span(
@@ -612,7 +698,7 @@ class Opik:
         Returns:
             None
         """
-        span.span_client.update_span(
+        span_module.span_client.update_span(
             id=id,
             trace_id=trace_id,
             parent_span_id=parent_span_id,
@@ -630,6 +716,7 @@ class Opik:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source="sdk",
         )
 
     def update_trace(
@@ -692,6 +779,7 @@ class Opik:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            source="sdk",
         )
 
     def log_spans_feedback_scores(

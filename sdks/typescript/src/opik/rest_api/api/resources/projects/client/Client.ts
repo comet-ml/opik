@@ -1167,6 +1167,99 @@ export class ProjectsClient {
     }
 
     /**
+     * Gets KPI card metrics for a project
+     *
+     * @param {string} id
+     * @param {OpikApi.KpiCardRequest} request
+     * @param {ProjectsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     *
+     * @example
+     *     await client.projects.getProjectKpiCards("id", {
+     *         entityType: "traces",
+     *         intervalStart: new Date("2024-01-15T09:30:00.000Z"),
+     *         intervalEnd: new Date("2024-01-15T09:30:00.000Z")
+     *     })
+     */
+    public getProjectKpiCards(
+        id: string,
+        request: OpikApi.KpiCardRequest,
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.KpiCardResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__getProjectKpiCards(id, request, requestOptions));
+    }
+
+    private async __getProjectKpiCards(
+        id: string,
+        request: OpikApi.KpiCardRequest,
+        requestOptions?: ProjectsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.KpiCardResponse>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${core.url.encodePathParam(id)}/kpi-cards`,
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.KpiCardRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.KpiCardResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/projects/{id}/kpi-cards",
+        );
+    }
+
+    /**
      * Gets specified metrics for a project
      *
      * @param {string} id

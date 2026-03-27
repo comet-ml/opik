@@ -107,6 +107,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -122,6 +123,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                     "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                 },
                 project_name="adk-test",
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -137,8 +139,10 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -215,8 +219,10 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -242,10 +248,13 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -397,6 +406,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -412,6 +422,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                     "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                                 },
                                 project_name=project_name,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -427,8 +438,10 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -456,6 +469,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -473,6 +487,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                     }
                                 ),
                                 project_name=project_name,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -488,10 +503,13 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -519,10 +537,13 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                         model=MODEL_NAME,
                         usage=ANY_DICT,
                         project_name=project_name,
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) > 0
