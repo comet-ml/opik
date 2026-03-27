@@ -1217,6 +1217,7 @@ public class SpanDAO {
             WHERE workspace_id IN :workspace_ids
             AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 

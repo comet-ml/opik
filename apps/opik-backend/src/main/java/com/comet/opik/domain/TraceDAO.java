@@ -1817,6 +1817,7 @@ class TraceDAOImpl implements TraceDAO {
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
