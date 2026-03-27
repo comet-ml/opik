@@ -216,8 +216,9 @@ public class RetentionCatchUpService {
                     var batchWsIds = List.copyOf(workspaceMinIds.keySet());
                     var finalGlobalLowerBound = globalLowerBound;
 
-                    // Lightweight pre-delete count for observability (upper-bound, excludes experiment exclusion).
-                    // Precision is >99% as very few traces are linked to experiments.
+                    // Lightweight pre-delete count for observability (upper-bound ceiling, >99% precision).
+                    // Runs sequentially before deletes to avoid overloading ClickHouse; cost is minimal
+                    // via primary key index. Collected metrics help assess query cost over time.
                     return Flux.concat(
                             traceDAO.countForRetention(batchWsIds, cutoffId, finalGlobalLowerBound)
                                     .doOnNext(c -> {
@@ -280,8 +281,9 @@ public class RetentionCatchUpService {
 
         var workspaceIds = List.of(rule.workspaceId());
 
-        // Lightweight pre-delete count for observability (upper-bound, excludes experiment exclusion).
-        // Precision is >99% as very few traces are linked to experiments.
+        // Lightweight pre-delete count for observability (upper-bound ceiling, >99% precision).
+        // Runs sequentially before deletes to avoid overloading ClickHouse; cost is minimal
+        // via primary key index. Collected metrics help assess query cost over time.
         return Flux.concat(
                 traceDAO.countForRetention(workspaceIds, chunkEnd, cursor)
                         .doOnNext(c -> rowsToDelete.add(c, Attributes.of(
