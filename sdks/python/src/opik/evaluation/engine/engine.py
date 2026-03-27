@@ -13,6 +13,7 @@ from opik.api_objects.dataset import execution_policy as dataset_execution_polic
 from opik.evaluation import rest_operations, test_case, test_result
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
+from opik.types import TraceSource
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
 from .types import EvaluationTask
@@ -72,11 +73,13 @@ class EvaluationEngine:
         project_name: Optional[str],
         workers: int,
         verbose: int,
+        source: TraceSource,
     ) -> None:
         self._client = client
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
+        self._source = source
 
     # --- Private: metrics & scoring ---
 
@@ -164,7 +167,7 @@ class EvaluationEngine:
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
-            task = opik.track(name=name)(task)  # type: ignore[attr-defined,has-type]
+            task = opik.track(name=name, source=self._source)(task)  # type: ignore[attr-defined,has-type]
 
         item_content = item.get_content(include_id=True)
         trace_data = trace.TraceData(
@@ -172,6 +175,7 @@ class EvaluationEngine:
             name=EVALUATION_TASK_NAME,
             created_by="evaluation",
             project_name=self._project_name,
+            source=self._source,
         )
 
         execution_policy_dict = None
@@ -185,11 +189,12 @@ class EvaluationEngine:
             client=self._client,
             execution_policy=execution_policy_dict or None,
         ):
-            LOGGER.debug("Task started, input: %s", item_content)
+            LOGGER.debug("[engine] Task started for item %s", item.id)
             task_start = time.perf_counter()
             try:
                 task_output_ = task(item_content)
             except Exception as exception:
+                LOGGER.error("[engine] Task failed for item %s: %s", item.id, exception)
                 if exception_analyzer.is_llm_provider_rate_limit_error(exception):
                     LOGGER.error(
                         logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
@@ -197,7 +202,9 @@ class EvaluationEngine:
 
                 raise
             task_execution_time = time.perf_counter() - task_start
-            LOGGER.debug("Task finished, output: %s", task_output_)
+            LOGGER.debug(
+                "[engine] Task done for item %s in %.1fs", item.id, task_execution_time
+            )
 
             opik_context.update_current_trace(output=task_output_)
 
@@ -208,6 +215,7 @@ class EvaluationEngine:
                 dataset_item_content=item_content,
                 dataset_item=item,
             )
+            LOGGER.debug("[engine] Scoring started for item %s", item.id)
             scoring_start = time.perf_counter()
             test_result_ = self._compute_test_result_for_test_case(
                 test_case_=test_case_,
@@ -218,6 +226,11 @@ class EvaluationEngine:
             )
             test_result_.task_execution_time = task_execution_time
             test_result_.scoring_time = time.perf_counter() - scoring_start
+            LOGGER.debug(
+                "[engine] Scoring done for item %s in %.1fs",
+                item.id,
+                test_result_.scoring_time,
+            )
 
         return test_result_
 
@@ -322,6 +335,7 @@ class EvaluationEngine:
                 created_by="evaluation",
                 error_info=task_trace.error_info,
                 thread_id=task_trace.thread_id,
+                source=self._source,
             ),
             client=self._client,
         ):

@@ -10,7 +10,12 @@ import {
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
-import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/ui/popover";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import {
@@ -97,12 +102,21 @@ const ProjectSelector: React.FC = () => {
               Select project
             </span>
           )}
-          <button
-            className="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-primary-foreground"
-            onClick={() => setOpen((prev) => !prev)}
-          >
-            <ChevronDown className="size-3.5 text-muted-slate" />
-          </button>
+          <PopoverTrigger asChild>
+            <button
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-primary-foreground",
+                open && "bg-primary-foreground",
+              )}
+            >
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-muted-slate",
+                  open && "rotate-180",
+                )}
+              />
+            </button>
+          </PopoverTrigger>
         </div>
       </PopoverAnchor>
       <PopoverContent

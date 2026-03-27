@@ -673,6 +673,26 @@ retention:
   workspaceBatchSize: ${RETENTION_WORKSPACE_BATCH_SIZE:-1000}
   slidingWindowDays: ${RETENTION_SLIDING_WINDOW_DAYS:-3}
   lockTimeoutSeconds: ${RETENTION_LOCK_TIMEOUT_SECONDS:-1800}
+  # Progressive catch-up for apply-to-past rules. Deletes historical data older than the sliding window.
+  # At rule creation, estimates workspace span velocity (spans/week) to triage into tiers:
+  #   small  (<smallThreshold/week): batch one-shot delete, up to smallBatchSize workspaces per cycle
+  #   medium (smallThreshold..largeThreshold/week): 10 most outdated, mediumChunkDays per cycle each
+  #   large  (>=largeThreshold/week or estimation hit row limit): 1 most outdated, largeChunkDays per cycle
+  catchUp:
+    enabled: ${RETENTION_CATCH_UP_ENABLED:-true}
+    # Velocity thresholds (spans/week). Free tier ~6K/week, so 10K keeps them in the small (fast) path.
+    smallThreshold: ${RETENTION_CATCH_UP_SMALL_THRESHOLD:-10000}
+    largeThreshold: ${RETENTION_CATCH_UP_LARGE_THRESHOLD:-100000}
+    # Max workspaces processed per cycle per tier
+    smallBatchSize: ${RETENTION_CATCH_UP_SMALL_BATCH_SIZE:-200}
+    mediumBatchSize: ${RETENTION_CATCH_UP_MEDIUM_BATCH_SIZE:-10}
+    # Time window (days) deleted per cycle for medium and large workspaces
+    mediumChunkDays: ${RETENTION_CATCH_UP_MEDIUM_CHUNK_DAYS:-7}
+    largeChunkDays: ${RETENTION_CATCH_UP_LARGE_CHUNK_DAYS:-1}
+    # Assumed velocity when the estimation query fails with TOO_MANY_ROWS (>20M rows)
+    defaultVelocity: ${RETENTION_CATCH_UP_DEFAULT_VELOCITY:-1000000}
+    # Earliest date for catch-up cursor start (service launch date)
+    serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -741,6 +761,12 @@ cacheManager:
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    # Default: PT5M
+    # Description: Cache TTL for workspace version determination results, applied per workspace
+    # Scope: Per workspace (cache key includes workspace ID)
+    # Overrides: Overrides defaultDuration for the workspace_version cache group
+    # Operational impact: Lower values increase DB query frequency on workspace load; higher values delay version transitions after entity changes
+    workspace_version: ${CACHE_MANAGER_WORKSPACE_VERSION_DURATION:-PT5M}
     experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
     # Default: PT30M
     # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
@@ -791,6 +817,13 @@ ollieStateConfig:
   # Default: 52428800 (50MB)
   # Description: Maximum upload size in bytes for ollie state persistence
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
+
+# Assistant Sidebar CDN configuration (runtime)
+# Full URL to the ollie-console manifest on CDN
+assistantSidebar:
+  # Default: https://cdn.comet.com/ollie/v1/manifest.json (always latest version)
+  # Description: Full CDN URL to the ollie-console manifest. Override to pin a specific version.
+  manifestUrl: ${ASSISTANT_SIDEBAR_MANIFEST_URL:-"https://cdn.comet.com/ollie/v1/manifest.json"}
 
 # Attachments configuration
 attachmentsConfig:
@@ -880,6 +913,16 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the Assistant Sidebar feature is enabled
+  assistantSidebarEnabled: ${TOGGLE_ASSISTANT_SIDEBAR_ENABLED:-"false"}
+  # Default: version_1
+  # Description: Forces ALL workspaces to a specific navigation version. Highest priority override.
+  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
+  # Scope: Global — applies to all workspaces regardless of their entity state.
+  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
+  # Operational impact: Set to "version_1" until V2 is ready, then change to "disabled" to enable entity-based determination.
+  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_1"}
 
 # Local Runner configuration
 localRunner:
@@ -958,9 +1001,6 @@ traceThreadConfig:
   # Default: 15s
   # Description: The interval at which the close trace thread job will run to inactive threads
   closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-15s}
-  # Default: 14s
-  # Description: The time to wait for the close trace threads job to finish before releasing the lock
-  closeTraceThreadJobLockTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_TIME:-14s}
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_WAIT_TIME:-300ms}

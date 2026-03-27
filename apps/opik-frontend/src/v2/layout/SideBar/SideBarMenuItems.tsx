@@ -5,7 +5,6 @@ import SidebarMenuItem, {
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
 import getMenuItems from "@/v2/layout/SideBar/helpers/getMenuItems";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { Separator } from "@/ui/separator";
 
 const SideBarMenuItems: React.FC = () => {
   const activeProjectId = useActiveProjectId();
@@ -25,11 +24,10 @@ const SideBarMenuItems: React.FC = () => {
 
   return (
     <>
-      {menuItems.map((menuGroup, index) => (
-        <li key={menuGroup.id}>
-          {index > 0 && <Separator className="my-2" />}
+      {menuItems.map((menuGroup) => (
+        <li key={menuGroup.id} className="pb-3">
           {menuGroup.label && (
-            <div className="comet-body-s-accented truncate px-2 py-1 text-light-slate">
+            <div className="comet-body-xs truncate px-2 py-1 text-light-slate">
               {menuGroup.label}
             </div>
           )}

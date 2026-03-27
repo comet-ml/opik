@@ -142,6 +142,7 @@ const BlueprintValuePrompt = forwardRef<
           template: currentTemplate,
           type: promptVersion?.type,
           templateStructure: prompt.template_structure,
+          projectId,
           ...(projectId && {
             excludeBlueprintUpdateForProjects: [projectId],
           }),

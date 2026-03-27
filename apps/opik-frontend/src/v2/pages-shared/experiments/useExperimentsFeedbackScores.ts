@@ -11,18 +11,20 @@ import { buildScoreColumnId, buildScoreLabel } from "@/lib/feedback-scores";
 
 interface UseExperimentsFeedbackScoresOptions {
   experimentIds?: string[];
+  projectId?: string;
   refetchInterval?: number;
 }
 
 export const useExperimentsFeedbackScores = (
   options: UseExperimentsFeedbackScoresOptions = {},
 ) => {
-  const { experimentIds, refetchInterval = 30000 } = options;
+  const { experimentIds, projectId, refetchInterval = 30000 } = options;
 
   const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
     useExperimentsFeedbackScoresNames(
       {
         experimentsIds: experimentIds,
+        projectId,
       },
       {
         placeholderData: keepPreviousData,

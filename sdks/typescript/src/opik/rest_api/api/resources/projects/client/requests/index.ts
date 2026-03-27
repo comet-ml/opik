@@ -1,4 +1,5 @@
 export type { DeleteProjectByIdRequest } from "./DeleteProjectByIdRequest.js";
+export type { FindAlertsByProjectRequest } from "./FindAlertsByProjectRequest.js";
 export type { FindDashboardsByProjectRequest } from "./FindDashboardsByProjectRequest.js";
 export type { FindDatasetsByProjectRequest } from "./FindDatasetsByProjectRequest.js";
 export type { FindExperimentsByProjectRequest } from "./FindExperimentsByProjectRequest.js";

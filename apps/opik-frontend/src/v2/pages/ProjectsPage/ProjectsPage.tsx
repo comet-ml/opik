@@ -437,7 +437,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Projects</h1>
+        <h1 className="comet-title-l truncate break-words">Manage projects</h1>
       </div>
       <ExplainerDescription
         className="mb-4"

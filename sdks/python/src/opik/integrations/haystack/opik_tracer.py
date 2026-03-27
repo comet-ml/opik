@@ -134,9 +134,13 @@ class OpikTracer(tracing.Tracer):
             # Send data to backend if tracing is active
             if tracing_runtime_config.is_tracing_active():
                 if isinstance(span_or_trace_data, opik_trace.TraceData):
-                    self._opik_client.trace(**span_or_trace_data.as_parameters)
+                    self._opik_client.__internal_api__trace__(
+                        **span_or_trace_data.as_parameters
+                    )
                 else:
-                    self._opik_client.span(**span_or_trace_data.as_parameters)
+                    self._opik_client.__internal_api__span__(
+                        **span_or_trace_data.as_parameters
+                    )
 
             self._context.pop()
             if self.enforce_flush:

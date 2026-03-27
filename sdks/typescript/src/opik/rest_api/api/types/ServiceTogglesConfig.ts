@@ -23,5 +23,6 @@ export interface ServiceTogglesConfig {
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
-    agentConfigurationEnabled: boolean;
+    assistantSidebarEnabled: boolean;
+    forceWorkspaceVersion: string;
 }

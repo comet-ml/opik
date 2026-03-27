@@ -1,10 +1,10 @@
 /**
- * Integration test for AgentConfig CRUD operations in the TypeScript SDK.
+ * Integration test for AgentConfigManager CRUD operations in the TypeScript SDK.
  * Requires a running Opik backend. See tests/integration/api/shouldRunIntegrationTests.ts.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { Opik } from "@/index";
-import { Blueprint } from "@/agent-config";
+import { AgentConfigManager, Blueprint } from "@/agent-config";
 import { Prompt } from "@/prompt/Prompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 import {
@@ -15,10 +15,9 @@ import {
 const shouldRunApiTests = shouldRunIntegrationTests();
 
 describe.skipIf(!shouldRunApiTests)(
-  "AgentConfig CRUD Integration Test",
+  "AgentConfigManager CRUD Integration Test",
   () => {
     let client: Opik;
-    const testProjectName = `test-agent-config-${Date.now()}`;
 
     beforeAll(() => {
       console.log(getIntegrationTestStatus());
@@ -27,21 +26,20 @@ describe.skipIf(!shouldRunApiTests)(
         return;
       }
 
-      client = new Opik({ projectName: testProjectName });
+      client = new Opik({});
     });
 
     it("should create a blueprint and retrieve it by latest", async () => {
-      const agentConfig = client.getAgentConfig({
-        projectName: testProjectName,
-      });
+      const testProjectName = `test-agent-config-${Date.now()}`;
+      const manager = new AgentConfigManager(testProjectName, client);
 
-      const created = await agentConfig.createBlueprint({
-        values: {
-          temperature: 0.8,
-          maxTokens: 100,
-          stream: true,
-          model: "gpt-4",
-        },
+      const created = await manager.createBlueprint({
+        values: [
+          { key: "temperature", value: "0.8", type: "float" },
+          { key: "maxTokens", value: "100", type: "integer" },
+          { key: "stream", value: "true", type: "boolean" },
+          { key: "model", value: "gpt-4", type: "string" },
+        ],
         description: "Initial config",
       });
 
@@ -53,7 +51,7 @@ describe.skipIf(!shouldRunApiTests)(
       expect(created.get("stream")).toBe(true);
       expect(created.get("model")).toBe("gpt-4");
 
-      const latest = await agentConfig.getBlueprint();
+      const latest = await manager.getBlueprint();
       expect(latest).not.toBeNull();
       expect(latest?.id).toBe(created.id);
       expect(latest?.get("temperature")).toBe(0.8);
@@ -63,58 +61,61 @@ describe.skipIf(!shouldRunApiTests)(
     });
 
     it("should retrieve a blueprint by ID", async () => {
-      const agentConfig = client.getAgentConfig({
-        projectName: testProjectName,
+      const testProjectName = `test-agent-config-${Date.now()}`;
+      const manager = new AgentConfigManager(testProjectName, client);
+
+      const created = await manager.createBlueprint({
+        values: [{ key: "temperature", value: "0.7", type: "string" }],
       });
 
-      const created = await agentConfig.createBlueprint({
-        values: { temperature: "0.7" },
-      });
-
-      const fetched = await agentConfig.getBlueprint({ id: created.id });
+      const fetched = await manager.getBlueprint({ id: created.id });
       expect(fetched).not.toBeNull();
       expect(fetched?.id).toBe(created.id);
       expect(fetched?.get("temperature")).toBe("0.7");
     });
 
     it("should create a mask blueprint", async () => {
-      const agentConfig = client.getAgentConfig({
-        projectName: testProjectName,
-      });
+      const testProjectName = `test-agent-config-${Date.now()}`;
+      const manager = new AgentConfigManager(testProjectName, client);
 
-      const baseBp = await agentConfig.createBlueprint({
-        values: { temperature: "0.6", model: "gpt-3.5" },
+      const baseBp = await manager.createBlueprint({
+        values: [
+          { key: "temperature", value: "0.6", type: "string" },
+          { key: "model", value: "gpt-3.5", type: "string" },
+        ],
         description: "Base config",
       });
 
-      const maskId = await agentConfig.createMask({
-        values: { temperature: "0.5" },
+      const maskId = await manager.createMask({
+        values: [{ key: "temperature", value: "0.5", type: "string" }],
         description: "A/B variant",
       });
 
       expect(typeof maskId).toBe("string");
       expect(maskId).not.toBe(baseBp.id);
 
-      const masked = await agentConfig.getBlueprint({ id: baseBp.id, maskId });
+      const masked = await manager.getBlueprint({ id: baseBp.id, maskId });
       expect(masked).not.toBeNull();
       expect(masked?.get("temperature")).toBe("0.5");
       expect(masked?.id).toBe(baseBp.id);
     });
 
     it("should tag a blueprint with an env label and retrieve it by env", async () => {
-      const agentConfig = client.getAgentConfig({
-        projectName: testProjectName,
-      });
+      const testProjectName = `test-agent-config-${Date.now()}`;
+      const manager = new AgentConfigManager(testProjectName, client);
 
-      const created = await agentConfig.createBlueprint({
-        values: { temperature: "0.9", model: "gpt-4o" },
+      const created = await manager.createBlueprint({
+        values: [
+          { key: "temperature", value: "0.9", type: "string" },
+          { key: "model", value: "gpt-4o", type: "string" },
+        ],
         description: "Production config",
       });
 
       const envLabel = `test-env-${Date.now()}`;
-      await agentConfig.tagBlueprintWithEnv(created.id, envLabel);
+      await manager.tagBlueprintWithEnv(created.id, envLabel);
 
-      const fetched = await agentConfig.getBlueprint({ env: envLabel });
+      const fetched = await manager.getBlueprint({ env: envLabel });
       expect(fetched).not.toBeNull();
       expect(fetched?.id).toBe(created.id);
     });
@@ -133,15 +134,14 @@ describe.skipIf(!shouldRunApiTests)(
       const promptVersionV1 = versionsV1[0];
       expect(promptVersionV1.commit).toBe(commitV1);
 
-      const agentConfig = client.getAgentConfig({
-        projectName: testProjectName,
-      });
+      const testProjectName = `test-agent-config-${Date.now()}`;
+      const manager = new AgentConfigManager(testProjectName, client);
 
-      const created = await agentConfig.createBlueprint({
-        values: {
-          systemPrompt: promptV1,
-          pinnedVersion: promptVersionV1,
-        },
+      const created = await manager.createBlueprint({
+        values: [
+          { key: "systemPrompt", value: promptV1.commit!, type: "prompt" },
+          { key: "pinnedVersion", value: promptVersionV1.commit, type: "prompt_commit" },
+        ],
         description: "Prompt resolution test",
       });
 
@@ -164,8 +164,8 @@ describe.skipIf(!shouldRunApiTests)(
       expect(promptV2.versionId).not.toBe(versionIdV1);
       const commitV2 = promptV2.commit!;
 
-      // Re-fetch the blueprint new latest blueprint
-      const fetched = await agentConfig.getBlueprint();
+      // Re-fetch the latest blueprint
+      const fetched = await manager.getBlueprint();
       expect(fetched).not.toBeNull();
 
       // New prompt is reflected
@@ -180,11 +180,10 @@ describe.skipIf(!shouldRunApiTests)(
     });
 
     it("should return null for nonexistent blueprint ID", async () => {
-      const agentConfig = client.getAgentConfig({
-        projectName: testProjectName,
-      });
+      const testProjectName = `test-agent-config-${Date.now()}`;
+      const manager = new AgentConfigManager(testProjectName, client);
 
-      const result = await agentConfig.getBlueprint({
+      const result = await manager.getBlueprint({
         id: "00000000-0000-0000-0000-000000000000",
       });
       expect(result).toBeNull();

@@ -8,7 +8,6 @@ import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevBut
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 
 type PluginStore = {
-  Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
   InviteUsersForm: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
@@ -25,13 +24,17 @@ type PluginStore = {
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
+  SidebarWorkspaceSelector: React.ComponentType | null;
+  AssistantSidebar: React.ComponentType<{
+    onWidthChange: (width: number) => void;
+  }> | null;
+  UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
 
 const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
 const PLUGIN_NAMES = [
-  "Logo",
   "UserMenu",
   "InviteUsersForm",
   "GetStartedPage",
@@ -44,11 +47,13 @@ const PLUGIN_NAMES = [
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
+  "SidebarWorkspaceSelector",
+  "AssistantSidebar",
+  "UpgradeButton",
   "init",
 ];
 
 const usePluginsStore = create<PluginStore>((set) => ({
-  Logo: null,
   UserMenu: null,
   InviteUsersForm: null,
   GetStartedPage: null,
@@ -61,6 +66,9 @@ const usePluginsStore = create<PluginStore>((set) => ({
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
+  SidebarWorkspaceSelector: null,
+  AssistantSidebar: null,
+  UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

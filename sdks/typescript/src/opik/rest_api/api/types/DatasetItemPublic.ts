@@ -3,7 +3,18 @@
 import type * as OpikApi from "../index.js";
 
 export interface DatasetItemPublic {
+    /**
+     * Stable item identifier.
+     * On write, used as the upsert key.
+     * If omitted, a new ID is generated.
+     * Remains the same across dataset versions
+     */
     id?: string;
+    /**
+     * Deprecated.
+     * Always equals 'id'.
+     * Retained for backward compatibility and will be removed in a future version
+     */
     datasetItemId?: string;
     traceId?: string;
     spanId?: string;

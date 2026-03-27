@@ -56,7 +56,8 @@ public interface FeedbackScoreDAO {
 
     Mono<List<String>> getSpanFeedbackScoreNames(UUID projectId, SpanType type);
 
-    Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
+    Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
+            @Nullable UUID projectId);
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -157,6 +158,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experiment_ids
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
             )
             <endif>
             SELECT DISTINCT
@@ -194,6 +198,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND id IN :experiment_ids
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -509,15 +516,18 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
+    public Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
+            @Nullable UUID projectId) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_experiments_feedback_score_names",
-                    workspaceId, experimentIds.size());
-            bindTemplateParam(null, experimentIds, template);
+                    workspaceId, experimentIds != null ? experimentIds.size() : 0);
+
+            List<UUID> projectIds = projectId == null ? null : List.of(projectId);
+            bindTemplateParam(projectIds, experimentIds, template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
-            bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
+            bindStatementParam(projectIds, experimentIds, statement, EntityType.TRACE);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> FeedbackScoreNames.ScoreName.builder()

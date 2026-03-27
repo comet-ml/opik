@@ -19,7 +19,7 @@ import PartialPageLayout from "@/v2/layout/PartialPageLayout/PartialPageLayout";
 import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
-import TracesPage from "@/v2/pages/TracesPage/TracesPage";
+import LogsPage from "@/v2/pages/LogsPage/LogsPage";
 import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/v2/pages/PromptPage/PromptPage";
@@ -49,6 +49,7 @@ import EvaluationSuitePage from "@/v2/pages/EvaluationSuitePage/EvaluationSuiteP
 import EvaluationSuiteItemsPage from "@/v2/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
+import InsightsPage from "@/v2/pages/InsightsPage/InsightsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -179,21 +180,21 @@ const projectHomeRoute = createRoute({
   },
 });
 
-// ----------- logs (project-scoped, renamed from /traces)
+// ----------- logs (project-scoped)
 const logsRoute = createRoute({
   path: "/logs",
   getParentRoute: () => projectScopedRoute,
-  component: TracesPage,
+  component: LogsPage,
   staticData: {
     title: "Logs",
   },
 });
 
-// ----------- insights placeholder (project-scoped)
+// ----------- insights (project-scoped)
 const insightsRoute = createRoute({
   path: "/insights",
   getParentRoute: () => projectScopedRoute,
-  component: () => <div>Insights</div>,
+  component: InsightsPage,
   staticData: {
     title: "Insights",
   },

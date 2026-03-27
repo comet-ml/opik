@@ -88,6 +88,7 @@ class ThreadDAOImpl implements ThreadDAO {
                   <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                   <if(search_text)> AND <search_text> <endif>
+                  <if(filters)> AND <filters> <endif>
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -408,6 +409,7 @@ class ThreadDAOImpl implements ThreadDAO {
                   <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                   <if(search_text)> AND <search_text> <endif>
+                  <if(filters)> AND <filters> <endif>
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -981,6 +983,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(search_text)> AND <search_text> <endif>
                     <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    <if(filters)> AND <filters> <endif>
                 ), spans_agg AS (
                     SELECT
                         trace_id,

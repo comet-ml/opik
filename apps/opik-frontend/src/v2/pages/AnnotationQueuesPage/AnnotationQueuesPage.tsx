@@ -30,7 +30,6 @@ import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell
 import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import AnnotateQueueCell from "@/v2/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueProgressCell";
@@ -41,8 +40,6 @@ import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescrip
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/v2/pages-shared/annotation-queues/NoAnnotationQueuesPage";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
-import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -52,14 +49,14 @@ import {
   getRowId,
 } from "@/shared/DataTable/utils";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
+import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
-  COLUMN_PROJECT_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -78,18 +75,6 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: COLUMN_PROJECT_ID,
-    label: "Project",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    accessorFn: (row) => row.project_id,
-    customMeta: {
-      nameKey: "project_name",
-      idKey: "project_id",
-      resource: RESOURCE_TYPE.project,
-    },
   },
   {
     id: "instructions",
@@ -184,7 +169,6 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  COLUMN_PROJECT_ID,
   "instructions",
   "items_count",
   "progress",
@@ -196,7 +180,6 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
-  COLUMN_PROJECT_ID,
   "instructions",
   "items_count",
   "progress",
@@ -227,20 +210,12 @@ const FILTERS_CONFIG = {
         placeholder: "Select scope",
       },
     },
-    [COLUMN_PROJECT_ID]: {
-      keyComponent: ProjectsSelectBox,
-      keyComponentProps: {
-        className: "w-full min-w-72",
-      },
-      defaultOperator: "=",
-      operators: [{ label: "=", value: "=" }],
-    },
   },
 };
 
 export const AnnotationQueuesPage: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const activeProjectId = useActiveProjectId();
+  const projectId = useActiveProjectId()!;
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -316,6 +291,7 @@ export const AnnotationQueuesPage: React.FC = () => {
   } = useAnnotationQueuesList(
     {
       workspaceName,
+      projectId,
       search: search as string,
       page: page as number,
       size: size as number,
@@ -353,12 +329,12 @@ export const AnnotationQueuesPage: React.FC = () => {
         to: "/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId",
         params: {
           workspaceName,
-          projectId: activeProjectId!,
+          projectId,
           annotationQueueId: queue.id,
         },
       });
     },
-    [navigate, workspaceName, activeProjectId],
+    [navigate, workspaceName, projectId],
   );
 
   const columns = useMemo(() => {
@@ -420,6 +396,7 @@ export const AnnotationQueuesPage: React.FC = () => {
           key={resetDialogKeyRef.current}
           open={openDialog}
           setOpen={setOpenDialog}
+          projectId={projectId}
         />
       </>
     );
@@ -509,6 +486,7 @@ export const AnnotationQueuesPage: React.FC = () => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        projectId={projectId}
       />
     </div>
   );

@@ -46,7 +46,6 @@ class TraceThreadsClosingJobStreamAddParamsTest {
             .streamTrimLimit(STREAM_TRIM_LIMIT)
             .timeoutToMarkThreadAsInactive(Duration.seconds(30))
             .closeTraceThreadJobInterval(Duration.seconds(15))
-            .closeTraceThreadJobLockTime(Duration.seconds(4))
             .closeTraceThreadJobLockWaitTime(Duration.milliseconds(300))
             .coldStartLookback(Duration.days(7))
             .maxBackoffExponent(5)
@@ -79,7 +78,7 @@ class TraceThreadsClosingJobStreamAddParamsTest {
         when(traceThreadService.getProjectsWithPendingClosureThreads(any(), any(), any(), anyInt()))
                 .thenReturn(Flux.just(message));
         when(traceThreadService.addToPendingQueue(any())).thenReturn(Mono.just(true));
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
+        when(lockService.bestEffortLock(any(), any(), any(), any(), any(), any(Boolean.class)))
                 .thenAnswer(invocation -> invocation.<Mono<?>>getArgument(1));
 
         var job = new TraceThreadsClosingJob(

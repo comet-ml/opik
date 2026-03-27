@@ -1,0 +1,107 @@
+name: TypeScript SDK Compatibility V1.x E2E Tests
+run-name: "TypeScript SDK Compatibility V1 E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'sdks/typescript/**'
+      - 'apps/opik-backend/**'
+      - '.github/workflows/typescript_sdk_compatibility_v1_e2e_tests.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'sdks/typescript/**'
+      - 'apps/opik-backend/**'
+      - '.github/workflows/typescript_sdk_compatibility_v1_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+jobs:
+  run-compatibility-v1-e2e:
+    name: TypeScript SDK Compatibility V1.x E2E Tests Node ${{matrix.node_version}}
+    runs-on: ubuntu-latest-m
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node_version: [18, 20, 22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Node.js ${{matrix.node_version}}
+        uses: actions/setup-node@v4.2.0
+        with:
+          node-version: ${{matrix.node_version}}
+
+      - name: Run latest Opik server
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+          COMPOSE_BAKE: false
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --backend --port-mapping --guardrails --build
+
+      - name: Check Opik server availability
+        shell: bash
+        run: |
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+          cd ${{ github.workspace }}/deployment/docker-compose
+          echo "Check Docker pods are up"
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          echo "Check backend health"
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Install TypeScript SDK dependencies
+        working-directory: sdks/typescript
+        run: npm ci
+
+      - name: Build TypeScript SDK
+        working-directory: sdks/typescript
+        run: npm run build
+
+      - name: Run compatibility V1 tests
+        working-directory: sdks/typescript
+        run: |
+          npm run test:compatibility -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/compat_v1_results_node${{matrix.node_version}}.xml
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          comment_mode: failures
+          check_name: "TS SDK Compat V1 E2E Tests - Node ${{matrix.node_version}}"
+          files: ${{ github.workspace }}/compat_v1_results_node${{matrix.node_version}}.xml
+
+      - name: Keep BE log in case of failure
+        if: failure()
+        run: |
+          PROJECT_NAME=$(docker compose ls --format json 2>/dev/null | jq -r '.[].Name' | grep '^opik' | head -1)
+          CONTAINER="${PROJECT_NAME:-opik}-backend-1"
+          docker logs "$CONTAINER" > ${{ github.workspace }}/opik-backend_compat_v1_node${{matrix.node_version}}.log 2>&1 || echo "Could not capture logs from $CONTAINER"
+
+      - name: Attach BE log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opik-backend-compat-v1-log-node${{matrix.node_version}}
+          path: ${{ github.workspace }}/opik-backend_compat_v1_node${{matrix.node_version}}.log
+
+      - name: Stop opik server
+        if: always()
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --stop --guardrails

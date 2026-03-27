@@ -74,6 +74,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happy_flow(
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -89,9 +90,11 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happy_flow(
                 model="gpt-oss-20b",
                 provider="groq",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

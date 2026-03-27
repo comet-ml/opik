@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { ErrorInfoWrite } from "./ErrorInfoWrite.js";
 import { JsonListStringWrite } from "./JsonListStringWrite.js";
+import { TraceWriteSource } from "./TraceWriteSource.js";
 
 export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.Raw, OpikApi.TraceWrite> =
     core.serialization.object({
@@ -21,6 +22,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         ttft: core.serialization.number().optional(),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
+        source: TraceWriteSource.optional(),
     });
 
 export declare namespace TraceWrite {
@@ -38,5 +40,6 @@ export declare namespace TraceWrite {
         last_updated_at?: string | null;
         ttft?: number | null;
         thread_id?: string | null;
+        source?: TraceWriteSource.Raw | null;
     }
 }

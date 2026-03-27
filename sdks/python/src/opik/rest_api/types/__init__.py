@@ -9,6 +9,7 @@ from .agent_blueprint_public import AgentBlueprintPublic
 from .agent_blueprint_public_type import AgentBlueprintPublicType
 from .agent_blueprint_write import AgentBlueprintWrite
 from .agent_blueprint_write_type import AgentBlueprintWriteType
+from .agent_config_create_write import AgentConfigCreateWrite
 from .agent_config_env import AgentConfigEnv
 from .agent_config_value_history import AgentConfigValueHistory
 from .agent_config_value_history_type import AgentConfigValueHistoryType
@@ -53,6 +54,7 @@ from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
+from .assistant_sidebar_config_response import AssistantSidebarConfigResponse
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
 from .audio_url import AudioUrl
@@ -213,6 +215,10 @@ from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
 from .dashboard_public_type import DashboardPublicType
+from .dashboard_update_public import DashboardUpdatePublic
+from .dashboard_update_public_type import DashboardUpdatePublicType
+from .dashboard_write import DashboardWrite
+from .dashboard_write_type import DashboardWriteType
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -524,6 +530,7 @@ from .span import Span
 from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
+from .span_experiment_item_bulk_write_view_source import SpanExperimentItemBulkWriteViewSource
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 from .span_filter import SpanFilter
 from .span_filter_operator import SpanFilterOperator
@@ -536,14 +543,18 @@ from .span_llm_as_judge_code_public import SpanLlmAsJudgeCodePublic
 from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
+from .span_public_source import SpanPublicSource
 from .span_public_type import SpanPublicType
+from .span_source import SpanSource
 from .span_type import SpanType
 from .span_update import SpanUpdate
+from .span_update_source import SpanUpdateSource
 from .span_update_type import SpanUpdateType
 from .span_user_defined_metric_python_code import SpanUserDefinedMetricPythonCode
 from .span_user_defined_metric_python_code_public import SpanUserDefinedMetricPythonCodePublic
 from .span_user_defined_metric_python_code_write import SpanUserDefinedMetricPythonCodeWrite
 from .span_write import SpanWrite
+from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .start_multipart_upload_response import StartMultipartUploadResponse
@@ -576,6 +587,7 @@ from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
 from .trace_enrichment_options import TraceEnrichmentOptions
 from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
+from .trace_experiment_item_bulk_write_view_source import TraceExperimentItemBulkWriteViewSource
 from .trace_filter import TraceFilter
 from .trace_filter_operator import TraceFilterOperator
 from .trace_filter_public import TraceFilterPublic
@@ -584,7 +596,9 @@ from .trace_filter_write import TraceFilterWrite
 from .trace_filter_write_operator import TraceFilterWriteOperator
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
+from .trace_public_source import TracePublicSource
 from .trace_public_visibility_mode import TracePublicVisibilityMode
+from .trace_source import TraceSource
 from .trace_thread import TraceThread
 from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_filter_operator import TraceThreadFilterOperator
@@ -603,8 +617,10 @@ from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefined
 from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
 from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
 from .trace_update import TraceUpdate
+from .trace_update_source import TraceUpdateSource
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
+from .trace_write_source import TraceWriteSource
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
@@ -636,6 +652,8 @@ from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
+from .workspace_version import WorkspaceVersion
+from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -645,6 +663,7 @@ __all__ = [
     "AgentBlueprintPublicType",
     "AgentBlueprintWrite",
     "AgentBlueprintWriteType",
+    "AgentConfigCreateWrite",
     "AgentConfigEnv",
     "AgentConfigValueHistory",
     "AgentConfigValueHistoryType",
@@ -689,6 +708,7 @@ __all__ = [
     "AssertionScoreAveragePublic",
     "AssistantMessage",
     "AssistantMessageRole",
+    "AssistantSidebarConfigResponse",
     "Attachment",
     "AttachmentPage",
     "AudioUrl",
@@ -813,6 +833,10 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
+    "DashboardUpdatePublic",
+    "DashboardUpdatePublicType",
+    "DashboardWrite",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -1115,6 +1139,7 @@ __all__ = [
     "SpanBatch",
     "SpanEnrichmentOptions",
     "SpanExperimentItemBulkWriteView",
+    "SpanExperimentItemBulkWriteViewSource",
     "SpanExperimentItemBulkWriteViewType",
     "SpanFilter",
     "SpanFilterOperator",
@@ -1127,14 +1152,18 @@ __all__ = [
     "SpanLlmAsJudgeCodeWrite",
     "SpanPagePublic",
     "SpanPublic",
+    "SpanPublicSource",
     "SpanPublicType",
+    "SpanSource",
     "SpanType",
     "SpanUpdate",
+    "SpanUpdateSource",
     "SpanUpdateType",
     "SpanUserDefinedMetricPythonCode",
     "SpanUserDefinedMetricPythonCodePublic",
     "SpanUserDefinedMetricPythonCodeWrite",
     "SpanWrite",
+    "SpanWriteSource",
     "SpanWriteType",
     "SpansCountResponse",
     "StartMultipartUploadResponse",
@@ -1167,6 +1196,7 @@ __all__ = [
     "TraceCountResponse",
     "TraceEnrichmentOptions",
     "TraceExperimentItemBulkWriteView",
+    "TraceExperimentItemBulkWriteViewSource",
     "TraceFilter",
     "TraceFilterOperator",
     "TraceFilterPublic",
@@ -1175,7 +1205,9 @@ __all__ = [
     "TraceFilterWriteOperator",
     "TracePagePublic",
     "TracePublic",
+    "TracePublicSource",
     "TracePublicVisibilityMode",
+    "TraceSource",
     "TraceThread",
     "TraceThreadFilter",
     "TraceThreadFilterOperator",
@@ -1194,8 +1226,10 @@ __all__ = [
     "TraceThreadUserDefinedMetricPythonCodePublic",
     "TraceThreadUserDefinedMetricPythonCodeWrite",
     "TraceUpdate",
+    "TraceUpdateSource",
     "TraceVisibilityMode",
     "TraceWrite",
+    "TraceWriteSource",
     "Usage",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
@@ -1227,4 +1261,6 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
 ]

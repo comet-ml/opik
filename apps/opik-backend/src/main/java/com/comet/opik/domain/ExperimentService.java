@@ -798,13 +798,17 @@ public class ExperimentService {
                     .doOnNext(experiments -> {
                         if (CollectionUtils.isNotEmpty(experiments)) {
                             log.info("Raising alert event for finished experiments, count '{}'", experiments.size());
-                            eventBus.post(AlertEvent.builder()
-                                    .eventType(EXPERIMENT_FINISHED)
-                                    .workspaceId(workspaceId)
-                                    .workspaceName(workspaceName)
-                                    .userName(userName)
-                                    .payload(experiments)
-                                    .build());
+                            experiments.stream()
+                                    .collect(Collectors.groupingBy(
+                                            e -> Optional.ofNullable(e.projectId())))
+                                    .forEach((projectId, projectExperiments) -> eventBus.post(AlertEvent.builder()
+                                            .eventType(EXPERIMENT_FINISHED)
+                                            .workspaceId(workspaceId)
+                                            .workspaceName(workspaceName)
+                                            .userName(userName)
+                                            .projectId(projectId.orElse(null))
+                                            .payload(projectExperiments)
+                                            .build()));
                         }
                     })
                     .then(Mono.defer(() -> experimentAggregationPublisher.publish(ids, workspaceId, userName)
