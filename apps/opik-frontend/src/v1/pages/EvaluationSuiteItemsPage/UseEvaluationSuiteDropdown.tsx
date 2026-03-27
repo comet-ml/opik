@@ -69,19 +69,21 @@ function UseEvaluationSuiteDropdown({
           datasetName={datasetName}
         />
       )}
-      <ConfirmDialog
-        key={`confirm-dialog-${resetKeyRef.current}`}
-        open={openConfirmDialog}
-        setOpen={setOpenConfirmDialog}
-        onConfirm={handleLoadPlayground}
-        title={`Load ${
-          isEvalSuite ? "evaluation suite" : "dataset"
-        } into playground`}
-        description={`Loading this ${
-          isEvalSuite ? "evaluation suite" : "dataset"
-        } into the Playground will replace any unsaved changes. This action cannot be undone.`}
-        confirmText={`Load ${isEvalSuite ? "evaluation suite" : "dataset"}`}
-      />
+      {canUsePlayground && (
+        <ConfirmDialog
+          key={`confirm-dialog-${resetKeyRef.current}`}
+          open={openConfirmDialog}
+          setOpen={setOpenConfirmDialog}
+          onConfirm={handleLoadPlayground}
+          title={`Load ${
+            isEvalSuite ? "evaluation suite" : "dataset"
+          } into playground`}
+          description={`Loading this ${
+            isEvalSuite ? "evaluation suite" : "dataset"
+          } into the Playground will replace any unsaved changes. This action cannot be undone.`}
+          confirmText={`Load ${isEvalSuite ? "evaluation suite" : "dataset"}`}
+        />
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={disabled}>
