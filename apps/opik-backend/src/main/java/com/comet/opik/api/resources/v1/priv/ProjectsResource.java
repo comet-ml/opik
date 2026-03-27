@@ -343,10 +343,14 @@ public class ProjectsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
             @QueryParam("name") @Schema(description = "Filter projects by name (partial match, case insensitive)") String name,
+            @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting) {
+
+        var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
 
         var criteria = ProjectCriteria.builder()
                 .projectName(name)
+                .filters(traceFilters)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

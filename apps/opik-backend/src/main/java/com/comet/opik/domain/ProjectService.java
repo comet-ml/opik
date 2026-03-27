@@ -287,7 +287,7 @@ class ProjectServiceImpl implements ProjectService {
                 .map(Project::id)
                 .toList();
 
-        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId);
+        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId, criteria);
 
         return ProjectStatsSummary.builder()
                 .content(
@@ -397,8 +397,9 @@ class ProjectServiceImpl implements ProjectService {
                 sortingFactory.getSortableFields());
     }
 
-    private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId) {
-        return traceDAO.getStatsByProjectIds(projectIds, workspaceId)
+    private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId,
+            ProjectCriteria criteria) {
+        return traceDAO.getStatsByProjectIds(projectIds, workspaceId, criteria.filters())
                 .map(stats -> stats.entrySet().stream()
                         .map(entry -> {
                             Map<String, Object> statsMap = entry.getValue().stats()
@@ -628,7 +629,7 @@ class ProjectServiceImpl implements ProjectService {
                             }).block();
 
                     Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
-                            workspaceId);
+                            workspaceId, ProjectCriteria.builder().build());
 
                     return project.toBuilder()
                             .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
