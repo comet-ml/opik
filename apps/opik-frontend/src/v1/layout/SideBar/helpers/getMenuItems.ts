@@ -21,10 +21,12 @@ const getMenuItems = ({
   canViewExperiments,
   canViewDashboards,
   canViewDatasets,
+  canUsePlayground,
 }: {
   canViewExperiments: boolean;
   canViewDashboards: boolean;
   canViewDatasets: boolean;
+  canUsePlayground: boolean;
 }): MenuItemGroup[] => {
   return [
     {
@@ -115,13 +117,17 @@ const getMenuItems = ({
           label: "Prompt library",
           count: "prompts",
         },
-        {
-          id: "playground",
-          path: "/$workspaceName/playground",
-          type: MENU_ITEM_TYPE.router,
-          icon: Blocks,
-          label: "Playground",
-        },
+        ...(canUsePlayground
+          ? [
+              {
+                id: "playground",
+                path: "/$workspaceName/playground",
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Blocks,
+                label: "Playground",
+              },
+            ]
+          : []),
       ],
     },
     {

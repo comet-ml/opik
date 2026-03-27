@@ -9,13 +9,14 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 const SideBarMenuItems: React.FC = () => {
   const activeProjectId = useActiveProjectId();
   const {
-    permissions: { canViewExperiments, canViewDatasets },
+    permissions: { canViewExperiments, canViewDatasets, canUsePlayground },
   } = usePermissions();
 
   const menuItems = getMenuItems({
     projectId: activeProjectId,
     canViewExperiments,
     canViewDatasets,
+    canUsePlayground,
   });
 
   const renderItems = (items: MenuItem[]) => {
