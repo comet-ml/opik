@@ -11,6 +11,7 @@ import {
 import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
+import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPage";
@@ -294,6 +295,12 @@ const playgroundRoute = createRoute({
   staticData: {
     title: "Playground",
   },
+  component: PlaygroundPageGuard,
+});
+
+const playgroundIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => playgroundRoute,
   component: PlaygroundPage,
 });
 
@@ -542,7 +549,7 @@ const routeTree = rootRoute.addChildren([
             evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
           ]),
           promptsRoute.addChildren([promptsListRoute, promptRoute]),
-          playgroundRoute,
+          playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
             optimizationsNewRoute,
