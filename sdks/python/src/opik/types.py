@@ -14,6 +14,7 @@ SpanType = Literal["general", "tool", "llm", "guardrail"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
 AttachmentEntityType = Literal["trace", "span"]
+TraceSource = Literal["sdk", "experiment", "optimization"]
 
 
 class LLMProvider(str, enum.Enum):

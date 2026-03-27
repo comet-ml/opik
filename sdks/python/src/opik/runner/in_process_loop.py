@@ -11,6 +11,7 @@ import time
 from typing import Callable, Optional
 
 from ..api_objects.agent_config.context import agent_config_context
+from .. import id_helpers
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
@@ -21,6 +22,22 @@ LOGGER = logging.getLogger(__name__)
 POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
+
+
+def _inject_trace_id(inputs: dict, trace_id: str) -> None:
+    """Merge trace_id into inputs["opik_args"]["trace"]["id"].
+
+    Skips injection when opik_args is explicitly set to None — callers that
+    set the key to None signal they own that slot and we must not clobber it.
+    """
+    existing = inputs.get("opik_args")
+    if existing is None and "opik_args" in inputs:
+        return
+    opik_args = dict(existing) if isinstance(existing, dict) else {}
+    trace_args = dict(opik_args.get("trace") or {})
+    trace_args["id"] = trace_id
+    opik_args["trace"] = trace_args
+    inputs["opik_args"] = opik_args
 
 
 class InProcessRunnerLoop:
@@ -165,12 +182,8 @@ class InProcessRunnerLoop:
         func: Callable = entry["func"]
         mask_id = job.mask_id
 
-        if job.trace_id:
-            opik_args = inputs.setdefault("opik_args", {})
-            trace_args = opik_args.setdefault("trace", {})
-            trace_args["id"] = job.trace_id
-
-        trace_id = job.trace_id
+        trace_id = id_helpers.generate_id()
+        _inject_trace_id(inputs, trace_id)
 
         try:
             timeout = job.timeout

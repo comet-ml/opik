@@ -83,8 +83,10 @@ def test_bedrock_invoke_model__anthropic___happyflow(
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 
@@ -155,8 +157,10 @@ def test_bedrock_invoke_model__create_raises_an_error__span_and_trace_finished_g
                     }
                 ),
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 
@@ -234,10 +238,13 @@ def test_bedrock_invoke_model__anthropic___invoke_model_call_made_in_another_tra
                         usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                         provider="bedrock",
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
 
@@ -298,8 +305,10 @@ def test_bedrock_invoke_model__anthropic___streaming__happyflow(fake_backend):
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
@@ -350,8 +359,10 @@ def test_bedrock_invoke_model__amazon_nova___non_streaming__happyflow(fake_backe
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
@@ -406,8 +417,10 @@ def test_bedrock_invoke_model__amazon_nova___streaming__happyflow(fake_backend):
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
@@ -458,8 +471,10 @@ def test_bedrock_invoke_model__meta_llama___non_streaming__happyflow(fake_backen
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
@@ -514,8 +529,10 @@ def test_bedrock_invoke_model__meta_llama___streaming__happyflow(fake_backend):
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
@@ -566,8 +583,10 @@ def test_bedrock_invoke_model__mistral___non_streaming__happyflow(fake_backend):
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])
@@ -622,8 +641,10 @@ def test_bedrock_invoke_model__mistral___streaming__happyflow(fake_backend):
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected_trace, fake_backend.trace_trees[0])

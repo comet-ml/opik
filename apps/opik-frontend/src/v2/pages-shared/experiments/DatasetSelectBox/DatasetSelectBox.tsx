@@ -11,6 +11,7 @@ const DEFAULT_LOADED_DATASET_ITEMS = 1000;
 type DatasetSelectBoxProps = {
   value: string;
   onValueChange: (value: string) => void;
+  projectId?: string | null;
   placeholder?: string;
   className?: string;
 };
@@ -18,6 +19,7 @@ type DatasetSelectBoxProps = {
 const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   value,
   onValueChange,
+  projectId,
   placeholder = "Select an evaluation suite",
   className,
 }) => {
@@ -26,6 +28,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   const { data, isLoading } = useDatasetsList(
     {
       workspaceName,
+      ...(projectId && { projectId }),
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },

@@ -84,10 +84,13 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -167,10 +170,13 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -246,6 +252,7 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -259,8 +266,10 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                         type="general",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -291,10 +300,13 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -368,6 +380,7 @@ async def test_opik_tracing_processor__functions(fake_backend):
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -383,6 +396,7 @@ async def test_opik_tracing_processor__functions(fake_backend):
                         type="tool",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -397,10 +411,13 @@ async def test_opik_tracing_processor__functions(fake_backend):
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -483,6 +500,7 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -507,8 +525,10 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                                 output={"output": ANY_BUT_NONE},
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -523,10 +543,13 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                         project_name=project_name,
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -626,14 +649,19 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                                         project_name=parent_decorator_project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                                         provider=LLMProvider.OPENAI,
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

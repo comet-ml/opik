@@ -14,20 +14,16 @@ import {
   CustomViewItem,
   InsightsViewOption,
 } from "./InsightsViewItems";
-import useDashboardsList from "@/api/dashboards/useDashboardsList";
-import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
+import useInsightsViewsList from "@/api/insights-views/useInsightsViewsList";
+import useInsightsViewBatchDeleteMutation from "@/api/insights-views/useInsightsViewBatchDeleteMutation";
 import useAppStore from "@/store/AppStore";
 import {
   Dashboard,
-  DASHBOARD_SCOPE,
   DASHBOARD_TYPE,
   DashboardTemplate,
 } from "@/types/dashboard";
 import { PROJECT_TEMPLATE_LIST } from "@/lib/dashboard/templates";
-import {
-  generateDashboardScopeFilter,
-  generateDashboardTypeFilter,
-} from "@/lib/filters";
+import { generateDashboardTypeFilter } from "@/lib/filters";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
@@ -112,16 +108,13 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
   });
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { mutate: deleteMutate } = useDashboardBatchDeleteMutation();
+  const { mutate: deleteMutate } = useInsightsViewBatchDeleteMutation();
 
   const processedFilters = useMemo(() => {
-    return [
-      ...generateDashboardScopeFilter(DASHBOARD_SCOPE.INSIGHTS),
-      ...generateDashboardTypeFilter(DASHBOARD_TYPE.MULTI_PROJECT),
-    ];
+    return generateDashboardTypeFilter(DASHBOARD_TYPE.MULTI_PROJECT);
   }, []);
 
-  const { data: dashboardsData } = useDashboardsList(
+  const { data: dashboardsData } = useInsightsViewsList(
     {
       workspaceName,
       filters: processedFilters,
@@ -205,7 +198,6 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
       description: template.description,
       config: template.config,
       type: DASHBOARD_TYPE.MULTI_PROJECT,
-      scope: DASHBOARD_SCOPE.INSIGHTS,
     } as Dashboard;
     setDialogState({
       isOpen: true,

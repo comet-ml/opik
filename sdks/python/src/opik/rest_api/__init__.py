@@ -55,6 +55,7 @@ from .types import (
     AssertionScoreAveragePublic,
     AssistantMessage,
     AssistantMessageRole,
+    AssistantSidebarConfigResponse,
     Attachment,
     AttachmentPage,
     AudioUrl,
@@ -179,6 +180,10 @@ from .types import (
     DashboardPublic,
     DashboardPublicScope,
     DashboardPublicType,
+    DashboardUpdatePublic,
+    DashboardUpdatePublicType,
+    DashboardWrite,
+    DashboardWriteType,
     DataPointDouble,
     DataPointNumberPublic,
     Dataset,
@@ -350,6 +355,9 @@ from .types import (
     JsonNodePublic,
     JsonNodeWrite,
     JsonSchema,
+    KpiCardResponse,
+    KpiMetric,
+    KpiMetricType,
     LlmAsJudgeCode,
     LlmAsJudgeCodePublic,
     LlmAsJudgeCodeWrite,
@@ -603,6 +611,8 @@ from .types import (
     WorkspaceSpansCount,
     WorkspaceTraceCount,
     WorkspaceUserPermissions,
+    WorkspaceVersion,
+    WorkspaceVersionOpikVersion,
 )
 from .errors import (
     BadGatewayError,
@@ -622,6 +632,7 @@ from . import (
     agent_configs,
     alerts,
     annotation_queues,
+    assistant_sidebars,
     attachments,
     automation_rule_evaluators,
     chat_completions,
@@ -631,6 +642,7 @@ from . import (
     experiments,
     feedback_definitions,
     guardrails,
+    insights_views,
     llm_models,
     llm_provider_key,
     manual_evaluation,
@@ -659,7 +671,6 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
-from .dashboards import DashboardUpdatePublicScope, DashboardUpdatePublicType, DashboardWriteScope, DashboardWriteType
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
@@ -667,6 +678,7 @@ from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
 from .projects import (
+    KpiCardRequestEntityType,
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
     ProjectUpdateVisibility,
@@ -735,6 +747,7 @@ __all__ = [
     "AssertionScoreAveragePublic",
     "AssistantMessage",
     "AssistantMessageRole",
+    "AssistantSidebarConfigResponse",
     "AsyncOpikApi",
     "Attachment",
     "AttachmentListRequestEntityType",
@@ -865,9 +878,9 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
-    "DashboardUpdatePublicScope",
+    "DashboardUpdatePublic",
     "DashboardUpdatePublicType",
-    "DashboardWriteScope",
+    "DashboardWrite",
     "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
@@ -1055,6 +1068,10 @@ __all__ = [
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
+    "KpiCardRequestEntityType",
+    "KpiCardResponse",
+    "KpiMetric",
+    "KpiMetricType",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1329,9 +1346,12 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
     "agent_configs",
     "alerts",
     "annotation_queues",
+    "assistant_sidebars",
     "attachments",
     "automation_rule_evaluators",
     "chat_completions",
@@ -1341,6 +1361,7 @@ __all__ = [
     "experiments",
     "feedback_definitions",
     "guardrails",
+    "insights_views",
     "llm_models",
     "llm_provider_key",
     "manual_evaluation",

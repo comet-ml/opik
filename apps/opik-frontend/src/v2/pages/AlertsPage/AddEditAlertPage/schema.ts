@@ -16,7 +16,6 @@ export const FeedbackScoreConditionSchema = z.object({
 export const TriggerSchema = z
   .object({
     eventType: z.nativeEnum(ALERT_EVENT_TYPE),
-    projectIds: z.array(z.string()).default([]),
     threshold: z.string().optional(),
     window: z.string().optional(),
     name: z.string().optional(), // Feedback score name (deprecated, use conditions)

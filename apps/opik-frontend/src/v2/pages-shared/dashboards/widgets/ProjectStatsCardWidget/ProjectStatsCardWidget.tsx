@@ -18,6 +18,7 @@ import useSpansStatistic from "@/api/traces/useSpansStatistic";
 import { ColumnStatistic } from "@/types/shared";
 import { Skeleton } from "@/ui/skeleton";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
+import { LOGS_SOURCE } from "@/types/traces";
 import {
   getMetricDefinition,
   formatMetricValue,
@@ -116,6 +117,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       filters: validTraceFilters,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      logsSource: LOGS_SOURCE.sdk,
     },
     { enabled: source === TRACE_DATA_TYPE.traces && !!projectId },
   );
@@ -126,6 +128,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       filters: validSpanFilters,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      logsSource: LOGS_SOURCE.sdk,
     },
     { enabled: source === TRACE_DATA_TYPE.spans && !!projectId },
   );

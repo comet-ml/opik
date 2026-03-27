@@ -4,6 +4,7 @@ import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE } from "@/constants/traces";
+import { LOGS_SOURCE } from "@/types/traces";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 const isLogsType = (value: string | null | undefined): value is LOGS_TYPE =>
@@ -30,6 +31,7 @@ const useLogsType = (options: UseLogsTypeOptions) => {
       projectId,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       enabled: !!projectId,

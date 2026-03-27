@@ -146,6 +146,7 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
     saveTemplate,
     saveMetadata,
   } = useSaveToPromptLibrary({
+    projectId: activeProjectId!,
     promptName: optimization.name,
     extractedPrompt,
     optimizationId: optimization.id,

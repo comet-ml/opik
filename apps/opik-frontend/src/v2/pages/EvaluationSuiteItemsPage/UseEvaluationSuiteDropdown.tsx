@@ -18,6 +18,7 @@ export interface UseEvaluationSuiteDropdownProps {
   datasetVersionId?: string;
   disabled?: boolean;
   isEvalSuite?: boolean;
+  projectId?: string | null;
 }
 
 function UseEvaluationSuiteDropdown({
@@ -26,6 +27,7 @@ function UseEvaluationSuiteDropdown({
   datasetVersionId,
   disabled = false,
   isEvalSuite = true,
+  projectId,
 }: UseEvaluationSuiteDropdownProps) {
   const resetKeyRef = useRef(0);
   const resetDialogKeyRef = useRef(0);
@@ -63,6 +65,7 @@ function UseEvaluationSuiteDropdown({
           open={openExperimentDialog}
           setOpen={setOpenExperimentDialog}
           datasetName={datasetName}
+          projectId={projectId}
         />
       )}
       <ConfirmDialog

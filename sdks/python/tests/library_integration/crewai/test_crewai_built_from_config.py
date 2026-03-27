@@ -74,8 +74,10 @@ def test_crewai__happyflow(
                                 tags=["crewai"],
                                 type="general",
                                 spans=ANY,  # Flexible - LLM spans may or may not be present depending on initialization timing
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                     SpanModel(
                         end_time=ANY_BUT_NONE,
@@ -100,12 +102,16 @@ def test_crewai__happyflow(
                                 tags=["crewai"],
                                 type="general",
                                 spans=ANY,  # Flexible - LLM spans may or may not be present depending on initialization timing
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

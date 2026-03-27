@@ -105,6 +105,7 @@ def test_haystack__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -116,6 +117,7 @@ def test_haystack__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -144,8 +146,10 @@ def test_haystack__happyflow(
                 },
                 model=ANY_STRING.starting_with(MODEL_NAME),
                 provider="openai",
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -233,6 +237,7 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 metadata=ANY_DICT,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -243,6 +248,7 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 metadata=ANY_DICT,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -256,12 +262,16 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 usage=ANY_DICT,
                                 model=ANY_STRING,
                                 provider="openai",
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

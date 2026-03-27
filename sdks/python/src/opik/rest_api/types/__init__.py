@@ -54,6 +54,7 @@ from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
+from .assistant_sidebar_config_response import AssistantSidebarConfigResponse
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
 from .audio_url import AudioUrl
@@ -214,6 +215,10 @@ from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
 from .dashboard_public_type import DashboardPublicType
+from .dashboard_update_public import DashboardUpdatePublic
+from .dashboard_update_public_type import DashboardUpdatePublicType
+from .dashboard_write import DashboardWrite
+from .dashboard_write_type import DashboardWriteType
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -392,6 +397,9 @@ from .json_node_detail import JsonNodeDetail
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
 from .json_schema import JsonSchema
+from .kpi_card_response import KpiCardResponse
+from .kpi_metric import KpiMetric
+from .kpi_metric_type import KpiMetricType
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -647,6 +655,8 @@ from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
+from .workspace_version import WorkspaceVersion
+from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -701,6 +711,7 @@ __all__ = [
     "AssertionScoreAveragePublic",
     "AssistantMessage",
     "AssistantMessageRole",
+    "AssistantSidebarConfigResponse",
     "Attachment",
     "AttachmentPage",
     "AudioUrl",
@@ -825,6 +836,10 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
+    "DashboardUpdatePublic",
+    "DashboardUpdatePublicType",
+    "DashboardWrite",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -996,6 +1011,9 @@ __all__ = [
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
+    "KpiCardResponse",
+    "KpiMetric",
+    "KpiMetricType",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1249,4 +1267,6 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
 ]

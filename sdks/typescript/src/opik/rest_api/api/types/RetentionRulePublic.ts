@@ -15,4 +15,8 @@ export interface RetentionRulePublic {
     createdAt?: Date;
     lastUpdatedBy?: string;
     lastUpdatedAt?: Date;
+    /** Current position of historical data cleanup */
+    catchUpCursor?: string;
+    /** Whether historical catch-up is complete */
+    catchUpDone?: boolean;
 }

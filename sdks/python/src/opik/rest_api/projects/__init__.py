@@ -3,6 +3,7 @@
 # isort: skip_file
 
 from .types import (
+    KpiCardRequestEntityType,
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
     ProjectUpdateVisibility,
@@ -10,6 +11,7 @@ from .types import (
 )
 
 __all__ = [
+    "KpiCardRequestEntityType",
     "ProjectMetricRequestPublicInterval",
     "ProjectMetricRequestPublicMetricType",
     "ProjectUpdateVisibility",

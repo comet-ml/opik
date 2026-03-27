@@ -41,6 +41,7 @@ def test_track__trace_logged_at_start_and_end__flush_before_end__both_traces_sen
             start_time=ANY_BUT_NONE,
             project_name="Default Project",
             last_updated_at=ANY_BUT_NONE,
+            source="sdk",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -60,8 +61,10 @@ def test_track__trace_logged_at_start_and_end__flush_before_end__both_traces_sen
                     output={"output": "the-output"},
                     end_time=ANY_BUT_NONE,
                     project_name="Default Project",
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -114,8 +117,10 @@ def test_track__trace_logged_at_start_and_end__deduplication_applied_to_the_batc
                     output={"output": "the-output"},
                     end_time=ANY_BUT_NONE,
                     project_name="Default Project",
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 

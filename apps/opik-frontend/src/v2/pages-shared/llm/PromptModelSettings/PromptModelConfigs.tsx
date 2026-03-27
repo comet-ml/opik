@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Button, ButtonProps } from "@/ui/button";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 import OpenAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import AnthropicModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
@@ -36,6 +37,7 @@ interface PromptModelConfigsProps {
   provider: COMPOSED_PROVIDER_TYPE;
   model?: PROVIDER_MODEL_TYPE | "";
   size?: ButtonProps["size"];
+  variant?: ButtonProps["variant"];
   configs: Partial<LLMPromptConfigsType>;
   onChange: (configs: Partial<LLMPromptConfigsType>) => void;
   disabled?: boolean;
@@ -45,6 +47,7 @@ const PromptModelConfigs = ({
   provider: composedProviderType,
   model,
   size = "icon-sm",
+  variant = "outline",
   configs,
   onChange,
   disabled: disabledProp = false,
@@ -118,11 +121,13 @@ const PromptModelConfigs = ({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size={size} disabled={disabled}>
-          <Settings2 />
-        </Button>
-      </DropdownMenuTrigger>
+      <TooltipWrapper content="Model parameters">
+        <DropdownMenuTrigger asChild>
+          <Button variant={variant} size={size} disabled={disabled}>
+            <Settings2 />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipWrapper>
 
       <DropdownMenuContent
         className="max-h-[70vh] overflow-y-auto p-6"

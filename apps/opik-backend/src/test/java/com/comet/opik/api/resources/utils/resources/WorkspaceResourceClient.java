@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.WorkspaceConfiguration;
+import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
@@ -150,5 +151,26 @@ public class WorkspaceResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .delete();
+    }
+
+    public WorkspaceVersion getWorkspaceVersion(String workspaceName) {
+        return getWorkspaceVersion(null, workspaceName);
+    }
+
+    public WorkspaceVersion getWorkspaceVersion(String apiKey, String workspaceName) {
+        try (var response = callGetWorkspaceVersion(apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(WorkspaceVersion.class);
+        }
+    }
+
+    public Response callGetWorkspaceVersion(String apiKey, String workspaceName) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/versions")
+                .request();
+        if (apiKey != null) {
+            target = target.header(HttpHeaders.AUTHORIZATION, apiKey);
+        }
+        return target.header(RequestContext.WORKSPACE_HEADER, workspaceName).get();
     }
 }

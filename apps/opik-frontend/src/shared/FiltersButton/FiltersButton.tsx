@@ -24,6 +24,7 @@ type FiltersButtonProps<TColumnData> = {
   variant?: ButtonProps["variant"];
   align?: "start" | "end";
   disabled?: boolean;
+  deferOnChange?: boolean;
 };
 
 const FiltersButton = <TColumnData,>({
@@ -35,6 +36,7 @@ const FiltersButton = <TColumnData,>({
   variant = "outline",
   align = "start",
   disabled,
+  deferOnChange = false,
 }: FiltersButtonProps<TColumnData>) => {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
@@ -63,11 +65,23 @@ const FiltersButton = <TColumnData,>({
   }, [initialFilters, open]);
 
   useEffect(() => {
-    onChange(validFilters);
-  }, [validFilters, onChange]);
+    if (!deferOnChange) {
+      onChange(validFilters);
+    }
+  }, [validFilters, onChange, deferOnChange]);
+
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      if (deferOnChange && !isOpen) {
+        onChange(filters.filter(isFilterValid));
+      }
+      setOpen(isOpen);
+    },
+    [deferOnChange, onChange, filters],
+  );
 
   return (
-    <Popover onOpenChange={setOpen} open={open}>
+    <Popover onOpenChange={handleOpenChange} open={open}>
       <TooltipWrapper content={isIconLayout ? "Filters" : undefined}>
         <PopoverTrigger asChild>
           <Button
@@ -90,7 +104,10 @@ const FiltersButton = <TColumnData,>({
           </Button>
         </PopoverTrigger>
       </TooltipWrapper>
-      <PopoverContent className="min-w-[540px] px-8 py-6" align={align}>
+      <PopoverContent
+        className="max-h-[70vh] min-w-[540px] px-8 py-6"
+        align={align}
+      >
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">
             <span className="comet-title-s">Filters</span>
@@ -109,7 +126,7 @@ const FiltersButton = <TColumnData,>({
             setFilters={setFilters}
             columns={columns}
             config={config}
-            className="-mr-1 max-h-[50vh]"
+            className="-mr-1 max-h-[30vh]"
           />
           <div className="flex items-center">
             <Button variant="secondary" onClick={onAddFilter}>

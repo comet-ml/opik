@@ -6209,6 +6209,34 @@ class ExperimentsResourceTest {
             assertThat(feedbackScoreNames).containsExactly("hallucination");
         }
 
+        @Test
+        @DisplayName("when filtered by project_id, then return only scores from that project")
+        void getFeedbackScoreNames__whenFilteredByProjectId__thenReturnOnlyProjectScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectA = podamFactory.manufacturePojo(Project.class);
+            var projectAId = projectResourceClient.createProject(projectA, apiKey, workspaceName);
+            projectA = projectA.toBuilder().id(projectAId).build();
+
+            var projectB = podamFactory.manufacturePojo(Project.class);
+            var projectBId = projectResourceClient.createProject(projectB, apiKey, workspaceName);
+            projectB = projectB.toBuilder().id(projectBId).build();
+
+            var scoreNamesA = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var scoresA = traceResourceClient.createMultiValueScores(scoreNamesA, projectA, apiKey, workspaceName);
+            createExperimentsItems(apiKey, workspaceName, scoresA, List.of());
+
+            var scoreNamesB = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var scoresB = traceResourceClient.createMultiValueScores(scoreNamesB, projectB, apiKey, workspaceName);
+            createExperimentsItems(apiKey, workspaceName, scoresB, List.of());
+
+            var actualEntity = experimentResourceClient.getFeedbackScoreNames(null, projectAId, apiKey, workspaceName);
+            assertFeedbackScoreNames(actualEntity, scoreNamesA);
+        }
+
     }
 
     private void fetchAndAssertResponse(

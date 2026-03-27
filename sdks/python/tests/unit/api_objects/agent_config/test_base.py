@@ -1,4 +1,5 @@
 import dataclasses
+import typing
 from typing import Annotated, Optional
 from unittest import mock
 
@@ -673,6 +674,100 @@ class TestGetAgentConfig:
             request_options=None,
         )
 
+    def test_blueprint_missing_field__raises_key_error(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        # Config version only has "temp", "name" is absent.
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            name="v3",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
+            ],
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        with pytest.raises(KeyError, match="v3"):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
+    def test_blueprint_missing_field__error_names_missing_fields(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            name="v3",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
+            ],
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        with pytest.raises(KeyError, match="MyConfig.name"):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
+    def test_blueprint_missing_all_fields__raises_key_error_listing_all(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        # Config version has no values at all.
+        bp = AgentBlueprintPublic(id="bp-1", name="v1", type="blueprint", values=[])
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        with pytest.raises(KeyError, match="v1"):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
+    def test_blueprint_missing_field__fallback_not_used(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Fallback values must NOT silently fill in missing config version fields."""
+
+        class MyConfig(AgentConfig):
+            temp: float
+            name: str
+
+        fallback = MyConfig(temp=0.5, name="default")
+
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            name="v2",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="MyConfig.temp", type="float", value="0.9"),
+            ],
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        # Must raise, not return a result with fallback.name == "default"
+        with pytest.raises(KeyError):
+            mock_opik_client.get_agent_config(fallback=fallback, latest=True)
+
 
 # ---------------------------------------------------------------------------
 # Live instance tests
@@ -1327,3 +1422,117 @@ class TestTrackContextGuard:
         # Should not raise even when no trace context is present
         cfg = MyConfig(temp=0.5)
         assert cfg.temp == 0.5
+
+
+# ---------------------------------------------------------------------------
+# _matches_blueprint description tests
+# ---------------------------------------------------------------------------
+
+
+class TestMatchesBlueprintDescription:
+    def _make_blueprint(
+        self,
+        key: str,
+        value: str,
+        type_: str,
+        description: typing.Optional[str] = None,
+    ) -> Blueprint:
+        return Blueprint(
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key=key, type=type_, value=value, description=description
+                    )
+                ],
+            )
+        )
+
+    def test_same_value_same_description__matches(self):
+        class MyConfig(AgentConfig):
+            temp: Annotated[float, "Sampling temperature"]
+
+        cfg = MyConfig(temp=0.7)
+        bp = self._make_blueprint(
+            "MyConfig.temp", "0.7", "float", "Sampling temperature"
+        )
+        assert cfg._matches_blueprint(bp, cfg._extract_fields_with_values()) is True
+
+    def test_same_value_changed_description__does_not_match(self):
+        class MyConfig(AgentConfig):
+            temp: Annotated[float, "New description"]
+
+        cfg = MyConfig(temp=0.7)
+        bp = self._make_blueprint("MyConfig.temp", "0.7", "float", "Old description")
+        assert cfg._matches_blueprint(bp, cfg._extract_fields_with_values()) is False
+
+    def test_same_value_description_added_where_none_was__does_not_match(self):
+        class MyConfig(AgentConfig):
+            temp: Annotated[float, "Added description"]
+
+        cfg = MyConfig(temp=0.7)
+        bp = self._make_blueprint("MyConfig.temp", "0.7", "float", description=None)
+        assert cfg._matches_blueprint(bp, cfg._extract_fields_with_values()) is False
+
+    def test_same_value_description_removed__does_not_match(self):
+        class MyConfig(AgentConfig):
+            temp: float  # no description
+
+        cfg = MyConfig(temp=0.7)
+        bp = self._make_blueprint("MyConfig.temp", "0.7", "float", "Old description")
+        assert cfg._matches_blueprint(bp, cfg._extract_fields_with_values()) is False
+
+    def test_same_value_both_no_description__matches(self):
+        class MyConfig(AgentConfig):
+            temp: float
+
+        cfg = MyConfig(temp=0.7)
+        bp = self._make_blueprint("MyConfig.temp", "0.7", "float", description=None)
+        assert cfg._matches_blueprint(bp, cfg._extract_fields_with_values()) is True
+
+    def test_description_change_triggers_update_via_create_version(
+        self, mock_rest_client, mock_opik_client
+    ):
+        class MyConfig(AgentConfig):
+            temp: Annotated[float, "New description"]
+
+        cfg = MyConfig(temp=0.7)
+
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+            AgentBlueprintPublic(
+                id="bp-1",
+                name="v1",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key="MyConfig.temp",
+                        type="float",
+                        value="0.7",
+                        description="Old description",
+                    )
+                ],
+            )
+        )
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            AgentBlueprintPublic(
+                id="bp-2",
+                name="v2",
+                type="blueprint",
+                values=[
+                    AgentConfigValuePublic(
+                        key="MyConfig.temp",
+                        type="float",
+                        value="0.7",
+                        description="New description",
+                    )
+                ],
+            )
+        )
+
+        result = mock_opik_client.create_agent_config_version(cfg)
+
+        mock_rest_client.agent_configs.update_agent_config.assert_called_once()
+        assert result == "v2"

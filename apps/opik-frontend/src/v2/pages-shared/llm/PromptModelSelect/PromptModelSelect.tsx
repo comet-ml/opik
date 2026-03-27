@@ -41,6 +41,7 @@ interface PromptModelSelectProps {
   onAddProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
 const STALE_TIME = 1000;
@@ -54,6 +55,7 @@ const PromptModelSelect = ({
   onAddProvider,
   onDeleteProvider,
   disabled = false,
+  compact = false,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -134,6 +136,7 @@ const PromptModelSelect = ({
 
     return {
       icon: selectedGroup?.icon,
+      modelName,
       title: `${
         selectedGroup?.label ? selectedGroup.label + " " : ""
       }${modelName}`,
@@ -275,22 +278,29 @@ const PromptModelSelect = ({
   };
 
   const renderSelectTrigger = () => {
-    const { icon: Icon, title } = getSelectedModelInfo();
+    const { icon: Icon, title, modelName } = getSelectedModelInfo();
 
     return (
       <TooltipWrapper content={title}>
         <SelectTrigger
-          className={cn("size-full data-[placeholder]:text-light-slate", {
-            "border-destructive": hasError,
-          })}
+          className={cn(
+            "size-full data-[placeholder]:text-light-slate",
+            compact &&
+              "w-auto min-w-0 gap-1 border-0 bg-transparent px-0 text-left hover:shadow-none hover:text-primary-hover [&>span]:truncate [&>svg]:text-current [&>svg]:opacity-100",
+            hasError && (compact ? "text-destructive" : "border-destructive"),
+          )}
         >
           <SelectValue
             placeholder="Select an LLM model"
             data-testid="select-a-llm-model"
           >
-            <div className="flex items-center gap-2">
-              {Icon && <Icon className="size-4 shrink-0 text-foreground" />}
-              <span className="truncate">{title}</span>
+            <div
+              className={cn("flex items-center", compact ? "gap-1" : "gap-2")}
+            >
+              {Icon && (
+                <Icon className={cn("shrink-0", !compact && "size-4")} />
+              )}
+              <span className="truncate">{compact ? modelName : title}</span>
             </div>
           </SelectValue>
         </SelectTrigger>

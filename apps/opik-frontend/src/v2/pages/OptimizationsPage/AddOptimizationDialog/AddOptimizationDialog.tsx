@@ -263,11 +263,12 @@ const DEFAULT_LOADED_DATASET_ITEMS = 25;
 type AddOptimizationDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  projectId?: string | null;
 };
 
 const AddOptimizationDialog: React.FunctionComponent<
   AddOptimizationDialogProps
-> = ({ open, setOpen }) => {
+> = ({ open, setOpen, projectId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -291,6 +292,7 @@ const AddOptimizationDialog: React.FunctionComponent<
   const { data, isLoading } = useDatasetsList(
     {
       workspaceName,
+      ...(projectId && { projectId }),
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },

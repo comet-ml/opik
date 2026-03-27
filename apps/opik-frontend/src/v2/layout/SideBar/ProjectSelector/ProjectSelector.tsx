@@ -68,7 +68,6 @@ const ProjectSelector: React.FC = () => {
 
   const handleSelect = useCallback(
     (projectId: string) => {
-      setActiveProject(workspaceName, projectId);
       setOpen(false);
       setSearch("");
       navigate({
@@ -121,9 +120,9 @@ const ProjectSelector: React.FC = () => {
       </PopoverAnchor>
       <PopoverContent
         align="start"
-        side="right"
+        side="bottom"
         className="w-[216px] p-1"
-        sideOffset={8}
+        sideOffset={4}
       >
         <div className="px-3 py-2">
           <span className="comet-body-s-accented text-foreground">

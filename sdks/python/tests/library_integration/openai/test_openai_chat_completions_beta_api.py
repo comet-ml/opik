@@ -115,8 +115,10 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with("gpt-4o"),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -181,8 +183,10 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
                 spans=[],
                 model=ANY_STRING.starting_with("gpt-4o"),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -247,8 +251,10 @@ def test_openai_beta_chat_completion_stream__generator_tracked_correctly(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -311,8 +317,10 @@ def test_openai_beta_chat_completion_stream__include_usage_is_not_enabled__usage
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -382,8 +390,10 @@ def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tr
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
         id=ANY_BUT_NONE,
@@ -410,8 +420,10 @@ def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tr
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 2
@@ -478,8 +490,10 @@ def test_openai_beta_chat_completion_stream__get_final_completion_called__genera
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -543,8 +557,10 @@ def test_openai_beta_chat_completion_stream__get_final_completion_called_after_s
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -610,8 +626,10 @@ def test_async_openai_beta_chat_completion_stream__data_tracked_correctly(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -677,8 +695,10 @@ def test_async_openai_beta_chat_completion_stream__get_final_completion_called_t
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

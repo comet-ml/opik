@@ -191,7 +191,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canEditDatasets, canDeleteDatasets },
+    permissions: { canCreateDatasets, canEditDatasets, canDeleteDatasets },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -224,6 +224,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
     {
       workspaceName,
+      projectId: activeProjectId,
       filters,
       sorting: sortedColumns,
       search: search!,
@@ -336,14 +337,14 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const handleRowClick = useCallback(
     (row: Dataset) => {
-      if (!row.id) return;
+      if (!row.id || !activeProjectId) return;
 
       navigate({
         to: "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId",
         params: {
           suiteId: row.id,
           workspaceName,
-          projectId: activeProjectId!,
+          projectId: activeProjectId,
         },
       });
     },
@@ -407,9 +408,11 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
-            Create new
-          </Button>
+          {canCreateDatasets && (
+            <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
+              Create new
+            </Button>
+          )}
         </div>
       </div>
       <DataTable
@@ -426,7 +429,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateDatasets && (
               <Button variant="link" onClick={handleNewSuiteClick}>
                 Create new
               </Button>

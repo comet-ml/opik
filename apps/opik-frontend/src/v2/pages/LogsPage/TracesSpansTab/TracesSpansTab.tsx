@@ -50,7 +50,7 @@ import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
-import { BaseTraceData, Span, Trace } from "@/types/traces";
+import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
@@ -578,6 +578,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         fromTime: intervalStart,
         toTime: intervalEnd,
         exclude: excludeFields,
+        logsSource: LOGS_SOURCE.sdk,
       },
       {
         enabled: isTableDataEnabled,
@@ -599,6 +600,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       fromTime: intervalStart,
       toTime: intervalEnd,
       exclude: excludeFields,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       enabled: false,
@@ -615,6 +617,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         search: trimmedSearch,
         fromTime: intervalStart,
         toTime: intervalEnd,
+        logsSource: LOGS_SOURCE.sdk,
       },
       {
         refetchInterval: REFETCH_INTERVAL,

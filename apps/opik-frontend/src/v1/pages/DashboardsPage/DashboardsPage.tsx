@@ -18,12 +18,7 @@ import TagCell from "@/shared/DataTableCells/TagCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import {
-  Dashboard,
-  DASHBOARD_SCOPE,
-  DASHBOARD_TYPE_LABELS,
-} from "@/types/dashboard";
-import { generateDashboardScopeFilter } from "@/lib/filters";
+import { Dashboard, DASHBOARD_TYPE_LABELS } from "@/types/dashboard";
 import Loader from "@/shared/Loader/Loader";
 import AddEditCloneDashboardDialog from "@/v1/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 import { DashboardRowActionsCell } from "@/v1/pages/DashboardsPage/DashboardRowActionsCell";
@@ -236,20 +231,12 @@ const DashboardsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
-  const processedFilters = useMemo(
-    () => [
-      ...filters!,
-      ...generateDashboardScopeFilter(DASHBOARD_SCOPE.WORKSPACE),
-    ],
-    [filters],
-  );
-
   const { data, isPending, isPlaceholderData, isFetching } = useDashboardsList(
     {
       workspaceName,
       sorting: sortedColumns,
       search: search!,
-      filters: processedFilters,
+      filters,
       page: page!,
       size: size!,
     },

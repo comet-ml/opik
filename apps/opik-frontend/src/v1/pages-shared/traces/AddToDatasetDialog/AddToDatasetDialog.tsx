@@ -38,6 +38,7 @@ import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescrip
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/ui/toast";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_SIZE = 100;
 
@@ -70,6 +71,9 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
+  const {
+    permissions: { canCreateDatasets },
+  } = usePermissions();
 
   // Enrichment options state - all checked by default (opt-out design)
   const [enrichmentOptions, setEnrichmentOptions] = useState({
@@ -402,17 +406,19 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             {hasOnlySpans && renderMetadataConfiguration("span")}
             <div className="my-2 flex items-center justify-between">
               <h3 className="comet-title-xs">Select an evaluation suite</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setOpenDialog(true);
-                }}
-                disabled={noValidRows}
-              >
-                <Plus className="mr-2 size-4" />
-                Create new evaluation suite
-              </Button>
+              {canCreateDatasets && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setOpenDialog(true);
+                  }}
+                  disabled={noValidRows}
+                >
+                  <Plus className="mr-2 size-4" />
+                  Create new evaluation suite
+                </Button>
+              )}
             </div>
             <SearchInput
               searchText={search}

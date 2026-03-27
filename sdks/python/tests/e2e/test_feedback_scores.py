@@ -68,6 +68,7 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
         trace_id=trace.id,
         name="trace-name",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -76,6 +77,7 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
         parent_span_id=None,
         name="span-name",
         feedback_scores=EXPECTED_SPAN_FEEDBACK_SCORES,
+        source="sdk",
     )
 
 
@@ -125,6 +127,7 @@ def test_feedbacks_are_logged_via_trace_and_span__and_deleted(opik_client: opik.
         trace_id=trace.id,
         name="trace-name",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -133,6 +136,7 @@ def test_feedbacks_are_logged_via_trace_and_span__and_deleted(opik_client: opik.
         parent_span_id=None,
         name="span-name",
         feedback_scores=EXPECTED_SPAN_FEEDBACK_SCORES,
+        source="sdk",
     )
 
 
@@ -185,6 +189,7 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
         name="trace-name-1",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
         project_name=opik_client.project_name,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -194,6 +199,7 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
         name="span-name-1",
         feedback_scores=EXPECTED_SPAN_FEEDBACK_SCORES,
         project_name=opik_client.project_name,
+        source="sdk",
     )
 
 
@@ -273,6 +279,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
         trace_id=ID_STORAGE["f_outer-trace-id"],
         name="f_outer",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -281,6 +288,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
         parent_span_id=ID_STORAGE["f_outer-span-id"],
         name="f_inner",
         feedback_scores=EXPECTED_INNER_SPAN_FEEDBACK_SCORES,
+        source="sdk",
     )
 
 
