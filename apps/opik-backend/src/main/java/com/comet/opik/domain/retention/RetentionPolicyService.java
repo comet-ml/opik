@@ -165,6 +165,8 @@ public class RetentionPolicyService {
     private Flux<Long> countAndDelete(List<String> batch, UUID cutoffId, UUID lowerBound) {
         // Lightweight pre-delete count for observability (upper-bound ceiling, >99% precision).
         // Omits experiment_items exclusion to avoid join cost.
+        // Counts run before deletes (not in parallel) so the metric reflects what's about to be removed.
+        // Cost is minimal: SELECT count() on ClickHouse hits the primary key index via UUID range filter.
         return Flux.concat(
                 traceDAO.countForRetention(batch, cutoffId, lowerBound)
                         .doOnNext(count -> {

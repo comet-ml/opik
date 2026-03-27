@@ -117,11 +117,12 @@ interface RetentionRuleDAO {
             " LIMIT 1")
     Optional<RetentionRule> findLargeCatchUpRule(@Bind("largeThreshold") long largeThreshold);
 
-    /** Find rules pending velocity estimation (newly created with applyToPast=true, not yet estimated). */
+    /** Find rules pending velocity estimation (newly created with applyToPast=true, not yet estimated). FIFO order prevents a consistently failing rule from starving others. */
     @SqlQuery("""
             SELECT * FROM retention_rules
             WHERE catch_up_done = false AND enabled = true AND apply_to_past = true
             AND catch_up_velocity IS NULL
+            ORDER BY created_at ASC
             LIMIT :limit
             """)
     List<RetentionRule> findUnestimatedCatchUpRules(@Bind("limit") int limit);
