@@ -1676,7 +1676,8 @@ export class OpikClient {
     this.logFeedbackScores(scores, this.spanFeedbackScoresBatchQueue);
   }
 
-  public flush = async () => {
+  public flush = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     logger.debug("Starting flush operation");
     try {
       await this.traceBatchQueue.flush();
@@ -1685,7 +1686,7 @@ export class OpikClient {
       await this.spanFeedbackScoresBatchQueue.flush();
       await this.datasetBatchQueue.flush();
       // Note: Prompt operations are synchronous and don't use batching
-      logger.info("Successfully flushed all data to Opik");
+      if (!silent) logger.info("Successfully flushed all data to Opik");
     } catch (error) {
       logger.error("Error during flush operation:", {
         error: error instanceof Error ? error.message : error,
