@@ -2322,8 +2322,11 @@ class Opik:
         name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         optimization_id: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> optimization.Optimization:
         id = optimization_id or id_helpers.generate_id()
+
+        project_name = self._resolve_project_name(project_name)
 
         self._rest_client.optimizations.create_optimization(
             id=id,
@@ -2332,10 +2335,11 @@ class Opik:
             objective_name=objective_name,
             status="running",
             metadata=metadata,
+            project_name=project_name,
         )
 
         optimization_client = optimization.Optimization(
-            id=id, rest_client=self._rest_client
+            id=id, rest_client=self._rest_client, project_name=project_name
         )
         return optimization_client
 
