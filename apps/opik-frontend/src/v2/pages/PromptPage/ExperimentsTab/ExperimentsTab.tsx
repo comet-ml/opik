@@ -353,11 +353,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     ];
   }, []);
 
-  // TODO: Need project scoping in V2 (OPIK-4968)
   const { isFeedbackScoresPending, dynamicScoresColumns } =
-    useExperimentsFeedbackScores();
+    useExperimentsFeedbackScores({
+      projectId: activeProjectId ?? undefined,
+    });
 
-  // TODO: Need project scoping in V2 (OPIK-4968) — DatasetSelectBox, ExperimentsPathsAutocomplete
   const { groups, setGroups, filtersAndGroupsConfig } =
     useExperimentsGroupsAndFilters({
       storageKeyPrefix: STORAGE_KEY_PREFIX,
@@ -371,10 +371,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     maxExpandedDeepestGroups: MAX_EXPANDED_DEEPEST_GROUPS,
   });
 
-  // TODO: Need project scoping in V2 (OPIK-4968) — useDatasetsList, useProjectsList inside
   const { data, isPending, isPlaceholderData, isFetching } =
     useGroupedExperimentsList({
       workspaceName,
+      projectId: activeProjectId ?? undefined,
       groupLimit,
       promptId,
       filters,
