@@ -241,6 +241,9 @@ export function matchesBlueprint(
     const serialized = serializeValue(localValue as SupportedValue, meta.backendType);
     if (blueprintRaw === undefined) return false;
     if (blueprintRaw !== serialized) return false;
+
+    const blueprintDesc = blueprint.getFieldDescription(meta.prefixedKey);
+    if (meta.description !== blueprintDesc) return false;
   }
 
   return true;
