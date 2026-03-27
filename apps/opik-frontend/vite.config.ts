@@ -16,7 +16,12 @@ export default defineConfig(({ mode }) => {
   // VITE_OPIK_AI_BACKEND_PORT: AI backend server port for proxy target (default: 8081)
   const devPort = parseInt(env.VITE_DEV_PORT || "5174", 10);
   const backendPort = parseInt(env.VITE_BACKEND_PORT || "8080", 10);
-  const opikAiBackendPort = parseInt(env.VITE_OPIK_AI_BACKEND_PORT || "8081", 10);
+  const opikAiBackendPort = parseInt(
+    env.VITE_OPIK_AI_BACKEND_PORT || "8081",
+    10,
+  );
+  const assistantPort = parseInt(env.VITE_ASSISTANT_SIDEBAR_PORT || "3333", 10);
+  const assistantApiPort = parseInt(env.VITE_ASSISTANT_API_PORT || "9080", 10);
 
   return {
     base: env.VITE_BASE_URL || "/",
@@ -58,6 +63,16 @@ export default defineConfig(({ mode }) => {
         "/opik-ai": {
           target: `http://localhost:${opikAiBackendPort}`,
           changeOrigin: true,
+        },
+        "/assistant-api": {
+          target: `http://localhost:${assistantApiPort}`,
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/assistant-api/, ""),
+        },
+        "/assistant": {
+          target: `http://localhost:${assistantPort}`,
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/assistant/, ""),
         },
       },
     },

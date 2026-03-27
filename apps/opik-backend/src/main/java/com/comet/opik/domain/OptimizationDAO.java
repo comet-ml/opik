@@ -7,6 +7,7 @@ import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
@@ -69,12 +70,20 @@ public interface OptimizationDAO {
     Mono<Optimization.OptimizationPage> find(int page, int size, @NonNull OptimizationSearchCriteria searchCriteria);
 
     Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
+
+    Mono<Boolean> hasVersion1Optimizations(String workspaceId);
 }
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class OptimizationDAOImpl implements OptimizationDAO {
+
+    private static final String HAS_VERSION1_OPTIMIZATIONS = """
+            SELECT 1 FROM optimizations
+            WHERE workspace_id = :workspace_id AND project_id = ''
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'""";
 
     private static final String UPSERT = """
             INSERT INTO optimizations (
@@ -880,5 +889,17 @@ class OptimizationDAOImpl implements OptimizationDAO {
         statement.bind("id", id);
 
         return statement;
+    }
+
+    @Override
+    public Mono<Boolean> hasVersion1Optimizations(@NonNull String workspaceId) {
+        var template = DatabaseUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
+                "has_version1_optimizations", workspaceId, "");
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .execute())
+                        .flatMap(result -> Flux.from(result.map((row, metadata) -> true))))
+                .hasElements();
     }
 }

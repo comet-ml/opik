@@ -49,8 +49,10 @@ def test_track__disable_root_span__no_root_span_created__happy_flow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -100,10 +102,13 @@ def test_track__disable_root_span__at_nested_span__all_spans_created(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -165,10 +170,13 @@ def test_track__disable_root_span__distributed_tracing_with_headers__root_span_c
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -236,10 +244,13 @@ def test_track__disable_root_span__trace_already_created_by_hand__root_span_crea
                         output={"output": "nested-output"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -284,8 +295,10 @@ async def test_track__disable_root_span__async_function__no_root_span_created__h
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -346,10 +359,13 @@ async def test_track__disable_root_span__async_generator__no_root_span_created(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -392,8 +408,10 @@ def test_track__disable_root_span__no_root_span_created__show_warning_for_type(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

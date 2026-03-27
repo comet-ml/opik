@@ -160,17 +160,18 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     (row: GroupedExperiment) => {
       const experimentResource = RESOURCE_MAP[RESOURCE_TYPE.experiment];
       navigate({
-        to: experimentResource.url,
+        to: experimentResource.projectUrl,
         params: {
           [experimentResource.param]: row.dataset_id,
           workspaceName,
+          projectId: activeProjectId!,
         },
         search: {
           experiments: [row.id],
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
@@ -352,9 +353,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     ];
   }, []);
 
+  // TODO: Need project scoping in V2 (OPIK-4968)
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
 
+  // TODO: Need project scoping in V2 (OPIK-4968) — DatasetSelectBox, ExperimentsPathsAutocomplete
   const { groups, setGroups, filtersAndGroupsConfig } =
     useExperimentsGroupsAndFilters({
       storageKeyPrefix: STORAGE_KEY_PREFIX,
@@ -369,6 +372,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     maxExpandedDeepestGroups: MAX_EXPANDED_DEEPEST_GROUPS,
   });
 
+  // TODO: Need project scoping in V2 (OPIK-4968) — useDatasetsList, useProjectsList inside
   const { data, isPending, isPlaceholderData, isFetching } =
     useGroupedExperimentsList({
       workspaceName,

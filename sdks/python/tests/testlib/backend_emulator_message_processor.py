@@ -2,7 +2,7 @@ import datetime
 from typing import List, Dict, Optional, Any, TYPE_CHECKING
 
 from opik.message_processing.emulation import emulator_message_processor
-from opik.types import ErrorInfoDict, SpanType
+from opik.types import ErrorInfoDict, SpanType, TraceSource
 from . import models
 
 if TYPE_CHECKING:
@@ -46,6 +46,7 @@ class BackendEmulatorMessageProcessor(
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
+        source: TraceSource,
         last_updated_at: Optional[datetime.datetime] = None,
     ) -> models.TraceModel:
         if spans is None:
@@ -68,6 +69,7 @@ class BackendEmulatorMessageProcessor(
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            source=source,
         )
 
     def create_span_model(
@@ -90,6 +92,7 @@ class BackendEmulatorMessageProcessor(
         error_info: Optional[ErrorInfoDict],
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
+        source: TraceSource,
     ) -> models.SpanModel:
         if spans is None:
             spans = []
@@ -115,6 +118,7 @@ class BackendEmulatorMessageProcessor(
             error_info=error_info,
             total_cost=total_cost,
             last_updated_at=last_updated_at,
+            source=source,
         )
 
     def create_feedback_score_model(

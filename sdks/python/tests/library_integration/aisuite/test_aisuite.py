@@ -97,8 +97,10 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -158,8 +160,10 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with("claude-sonnet-4-5"),
                 provider="anthropic",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -230,8 +234,10 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
                     "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -303,10 +309,13 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         spans=[],
                         model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                         provider="openai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -378,8 +387,10 @@ def test_aisuite__openai_provider__client_chat_completions_create__opik_args__ha
                 spans=[],
                 model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

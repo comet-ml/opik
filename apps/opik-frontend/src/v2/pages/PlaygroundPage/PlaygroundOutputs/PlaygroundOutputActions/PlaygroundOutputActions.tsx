@@ -531,6 +531,9 @@ const PlaygroundOutputActions = ({
           {renderActionButton()}
         </div>
       </div>
+      {/* TODO: When Playground is integrated into project scope (OPIK-5161),
+          use useActiveProjectId() instead of playgroundProject and remove
+          project creation logic from handleCreateRuleClick */}
       <AddEditRuleDialog
         open={isRuleDialogOpen}
         setOpen={(open) => {
@@ -540,7 +543,7 @@ const PlaygroundOutputActions = ({
             setRuleDialogProjectId(undefined);
           }
         }}
-        projectId={ruleDialogProjectId || playgroundProject?.id}
+        projectId={ruleDialogProjectId || playgroundProject?.id || ""}
         projectName={PLAYGROUND_PROJECT_NAME}
         datasetColumnNames={datasetColumns.map((c) => c.name)}
         hideScopeSelector

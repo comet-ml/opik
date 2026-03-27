@@ -25,6 +25,15 @@ class RetentionRulePublic(UniversalBaseModel):
     created_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
+    catch_up_cursor: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Current position of historical data cleanup
+    """
+
+    catch_up_done: typing.Optional[bool] = pydantic.Field(default=None)
+    """
+    Whether historical catch-up is complete
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

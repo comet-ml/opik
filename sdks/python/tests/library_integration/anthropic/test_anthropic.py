@@ -109,8 +109,10 @@ def test_anthropic_messages_create__happyflow(
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -173,8 +175,10 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
                 },
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -252,10 +256,13 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                         provider="anthropic",
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -323,10 +330,13 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                         provider="anthropic",
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -387,8 +397,10 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -462,8 +474,10 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
         id=ANY_BUT_NONE,
@@ -493,8 +507,10 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 2
@@ -555,8 +571,10 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -618,8 +636,10 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -683,8 +703,10 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -748,8 +770,10 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -810,8 +834,10 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -887,8 +913,10 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -964,8 +992,10 @@ def test_anthropic_messages_create__opik_args__happyflow(
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1024,8 +1054,10 @@ def test_anthropic_messages_parse__happyflow(fake_backend):
                 model=ANY_STRING.starting_with(PARSE_MODEL_PREFIX),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1078,8 +1110,10 @@ def test_async_anthropic_messages_parse__happyflow(fake_backend):
                 model=ANY_STRING.starting_with(PARSE_MODEL_PREFIX),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1128,8 +1162,10 @@ def test_anthropic_beta_messages_create__happyflow(fake_backend):
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1178,8 +1214,10 @@ def test_anthropic_beta_messages_parse__happyflow(fake_backend):
                 model=ANY_STRING.starting_with(PARSE_MODEL_PREFIX),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1230,8 +1268,10 @@ def test_anthropic_beta_messages_stream__generator_tracked_correctly(fake_backen
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1285,8 +1325,10 @@ def test_async_anthropic_beta_messages_stream__data_tracked_correctly(fake_backe
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

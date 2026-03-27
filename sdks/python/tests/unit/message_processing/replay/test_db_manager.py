@@ -46,6 +46,7 @@ def _create_trace_message(
         error_info=None,
         thread_id=None,
         last_updated_at=None,
+        source="sdk",
     )
     msg.message_id = message_id
     return msg
@@ -74,6 +75,7 @@ def _create_span_message(
         error_info=None,
         total_cost=None,
         last_updated_at=None,
+        source="sdk",
     )
     msg.message_id = message_id
     return msg

@@ -67,8 +67,10 @@ def test_guardrails__trace_and_span_per_one_validation_check(
                 project_name=expected_project_name,
                 model="gpt-3.5-turbo",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(COMPETITOR_CHECK_EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

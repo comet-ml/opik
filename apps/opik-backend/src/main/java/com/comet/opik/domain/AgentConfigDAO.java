@@ -54,7 +54,7 @@ interface AgentConfigDAO {
 
     @Builder(toBuilder = true)
     record BlueprintValueReference(@NonNull UUID blueprintId, @NonNull UUID projectId, @NonNull UUID configId,
-            @NonNull String configKey, String oldValue, @NonNull String latestBlueprintName) {
+            @NonNull String configKey, String oldValue, long blueprintCount) {
     }
 
     @Builder(toBuilder = true)
@@ -309,6 +309,12 @@ interface AgentConfigDAO {
                 WHERE pv.workspace_id = :workspace_id
                     AND pv.prompt_id = :prompt_id
                     AND pv.commit != :new_commit
+            ),
+            blueprint_counts AS (
+                SELECT workspace_id, project_id, COUNT(*) AS blueprint_count
+                FROM agent_blueprints
+                WHERE workspace_id = :workspace_id AND type = 'blueprint'
+                GROUP BY workspace_id, project_id
             )
             SELECT DISTINCT
                 ab.id as blueprint_id,
@@ -316,12 +322,15 @@ interface AgentConfigDAO {
                 ab.config_id,
                 acv.key as config_key,
                 acv.value as old_value,
-                ab.name as latest_blueprint_name
+                COALESCE(bc.blueprint_count, 0) as blueprint_count
             FROM agent_blueprints ab
             JOIN agent_config_values acv
                 ON acv.valid_from_blueprint_id = ab.id
                 AND acv.workspace_id = ab.workspace_id
                 AND acv.project_id = ab.project_id
+            LEFT JOIN blueprint_counts bc
+                ON bc.workspace_id = ab.workspace_id
+                AND bc.project_id = ab.project_id
             WHERE ab.workspace_id = :workspace_id
                 AND ab.type = 'blueprint'
                 AND acv.type = 'prompt'

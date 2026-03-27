@@ -159,6 +159,7 @@ def test_langgraph__supervisor_multi_agent__parent_command_not_logged_as_error(
                 end_time=ANY_BUT_NONE,
                 error_info=None,
                 spans=ANY_LIST,
+                source="sdk",
             ),
             # weather_agent executes after the ParentCommand routing completes.
             SpanModel(
@@ -171,6 +172,7 @@ def test_langgraph__supervisor_multi_agent__parent_command_not_logged_as_error(
                 end_time=ANY_BUT_NONE,
                 error_info=None,
                 spans=ANY_LIST,
+                source="sdk",
             ),
             # Second supervisor invocation: returns the final answer with no
             # tool calls, so no ParentCommand is raised here.
@@ -184,8 +186,10 @@ def test_langgraph__supervisor_multi_agent__parent_command_not_logged_as_error(
                 end_time=ANY_BUT_NONE,
                 error_info=None,
                 spans=ANY_LIST,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

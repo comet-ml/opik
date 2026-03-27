@@ -10,6 +10,8 @@ import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardin
 
 export const AGENT_ONBOARDING_KEY = "agent-onboarding";
 
+export const TRACES_OLDEST_FIRST_SORTING = [{ id: "id", desc: false }];
+
 export const AGENT_ONBOARDING_STEPS = {
   AGENT_NAME: "agent-name",
   CONNECT_AGENT: "connect-agent",
@@ -23,6 +25,7 @@ type AgentOnboardingStep =
 interface AgentOnboardingState {
   step: AgentOnboardingStep;
   agentName: string;
+  traceId?: string;
 }
 
 interface AgentOnboardingContextValue {
@@ -70,8 +73,9 @@ const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
     if (!state.step || state.step === AGENT_ONBOARDING_STEPS.DONE) return;
 
     const hash = `#${state.step}`;
+    const traceParam = new URLSearchParams(window.location.search).get("trace");
 
-    if (window.location.hash !== hash) {
+    if (window.location.hash !== hash && !traceParam) {
       window.history.replaceState(null, "", hash);
 
       try {

@@ -42,6 +42,7 @@ def test_start_as_current_trace__inside__happy_flow(fake_backend):
         spans=[],
         last_updated_at=ANY_BUT_NONE,
         thread_id="test-thread-123",
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -80,6 +81,7 @@ def test_start_as_current_trace__outside__happy_flow(fake_backend):
         end_time=ANY_BUT_NONE,
         spans=[],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -120,6 +122,7 @@ def test_start_as_current_trace__mixed__inside_override_outside(fake_backend):
         end_time=ANY_BUT_NONE,
         spans=[],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -163,6 +166,7 @@ def test_start_as_current_trace__user_error__logged_and_raised(fake_backend):
             traceback=ANY_STRING,
         ),
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -182,6 +186,7 @@ def test_start_as_current_trace__minimal_parameters__works(fake_backend):
         project_name="Default Project",
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -229,6 +234,7 @@ def test_start_as_current_trace__pop_end_candidates_preserves_trace(fake_backend
             opik_args_data=None,
             tracing_active=True,
             create_duplicate_root_span=True,
+            source="sdk",
         )
 
         # Simulate what _streams_handler does: pop_end_candidates
@@ -242,6 +248,7 @@ def test_start_as_current_trace__pop_end_candidates_preserves_trace(fake_backend
         current_trace = opik_context.get_current_trace_data()
         assert current_trace is not None
         assert current_trace.id == trace_data.id
+        assert current_trace.source == "sdk"
 
         # A subsequent tracked call should still see the parent trace
         @opik.track(name="child-work", type="tool")
