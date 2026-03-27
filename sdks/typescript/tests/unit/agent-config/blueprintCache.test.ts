@@ -200,6 +200,96 @@ describe("initBlueprintCacheEntry", () => {
   });
 });
 
+describe("refresh policy", () => {
+  it("latest lookup — initBlueprintCacheEntry registers refresh callback and starts timer", () => {
+    const registry = new BlueprintCacheRegistry();
+    const cb = vi.fn().mockResolvedValue(makeMockBlueprint());
+    const spy = vi.spyOn(registry, "ensureRefreshTimerStarted");
+
+    const entry = registry.getOrCreate("proj", null, null, null);
+    entry.setRefreshCallback(cb);
+    registry.ensureRefreshTimerStarted();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(entry["_refreshCallback"]).toBe(cb);
+    registry.clear();
+    spy.mockRestore();
+  });
+
+  it("env lookup — refresh callback is registered and timer starts", () => {
+    const registry = new BlueprintCacheRegistry();
+    const cb = vi.fn().mockResolvedValue(makeMockBlueprint());
+    const spy = vi.spyOn(registry, "ensureRefreshTimerStarted");
+
+    const entry = registry.getOrCreate("proj", "prod", null, null);
+    entry.setRefreshCallback(cb);
+    registry.ensureRefreshTimerStarted();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(entry["_refreshCallback"]).toBe(cb);
+    registry.clear();
+    spy.mockRestore();
+  });
+
+  it("version-pinned lookup — initBlueprintCacheEntry with non-null version does NOT start timer", () => {
+    const spy = vi.spyOn(getGlobalBlueprintRegistry(), "ensureRefreshTimerStarted");
+    // version is non-null → refreshCallback must be null per the contract
+    initBlueprintCacheEntry("proj", null, null, makeMockBlueprint(), null, "v1");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("masked lookup — initBlueprintCacheEntry with maskId does NOT start timer", () => {
+    const spy = vi.spyOn(getGlobalBlueprintRegistry(), "ensureRefreshTimerStarted");
+    const cb = vi.fn().mockResolvedValue(null);
+    initBlueprintCacheEntry("proj", null, "mask-abc", null, cb);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("latest and version-pinned use separate cache keys", () => {
+    const registry = new BlueprintCacheRegistry();
+    const latestEntry = registry.getOrCreate("proj", null, null, null);
+    const versionEntry = registry.getOrCreate("proj", null, null, "v1");
+    expect(latestEntry).not.toBe(versionEntry);
+    registry.clear();
+  });
+
+  it("latest cache is refreshed by background timer when stale", async () => {
+    vi.useFakeTimers();
+    const registry = new BlueprintCacheRegistry();
+    const refreshed = makeMockBlueprint("refreshed");
+    const cb = vi.fn().mockResolvedValue(refreshed);
+
+    const entry = registry.getOrCreate("proj", null, null, null);
+    entry.setRefreshCallback(cb);
+    registry.ensureRefreshTimerStarted();
+
+    await vi.advanceTimersByTimeAsync(300_000);
+
+    expect(cb).toHaveBeenCalled();
+    expect(entry.getBlueprint()).toBe(refreshed);
+    registry.clear();
+  });
+
+  it("version-pinned cache is NOT refreshed even when stale", async () => {
+    vi.useFakeTimers();
+    const registry = new BlueprintCacheRegistry();
+    const cb = vi.fn().mockResolvedValue(makeMockBlueprint("should-not-refresh"));
+
+    // version-pinned entry: no refresh callback registered
+    const entry = registry.getOrCreate("proj", null, null, "v1");
+    entry.update(makeMockBlueprint("original"));
+
+    registry.ensureRefreshTimerStarted();
+    await vi.advanceTimersByTimeAsync(600_000);
+
+    expect(cb).not.toHaveBeenCalled();
+    expect(entry.getBlueprint()?.id).toBe("original");
+    registry.clear();
+  });
+});
+
 describe("getCachedBlueprint (cache hit / miss behavior)", () => {
   it("returns a fresh entry after initBlueprintCacheEntry populates it", () => {
     const bp = makeMockBlueprint();
