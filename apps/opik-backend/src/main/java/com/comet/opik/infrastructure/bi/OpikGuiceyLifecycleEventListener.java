@@ -4,10 +4,14 @@ import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
 import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
+import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
+import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
+import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
@@ -48,6 +52,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setMetricsAlertJob();
                 setExperimentDenormalizationJob();
                 setLocalRunnerReaperJob();
+                setRetentionJobs();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
 
@@ -131,6 +136,26 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(LocalRunnerReaperJob.class,
                 localRunnerConfig.getReaperJobInterval().toJavaDuration(), null);
+    }
+
+    private void setRetentionJobs() {
+        RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
+
+        if (!retentionConfig.isEnabled()) {
+            log.info("Retention jobs are disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(RetentionSlidingWindowJob.class, retentionConfig.getInterval(), null);
+
+        if (retentionConfig.getCatchUp().isEnabled()) {
+            scheduleRepeatingJob(RetentionEstimationJob.class,
+                    Duration.ofMinutes(retentionConfig.getCatchUp().getEstimationIntervalMinutes()), null);
+            scheduleRepeatingJob(RetentionCatchUpJob.class,
+                    retentionConfig.getCatchUp().getCatchUpInterval(), null);
+        } else {
+            log.info("Retention catch-up jobs are disabled, skipping estimation and catch-up job setup");
+        }
     }
 
     private void scheduleRepeatingJob(Class<? extends org.quartz.Job> jobClass, Duration interval,

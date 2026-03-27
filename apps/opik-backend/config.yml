@@ -672,7 +672,6 @@ retention:
   executionsPerDay: ${RETENTION_EXECUTIONS_PER_DAY:-48}
   workspaceBatchSize: ${RETENTION_WORKSPACE_BATCH_SIZE:-1000}
   slidingWindowDays: ${RETENTION_SLIDING_WINDOW_DAYS:-3}
-  lockTimeoutSeconds: ${RETENTION_LOCK_TIMEOUT_SECONDS:-1800}
   # Progressive catch-up for apply-to-past rules. Deletes historical data older than the sliding window.
   # At rule creation, estimates workspace span velocity (spans/week) to triage into tiers:
   #   small  (<smallThreshold/week): batch one-shot delete, up to smallBatchSize workspaces per cycle
@@ -691,6 +690,10 @@ retention:
     largeChunkDays: ${RETENTION_CATCH_UP_LARGE_CHUNK_DAYS:-1}
     # Assumed velocity when the estimation query fails with TOO_MANY_ROWS (>20M rows)
     defaultVelocity: ${RETENTION_CATCH_UP_DEFAULT_VELOCITY:-1000000}
+    # Interval in minutes between catch-up cycles (default: 45)
+    intervalMinutes: ${RETENTION_CATCH_UP_INTERVAL_MINUTES:-45}
+    # Interval in minutes between estimation cycles for new rules (default: 5)
+    estimationIntervalMinutes: ${RETENTION_CATCH_UP_ESTIMATION_INTERVAL_MINUTES:-5}
     # Earliest date for catch-up cursor start (service launch date)
     serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
 

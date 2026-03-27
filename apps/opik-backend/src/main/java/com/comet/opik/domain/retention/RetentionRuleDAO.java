@@ -117,6 +117,20 @@ interface RetentionRuleDAO {
             " LIMIT 1")
     Optional<RetentionRule> findLargeCatchUpRule(@Bind("largeThreshold") long largeThreshold);
 
+    /** Find rules pending velocity estimation (newly created with applyToPast=true, not yet estimated). FIFO order prevents a consistently failing rule from starving others. */
+    @SqlQuery("""
+            SELECT * FROM retention_rules
+            WHERE catch_up_done = false AND enabled = true AND apply_to_past = true
+            AND catch_up_velocity IS NULL
+            ORDER BY created_at ASC
+            LIMIT :limit
+            """)
+    List<RetentionRule> findUnestimatedCatchUpRules(@Bind("limit") int limit);
+
+    /** Set velocity and cursor after estimation. */
+    @SqlUpdate("UPDATE retention_rules SET catch_up_velocity = :velocity, catch_up_cursor = :cursor WHERE id = :id")
+    void updateVelocityAndCursor(@Bind("id") UUID id, @Bind("velocity") long velocity, @Bind("cursor") UUID cursor);
+
     /** Advance the catch-up cursor for a rule. */
     @SqlUpdate("UPDATE retention_rules SET catch_up_cursor = :cursor WHERE id = :id")
     void updateCatchUpCursor(@Bind("id") UUID id, @Bind("cursor") UUID cursor);
