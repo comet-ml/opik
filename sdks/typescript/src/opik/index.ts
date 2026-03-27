@@ -20,7 +20,7 @@ export { DatasetVersion } from "@/dataset/DatasetVersion";
 export { DatasetVersionNotFoundError } from "@/errors/dataset/errors";
 export type { DatasetVersionPublic } from "@/rest_api/api/types/DatasetVersionPublic";
 
-export { Prompt, PromptType } from "@/prompt";
+export { Prompt, ChatPrompt, PromptType } from "@/prompt";
 export { OpikQueryLanguage } from "@/query";
 export type { FilterExpression } from "@/query";
 
@@ -28,7 +28,7 @@ export { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queu
 export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_api/api/types/AnnotationQueuePublicScope";
 
 // AgentConfig exports
-export { Blueprint, agentConfigContext } from "@/agent-config";
+export { Blueprint, AgentConfigManager, agentConfigContext } from "@/agent-config";
 export type { CreateBlueprintOptions, GetBlueprintOptions, AgentConfig, FieldMeta } from "@/agent-config";
 
 // Runner exports
