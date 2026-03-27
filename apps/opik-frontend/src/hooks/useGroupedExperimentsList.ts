@@ -76,6 +76,7 @@ const buildOrderMap = <T extends { id: string }>(
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
+  projectId?: string;
   filters?: Filters;
   sorting?: Sorting;
   groups?: Groups;
@@ -360,11 +361,13 @@ export default function useGroupedExperimentsList(
     const isOrphanProjectFilter = projectFilter && projectIdValue === "";
 
     return {
-      projectId: isOrphanProjectFilter ? undefined : projectIdValue,
+      projectId:
+        params.projectId ??
+        (isOrphanProjectFilter ? undefined : projectIdValue),
       projectDeleted: isOrphanProjectFilter ? true : undefined,
       filtersWithoutProjectId: otherFilters,
     };
-  }, [params.filters]);
+  }, [params.filters, params.projectId]);
 
   const {
     data: groupsData,
