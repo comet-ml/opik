@@ -2,13 +2,10 @@ package com.comet.opik.domain.retention;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.retention.RetentionPeriod;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.SpanDAO.VelocityEstimate;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
-import com.comet.opik.infrastructure.auth.RequestContext;
-import jakarta.inject.Provider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -25,6 +22,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
+import static com.comet.opik.domain.retention.RetentionUtils.extractInstant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -42,7 +40,7 @@ import static org.mockito.Mockito.when;
  * trigger on the estimation query also breaks span/trace inserts and deletes.
  */
 @ExtendWith(MockitoExtension.class)
-class RetentionRuleServiceVelocityTest {
+class RetentionEstimationServiceTest {
 
     private static final String WORKSPACE_ID = "00000001-0000-0000-0000-000000000000";
     private static final Instant NOW = Instant.parse("2026-03-25T12:00:00Z");
@@ -51,17 +49,13 @@ class RetentionRuleServiceVelocityTest {
     @Mock
     private TransactionTemplate template;
     @Mock
-    private Provider<RequestContext> requestContextProvider;
-    @Mock
-    private IdGenerator idGenerator;
-    @Mock
     private SpanDAO spanDAO;
     @Mock
     private TraceDAO traceDAO;
 
     private final InstantToUUIDMapper uuidMapper = new InstantToUUIDMapper();
     private RetentionConfig config;
-    private RetentionRuleServiceImpl service;
+    private RetentionEstimationService service;
 
     @BeforeEach
     void setUp() {
@@ -73,9 +67,7 @@ class RetentionRuleServiceVelocityTest {
         catchUp.setServiceStartDate(LocalDate.of(2024, 9, 1));
         config.setCatchUp(catchUp);
 
-        service = new RetentionRuleServiceImpl(
-                template, requestContextProvider, idGenerator,
-                spanDAO, traceDAO, uuidMapper, config);
+        service = new RetentionEstimationService(template, spanDAO, traceDAO, uuidMapper, config);
     }
 
     @Nested
@@ -206,11 +198,5 @@ class RetentionRuleServiceVelocityTest {
             assertThat(result.velocity()).isZero();
             assertThat(result.startCursor()).isNull();
         }
-    }
-
-    private static Instant extractInstant(UUID uuid) {
-        long msb = uuid.getMostSignificantBits();
-        long epochMilli = msb >>> 16;
-        return Instant.ofEpochMilli(epochMilli);
     }
 }
