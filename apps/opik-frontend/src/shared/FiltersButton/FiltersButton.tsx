@@ -104,7 +104,10 @@ const FiltersButton = <TColumnData,>({
           </Button>
         </PopoverTrigger>
       </TooltipWrapper>
-      <PopoverContent className="max-h-[70vh] min-w-[540px] px-8 py-6" align={align}>
+      <PopoverContent
+        className="max-h-[70vh] min-w-[540px] px-8 py-6"
+        align={align}
+      >
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">
             <span className="comet-title-s">Filters</span>

@@ -162,6 +162,7 @@ const useLoadChatPrompt = ({
     chatPromptData,
     chatPromptVersionDataLoaded,
     onMessagesLoaded,
+    skipInitialLoad,
   ]);
 
   return {
