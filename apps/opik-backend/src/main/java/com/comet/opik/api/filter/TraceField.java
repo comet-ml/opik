@@ -1,11 +1,7 @@
 package com.comet.opik.api.filter;
 
-import com.comet.opik.api.Source;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-
-import java.util.Optional;
-import java.util.function.Function;
 
 @Getter
 @RequiredArgsConstructor
@@ -39,19 +35,9 @@ public enum TraceField implements Field {
     CUSTOM(CUSTOM_QUERY_PARAM, FieldType.CUSTOM),
     ANNOTATION_QUEUE_IDS(ANNOTATION_QUEUE_IDS_QUERY_PARAM, FieldType.LIST),
     EXPERIMENT_ID(EXPERIMENT_ID_QUERY_PARAM, FieldType.STRING_EXACT),
-    SOURCE(SOURCE_QUERY_PARAM, FieldType.ENUM_LEGACY, Source::legacyFallbackDbValue),
+    SOURCE(SOURCE_QUERY_PARAM, FieldType.ENUM_LEGACY),
     ;
 
     private final String queryParamField;
     private final FieldType type;
-    private final Function<String, Optional<String>> legacyFallback;
-
-    TraceField(String queryParamField, FieldType type) {
-        this(queryParamField, type, null);
-    }
-
-    @Override
-    public Optional<String> legacyFallbackDbValue(String filterValue) {
-        return legacyFallback != null ? legacyFallback.apply(filterValue) : Optional.empty();
-    }
 }

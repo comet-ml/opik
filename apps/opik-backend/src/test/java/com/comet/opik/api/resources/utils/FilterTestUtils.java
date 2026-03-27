@@ -1,15 +1,14 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.filter.Field;
+import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 
 import java.time.Instant;
 
+@UtilityClass
 public class FilterTestUtils {
-
-    private FilterTestUtils() {
-    }
 
     public static String getValidValue(Field field) {
         return switch (field.getType()) {

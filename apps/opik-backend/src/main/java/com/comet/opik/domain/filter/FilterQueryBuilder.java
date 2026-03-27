@@ -927,16 +927,8 @@ public class FilterQueryBuilder {
     private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
         var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i);
-
-        if (filter.field().getType() == FieldType.ENUM_LEGACY) {
-            return filter.field().legacyFallbackDbValue(filter.value())
-                    .map(fallback -> "(%s)".formatted(template.formatted(dbField, i, fallback)))
-                    .orElseGet(() -> "(%s)".formatted(
-                            ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM).formatted(dbField,
-                                    i)));
-        }
-
-        return "(%s)".formatted(template.formatted(dbField, i));
+        var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
+        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
     }
 
     private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
