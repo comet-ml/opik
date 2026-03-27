@@ -12,7 +12,7 @@ const mockAddTracesToDataset = vi.fn();
 const mockAddSpansToDataset = vi.fn();
 
 // Mock the API hooks
-vi.mock("@/api/datasets/useDatasetsList", () => ({
+vi.mock("@/api/datasets/useProjectDatasetsList", () => ({
   default: vi.fn(() => ({
     data: {
       content: [

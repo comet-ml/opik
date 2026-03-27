@@ -19,7 +19,8 @@ import PlaygroundHeader from "@/v2/pages/PlaygroundPage/PlaygroundHeader";
 import SetupProviderDialog from "@/v2/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import useActionButtonActions from "@/v2/pages/PlaygroundPage/useActionButtonActions";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
+import useProjectByName from "@/api/projects/useProjectByName";
 import {
   useTriggerProviderValidation,
   useIsRunning,
@@ -36,6 +37,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 const EMPTY_ITEMS: DatasetItem[] = [];
 const EMPTY_DATASETS: Dataset[] = [];
@@ -119,9 +121,18 @@ const PlaygroundPage = () => {
   );
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
 
-  const { data: datasetsData } = useDatasetsList(
-    { workspaceName, page: 1, size: DEFAULT_LOADED_DATASETS },
-    { enabled: canViewDatasets && !!plainDatasetId },
+  const { data: playgroundProject } = useProjectByName(
+    { projectName: PLAYGROUND_PROJECT_NAME },
+    { enabled: !!workspaceName, retry: false },
+  );
+
+  const { data: datasetsData } = useProjectDatasetsList(
+    {
+      projectId: playgroundProject?.id ?? "",
+      page: 1,
+      size: DEFAULT_LOADED_DATASETS,
+    },
+    { enabled: canViewDatasets && !!playgroundProject?.id && !!plainDatasetId },
   );
   const datasetName =
     (datasetsData?.content || EMPTY_DATASETS).find(
