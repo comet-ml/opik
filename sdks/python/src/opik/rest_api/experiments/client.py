@@ -393,7 +393,11 @@ class ExperimentsClient:
         return _response.data
 
     def find_feedback_score_names(
-        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -401,6 +405,8 @@ class ExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -417,7 +423,7 @@ class ExperimentsClient:
         client.experiments.find_feedback_score_names()
         """
         _response = self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids, request_options=request_options
+            experiment_ids=experiment_ids, project_id=project_id, request_options=request_options
         )
         return _response.data
 
@@ -1142,7 +1148,11 @@ class AsyncExperimentsClient:
         return _response.data
 
     async def find_feedback_score_names(
-        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -1150,6 +1160,8 @@ class AsyncExperimentsClient:
         Parameters
         ----------
         experiment_ids : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1169,7 +1181,7 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids, request_options=request_options
+            experiment_ids=experiment_ids, project_id=project_id, request_options=request_options
         )
         return _response.data
 
