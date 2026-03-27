@@ -14,9 +14,8 @@ import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import { BASE_API_URL } from "@/api/api";
 import useAssistantSidebarConfig from "@/api/assistant-sidebar/useAssistantSidebarConfig";
+import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
 
-const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
-const IS_DEV = import.meta.env.DEV;
 const BRIDGE_PROTOCOL_VERSION = 1;
 
 const stopPropagation = (e: Event) => e.stopPropagation();
@@ -90,7 +89,7 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         refs.onRequestVisibility.current(false);
         break;
       default:
-        if (IS_DEV) {
+        if (IS_ASSISTANT_DEV) {
           console.warn(
             `[AssistantBridge] Unhandled sidebar event: "${event}"`,
             data,
@@ -157,10 +156,8 @@ interface AssistantMeta {
 function useAssistantMeta(): AssistantMeta | null {
   const { data: config } = useAssistantSidebarConfig();
 
-  // Local env var overrides the manifest base URL from the config endpoint
-  const resolvedManifestUrl = DEV_BASE_URL
-    ? `${DEV_BASE_URL}/manifest.json`
-    : config?.manifest_url || null;
+  const resolvedManifestUrl =
+    !IS_ASSISTANT_DEV && config?.manifest_url ? config.manifest_url : null;
 
   const manifestBase = resolvedManifestUrl
     ? resolvedManifestUrl.substring(0, resolvedManifestUrl.lastIndexOf("/"))
@@ -175,7 +172,7 @@ function useAssistantMeta(): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: IS_DEV ? "/assistant/shell" : `/assistant/${manifest.shell}`,
+        shellUrl: `/assistant/${manifest.shell}`,
         version: manifest.ver,
       };
     },
@@ -183,6 +180,15 @@ function useAssistantMeta(): AssistantMeta | null {
     staleTime: Infinity,
     retry: 1,
   });
+
+  if (IS_ASSISTANT_DEV) {
+    return {
+      scriptUrl: "/assistant/assistant.js",
+      cssUrl: "/assistant/assistant.css",
+      shellUrl: "/assistant/shell",
+      version: "dev",
+    };
+  }
 
   return data ?? null;
 }
