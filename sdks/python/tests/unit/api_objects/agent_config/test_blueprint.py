@@ -304,6 +304,99 @@ class TestBlueprintPromptResolution:
                 rest_client_=mock_rest,
             )
 
+    def test_prompt_field_type_declared_as_chatprompt__chat_template_structure__resolves_to_chat_prompt(
+        self,
+    ):
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(key="p", type="prompt", value="aaa11111"),
+            ]
+        )
+
+        mock_rest = mock.Mock()
+        version_detail = mock.Mock()
+        version_detail.template_structure = "chat"
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "my-prompt"
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
+
+        fake_chat_prompt = mock.Mock(spec=ChatPrompt)
+        with mock.patch(
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
+            return_value=fake_chat_prompt,
+        ):
+            bp = Blueprint(
+                raw,
+                field_types={"p": ChatPrompt},
+                rest_client_=mock_rest,
+            )
+
+        assert bp["p"] is fake_chat_prompt
+        assert isinstance(bp["p"], ChatPrompt)
+
+    def test_prompt_field_type_declared_as_chatprompt__text_template_structure__still_resolves_to_chat_prompt(
+        self,
+    ):
+        """When the user declared ChatPrompt, we return ChatPrompt even if backend says text."""
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(key="p", type="prompt", value="bbb22222"),
+            ]
+        )
+
+        mock_rest = mock.Mock()
+        version_detail = mock.Mock()
+        version_detail.template_structure = "text"
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "my-prompt"
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
+
+        fake_chat_prompt = mock.Mock(spec=ChatPrompt)
+        with mock.patch(
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
+            return_value=fake_chat_prompt,
+        ):
+            bp = Blueprint(
+                raw,
+                field_types={"p": ChatPrompt},
+                rest_client_=mock_rest,
+            )
+
+        assert bp["p"] is fake_chat_prompt
+
+    def test_prompt_field_type_declared_as_prompt__chat_template_structure__still_resolves_to_prompt(
+        self,
+    ):
+        """When the user declared Prompt, we return Prompt even if backend says chat."""
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(key="p", type="prompt", value="ccc33333"),
+            ]
+        )
+
+        mock_rest = mock.Mock()
+        version_detail = mock.Mock()
+        version_detail.template_structure = "chat"
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "my-prompt"
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
+
+        fake_prompt = mock.Mock(spec=Prompt)
+        with mock.patch(
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
+            return_value=fake_prompt,
+        ):
+            bp = Blueprint(
+                raw,
+                field_types={"p": Prompt},
+                rest_client_=mock_rest,
+            )
+
+        assert bp["p"] is fake_prompt
+
     def test_two_prompt_fields__makes_exactly_one_api_call_per_prompt(self):
         raw = _make_raw_blueprint(
             values=[

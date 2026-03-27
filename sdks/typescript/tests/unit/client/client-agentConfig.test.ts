@@ -5,6 +5,8 @@ import { AgentConfigManager, Blueprint } from "@/agent-config";
 import { OpikApiError } from "@/rest_api";
 import * as OpikApi from "@/rest_api/api";
 import { trackStorage } from "@/decorators/track";
+import { Prompt } from "@/prompt/Prompt";
+import { ChatPrompt } from "@/prompt/ChatPrompt";
 import {
   mockAPIFunction,
   createMockHttpResponsePromise,
@@ -377,6 +379,80 @@ describe("Blueprint value object", () => {
     await expect(
       Blueprint.fromApiResponse({ type: "blueprint", values: [] })
     ).rejects.toThrow("missing required field 'id'");
+  });
+});
+
+describe("Blueprint prompt class hints", () => {
+  function makePromptResponse(commit: string): OpikApi.AgentBlueprintPublic {
+    return {
+      id: "bp-prompt",
+      type: "blueprint",
+      values: [{ key: "MyConfig.p", value: commit, type: "prompt" }],
+    };
+  }
+
+  const chatTemplate = JSON.stringify([{ role: "user", content: "Hi" }]);
+  const textTemplate = "Hello";
+
+  function mockOpikWithPromptCommit(templateStructure: string) {
+    const template = templateStructure === "chat" ? chatTemplate : textTemplate;
+    const opik = {
+      api: {
+        prompts: {
+          getPromptByCommit: vi.fn().mockResolvedValue({
+            id: "prompt-id",
+            name: "my-prompt",
+            requestedVersion: {
+              id: "version-id",
+              promptId: "prompt-id",
+              commit: "abc12345",
+              template,
+              templateStructure,
+              type: "mustache",
+            },
+          }),
+        },
+      },
+    };
+    return opik as unknown as Parameters<typeof Blueprint.fromApiResponse>[1];
+  }
+
+  it("hint=ChatPrompt returns ChatPrompt regardless of templateStructure metadata", async () => {
+    const opik = mockOpikWithPromptCommit("chat");
+    const bp = await Blueprint.fromApiResponse(
+      makePromptResponse("abc12345"),
+      opik,
+      { "MyConfig.p": "ChatPrompt" }
+    );
+    expect(bp.values["MyConfig.p"]).toBeInstanceOf(ChatPrompt);
+  });
+
+  it("hint=Prompt returns Prompt even when templateStructure=chat", async () => {
+    const opik = mockOpikWithPromptCommit("chat");
+    const bp = await Blueprint.fromApiResponse(
+      makePromptResponse("abc12345"),
+      opik,
+      { "MyConfig.p": "Prompt" }
+    );
+    expect(bp.values["MyConfig.p"]).toBeInstanceOf(Prompt);
+  });
+
+  it("no hint uses templateStructure=chat to return ChatPrompt", async () => {
+    const opik = mockOpikWithPromptCommit("chat");
+    const bp = await Blueprint.fromApiResponse(
+      makePromptResponse("abc12345"),
+      opik
+    );
+    expect(bp.values["MyConfig.p"]).toBeInstanceOf(ChatPrompt);
+  });
+
+  it("no hint uses templateStructure=text to return Prompt", async () => {
+    const opik = mockOpikWithPromptCommit("text");
+    const bp = await Blueprint.fromApiResponse(
+      makePromptResponse("abc12345"),
+      opik
+    );
+    expect(bp.values["MyConfig.p"]).toBeInstanceOf(Prompt);
   });
 });
 

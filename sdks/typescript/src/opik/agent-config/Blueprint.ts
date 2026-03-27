@@ -5,6 +5,8 @@ import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 import { deserializeValue } from "./typeHelpers";
 
+export type PromptClassHint = "Prompt" | "ChatPrompt";
+
 export interface BlueprintData {
   id: string;
   name?: string;
@@ -15,6 +17,7 @@ export interface BlueprintData {
   createdAt?: Date;
   values: OpikApi.AgentConfigValuePublic[];
   opik?: OpikClient;
+  promptClassHints?: Record<string, PromptClassHint>;
 }
 
 export class Blueprint {
@@ -28,6 +31,7 @@ export class Blueprint {
   private readonly _rawValues: OpikApi.AgentConfigValuePublic[];
   private readonly _opik?: OpikClient;
   private readonly _resolvedValues: Record<string, unknown>;
+  private readonly _promptClassHints: Record<string, PromptClassHint>;
 
   constructor(data: BlueprintData) {
     this.id = data.id;
@@ -39,6 +43,7 @@ export class Blueprint {
     this.createdAt = data.createdAt;
     this._rawValues = data.values;
     this._opik = data.opik;
+    this._promptClassHints = data.promptClassHints ?? {};
 
     this._resolvedValues = {};
     for (const v of this._rawValues) {
@@ -48,7 +53,8 @@ export class Blueprint {
 
   static async fromApiResponse(
     response: OpikApi.AgentBlueprintPublic,
-    opik?: OpikClient
+    opik?: OpikClient,
+    promptClassHints?: Record<string, PromptClassHint>
   ): Promise<Blueprint> {
     if (!response.id) {
       throw new Error("Invalid API response: missing required field 'id'");
@@ -63,6 +69,7 @@ export class Blueprint {
       createdAt: response.createdAt,
       values: response.values,
       opik,
+      promptClassHints,
     });
     await blueprint.resolvePrompts();
     return blueprint;
@@ -87,7 +94,11 @@ export class Blueprint {
       }
 
       if (v.type === "prompt") {
-        if (versionDetail.templateStructure === "chat") {
+        const hint = this._promptClassHints[v.key];
+        const useChatPrompt =
+          hint === "ChatPrompt" ||
+          (hint === undefined && versionDetail.templateStructure === "chat");
+        if (useChatPrompt) {
           this._resolvedValues[v.key] = ChatPrompt.fromApiResponse(
             promptDetail,
             versionDetail,

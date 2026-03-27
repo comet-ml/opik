@@ -3,7 +3,7 @@ import { OpikApiError } from "@/rest_api";
 import * as OpikApi from "@/rest_api/api";
 import { generateId } from "@/utils/generateId";
 import { logger } from "@/utils/logger";
-import { Blueprint } from "./Blueprint";
+import { Blueprint, type PromptClassHint } from "./Blueprint";
 
 export interface CreateBlueprintOptions {
   values: OpikApi.AgentConfigValueWrite[];
@@ -15,6 +15,7 @@ export interface GetBlueprintOptions {
   name?: string;
   env?: string;
   maskId?: string;
+  promptClassHints?: Record<string, PromptClassHint>;
 }
 
 export class AgentConfigManager {
@@ -125,7 +126,7 @@ export class AgentConfigManager {
   async getBlueprint(
     options: GetBlueprintOptions = {}
   ): Promise<Blueprint | null> {
-    const { id, name, env, maskId } = options;
+    const { id, name, env, maskId, promptClassHints } = options;
 
     try {
       let response: OpikApi.AgentBlueprintPublic;
@@ -166,7 +167,7 @@ export class AgentConfigManager {
         );
       }
 
-      return await Blueprint.fromApiResponse(response, this.opik);
+      return await Blueprint.fromApiResponse(response, this.opik, promptClassHints);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         return null;
