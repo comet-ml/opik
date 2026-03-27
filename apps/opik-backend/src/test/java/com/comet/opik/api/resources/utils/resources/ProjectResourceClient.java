@@ -4,6 +4,8 @@ import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.TokenUsageNames;
+import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
@@ -134,6 +136,32 @@ public class ProjectResourceClient {
 
             return null;
         }
+    }
+
+    public KpiCardResponse getKpiCards(UUID projectId, KpiCardRequest request, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("kpi-cards")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
+
+            return response.readEntity(KpiCardResponse.class);
+        }
+    }
+
+    public Response getKpiCardsRaw(UUID projectId, KpiCardRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("kpi-cards")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 
     public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
