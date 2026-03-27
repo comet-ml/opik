@@ -9,7 +9,7 @@ import isBoolean from "lodash/isBoolean";
 
 import useTracesList from "@/api/traces/useTracesList";
 import useSpansList from "@/api/traces/useSpansList";
-import { Span, Trace } from "@/types/traces";
+import { Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { Sorting } from "@/types/sorting";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
@@ -28,6 +28,7 @@ type UseTracesOrSpansListParams = {
   fromTime?: string;
   toTime?: string;
   exclude?: string[];
+  logsSource?: LOGS_SOURCE;
 };
 
 export type TracesOrSpansListData = {

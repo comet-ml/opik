@@ -21,7 +21,7 @@ import {
   ANNOTATION_QUEUE_SCOPE,
   AnnotationQueue,
 } from "@/types/annotation-queues";
-import { Trace, Thread } from "@/types/traces";
+import { Trace, Thread, LOGS_SOURCE } from "@/types/traces";
 import {
   getFeedbackScoresByUser,
   getCommentsByUser,
@@ -93,6 +93,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       filters: annotationQueueFilter,
       search: "",
       truncate: false,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       enabled: false,
@@ -108,6 +109,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       filters: annotationQueueFilter,
       search: "",
       truncate: false,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       enabled: false,

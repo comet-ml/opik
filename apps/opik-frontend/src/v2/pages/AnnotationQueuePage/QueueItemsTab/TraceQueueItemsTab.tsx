@@ -29,7 +29,7 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { Trace } from "@/types/traces";
+import { Trace, LOGS_SOURCE } from "@/types/traces";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import {
   convertColumnDataToColumn,
@@ -382,6 +382,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       size: size as number,
       search: search as string,
       truncate: truncationEnabled,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       placeholderData: keepPreviousData,
@@ -393,6 +394,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       projectId: annotationQueue.project_id,
       filters,
       search: search as string,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       placeholderData: keepPreviousData,

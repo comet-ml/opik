@@ -21,6 +21,7 @@ import NoData from "@/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { COLOR_VARIANTS_MAP } from "@/constants/colorVariants";
 import { Filter } from "@/types/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
@@ -57,6 +58,7 @@ interface MetricContainerChartProps {
   getLabelAction?: (label: string) => LegendLabelAction | undefined;
   isAggregateTotal?: boolean;
   customEmptyState?: React.ReactNode;
+  logsSource?: LOGS_SOURCE;
 }
 
 const customColorMap = {
@@ -98,6 +100,7 @@ const MetricContainerChart = ({
   getLabelAction,
   isAggregateTotal = false,
   customEmptyState,
+  logsSource,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -110,6 +113,7 @@ const MetricContainerChart = ({
       threadFilters,
       spanFilters,
       breakdown,
+      logsSource,
     },
     {
       enabled: !!projectId,
