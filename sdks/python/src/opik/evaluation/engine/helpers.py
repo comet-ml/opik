@@ -35,7 +35,7 @@ def evaluate_llm_task_context(
         trace_data.init_end_time()
 
         client = client if client is not None else opik_client.get_client_cached()
-        client.trace(**trace_data.as_parameters)
+        client.__internal_api__trace__(**trace_data.as_parameters)
 
         # Only insert experiment item if an experiment is provided
         if experiment is not None:
@@ -69,4 +69,4 @@ def evaluate_llm_task_result_spans_context(
             trace_data.error_info = error_info
 
         trace_data.init_end_time()
-        client.trace(**trace_data.as_parameters)
+        client.__internal_api__trace__(**trace_data.as_parameters)

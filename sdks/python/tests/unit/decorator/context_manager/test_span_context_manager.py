@@ -89,9 +89,11 @@ def test_start_as_current_span__inside__happy_flow(fake_backend, temp_file_15kb)
                     "original_usage.total_tokens": 121,
                 },
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -161,9 +163,11 @@ def test_start_as_current_span__outside__happy_flow(fake_backend):
                 model="gpt-3.5-turbo",
                 provider="openai",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -237,9 +241,11 @@ def test_start_as_current_span__mixed__inside_override_outside(fake_backend):
                 model="gpt-3.5-turbo",
                 provider="openai",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -296,6 +302,7 @@ def test_start_as_current_span__user_error__logged_and_raised(fake_backend):
                 ),
                 total_cost=None,
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         error_info=ErrorInfoDict(
@@ -304,6 +311,7 @@ def test_start_as_current_span__user_error__logged_and_raised(fake_backend):
             traceback=ANY_STRING,
         ),
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -373,12 +381,15 @@ def test_start_as_current_span__distributed_headers_provided__child_span_created
                         end_time=ANY_BUT_NONE,
                         project_name="test-project",
                         last_updated_at=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
@@ -444,9 +455,11 @@ def test_start_as_current_span__parent_trace_exists__new_not_created(fake_backen
                 model="gpt-3.5-turbo",
                 provider="openai",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])

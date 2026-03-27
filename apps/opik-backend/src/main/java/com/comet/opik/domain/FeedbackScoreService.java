@@ -59,7 +59,8 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(UUID projectId, SpanType type);
 
-    Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
+    Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
+            @Nullable UUID projectId);
 
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -294,8 +295,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
-        return dao.getExperimentsFeedbackScoreNames(experimentIds)
+    public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds, UUID projectId) {
+        return dao.getExperimentsFeedbackScoreNames(experimentIds, projectId)
                 .map(scores -> scores.stream()
                         .map(score -> FeedbackScoreNames.ScoreName.builder()
                                 .name(score.name())

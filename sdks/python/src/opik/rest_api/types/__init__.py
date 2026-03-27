@@ -54,6 +54,7 @@ from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
+from .assistant_sidebar_config_response import AssistantSidebarConfigResponse
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
 from .audio_url import AudioUrl
@@ -651,6 +652,8 @@ from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
+from .workspace_version import WorkspaceVersion
+from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -705,6 +708,7 @@ __all__ = [
     "AssertionScoreAveragePublic",
     "AssistantMessage",
     "AssistantMessageRole",
+    "AssistantSidebarConfigResponse",
     "Attachment",
     "AttachmentPage",
     "AudioUrl",
@@ -1257,4 +1261,6 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
 ]

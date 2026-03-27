@@ -78,9 +78,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
     ) -> None:
         """Send root trace or span data to the backend."""
         if isinstance(root, span.SpanData):
-            self._opik_client.span(**root.as_parameters)
+            self._opik_client.__internal_api__span__(**root.as_parameters)
         elif isinstance(root, trace.TraceData):
-            self._opik_client.trace(**root.as_parameters)
+            self._opik_client.__internal_api__trace__(**root.as_parameters)
 
     def start_trace(self, trace_id: Optional[str] = None) -> None:
         if (
@@ -104,13 +104,15 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
         if span_creation_result.trace_data is not None:
             self._opik_context_storage.set_trace_data(span_creation_result.trace_data)
-            self._opik_client.trace(
+            self._opik_client.__internal_api__trace__(
                 **span_creation_result.trace_data.as_start_parameters
             )
             _llama_root.set(span_creation_result.trace_data)
         else:
             self._opik_context_storage.add_span_data(span_creation_result.span_data)
-            self._opik_client.span(**span_creation_result.span_data.as_start_parameters)
+            self._opik_client.__internal_api__span__(
+                **span_creation_result.span_data.as_start_parameters
+            )
             _llama_root.set(span_creation_result.span_data)
 
     def end_trace(
@@ -214,7 +216,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             self._opik_client.config.log_start_trace_span
             and tracing_runtime_config.is_tracing_active()
         ):
-            self._opik_client.span(**span_data.as_start_parameters)
+            self._opik_client.__internal_api__span__(**span_data.as_start_parameters)
 
         # Update root input from first child event
         if parent_id == llama_index_schema.BASE_TRACE_EVENT and span_input is not None:
@@ -259,7 +261,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             span_data.update(output=span_output, error_info=error_info).init_end_time()
 
             if tracing_runtime_config.is_tracing_active():
-                self._opik_client.span(**span_data.as_parameters)
+                self._opik_client.__internal_api__span__(**span_data.as_parameters)
 
             self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
             del self._map_event_id_to_span_data[event_id]

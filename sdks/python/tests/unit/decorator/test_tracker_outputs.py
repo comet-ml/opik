@@ -57,10 +57,13 @@ def test_track__one_nested_function__happyflow(fake_backend):
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -95,8 +98,10 @@ def test_track__one_function_without_nesting__inputs_and_outputs_not_captured__i
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -131,8 +136,10 @@ def test_track__one_function_without_nesting__output_is_dict__output_is_wrapped_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -191,12 +198,16 @@ def test_track__two_nested_functions__happyflow(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -249,6 +260,7 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -258,10 +270,13 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -301,8 +316,10 @@ def test_track__two_traces__happyflow(fake_backend):
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -321,8 +338,10 @@ def test_track__two_traces__happyflow(fake_backend):
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -371,8 +390,10 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
                     "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -428,10 +449,13 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
                             "traceback": ANY_STRING,
                         },
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -479,8 +503,10 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
                     "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -536,8 +562,10 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
         TraceModel(
             id=ID_STORAGE["f_inner-trace-id-thread-1"],
@@ -556,8 +584,10 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
         TraceModel(
             id=ID_STORAGE["f_inner-trace-id-thread-2"],
@@ -576,8 +606,10 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -638,8 +670,10 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -690,8 +724,10 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
                     "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -757,12 +793,16 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -843,14 +883,19 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                         start_time=ANY_BUT_NONE,
                                         end_time=ANY_BUT_NONE,
                                         spans=[],
+                                        source="sdk",
                                     ),
                                 ],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -887,8 +932,10 @@ def test_track__single_async_function_tracked__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -938,10 +985,13 @@ def test_track__nested_async_function_tracked__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -985,8 +1035,10 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1041,10 +1093,13 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1098,10 +1153,13 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1167,12 +1225,16 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1231,10 +1293,13 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1287,8 +1352,10 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
                 output={"output": "f-output"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1350,8 +1417,10 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
                     "message": "custom error message",
                     "traceback": "custom traceback",
                 },
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1393,8 +1462,10 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1446,8 +1517,10 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
                         id=ANY_BUT_NONE, name="span-score-name", value=0.5
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1502,8 +1575,10 @@ def test_track__update_current_span_with_error_info_then_exception_raised__excep
                     "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1536,8 +1611,10 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1571,8 +1648,10 @@ def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1618,8 +1697,10 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
                     "message": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1670,8 +1751,10 @@ def test_track__span_usage_updated__openai_format(fake_backend):
                     "original_usage.prompt_tokens": 20,
                     "original_usage.total_tokens": 30,
                 },
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1726,8 +1809,10 @@ def test_track__span_updated_with_prompts__happy_flow(fake_backend):
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 metadata={"opik_prompts": expected_prompts},
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1782,8 +1867,10 @@ def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
                 output={"output": "f-output"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1838,8 +1925,10 @@ def test_track__function_called_with_mutable_input_which_changed_afterward__chec
                 output={"output": "the-output"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1910,12 +1999,16 @@ def test_track__using_distributed_headers__spans_are_created_correctly(fake_back
                                 input={"x": "inner_function_in_thread-input"},
                                 output={"output": "inner_function_in_thread-output"},
                                 end_time=ANY_BUT_NONE,
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1979,10 +2072,13 @@ def test_track__using_distributed_headers__through_node__spans_are_created_corre
                         input={"x": "inner_function_in_thread-input"},
                         output={"output": "inner_function_in_thread-output"},
                         end_time=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -2040,8 +2136,10 @@ def test_track__functools_partial_function__function_name_extracted_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

@@ -141,6 +141,12 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canEditAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.ANNOTATION_QUEUE_EDIT),
+    [checkNullablePermission],
+  );
+
   const canDeleteAnnotationQueues = useMemo(
     () =>
       checkNullablePermission(
@@ -238,6 +244,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canCreateProjects,
     canDeleteProjects,
     canCreateAnnotationQueues,
+    canEditAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
     canCreatePrompts,

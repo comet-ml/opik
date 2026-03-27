@@ -148,6 +148,15 @@ public interface TraceDAO {
      * @param lowerBound      global lower bound for experiment_items subquery
      */
     Mono<Long> deleteForRetentionBounded(Map<String, UUID> workspaceMinIds, UUID cutoffId, UUID lowerBound);
+
+    /**
+     * Scout for the first day with trace data in a month-sized range.
+     * Used to find the actual start of data for huge workspaces where the full estimation query fails.
+     *
+     * @return the first date with data as an Instant (start of day UTC), or empty if no data in range.
+     *         Throws with code 158 if even the month range exceeds row limits.
+     */
+    Mono<Instant> scoutFirstDayWithData(String workspaceId, UUID rangeStart, UUID rangeEnd);
 }
 
 @Slf4j
@@ -1789,6 +1798,18 @@ class TraceDAOImpl implements TraceDAO {
                 AND trace_id \\< :cutoff_id
             )
             SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    private static final String SCOUT_FIRST_DAY_WITH_DATA = """
+            SELECT toDate(UUIDv7ToDateTime(toUUID(id))) AS day
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id >= :range_start AND id \\< :range_end
+            GROUP BY day
+            ORDER BY day
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -3911,6 +3932,31 @@ class TraceDAOImpl implements TraceDAO {
 
                     return Mono.from(statement.execute())
                             .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    @Override
+    public Mono<Instant> scoutFirstDayWithData(@NonNull String workspaceId,
+            @NonNull UUID rangeStart, @NonNull UUID rangeEnd) {
+        log.info("Scouting first day with data for workspace '{}', range=['{}', '{}')",
+                workspaceId, rangeStart, rangeEnd);
+
+        var template = getSTWithLogComment(SCOUT_FIRST_DAY_WITH_DATA,
+                "retention_scout_first_day", workspaceId, "");
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("range_start", rangeStart)
+                            .bind("range_end", rangeEnd);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, metadata) -> {
+                                var day = row.get("day", java.time.LocalDate.class);
+                                return day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+                            })))
+                            .defaultIfEmpty(Instant.MAX); // sentinel: no data in range
                 });
     }
 }

@@ -1,7 +1,7 @@
 from typing import List, Any, Optional, Dict
 
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from opik.types import ErrorInfoDict
+from opik.types import ErrorInfoDict, TraceSource
 
 import dataclasses
 import datetime
@@ -64,6 +64,7 @@ class SpanModel:
     Attributes:
         id: Unique identifier for the span.
         start_time: Start time of the span.
+        source: Source of the span, indicating where it originated.
         name: Name of the span, if provided.
         input: Input data associated with the span, if any.
         output: Output data associated with the span, if any.
@@ -89,6 +90,7 @@ class SpanModel:
 
     id: str
     start_time: datetime.datetime
+    source: TraceSource
     name: Optional[str] = None
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
@@ -144,6 +146,7 @@ class TraceModel:
         name: Optional name for the trace, which can provide a descriptive
             label.
         project_name: Name of the project associated with the trace.
+        source: Source of the trace, indicating where it originated.
         input: Optional dictionary containing the input data
             associated with the trace.
         output: Optional dictionary containing the output data
@@ -170,6 +173,7 @@ class TraceModel:
     start_time: datetime.datetime
     name: Optional[str]
     project_name: str
+    source: TraceSource
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None

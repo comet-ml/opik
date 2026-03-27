@@ -429,11 +429,20 @@ public class ExperimentResourceClient {
     }
 
     public FeedbackScoreNames getFeedbackScoreNames(List<UUID> experimentIds, String apiKey, String workspaceName) {
-        var ids = JsonUtils.writeValueAsString(experimentIds);
+        return getFeedbackScoreNames(experimentIds, null, apiKey, workspaceName);
+    }
+
+    public FeedbackScoreNames getFeedbackScoreNames(List<UUID> experimentIds, UUID projectId, String apiKey,
+            String workspaceName) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
-                .path("names")
-                .queryParam("experiment_ids", ids);
+                .path("names");
+        if (experimentIds != null) {
+            webTarget = webTarget.queryParam("experiment_ids", JsonUtils.writeValueAsString(experimentIds));
+        }
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
         try (var response = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)

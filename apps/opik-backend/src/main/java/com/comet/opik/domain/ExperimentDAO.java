@@ -83,7 +83,7 @@ import static java.util.stream.Collectors.toSet;
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
-class ExperimentDAO {
+public class ExperimentDAO {
 
     /**
      * Common parameters for target project IDs query.
@@ -151,6 +151,13 @@ class ExperimentDAO {
             FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY,
             FilterStrategy.EXPERIMENT_SCORES_AGGREGATED,
             FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY);
+
+    private static final String HAS_VERSION1_EXPERIMENTS = """
+            SELECT 1 FROM experiments
+            WHERE workspace_id = :workspace_id AND project_id = ''
+            AND name NOT IN :demo_experiment_names
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'""";
 
     /**
      * The query validates if already exists with this id. Failing if so.
@@ -1729,6 +1736,19 @@ class ExperimentDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
+
+    public Mono<Boolean> hasVersion1Experiments(@NonNull String workspaceId,
+            @NonNull List<String> demoExperimentNames) {
+        var template = getSTWithLogComment(HAS_VERSION1_EXPERIMENTS,
+                "has_version1_experiments", workspaceId, demoExperimentNames);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("demo_experiment_names", demoExperimentNames.toArray(String[]::new))
+                        .execute())
+                        .flatMap(result -> Flux.from(result.map((row, metadata) -> true))))
+                .hasElements();
+    }
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment, @NonNull String executionPolicyJson) {

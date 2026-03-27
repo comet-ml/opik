@@ -6,7 +6,7 @@ from typing import (
 import opik.context_storage as context_storage
 import opik.datetime_helpers as datetime_helpers
 from opik.api_objects import helpers, span, trace
-from opik.types import DistributedTraceHeadersDict
+from opik.types import DistributedTraceHeadersDict, TraceSource
 
 from . import arguments_helpers
 
@@ -38,6 +38,7 @@ def create_span_respecting_context(
     opik_context_storage: Optional[context_storage.OpikContextStorage] = None,
     should_create_duplicate_root_span: bool = True,
     preset_trace_id: Optional[str] = None,
+    source: Optional[TraceSource] = None,
 ) -> SpanCreationResult:
     """
     Handles different span creation flows.
@@ -51,6 +52,7 @@ def create_span_respecting_context(
             start_span_arguments=start_span_arguments,
             parent_span_id=distributed_trace_headers["opik_parent_span_id"],
             trace_id=distributed_trace_headers["opik_trace_id"],
+            source=source,
         )
 
         return SpanCreationResult(None, span_data, should_process_span_data=True)
@@ -81,6 +83,7 @@ def create_span_respecting_context(
             start_span_arguments=start_span_arguments,
             parent_span_id=current_span_data.id,
             trace_id=current_span_data.trace_id,
+            source=source if source is not None else current_span_data.source,
         )
 
         return SpanCreationResult(None, span_data, should_process_span_data=True)
@@ -103,6 +106,7 @@ def create_span_respecting_context(
             start_span_arguments=start_span_arguments,
             parent_span_id=None,
             trace_id=current_trace_data.id,
+            source=source if source is not None else current_trace_data.source,
         )
 
         return SpanCreationResult(None, span_data, should_process_span_data=True)
@@ -119,12 +123,14 @@ def create_span_respecting_context(
             tags=start_span_arguments.tags,
             project_name=start_span_arguments.project_name,
             thread_id=start_span_arguments.thread_id,
+            source=source if source is not None else "sdk",
         )
 
         current_span_data = arguments_helpers.create_span_data(
             start_span_arguments=start_span_arguments,
             parent_span_id=None,
             trace_id=current_trace_data.id,
+            source=source,
         )
 
     return SpanCreationResult(

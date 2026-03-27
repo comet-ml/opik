@@ -1209,6 +1209,19 @@ public class SpanDAO {
             ;
             """;
 
+    private static final String ESTIMATE_VELOCITY_FOR_RETENTION = """
+            SELECT
+                toUInt64(if(count() = 0, 0,
+                    uniq(id) / greatest(dateDiff('week', UUIDv7ToDateTime(toUUID(min(id))), now()), 1)
+                )) AS spans_per_week,
+                UUIDv7ToDateTime(toUUID(min(id))) AS oldest_span_time
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND trace_id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
             SELECT
                 DISTINCT id, workspace_id
@@ -2849,6 +2862,38 @@ public class SpanDAO {
 
                     return Mono.from(statement.execute())
                             .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    /**
+     * Result of the velocity estimation query: spans/week and the oldest span timestamp.
+     */
+    public record VelocityEstimate(long spansPerWeek, Instant oldestSpanTime) {
+    }
+
+    /**
+     * Estimate the span velocity (spans/week) for a workspace in the catch-up range.
+     * Also returns the oldest span timestamp to use as the catch-up cursor start.
+     *
+     * @return velocity estimate with oldest span time, or empty Mono if no data exists
+     * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
+     */
+    public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
+        log.info("Estimating retention velocity for workspace '{}'", workspaceId);
+
+        var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
+                "retention_estimate_velocity", workspaceId, "");
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("cutoff_id", cutoffId);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, metadata) -> new VelocityEstimate(
+                                    row.get("spans_per_week", Long.class),
+                                    row.get("oldest_span_time", Instant.class)))));
                 });
     }
 

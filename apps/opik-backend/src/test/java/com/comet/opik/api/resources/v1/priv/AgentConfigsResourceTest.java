@@ -1654,6 +1654,69 @@ class AgentConfigsResourceTest {
 
             assertConfigValues(expectedValues, latestBlueprint.values());
         }
+
+        @Test
+        @DisplayName("Success: auto-created blueprint gets correct name when intermediate blueprints exist")
+        void createPromptVersion__whenIntermediateBlueprintsExist__thenAutoUpdateUsesCorrectName() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var promptName = "test-prompt-" + UUID.randomUUID();
+            var prompt = com.comet.opik.api.Prompt.builder()
+                    .name(promptName)
+                    .build();
+
+            promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion1 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit1 = promptVersion1.commit();
+
+            // v1: blueprint with prompt reference
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description("Initial config with prompt")
+                                    .values(List.of(
+                                            AgentConfigValue.builder().key("system_prompt").value(commit1)
+                                                    .type(ValueType.PROMPT).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            // v2: blueprint that adds a different parameter (prompt reference stays from v1)
+            agentConfigsResourceClient.updateAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description("Second blueprint with other param")
+                                    .values(List.of(
+                                            AgentConfigValue.builder().key("temperature").value("0.7")
+                                                    .type(ValueType.FLOAT).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // create new prompt version -> triggers auto blueprint creation
+            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit2 = promptVersion2.commit();
+
+            Awaitility.await().untilAsserted(() -> {
+                var latestBlueprint = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                        TEST_WORKSPACE, HttpStatus.SC_OK);
+
+                assertThat(latestBlueprint).isNotNull();
+                assertThat(latestBlueprint.name()).isEqualTo("v3");
+
+                var promptValue = latestBlueprint.values().stream()
+                        .filter(v -> v.key().equals("system_prompt"))
+                        .findFirst()
+                        .orElseThrow();
+                assertThat(promptValue.value()).isEqualTo(commit2);
+            });
+        }
     }
 
     @Nested

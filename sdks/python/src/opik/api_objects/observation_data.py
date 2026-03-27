@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, TypeVar
 
 import opik.api_objects.attachment as attachment
 import opik.datetime_helpers as datetime_helpers
-from opik.types import ErrorInfoDict, FeedbackScoreDict
+from opik.types import ErrorInfoDict, FeedbackScoreDict, TraceSource
 from . import data_helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ class ObservationData:
     project_name: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
     attachments: Optional[List[attachment.Attachment]] = None
+    source: TraceSource = "sdk"
 
     def update(self: ObservationDataT, **new_data: Any) -> ObservationDataT:
         """

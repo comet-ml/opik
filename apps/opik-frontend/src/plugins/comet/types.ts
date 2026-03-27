@@ -74,6 +74,7 @@ export enum ManagementPermissionsNames {
   DATASET_EDIT = "dataset_edit",
   DATASET_DELETE = "dataset_delete",
   ANNOTATION_QUEUE_CREATE = "annotation_queue_create",
+  ANNOTATION_QUEUE_EDIT = "annotation_queue_edit",
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_TAG = "trace_tag",
   TRACE_DELETE = "trace_delete",

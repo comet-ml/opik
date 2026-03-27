@@ -170,6 +170,10 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      # Assistant Sidebar CDN configuration (runtime)
+      # Override to pin a specific ollie-console version manifest
+      # ASSISTANT_SIDEBAR_MANIFEST_URL: "https://cdn.comet.com/ollie/v1/manifest-0.1.11.json"
+      # TOGGLE_ASSISTANT_SIDEBAR_ENABLED: "false"
     envFrom:
       - configMapRef:
           name: opik-backend

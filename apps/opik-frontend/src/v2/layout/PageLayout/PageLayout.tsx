@@ -1,11 +1,4 @@
-import React, {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet } from "@tanstack/react-router";
 import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
@@ -16,14 +9,11 @@ import WelcomeWizardDialog from "@/v2/pages-shared/WelcomeWizard/WelcomeWizardDi
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useAssistantSidebarConfig from "@/api/assistant-sidebar/useAssistantSidebarConfig";
 import QuickstartDialog from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { PortalContainerProvider } from "@/lib/portal-container";
-
-// Fallback: load AssistantSidebar directly when plugin system is not active (dev mode)
-const AssistantSidebarFallback = lazy(
-  () => import("@/plugins/comet/AssistantSidebar"),
-);
+import SilentErrorBoundary from "@/shared/SilentErrorBoundary/SilentErrorBoundary";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
@@ -41,23 +31,17 @@ const PageLayout = () => {
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
   );
 
-  const assistantEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ASSISTANT_SIDEBAR_ENABLED,
-  );
-
   const { data: wizardStatus } = useWelcomeWizardStatus({
     enabled: welcomeWizardEnabled,
   });
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
-  const AssistantSidebarPlugin = usePluginsStore(
-    (state) => state.AssistantSidebar,
-  );
+  const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
 
-  // FF gates everything — no wrapper div, no module load when disabled
-  const AssistantSidebar = assistantEnabled
-    ? AssistantSidebarPlugin || AssistantSidebarFallback
-    : null;
+  const { data: assistantConfig } = useAssistantSidebarConfig({
+    enabled: !!AssistantSidebar,
+  });
+  const showAssistantSidebar = !!AssistantSidebar && !!assistantConfig?.enabled;
 
   const isMobile = useMediaQuery("(max-width: 1023px)");
   const pinned = isMobile ? false : storedPinned;
@@ -96,10 +80,6 @@ const PageLayout = () => {
     setShowWelcomeWizard(false);
   }, []);
 
-  const hostRefCallback = useCallback((node: HTMLDivElement | null) => {
-    setHostContainer(node);
-  }, []);
-
   return (
     <section
       className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col"
@@ -107,14 +87,16 @@ const PageLayout = () => {
         {
           "--banner-height": `${bannerHeight}px`,
           "--sidebar-width": pinned ? "240px" : "0px",
-          "--assistant-sidebar-width": `${assistantSidebarWidth}px`,
+          "--assistant-sidebar-width": `${
+            showAssistantSidebar ? assistantSidebarWidth : 0
+          }px`,
         } as React.CSSProperties
       }
     >
       <div className="flex min-h-0 flex-1">
         <PortalContainerProvider value={hostContainer}>
           <div
-            ref={hostRefCallback}
+            ref={setHostContainer}
             className="relative min-w-0 flex-1 overflow-hidden [transform:translateZ(0)]"
           >
             {RetentionBanner ? (
@@ -154,11 +136,11 @@ const PageLayout = () => {
           </div>
         </PortalContainerProvider>
 
-        {AssistantSidebar ? (
+        {showAssistantSidebar ? (
           <div ref={sidebarWrapperRef} className="relative z-[1] w-0 shrink-0">
-            <Suspense fallback={null}>
+            <SilentErrorBoundary>
               <AssistantSidebar onWidthChange={handleSidebarWidthChange} />
-            </Suspense>
+            </SilentErrorBoundary>
           </div>
         ) : null}
       </div>

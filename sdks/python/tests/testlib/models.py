@@ -3,6 +3,7 @@ import datetime
 from typing import Optional, List
 
 from opik.message_processing.emulation import models
+from opik.types import TraceSource
 from .any_compare_helpers import ANY, ANY_BUT_NONE
 
 
@@ -17,6 +18,7 @@ class SpanModel(models.SpanModel):
     attachments: Optional[List[models.AttachmentModel]] = dataclasses.field(
         default_factory=lambda: ANY
     )  # we don't want to check attachments unless explicitly specified in the test
+    source: TraceSource = dataclasses.field(default_factory=lambda: "sdk")
 
 
 @dataclasses.dataclass
@@ -27,6 +29,7 @@ class TraceModel(models.TraceModel):
     attachments: Optional[List[models.AttachmentModel]] = dataclasses.field(
         default_factory=lambda: ANY
     )  # we don't want to check attachments unless explicitly specified in the test
+    source: TraceSource = dataclasses.field(default_factory=lambda: "sdk")
 
 
 @dataclasses.dataclass
