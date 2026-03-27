@@ -219,6 +219,7 @@ export const useOptimizationsNewFormHandlers = () => {
           dataset_name: datasetNameValue,
           objective_name: objectiveName,
           status: OPTIMIZATION_STATUS.INITIALIZED,
+          project_id: activeProjectId ?? undefined,
         },
       });
 

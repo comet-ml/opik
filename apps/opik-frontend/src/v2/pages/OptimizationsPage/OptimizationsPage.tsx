@@ -246,6 +246,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     pageSize,
   } = useOptimizationsView({
     workspaceName,
+    projectId: activeProjectId ?? undefined,
     datasetId,
     search: search || "",
     page: page || 1,
