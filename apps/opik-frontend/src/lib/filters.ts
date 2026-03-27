@@ -1,7 +1,12 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter, Filters } from "@/types/filters";
-import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { DatasetItemColumn } from "@/types/datasets";
+import {
+  COLUMN_DATA_ID,
+  COLUMN_TYPE,
+  DYNAMIC_COLUMN_TYPE,
+} from "@/types/shared";
 import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
   makeEndOfMinute,
@@ -312,4 +317,45 @@ export const mapDynamicColumnTypesToColumnType = (
   }
 
   return COLUMN_TYPE.string;
+};
+
+/**
+ * Build filter column definitions from dataset columns.
+ * Maps each column to a filter with "data." prefix and appends a tags filter.
+ */
+export const buildDatasetFilterColumns = (
+  datasetColumns: DatasetItemColumn[],
+  includeId = false,
+) => {
+  const dataFilterColumns = datasetColumns.map((c) => ({
+    id: `${COLUMN_DATA_ID}.${c.name}`,
+    label: c.name,
+    type: mapDynamicColumnTypesToColumnType(c.types),
+  }));
+  return [
+    ...(includeId ? [{ id: "id", label: "ID", type: COLUMN_TYPE.string }] : []),
+    ...dataFilterColumns,
+    {
+      id: "tags",
+      label: "Tags",
+      type: COLUMN_TYPE.list,
+      iconType: "tags" as const,
+    },
+  ];
+};
+
+/**
+ * Transform data column filters from "data.columnName" format to backend format.
+ * Converts field="data.columnName" to field="data" with key="columnName".
+ * Used for dataset item filtering in the playground.
+ */
+export const transformDataColumnFilters = (filters: Filter[]): Filter[] => {
+  const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
+  return filters.map((filter) => {
+    if (filter.field.startsWith(dataFieldPrefix)) {
+      const columnKey = filter.field.slice(dataFieldPrefix.length);
+      return { ...filter, field: COLUMN_DATA_ID, key: columnKey };
+    }
+    return filter;
+  });
 };

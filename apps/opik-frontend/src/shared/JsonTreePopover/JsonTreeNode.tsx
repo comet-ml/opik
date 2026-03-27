@@ -1,7 +1,8 @@
 import React, { useCallback, useRef, useEffect } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { JsonTreeNodeProps, JsonValue } from "./types";
+import { JsonValue } from "@/types/shared";
+import { JsonTreeNodeProps } from "./types";
 import {
   VALUE_TYPE_STYLES,
   getValueTypeStyle,

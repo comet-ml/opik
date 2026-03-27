@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, RefObject } from "react";
 import { EditorView, keymap, ViewUpdate } from "@codemirror/view";
-import { JsonValue } from "@/shared/JsonTreePopover";
+import { JsonValue } from "@/types/shared";
 
 const MUSTACHE_OPEN = "{{";
 const MUSTACHE_CLOSE = "}}";

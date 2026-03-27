@@ -25,7 +25,7 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { DropdownOption } from "@/types/shared";
 import { ImprovePromptConfig } from "@/v1/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 import PromptVariablesList from "@/v1/pages-shared/llm/PromptVariablesList/PromptVariablesList";
-import { JsonObject } from "@/shared/JsonTreePopover";
+import { JsonObject } from "@/types/shared";
 
 interface MessageValidationError {
   content?: {
