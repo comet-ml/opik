@@ -4,6 +4,11 @@ import com.comet.opik.domain.retention.RetentionPolicyService;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -20,6 +25,8 @@ import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
+import static io.opentelemetry.api.common.AttributeKey.longKey;
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
  * Quartz job for the regular sliding-window retention cycle.
@@ -39,6 +46,9 @@ public class RetentionSlidingWindowJob extends Job implements InterruptableJob {
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
+    private final LongCounter runCounter;
+    private final LongHistogram runDuration;
+
     @Inject
     public RetentionSlidingWindowJob(
             @NonNull RetentionPolicyService retentionPolicyService,
@@ -47,6 +57,20 @@ public class RetentionSlidingWindowJob extends Job implements InterruptableJob {
         this.retentionPolicyService = retentionPolicyService;
         this.lockService = lockService;
         this.config = config;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.retention");
+
+        this.runCounter = meter
+                .counterBuilder("opik.retention.sliding_window.run")
+                .setDescription("Number of sliding window retention job runs")
+                .build();
+
+        this.runDuration = meter
+                .histogramBuilder("opik.retention.sliding_window.duration")
+                .setDescription("Duration of sliding window retention job runs")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
     }
 
     @Override
@@ -58,20 +82,29 @@ public class RetentionSlidingWindowJob extends Job implements InterruptableJob {
 
         Instant now = Instant.now();
         int fraction = computeCurrentFraction(now);
+        long startMs = System.currentTimeMillis();
 
         try {
             lockService.bestEffortLock(
                     RUN_LOCK,
                     retentionPolicyService.executeRetentionCycle(fraction, now),
-                    Mono.fromRunnable(() -> log.debug(
-                            "Retention sliding window: could not acquire lock, another instance is running")),
+                    Mono.fromRunnable(() -> {
+                        log.debug("Retention sliding window: could not acquire lock, another instance is running");
+                        runCounter.add(1, Attributes.of(stringKey("result"), "skipped_lock"));
+                    }),
                     config.getInterval(),
                     Duration.ZERO,
                     true) // holdUntilExpiry: prevent redundant runs across instances
                     .block();
             log.debug("Retention sliding window tick completed: fraction='{}'", fraction);
+            runCounter.add(1, Attributes.of(
+                    stringKey("result"), "success",
+                    longKey("fraction"), (long) fraction));
+            runDuration.record(System.currentTimeMillis() - startMs);
         } catch (Exception e) {
             log.error("Retention sliding window tick failed", e);
+            runCounter.add(1, Attributes.of(stringKey("result"), "error"));
+            runDuration.record(System.currentTimeMillis() - startMs);
         }
     }
 

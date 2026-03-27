@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset daniela:000061_add_catch_up_columns_to_retention_rules
+--changeset daniela:000062_add_catch_up_columns_to_retention_rules
 --comment: Add catch-up tracking columns for progressive historical data deletion
 
 ALTER TABLE retention_rules

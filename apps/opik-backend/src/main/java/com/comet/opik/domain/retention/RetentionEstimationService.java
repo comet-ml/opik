@@ -6,6 +6,10 @@ import com.comet.opik.api.retention.RetentionRule;
 import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -45,6 +49,9 @@ public class RetentionEstimationService {
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
 
+    private final LongCounter rulesEstimated;
+    private final LongHistogram velocityValues;
+
     @Inject
     public RetentionEstimationService(
             @NonNull TransactionTemplate template,
@@ -57,6 +64,20 @@ public class RetentionEstimationService {
         this.traceDAO = traceDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.retention");
+
+        this.rulesEstimated = meter
+                .counterBuilder("opik.retention.estimation.rules_estimated")
+                .setDescription("Number of rules that completed velocity estimation")
+                .build();
+
+        this.velocityValues = meter
+                .histogramBuilder("opik.retention.estimation.velocity")
+                .setDescription("Estimated velocity (spans/week) for rules")
+                .setUnit("spans/week")
+                .ofLongs()
+                .build();
     }
 
     /**
@@ -106,7 +127,9 @@ public class RetentionEstimationService {
                         rule.id(), estimation.velocity(), estimation.startCursor());
                 return null;
             });
+            velocityValues.record(estimation.velocity());
         }
+        rulesEstimated.add(1);
     }
 
     /**

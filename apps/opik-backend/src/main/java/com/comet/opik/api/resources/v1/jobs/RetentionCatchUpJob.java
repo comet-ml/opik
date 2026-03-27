@@ -4,6 +4,11 @@ import com.comet.opik.domain.retention.RetentionCatchUpService;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -19,6 +24,7 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
  * Quartz job for progressive historical data deletion (catch-up).
@@ -38,6 +44,9 @@ public class RetentionCatchUpJob extends Job implements InterruptableJob {
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
+    private final LongCounter runCounter;
+    private final LongHistogram runDuration;
+
     @Inject
     public RetentionCatchUpJob(
             @NonNull RetentionCatchUpService catchUpService,
@@ -46,6 +55,20 @@ public class RetentionCatchUpJob extends Job implements InterruptableJob {
         this.catchUpService = catchUpService;
         this.lockService = lockService;
         this.config = config;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.retention");
+
+        this.runCounter = meter
+                .counterBuilder("opik.retention.catch_up.run")
+                .setDescription("Number of catch-up retention job runs")
+                .build();
+
+        this.runDuration = meter
+                .histogramBuilder("opik.retention.catch_up.duration")
+                .setDescription("Duration of catch-up retention job runs")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
     }
 
     @Override
@@ -55,19 +78,27 @@ public class RetentionCatchUpJob extends Job implements InterruptableJob {
             return;
         }
 
+        long startMs = System.currentTimeMillis();
+
         try {
             lockService.bestEffortLock(
                     RUN_LOCK,
                     catchUpService.executeCatchUpCycle(Instant.now()),
-                    Mono.fromRunnable(() -> log.debug(
-                            "Retention catch-up: could not acquire lock, another instance is running")),
+                    Mono.fromRunnable(() -> {
+                        log.debug("Retention catch-up: could not acquire lock, another instance is running");
+                        runCounter.add(1, Attributes.of(stringKey("result"), "skipped_lock"));
+                    }),
                     config.getCatchUp().getCatchUpInterval(),
                     Duration.ZERO,
                     true) // holdUntilExpiry: prevent redundant runs across instances
                     .block();
             log.debug("Retention catch-up tick completed");
+            runCounter.add(1, Attributes.of(stringKey("result"), "success"));
+            runDuration.record(System.currentTimeMillis() - startMs);
         } catch (Exception e) {
             log.error("Retention catch-up tick failed", e);
+            runCounter.add(1, Attributes.of(stringKey("result"), "error"));
+            runDuration.record(System.currentTimeMillis() - startMs);
         }
     }
 
