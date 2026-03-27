@@ -89,7 +89,7 @@ public class RetentionConfig {
         private LocalDate serviceStartDate = LocalDate.of(2024, 9, 1);
 
         /** Derived: interval between catch-up executions. */
-        public Duration getInterval() {
+        public Duration getCatchUpInterval() {
             return Duration.ofMinutes(intervalMinutes);
         }
     }

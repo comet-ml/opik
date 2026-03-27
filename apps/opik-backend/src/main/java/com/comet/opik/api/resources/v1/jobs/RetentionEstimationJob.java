@@ -8,12 +8,14 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.DisallowConcurrentExecution;
+import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -23,19 +25,19 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * Separated from the HTTP request handler to avoid blocking the request thread
  * with potentially slow ClickHouse queries (especially month-by-month scouting
  * for huge workspaces).
- * Concurrency is guarded by the Redis lock, not by Quartz — doJob() returns immediately
- * and the reactive chain runs in the background. Estimation is idempotent, so
- * incomplete work during shutdown is safely retried on the next cycle.
  */
 @Singleton
 @Slf4j
-public class RetentionEstimationJob extends Job {
+@DisallowConcurrentExecution
+public class RetentionEstimationJob extends Job implements InterruptableJob {
 
     private static final Lock RUN_LOCK = new Lock("retention_policy:estimation_lock");
 
     private final RetentionEstimationService estimationService;
     private final LockService lockService;
     private final RetentionConfig config;
+
+    private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     @Inject
     public RetentionEstimationJob(
@@ -49,21 +51,30 @@ public class RetentionEstimationJob extends Job {
 
     @Override
     public void doJob(JobExecutionContext context) {
-        // estimatePendingRules() calls .block() on DAO reactive chains internally,
-        // so we use subscribeOn(boundedElastic) to avoid blocking a reactor thread.
-        lockService.bestEffortLock(
-                RUN_LOCK,
-                Mono.fromRunnable(estimationService::estimatePendingRules)
-                        .subscribeOn(Schedulers.boundedElastic()),
-                Mono.fromRunnable(() -> log.debug(
-                        "Retention estimation: could not acquire lock, another instance is running")),
-                Duration.ofMinutes(config.getCatchUp().getEstimationIntervalMinutes()),
-                Duration.ZERO,
-                true) // holdUntilExpiry: prevent redundant runs across instances
-                .subscribe(
-                        __ -> {
-                        },
-                        error -> log.error("Retention estimation tick failed", error),
-                        () -> log.debug("Retention estimation tick completed"));
+        if (interrupted.get()) {
+            log.info("Retention estimation job interrupted before execution, skipping");
+            return;
+        }
+
+        try {
+            lockService.bestEffortLock(
+                    RUN_LOCK,
+                    Mono.fromRunnable(estimationService::estimatePendingRules),
+                    Mono.fromRunnable(() -> log.debug(
+                            "Retention estimation: could not acquire lock, another instance is running")),
+                    Duration.ofMinutes(config.getCatchUp().getEstimationIntervalMinutes()),
+                    Duration.ZERO,
+                    true) // holdUntilExpiry: prevent redundant runs across instances
+                    .block();
+            log.debug("Retention estimation tick completed");
+        } catch (Exception e) {
+            log.error("Retention estimation tick failed", e);
+        }
+    }
+
+    @Override
+    public void interrupt() {
+        interrupted.set(true);
+        log.info("Retention estimation job interrupted");
     }
 }

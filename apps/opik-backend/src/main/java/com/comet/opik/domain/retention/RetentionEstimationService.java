@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.domain.retention.RetentionUtils.extractInstant;
+import static com.comet.opik.domain.retention.RetentionUtils.isTooManyRowsException;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -37,8 +38,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 @Singleton
 public class RetentionEstimationService {
-
-    private static final int CH_TOO_MANY_ROWS = 158;
 
     private final TransactionTemplate template;
     private final SpanDAO spanDAO;
@@ -65,8 +64,10 @@ public class RetentionEstimationService {
      * Called by the RetentionEstimationJob on each cycle.
      */
     public void estimatePendingRules() {
+        // Limit rules per cycle to avoid unbounded work — each estimation can trigger
+        // ClickHouse queries (velocity scan + month-by-month scouting in worst case)
         List<RetentionRule> pending = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(RetentionRuleDAO.class).findUnestimatedCatchUpRules());
+                handle -> handle.attach(RetentionRuleDAO.class).findUnestimatedCatchUpRules(10));
 
         if (pending.isEmpty()) {
             log.debug("No rules pending velocity estimation");
@@ -198,17 +199,6 @@ public class RetentionEstimationService {
 
         log.info("Scouting found no data for workspace '{}', no catch-up needed", workspaceId);
         return null;
-    }
-
-    static boolean isTooManyRowsException(Throwable t) {
-        while (t != null) {
-            String msg = t.getMessage();
-            if (msg != null && msg.contains("Code: " + CH_TOO_MANY_ROWS)) {
-                return true;
-            }
-            t = t.getCause();
-        }
-        return false;
     }
 
     record VelocityEstimation(long velocity, UUID startCursor) {

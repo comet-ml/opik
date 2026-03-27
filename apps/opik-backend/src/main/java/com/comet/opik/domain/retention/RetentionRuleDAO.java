@@ -122,8 +122,9 @@ interface RetentionRuleDAO {
             SELECT * FROM retention_rules
             WHERE catch_up_done = false AND enabled = true AND apply_to_past = true
             AND catch_up_velocity IS NULL
+            LIMIT :limit
             """)
-    List<RetentionRule> findUnestimatedCatchUpRules();
+    List<RetentionRule> findUnestimatedCatchUpRules(@Bind("limit") int limit);
 
     /** Set velocity and cursor after estimation. */
     @SqlUpdate("UPDATE retention_rules SET catch_up_velocity = :velocity, catch_up_cursor = :cursor WHERE id = :id")

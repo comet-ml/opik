@@ -52,9 +52,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setMetricsAlertJob();
                 setExperimentDenormalizationJob();
                 setLocalRunnerReaperJob();
-                setRetentionSlidingWindowJob();
-                setRetentionEstimationJob();
-                setRetentionCatchUpJob();
+                setRetentionJobs();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
 
@@ -140,38 +138,24 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 localRunnerConfig.getReaperJobInterval().toJavaDuration(), null);
     }
 
-    private void setRetentionSlidingWindowJob() {
+    private void setRetentionJobs() {
         RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
 
         if (!retentionConfig.isEnabled()) {
-            log.info("Retention sliding window job is disabled, skipping job setup");
+            log.info("Retention jobs are disabled, skipping job setup");
             return;
         }
 
         scheduleRepeatingJob(RetentionSlidingWindowJob.class, retentionConfig.getInterval(), null);
-    }
 
-    private void setRetentionEstimationJob() {
-        RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
-
-        if (!retentionConfig.isEnabled() || !retentionConfig.getCatchUp().isEnabled()) {
-            log.info("Retention estimation job is disabled, skipping job setup");
-            return;
+        if (retentionConfig.getCatchUp().isEnabled()) {
+            scheduleRepeatingJob(RetentionEstimationJob.class,
+                    Duration.ofMinutes(retentionConfig.getCatchUp().getEstimationIntervalMinutes()), null);
+            scheduleRepeatingJob(RetentionCatchUpJob.class,
+                    retentionConfig.getCatchUp().getCatchUpInterval(), null);
+        } else {
+            log.info("Retention catch-up jobs are disabled, skipping estimation and catch-up job setup");
         }
-
-        scheduleRepeatingJob(RetentionEstimationJob.class,
-                Duration.ofMinutes(retentionConfig.getCatchUp().getEstimationIntervalMinutes()), null);
-    }
-
-    private void setRetentionCatchUpJob() {
-        RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
-
-        if (!retentionConfig.isEnabled() || !retentionConfig.getCatchUp().isEnabled()) {
-            log.info("Retention catch-up job is disabled, skipping job setup");
-            return;
-        }
-
-        scheduleRepeatingJob(RetentionCatchUpJob.class, retentionConfig.getCatchUp().getInterval(), null);
     }
 
     private void scheduleRepeatingJob(Class<? extends org.quartz.Job> jobClass, Duration interval,
