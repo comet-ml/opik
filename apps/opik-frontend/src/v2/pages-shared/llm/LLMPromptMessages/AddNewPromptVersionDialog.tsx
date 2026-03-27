@@ -93,7 +93,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   const [promptId, setPromptId] = useState<string | undefined>(prompt?.id);
   const [saveMode, setSaveMode] = useState<SaveMode>(
-    prompt?.id || !canCreatePrompts ? "update" : "new",
+    prompt?.id ? "update" : "new",
   );
   const isEdit = saveMode === "update" && Boolean(promptId);
 
