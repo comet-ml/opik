@@ -167,9 +167,10 @@ class TestBlueprintPromptResolution:
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.template_structure = "chat"
+        version_detail.type = "mustache"
         prompt_detail = mock.Mock()
         prompt_detail.name = "chat-prompt"
+        prompt_detail.template_structure = "chat"
         prompt_detail.requested_version = version_detail
         mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
@@ -195,9 +196,10 @@ class TestBlueprintPromptResolution:
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.template_structure = "chat"
+        version_detail.type = "mustache"
         prompt_detail = mock.Mock()
         prompt_detail.name = "any-prompt"
+        prompt_detail.template_structure = "chat"
         prompt_detail.requested_version = version_detail
         mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
