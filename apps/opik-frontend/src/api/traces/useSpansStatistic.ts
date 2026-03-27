@@ -3,7 +3,8 @@ import api, { QueryConfig, SPANS_REST_ENDPOINT } from "@/api/api";
 import { SPAN_TYPE } from "@/types/traces";
 import { ColumnsStatistic } from "@/types/shared";
 import { Filters } from "@/types/filters";
-import { processFilters } from "@/lib/filters";
+import { generateLogsSourceFilter, processFilters } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 
 type UseSpansStatisticParams = {
   projectId: string;
@@ -13,6 +14,7 @@ type UseSpansStatisticParams = {
   search?: string;
   fromTime?: string;
   toTime?: string;
+  logsSource?: LOGS_SOURCE;
 };
 
 export type UseSpansStatisticResponse = {
@@ -29,6 +31,7 @@ const getSpansStatistic = async (
     search,
     fromTime,
     toTime,
+    logsSource,
   }: UseSpansStatisticParams,
 ) => {
   const { data } = await api.get(`${SPANS_REST_ENDPOINT}stats`, {
@@ -37,7 +40,10 @@ const getSpansStatistic = async (
       project_id: projectId,
       ...(traceId && { trace_id: traceId }),
       ...(type && { type }),
-      ...processFilters(filters),
+      ...processFilters(
+        filters,
+        logsSource ? generateLogsSourceFilter(logsSource) : undefined,
+      ),
       ...(search && { search }),
       ...(fromTime && { from_time: fromTime }),
       ...(toTime && { to_time: toTime }),

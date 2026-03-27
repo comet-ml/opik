@@ -11,12 +11,13 @@ import { Blueprint } from "@/agent-config/Blueprint";
 import type * as OpikApi from "@/rest_api/api";
 
 function makeBlueprintWithRawValues(
-  rawValues: { key: string; value?: string; type: string }[]
+  rawValues: { key: string; value?: string; type: string; description?: string }[]
 ): Blueprint {
   const apiValues = rawValues.map((v) => ({
     key: v.key,
     value: v.value,
     type: v.type as OpikApi.AgentConfigValuePublicType,
+    description: v.description,
   }));
 
   return new Blueprint({
@@ -252,6 +253,58 @@ describe("matchesBlueprint", () => {
         { key: "Cfg.hint", value: "some-hint", type: "string" },
       ]);
       expect(matchesBlueprint(schemaWithOptional, { temperature: 0.5, hint: undefined }, bp, "Cfg")).toBe(false);
+    });
+  });
+
+  describe("field description comparison", () => {
+    it("returns true when values and descriptions both match", () => {
+      const schema = z
+        .object({ temperature: z.number().describe("Sampling temperature") })
+        .describe("Cfg");
+      const bp = makeBlueprintWithRawValues([
+        { key: "Cfg.temperature", value: "0.5", type: "float", description: "Sampling temperature" },
+      ]);
+      expect(matchesBlueprint(schema, { temperature: 0.5 }, bp, "Cfg")).toBe(true);
+    });
+
+    it("returns false when value is same but description changed", () => {
+      const schema = z
+        .object({ temperature: z.number().describe("New description") })
+        .describe("Cfg");
+      const bp = makeBlueprintWithRawValues([
+        { key: "Cfg.temperature", value: "0.5", type: "float", description: "Old description" },
+      ]);
+      expect(matchesBlueprint(schema, { temperature: 0.5 }, bp, "Cfg")).toBe(false);
+    });
+
+    it("returns false when description added locally but blueprint has none", () => {
+      const schema = z
+        .object({ temperature: z.number().describe("Added description") })
+        .describe("Cfg");
+      const bp = makeBlueprintWithRawValues([
+        { key: "Cfg.temperature", value: "0.5", type: "float" },
+      ]);
+      expect(matchesBlueprint(schema, { temperature: 0.5 }, bp, "Cfg")).toBe(false);
+    });
+
+    it("returns false when blueprint has description but local field has none", () => {
+      const schema = z
+        .object({ temperature: z.number() })
+        .describe("Cfg");
+      const bp = makeBlueprintWithRawValues([
+        { key: "Cfg.temperature", value: "0.5", type: "float", description: "Old description" },
+      ]);
+      expect(matchesBlueprint(schema, { temperature: 0.5 }, bp, "Cfg")).toBe(false);
+    });
+
+    it("returns true when both local and blueprint have no description", () => {
+      const schema = z
+        .object({ temperature: z.number() })
+        .describe("Cfg");
+      const bp = makeBlueprintWithRawValues([
+        { key: "Cfg.temperature", value: "0.5", type: "float" },
+      ]);
+      expect(matchesBlueprint(schema, { temperature: 0.5 }, bp, "Cfg")).toBe(true);
     });
   });
 });

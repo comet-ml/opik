@@ -68,7 +68,6 @@ const ProjectSelector: React.FC = () => {
 
   const handleSelect = useCallback(
     (projectId: string) => {
-      setActiveProject(workspaceName, projectId);
       setOpen(false);
       setSearch("");
       navigate({

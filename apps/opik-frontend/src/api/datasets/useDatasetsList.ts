@@ -8,6 +8,7 @@ import { processFilters } from "@/lib/filters";
 
 type UseDatasetsListParams = {
   workspaceName: string;
+  projectId?: string | null;
   withExperimentsOnly?: boolean;
   withOptimizationsOnly?: boolean;
   promptId?: string;
@@ -29,6 +30,7 @@ const getDatasetsList = async (
   { signal }: QueryFunctionContext,
   {
     workspaceName,
+    projectId,
     withExperimentsOnly,
     withOptimizationsOnly,
     promptId,
@@ -44,6 +46,7 @@ const getDatasetsList = async (
     signal,
     params: {
       workspace_name: workspaceName,
+      ...(projectId && { project_id: projectId }),
       ...(withExperimentsOnly && {
         with_experiments_only: withExperimentsOnly,
       }),

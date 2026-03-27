@@ -1,6 +1,7 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, THREADS_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
-import { processFilters } from "@/lib/filters";
+import { generateLogsSourceFilter, processFilters } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 import { Thread } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { Sorting } from "@/types/sorting";
@@ -16,6 +17,7 @@ type UseThreadListParams = {
   truncate?: boolean;
   fromTime?: string;
   toTime?: string;
+  logsSource?: LOGS_SOURCE;
 };
 
 export type UseThreadListResponse = {
@@ -36,6 +38,7 @@ const getThreadList = async (
     truncate,
     fromTime,
     toTime,
+    logsSource,
   }: UseThreadListParams,
 ) => {
   const { data } = await api.get<UseThreadListResponse>(
@@ -44,7 +47,10 @@ const getThreadList = async (
       signal,
       params: {
         project_id: projectId,
-        ...processFilters(filters),
+        ...processFilters(
+          filters,
+          logsSource ? generateLogsSourceFilter(logsSource) : undefined,
+        ),
         ...processSorting(sorting),
         ...(search && { search }),
         size,

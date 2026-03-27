@@ -12,6 +12,7 @@ import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
+import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPage";
@@ -238,6 +239,7 @@ const compareExperimentsRoute = createRoute({
 const evaluationSuitesRoute = createRoute({
   path: "/evaluation-suites",
   getParentRoute: () => projectScopedRoute,
+  component: DatasetsPageGuard,
   staticData: {
     title: "Evaluation suites",
   },

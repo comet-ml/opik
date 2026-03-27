@@ -53,6 +53,7 @@ jobs:
         env:
           OPIK_USAGE_REPORT_ENABLED: false
           COMPOSE_BAKE: false
+          TOGGLE_RUNNERS_ENABLED: "true"
         run: |
           cd ${{ github.workspace }}
           ./opik.sh --backend --port-mapping --build
