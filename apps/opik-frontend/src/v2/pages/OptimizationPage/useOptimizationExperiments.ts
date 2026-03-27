@@ -13,7 +13,7 @@ import {
   aggregateCandidates,
   mergeExperimentScores,
 } from "@/lib/optimizations";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
@@ -22,6 +22,7 @@ import { AggregatedCandidate } from "@/types/optimizations";
 
 export const useOptimizationExperiments = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
 
   const { optimizationId } = useParams({
     select: (params) => params,
@@ -50,6 +51,7 @@ export const useOptimizationExperiments = () => {
   } = useExperimentsList(
     {
       workspaceName,
+      projectId: activeProjectId ?? undefined,
       optimizationId: optimizationId,
       sorting: [{ id: "created_at", desc: false }],
       forceSorting: true,
@@ -70,6 +72,7 @@ export const useOptimizationExperiments = () => {
   const { data: latestExperimentData } = useExperimentsList(
     {
       workspaceName,
+      projectId: activeProjectId ?? undefined,
       optimizationId: optimizationId,
       types: [
         EXPERIMENT_TYPE.TRIAL,
