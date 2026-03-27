@@ -10,6 +10,7 @@ const MAX_LOADED_DATASETS = 10000;
 
 interface UseDatasetVersionSelectParams {
   workspaceName: string;
+  projectId?: string | null;
   search: string;
   openDatasetId: string | null;
 }
@@ -27,6 +28,7 @@ export interface UseDatasetVersionSelectReturn {
 
 export default function useDatasetVersionSelect({
   workspaceName,
+  projectId,
   search,
   openDatasetId,
 }: UseDatasetVersionSelectParams): UseDatasetVersionSelectReturn {
@@ -34,6 +36,7 @@ export default function useDatasetVersionSelect({
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
     {
       workspaceName,
+      ...(projectId && { projectId }),
       page: 1,
       size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
     },
