@@ -210,7 +210,7 @@ const PromptsPage: React.FunctionComponent = () => {
   });
 
   const {
-    permissions: { canDeletePrompts },
+    permissions: { canCreatePrompts, canDeletePrompts },
   } = usePermissions();
 
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
@@ -376,9 +376,11 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button variant="default" size="sm" onClick={handleNewPromptClick}>
-            Create new prompt
-          </Button>
+          {canCreatePrompts && (
+            <Button variant="default" size="sm" onClick={handleNewPromptClick}>
+              Create new prompt
+            </Button>
+          )}
         </div>
       </div>
       <DataTable
@@ -395,7 +397,7 @@ const PromptsPage: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreatePrompts && (
               <Button variant="link" onClick={handleNewPromptClick}>
                 Create new prompt
               </Button>

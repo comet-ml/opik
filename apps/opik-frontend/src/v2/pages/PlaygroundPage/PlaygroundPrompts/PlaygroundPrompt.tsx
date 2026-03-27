@@ -45,6 +45,7 @@ import {
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
 import { useActiveProjectId } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
@@ -89,6 +90,10 @@ const PlaygroundPrompt = ({
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
+
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
 
   const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
     useState(false);
@@ -321,6 +326,7 @@ const PlaygroundPrompt = ({
               variant="outline"
               size="icon-sm"
               onClick={handleSaveChatPrompt}
+              disabled={!canCreatePrompts && !selectedChatPromptId}
               badge={hasUnsavedChatPromptChanges}
             >
               <Save />

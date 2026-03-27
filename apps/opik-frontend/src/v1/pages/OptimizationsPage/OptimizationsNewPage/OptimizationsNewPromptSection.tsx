@@ -24,6 +24,7 @@ import PromptsSelectBox from "@/v1/pages-shared/llm/PromptsSelectBox/PromptsSele
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import AddNewPromptVersionDialog from "@/v1/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 
 type OptimizationsNewPromptSectionProps = {
@@ -47,6 +48,10 @@ const OptimizationsNewPromptSection: React.FC<
   onModelChange,
   onModelConfigChange,
 }) => {
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
+
   const [selectedChatPromptId, setSelectedChatPromptId] = useState<
     string | undefined
   >(undefined);
@@ -135,6 +140,7 @@ const OptimizationsNewPromptSection: React.FC<
                 variant="outline"
                 size="icon-sm"
                 onClick={handleSaveChatPrompt}
+                disabled={!canCreatePrompts && !selectedChatPromptId}
                 badge={hasUnsavedChatPromptChanges}
                 type="button"
               >

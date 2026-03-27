@@ -18,6 +18,7 @@ import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptById from "@/api/prompts/usePromptById";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import PromptsSelectBox from "@/v1/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/v1/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
@@ -69,6 +70,10 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   improvePromptConfig,
   disabled = false,
 }) => {
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
+
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
   const selectedPromptIdRef = useRef<string | undefined>();
@@ -206,7 +211,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         parsePromptVersionContent(promptData?.latest_version),
       ));
 
-  const saveDisabled = message.content === "";
+  const saveDisabled =
+    message.content === "" || (!canCreatePrompts && !promptId);
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&
