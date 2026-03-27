@@ -153,3 +153,9 @@ class Blueprint:
 
     def keys(self) -> typing.KeysView[str]:
         return self._values.keys()
+
+    def get_field_description(self, key: str) -> typing.Optional[str]:
+        for param in self._raw.values:
+            if param.key == key:
+                return param.description
+        return None

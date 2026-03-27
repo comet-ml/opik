@@ -134,4 +134,8 @@ export class Blueprint {
     if (!entry) return undefined;
     return { value: entry.value, type: entry.type };
   }
+
+  getFieldDescription(key: string): string | undefined {
+    return this._rawValues.find((v) => v.key === key)?.description ?? undefined;
+  }
 }

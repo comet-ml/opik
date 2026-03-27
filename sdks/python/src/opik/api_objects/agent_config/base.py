@@ -166,11 +166,13 @@ class AgentConfig:
         if missing_locally:
             return False
 
-        for key, (py_type, value, _desc) in fields_with_values.items():
+        for key, (py_type, value, desc) in fields_with_values.items():
             bp_value = blueprint.get(key)
             local_ser = type_helpers.python_value_to_backend_value(value, py_type)
             bp_ser = type_helpers.python_value_to_backend_value(bp_value, py_type)
             if local_ser != bp_ser:
+                return False
+            if desc != blueprint.get_field_description(key):
                 return False
         return True
 
