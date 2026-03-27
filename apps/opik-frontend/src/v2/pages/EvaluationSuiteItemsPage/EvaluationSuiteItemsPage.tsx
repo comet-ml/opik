@@ -49,12 +49,14 @@ import { useClearDraft, useHasDraft } from "@/store/EvaluationSuiteDraftStore";
 import { DATASET_STATUS, DATASET_TYPE } from "@/types/datasets";
 import { useEffectiveSuiteAssertions } from "@/hooks/useEffectiveSuiteAssertions";
 import { AssertionsListTooltipContent } from "@/v2/pages-shared/experiments/EvaluationSuiteExperiment/AssertionsListTooltipContent";
+import { useActiveProjectId } from "@/store/AppStore";
 import UseEvaluationSuiteDropdown from "./UseEvaluationSuiteDropdown";
 
 const POLLING_INTERVAL_MS = 3000;
 
 function EvaluationSuiteItemsPage(): React.ReactElement {
   const suiteId = useSuiteIdFromURL();
+  const activeProjectId = useActiveProjectId();
 
   const [tab, setTab] = useQueryParam("tab", StringParam);
   const [addVersionDialogOpen, setAddVersionDialogOpen] = useState(false);
@@ -326,6 +328,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               datasetId={suiteId}
               datasetVersionId={latestVersion?.id}
               isEvalSuite={isEvaluationSuite}
+              projectId={activeProjectId}
             />
             {isEvaluationSuite && (
               <Button

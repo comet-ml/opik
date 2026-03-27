@@ -361,6 +361,7 @@ const GeneralDatasetsTab: React.FC = () => {
       storageKeyPrefix: STORAGE_KEY_PREFIX,
       sortedColumns,
       filters,
+      projectId: activeProjectId,
     });
 
   const expandingConfig = useExpandingConfig({
@@ -767,6 +768,7 @@ const GeneralDatasetsTab: React.FC = () => {
         open={openDialog}
         setOpen={setOpenDialog}
         datasetName={query?.datasetName}
+        projectId={activeProjectId}
       />
     </>
   );

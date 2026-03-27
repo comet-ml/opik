@@ -417,6 +417,7 @@ export default function useGroupedExperimentsList(
   } = useDatasetsList(
     {
       workspaceName: params.workspaceName,
+      ...(projectId && { projectId }),
       page: 1,
       size: MAX_ENTITIES_FOR_SORTING,
       withExperimentsOnly: true,

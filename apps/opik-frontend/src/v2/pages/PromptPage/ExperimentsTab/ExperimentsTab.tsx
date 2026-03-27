@@ -364,6 +364,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       sortedColumns,
       filters,
       promptId,
+      projectId: activeProjectId,
     });
 
   const expandingConfig = useExpandingConfig({
