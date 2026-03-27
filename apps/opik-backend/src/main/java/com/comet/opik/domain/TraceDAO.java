@@ -150,6 +150,14 @@ public interface TraceDAO {
     Mono<Long> deleteForRetentionBounded(Map<String, UUID> workspaceMinIds, UUID cutoffId, UUID lowerBound);
 
     /**
+     * Lightweight pre-delete count for observability.
+     * Counts traces in [lowerBound, cutoffId) without the experiment_items exclusion subquery
+     * to avoid join cost. This is an upper-bound ceiling with >99% precision (very few traces
+     * are linked to experiments in practice).
+     */
+    Mono<Long> countForRetention(List<String> workspaceIds, UUID cutoffId, UUID lowerBound);
+
+    /**
      * Scout for the first day with trace data in a month-sized range.
      * Used to find the actual start of data for huge workspaces where the full estimation query fails.
      *
@@ -1798,6 +1806,18 @@ class TraceDAOImpl implements TraceDAO {
                 AND trace_id \\< :cutoff_id
             )
             SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    // Lightweight pre-delete count for observability. Omits the experiment_items exclusion subquery
+    // to avoid the join cost; this makes it an upper-bound ceiling with >99% precision in practice
+    // (very few traces are linked to experiments).
+    private static final String COUNT_FOR_RETENTION = """
+            SELECT count() FROM traces
+            WHERE workspace_id IN :workspace_ids
+            AND id >= :lower_bound
+            AND id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -3892,6 +3912,28 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
+    public Mono<Long> countForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+            @NonNull UUID lowerBound) {
+        if (workspaceIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_traces", null,
+                workspaceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("cutoff_id", cutoffId)
+                            .bind("lower_bound", lowerBound);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, meta) -> row.get(0, Long.class))));
+                });
+    }
+
+    @Override
     public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds,
             @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
         Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
@@ -3938,7 +3980,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Mono<Instant> scoutFirstDayWithData(@NonNull String workspaceId,
             @NonNull UUID rangeStart, @NonNull UUID rangeEnd) {
-        log.info("Scouting first day with data for workspace '{}', range=['{}', '{}')",
+        log.debug("Scouting first day with data for workspace '{}', range=['{}', '{}')",
                 workspaceId, rangeStart, rangeEnd);
 
         var template = getSTWithLogComment(SCOUT_FIRST_DAY_WITH_DATA,

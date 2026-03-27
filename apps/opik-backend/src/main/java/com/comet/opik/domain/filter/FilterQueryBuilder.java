@@ -207,7 +207,8 @@ public class FilterQueryBuilder {
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             Map.entry(FieldType.MAP,
                                     "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) = lower(:filter%2$d)"),
-                            Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"))))
+                            Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.ENUM_LEGACY, "(%1$s = :filter%2$d OR %1$s = '%3$s')"))))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s != :filter%2$d"),
@@ -227,7 +228,8 @@ public class FilterQueryBuilder {
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             Map.entry(FieldType.MAP,
                                     "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) != lower(:filter%2$d)"),
-                            Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"))))
+                            Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.ENUM_LEGACY, "(%1$s != :filter%2$d AND %1$s != '%3$s')"))))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s > :filter%2$d"),
@@ -925,20 +927,8 @@ public class FilterQueryBuilder {
     private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
         var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i);
-        var formattedTemplate = template.formatted(dbField, i);
-
-        return filter.field().legacyFallbackDbValue(filter.value())
-                .map(fallback -> buildWithLegacyFallback(filter.operator(), dbField, i, fallback, formattedTemplate))
-                .orElse("(%s)".formatted(formattedTemplate));
-    }
-
-    private static String buildWithLegacyFallback(
-            Operator operator, String dbField, int i, String fallback, String formattedTemplate) {
-        return switch (operator) {
-            case EQUAL -> "(%s = :filter%d OR %s = '%s')".formatted(dbField, i, dbField, fallback);
-            case NOT_EQUAL -> "(%s != :filter%d AND %s != '%s')".formatted(dbField, i, dbField, fallback);
-            default -> "(%s)".formatted(formattedTemplate);
-        };
+        var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
+        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
     }
 
     private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {

@@ -106,17 +106,19 @@ class RetentionPolicyServiceTest {
     private SpanResourceClient spanClient;
     private RetentionPolicyService retentionPolicyService;
     private RetentionCatchUpService catchUpService;
+    private RetentionEstimationService estimationService;
     private TransactionTemplateAsync templateAsync;
     private IdGenerator idGenerator;
 
     @BeforeAll
     void beforeAll(ClientSupport client, RetentionPolicyService retentionPolicyService,
-            RetentionCatchUpService catchUpService,
+            RetentionCatchUpService catchUpService, RetentionEstimationService estimationService,
             TransactionTemplateAsync templateAsync, IdGenerator idGenerator) {
         this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
         this.retentionPolicyService = retentionPolicyService;
+        this.estimationService = estimationService;
         this.catchUpService = catchUpService;
         this.templateAsync = templateAsync;
         this.idGenerator = idGenerator;
@@ -519,14 +521,18 @@ class RetentionPolicyServiceTest {
             waitForRows("traces", WS_SMALL, 3);
             waitForRows("spans", WS_SMALL, 11);
 
-            // Create rule with applyToPast=true — velocity estimation runs during creation
+            // Create rule with applyToPast=true — saved as pending estimation (no velocity/cursor yet)
             var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.SHORT_14D)
                     .applyToPast(true).build();
             var created = retentionClient.createAndGet(rule, WS_SMALL_API_KEY, WS_SMALL_NAME);
 
-            // Rule should have velocity estimated and catch-up pending
+            // Rule pending estimation: no velocity, no cursor, not done
             assertThat(created.catchUpDone()).isFalse();
-            assertThat(created.catchUpCursor()).isNotNull();
+            assertThat(created.catchUpVelocity()).isNull();
+            assertThat(created.catchUpCursor()).isNull();
+
+            // Run estimation job — populates velocity + cursor
+            estimationService.estimatePendingRules();
 
             // Run catch-up — small workspace should be processed in one shot
             catchUpService.executeCatchUpCycle(now).block();
