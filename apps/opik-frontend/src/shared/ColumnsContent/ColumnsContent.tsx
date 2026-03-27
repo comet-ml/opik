@@ -104,7 +104,8 @@ const ColumnsContent = <TColumnData,>({
   );
 
   const selectedCount = selectedColumns.filter(
-    (id) => !excludeFromSelectAll.includes(id),
+    (id) =>
+      !excludeFromSelectAll.includes(id) && selectAllColumnsIds.includes(id),
   ).length;
   const totalCount = selectAllColumnsIds.length;
 

@@ -2991,6 +2991,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       responses:
         "200":
           description: Feedback Scores resource
@@ -5208,6 +5213,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TokenUsageNames"
+  /v1/private/projects/{id}/kpi-cards:
+    post:
+      tags:
+      - Projects
+      summary: Get Project KPI Cards
+      description: Gets KPI card metrics for a project
+      operationId: getProjectKpiCards
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KpiCardRequest"
+      responses:
+        "200":
+          description: KPI Card Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KpiCardResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -9321,9 +9358,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -9766,9 +9803,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10221,9 +10258,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -16580,6 +16617,50 @@ components:
           type: array
           items:
             type: string
+    KpiCardResponse:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiMetric"
+    KpiMetric:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - count
+          - errors
+          - avg_duration
+          - avg_cost
+        current_value:
+          type: number
+          format: double
+        previous_value:
+          type: number
+          format: double
+    KpiCardRequest:
+      required:
+      - entity_type
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum:
+          - traces
+          - spans
+          - threads
+        filters:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
     DataPointNumber_Public:
       required:
       - time
@@ -17447,6 +17528,15 @@ components:
         last_updated_at:
           type: string
           format: date-time
+          readOnly: true
+        catch_up_cursor:
+          type: string
+          description: Current position of historical data cleanup
+          format: uuid
+          readOnly: true
+        catch_up_done:
+          type: boolean
+          description: Whether historical catch-up is complete
           readOnly: true
     RetentionRule_Write:
       required:

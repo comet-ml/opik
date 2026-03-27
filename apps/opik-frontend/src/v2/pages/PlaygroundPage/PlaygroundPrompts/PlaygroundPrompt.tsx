@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { CopyPlus, Trash, Save } from "lucide-react";
+import { Trash, Save } from "lucide-react";
 import last from "lodash/last";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -18,12 +18,12 @@ import {
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
-import {
-  generateDefaultPrompt,
-  getDefaultConfigByProvider,
-} from "@/lib/playground";
+import { getDefaultConfigByProvider } from "@/lib/playground";
 import { updateProviderConfig } from "@/lib/modelUtils";
-import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
+import {
+  PLAYGROUND_LAST_PICKED_MODEL,
+  PLAYGROUND_PROMPT_COLORS,
+} from "@/constants/llm";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -31,10 +31,11 @@ import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import {
-  useAddPrompt,
   useDatasetVariables,
+  useDatasetSampleData,
   useDeletePrompt,
   usePromptById,
+  usePromptCount,
   useUpdateOutput,
   useUpdatePrompt,
   useProviderValidationTrigger,
@@ -58,7 +59,6 @@ interface PlaygroundPromptProps {
   isPendingProviderKeys: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
-  scrollToPromptRef: React.MutableRefObject<string>;
 }
 
 const PlaygroundPrompt = ({
@@ -69,14 +69,15 @@ const PlaygroundPrompt = ({
   isPendingProviderKeys,
   providerResolver,
   modelResolver,
-  scrollToPromptRef,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const queryClient = useQueryClient();
   const activeProjectId = useActiveProjectId();
 
   const prompt = usePromptById(promptId);
+  const promptCount = usePromptCount();
   const datasetVariables = useDatasetVariables();
+  const datasetSampleData = useDatasetSampleData();
   const providerValidationTrigger = useProviderValidationTrigger();
 
   const [, setLastPickedModel] = useLastPickedModel({
@@ -85,7 +86,6 @@ const PlaygroundPrompt = ({
 
   const { model, messages, configs, name } = prompt;
 
-  const addPrompt = useAddPrompt();
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
@@ -115,13 +115,27 @@ const PlaygroundPrompt = ({
     selectedChatPromptId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
+    skipInitialLoad: prompt?.skipInitialPromptLoad,
   });
+
+  // Clear the one-time flag so it doesn't persist to localStorage
+  useEffect(() => {
+    if (prompt?.skipInitialPromptLoad) {
+      updatePrompt(promptId, { skipInitialPromptLoad: undefined });
+    }
+  }, [prompt?.skipInitialPromptLoad, promptId, updatePrompt]);
 
   const provider = providerResolver(model);
 
   const promptVariablesArray = useMemo(
     () => datasetVariables || [],
     [datasetVariables],
+  );
+
+  const hasMessageContent = messages.some((msg) =>
+    typeof msg.content === "string"
+      ? msg.content.trim()
+      : Array.isArray(msg.content) && msg.content.length > 0,
   );
 
   const handleAddMessage = useCallback(() => {
@@ -136,18 +150,6 @@ const PlaygroundPrompt = ({
       messages: [...messages, newMessage],
     });
   }, [messages, updatePrompt, promptId]);
-
-  const handleDuplicatePrompt = () => {
-    const newPrompt = generateDefaultPrompt({
-      initPrompt: prompt,
-      setupProviders: providerKeys,
-      providerResolver: providerResolver,
-      modelResolver: modelResolver,
-    });
-
-    addPrompt(newPrompt, index + 1);
-    scrollToPromptRef.current = newPrompt.id;
-  };
 
   const handleUpdateMessage = useCallback(
     (messages: LLMMessage[]) => {
@@ -242,7 +244,7 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", { value: "" });
+        updateOutput(promptId, "", { value: null });
       }
     }
   }, [
@@ -264,128 +266,121 @@ const PlaygroundPrompt = ({
     [promptId, updatePrompt],
   );
 
+  const handleDetachPrompt = useCallback(() => {
+    updatePrompt(promptId, { loadedChatPromptId: undefined });
+  }, [promptId, updatePrompt]);
+
   // Handler for saving chat prompt
   const handleSaveChatPrompt = useCallback(() => {
     setShowSaveChatPromptDialog(true);
   }, []);
 
-  const setRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      if (element && scrollToPromptRef.current === promptId) {
-        element?.scrollIntoView({
-          behavior: "smooth",
-          inline: "start",
-        });
-      }
-    },
-    [promptId, scrollToPromptRef],
-  );
+  const promptColor =
+    PLAYGROUND_PROMPT_COLORS[index % PLAYGROUND_PROMPT_COLORS.length];
 
   return (
-    <div
-      className="h-[var(--prompt-height)] w-full min-w-[var(--min-prompt-width)]"
-      style={
-        {
-          "--prompt-height": "calc(100% - 64px)",
-        } as React.CSSProperties
-      }
-      ref={setRef}
-    >
-      <div className="mb-2 flex h-8 items-center justify-between">
-        <p className="comet-body-s-accented">
-          {name} {getAlphabetLetter(index)}
-        </p>
-
-        <div className="flex h-full flex-1 items-center justify-end gap-1">
-          <TooltipWrapper content={chatPromptData?.name || "Load chat prompt"}>
-            <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
-              <PromptsSelectBox
-                projectId={activeProjectId!}
-                value={selectedChatPromptId}
-                onValueChange={(value) =>
-                  value && handleImportChatPrompt(value)
-                }
-                clearable={false}
-                filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-              />
-            </div>
-          </TooltipWrapper>
-          <TooltipWrapper
-            content={
-              hasUnsavedChatPromptChanges
-                ? "This prompt version hasn't been saved"
-                : "Save as chat prompt"
-            }
-          >
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={handleSaveChatPrompt}
-              badge={hasUnsavedChatPromptChanges}
+    <div className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r">
+      <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1 pr-2">
+            <p className="comet-body-s-accented whitespace-nowrap">{name}</p>
+            <span
+              className="comet-body-s flex size-6 items-center justify-center rounded-md"
+              style={{
+                backgroundColor: promptColor.bg,
+                color: promptColor.text,
+              }}
             >
-              <Save />
-            </Button>
-          </TooltipWrapper>
-          <Separator orientation="vertical" className="h-6" />
-          <div className="h-full w-80">
-            <PromptModelSelect
-              value={model}
-              onChange={handleUpdateModel}
-              provider={provider}
-              workspaceName={workspaceName}
-              onAddProvider={handleAddProvider}
-              onDeleteProvider={handleDeleteProvider}
-              hasError={!model}
-            />
+              {getAlphabetLetter(index)}
+            </span>
           </div>
+          <PromptModelSelect
+            compact
+            value={model}
+            onChange={handleUpdateModel}
+            provider={provider}
+            workspaceName={workspaceName}
+            onAddProvider={handleAddProvider}
+            onDeleteProvider={handleDeleteProvider}
+            hasError={!model}
+          />
           <PromptModelConfigs
             provider={provider}
             model={model}
             configs={configs}
             onChange={handleUpdateConfig}
+            size="icon-xs"
+            variant="ghost"
           />
-          <Separator orientation="vertical" className="h-6" />
-          <TooltipWrapper content="Duplicate a prompt">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={handleDuplicatePrompt}
-            >
-              <CopyPlus />
-            </Button>
-          </TooltipWrapper>
+        </div>
 
-          <TooltipWrapper content="Delete a prompt">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => deletePrompt(promptId)}
-            >
-              <Trash />
-            </Button>
-          </TooltipWrapper>
+        <div className="flex min-w-0 items-center overflow-hidden pl-4 [@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4">
+          <PromptsSelectBox
+            compact
+            projectId={activeProjectId!}
+            value={selectedChatPromptId}
+            onValueChange={(value) => value && handleImportChatPrompt(value)}
+            onClear={handleDetachPrompt}
+            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+            hasUnsavedChanges={hasUnsavedChatPromptChanges}
+            promptName={chatPromptData?.name}
+          />
+
+          <div className="flex shrink-0 items-center">
+            {hasMessageContent && (
+              <TooltipWrapper content="Save to prompt library">
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleSaveChatPrompt}
+                >
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
+
+            {promptCount > 1 && (
+              <>
+                <Separator orientation="vertical" className="mx-1 h-4" />
+                <TooltipWrapper content="Remove prompt">
+                  <Button
+                    variant="minimal"
+                    size="icon-sm"
+                    onClick={() => deletePrompt(promptId)}
+                  >
+                    <Trash />
+                  </Button>
+                </TooltipWrapper>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      <LLMPromptMessages
-        messages={messages}
-        onChange={handleUpdateMessage}
-        onAddMessage={handleAddMessage}
-        promptVariables={promptVariablesArray}
-        hidePromptActions={false}
-        improvePromptConfig={{
-          model,
-          provider,
-          configs,
-          workspaceName,
-          onAccept: (messageId, improvedContent) => {
-            const updatedMessages = messages.map((msg) =>
-              msg.id === messageId ? { ...msg, content: improvedContent } : msg,
-            );
-            updatePrompt(promptId, { messages: updatedMessages });
-          },
-        }}
-      />
+      <div className="flex-1 overflow-y-auto p-4" data-scroll-container>
+        <LLMPromptMessages
+          messages={messages}
+          onChange={handleUpdateMessage}
+          onAddMessage={handleAddMessage}
+          promptVariables={promptVariablesArray}
+          jsonTreeData={datasetSampleData}
+          hidePromptActions={false}
+          improvePromptConfig={{
+            model,
+            provider,
+            configs,
+            workspaceName,
+            onAccept: (messageId, improvedContent) => {
+              const updatedMessages = messages.map((msg) =>
+                msg.id === messageId
+                  ? { ...msg, content: improvedContent }
+                  : msg,
+              );
+              updatePrompt(promptId, { messages: updatedMessages });
+            },
+          }}
+        />
+      </div>
 
       <AddNewPromptVersionDialog
         open={showSaveChatPromptDialog}
@@ -394,7 +389,7 @@ const PlaygroundPrompt = ({
         template={chatPromptTemplate}
         templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
         defaultName={lastImportedPromptName}
-        onSave={(version, promptName, savedPromptId) => {
+        onSave={(version, _, savedPromptId) => {
           setShowSaveChatPromptDialog(false);
 
           // Update the loaded chat prompt ID to the saved prompt

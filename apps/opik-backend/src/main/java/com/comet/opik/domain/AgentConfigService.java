@@ -180,7 +180,9 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 .lastUpdatedBy(userName)
                 .build();
 
-        String name = generateNextBlueprintName(dao, workspaceId, projectId);
+        String name = blueprint.type() == AgentBlueprint.BlueprintType.MASK
+                ? ""
+                : generateNextBlueprintName(dao, workspaceId, projectId);
         UUID blueprintId = createBlueprintSnapshot(dao, workspaceId, projectId, configId, name, blueprint);
 
         return blueprint.toBuilder()
@@ -228,11 +230,6 @@ class AgentConfigServiceImpl implements AgentConfigService {
     private String generateNextBlueprintName(AgentConfigDAO dao, String workspaceId, UUID projectId) {
         long count = dao.countBlueprints(workspaceId, projectId);
         return "v" + (count + 1);
-    }
-
-    static String incrementBlueprintName(String name) {
-        int version = Integer.parseInt(name.substring(1));
-        return "v" + (version + 1);
     }
 
     private void insertValues(
@@ -632,7 +629,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     for (var entry : referencesByProject.entrySet()) {
                         List<AgentConfigDAO.BlueprintValueReference> refs = entry.getValue();
                         UUID configId = refs.getFirst().configId();
-                        String name = incrementBlueprintName(refs.getFirst().latestBlueprintName());
+                        String name = "v" + (refs.getFirst().blueprintCount() + 1);
                         UUID blueprintId = idGenerator.generateId();
 
                         blueprintInserts.add(AgentConfigDAO.BlueprintInsertData.builder()

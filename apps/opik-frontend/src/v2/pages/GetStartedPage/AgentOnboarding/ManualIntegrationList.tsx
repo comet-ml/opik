@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { BookOpen } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -7,7 +7,7 @@ import IntegrationCard from "@/v2/pages-shared/onboarding/IntegrationExplorer/co
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey } from "@/store/AppStore";
-import { maskAPIKey, MASKED_API_KEY_PLACEHOLDER } from "@/lib/utils";
+import { maskAPIKey } from "@/lib/utils";
 import {
   INTEGRATION_CATEGORIES,
   getIntegrationsByCategory,
@@ -60,21 +60,23 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
             />
           </div>
         </div>
-        <div className="flex flex-1 flex-col gap-1">
-          <span className="comet-body-s-accented px-0.5 pb-0.5">API key</span>
-          <div className="flex h-8 items-center gap-1 rounded border bg-primary-foreground px-2.5">
-            <code className="comet-body-s text-muted-slate">
-              {apiKey ? maskAPIKey(apiKey) : MASKED_API_KEY_PLACEHOLDER}
-            </code>
-            <CopyButton
-              text={apiKey || ""}
-              message="API key copied"
-              tooltipText="Copy API key"
-              size="icon-3xs"
-              className="ml-auto"
-            />
+        {apiKey && (
+          <div className="flex flex-1 flex-col gap-1">
+            <span className="comet-body-s-accented px-0.5 pb-0.5">API key</span>
+            <div className="flex h-8 items-center gap-1 rounded border bg-primary-foreground px-2.5">
+              <code className="comet-body-s text-muted-slate">
+                {maskAPIKey(apiKey)}
+              </code>
+              <CopyButton
+                text={apiKey}
+                message="API key copied"
+                tooltipText="Copy API key"
+                size="icon-3xs"
+                className="ml-auto"
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-4">
@@ -129,19 +131,14 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
             )}
             target="_blank"
             rel="noopener noreferrer"
+            className="flex h-8 items-center gap-1 rounded-lg border bg-background px-3 py-1.5 transition-all duration-200 hover:bg-primary-foreground"
+            id="onboarding-integration-view-all"
+            data-fs-element="OnboardingIntegrationViewAll"
           >
-            <IntegrationCard
-              title="View all"
-              icon={
-                <div className="flex size-4 items-center justify-center rounded bg-primary/10">
-                  <BookOpen className="size-3 text-primary" />
-                </div>
-              }
-              className="h-8 gap-1 overflow-hidden p-[0.375rem_0.5rem] [&>div:last-child]:min-w-0 [&_h3]:truncate"
-              iconClassName="min-w-0"
-              id="onboarding-integration-view-all"
-              data-fs-element="OnboardingIntegrationViewAll"
-            />
+            <span className="comet-body-s-accented truncate font-normal text-foreground">
+              View all
+            </span>
+            <ExternalLink className="size-3 shrink-0 text-foreground" />
           </a>
         </div>
       </div>

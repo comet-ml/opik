@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { z } from "zod";
 import { Opik, track, agentConfigContext, Prompt } from "@/index";
+import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { AgentConfigManager } from "@/agent-config";
 import { getTrackContext, getTrackOpikClient } from "@/decorators/track";
 import {
@@ -396,7 +397,7 @@ describe.skipIf(!shouldRunApiTests)(
       await expect(run()).rejects.toThrow();
     });
 
-    // ─── Test 7: Prompt field stored and retrieved ───
+    // ─── Test 7: Prompt and ChatPrompt stored together, retrieved as different types ───
 
     it(
       "should store a Prompt in config and retrieve it as a Prompt instance",
@@ -408,6 +409,7 @@ describe.skipIf(!shouldRunApiTests)(
           .object({
             model: z.string(),
             system_prompt: z.instanceof(Prompt).describe("System prompt for the agent"),
+            chat_prompt: z.instanceof(ChatPrompt).describe("Chat prompt for the agent"),
           })
           .describe("PromptConfig");
 
@@ -417,9 +419,18 @@ describe.skipIf(!shouldRunApiTests)(
         });
         expect(storedPrompt.commit).toBeDefined();
 
+        const storedChatPrompt = await client.createChatPrompt({
+          name: `${projectName}-chat`,
+          messages: [
+            { role: "system", content: "You are a helpful assistant." },
+            { role: "user", content: "Help me with {{task}}" },
+          ],
+        });
+        expect(storedChatPrompt.commit).toBeDefined();
+
         const versionName = await client.createAgentConfig(
           MyConfig,
-          { model: "gpt-4", system_prompt: storedPrompt },
+          { model: "gpt-4", system_prompt: storedPrompt, chat_prompt: storedChatPrompt },
           { projectName }
         );
         expect(typeof versionName).toBe("string");
@@ -428,7 +439,7 @@ describe.skipIf(!shouldRunApiTests)(
 
         const run = track({ projectName }, async () => {
           const cfg = await client.getAgentConfigVersion(MyConfig, {
-            fallback: { model: "fallback", system_prompt: storedPrompt },
+            fallback: { model: "fallback", system_prompt: storedPrompt, chat_prompt: storedChatPrompt },
             projectName,
             latest: true,
           });
@@ -436,6 +447,7 @@ describe.skipIf(!shouldRunApiTests)(
           // Access fields to trigger metadata injection
           void cfg.model;
           void cfg.system_prompt;
+          void cfg.chat_prompt;
 
           const ctx = getTrackContext();
           traceId = ctx?.trace?.data?.id;
@@ -445,11 +457,23 @@ describe.skipIf(!shouldRunApiTests)(
         const cfg = await run();
 
         expect(cfg.model).toBe("gpt-4");
+
+        // Verify Prompt comes back as Prompt, not ChatPrompt
         expect(cfg.system_prompt).toBeInstanceOf(Prompt);
+        expect(cfg.system_prompt).not.toBeInstanceOf(ChatPrompt);
         expect((cfg.system_prompt as Prompt).commit).toBe(storedPrompt.commit);
         expect((cfg.system_prompt as Prompt).prompt).toBe(
           "You are a helpful assistant. Think step by step."
         );
+
+        // Verify ChatPrompt comes back as ChatPrompt, not Prompt
+        expect(cfg.chat_prompt).toBeInstanceOf(ChatPrompt);
+        expect(cfg.chat_prompt).not.toBeInstanceOf(Prompt);
+        expect((cfg.chat_prompt as ChatPrompt).commit).toBe(storedChatPrompt.commit);
+        expect((cfg.chat_prompt as ChatPrompt).messages).toEqual([
+          { role: "system", content: "You are a helpful assistant." },
+          { role: "user", content: "Help me with {{task}}" },
+        ]);
 
         await getTrackOpikClient().flush();
         expect(traceId).toBeDefined();
@@ -457,11 +481,16 @@ describe.skipIf(!shouldRunApiTests)(
         const agentMeta = await fetchAgentConfigMeta(traceId!, projectName);
         const agentValues = agentMeta.values as Record<string, { value: unknown; type: string }>;
         verifyAgentConfigField(agentValues, "PromptConfig.model", { type: "string", value: "gpt-4" });
-        // prompt field must be serialized to its commit string, not a Prompt object
+        // prompt fields must be serialized to their commit strings, not object instances
         verifyAgentConfigField(agentValues, "PromptConfig.system_prompt", {
           type: "prompt",
           description: "System prompt for the agent",
           value: storedPrompt.commit,
+        });
+        verifyAgentConfigField(agentValues, "PromptConfig.chat_prompt", {
+          type: "prompt",
+          description: "Chat prompt for the agent",
+          value: storedChatPrompt.commit,
         });
       },
       60_000

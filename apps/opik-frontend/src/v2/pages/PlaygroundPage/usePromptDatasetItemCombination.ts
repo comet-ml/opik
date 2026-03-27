@@ -24,6 +24,7 @@ import mustache from "mustache";
 import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
+import isNumber from "lodash/isNumber";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
@@ -200,14 +201,16 @@ const usePromptDatasetItemCombination = ({
 
       const datasetItemId = datasetItem?.id || "";
       const datasetItemData = await hydrateDatasetItemData(datasetItem);
-      const key = `${datasetItemId}-${prompt.id}`;
+      const key = datasetItemId ? `${datasetItemId}-${prompt.id}` : prompt.id;
 
       addAbortController(key, controller);
 
       try {
         updateOutput(prompt.id, datasetItemId, {
           isLoading: true,
+          value: null,
           selectedRuleIds,
+          usage: undefined,
         });
 
         const providerMessages = prompt.messages.map((m) =>
@@ -238,8 +241,25 @@ const usePromptDatasetItemCombination = ({
           },
         });
 
+        const duration =
+          run.startTime && run.endTime
+            ? (new Date(run.endTime).getTime() -
+                new Date(run.startTime).getTime()) /
+              1000
+            : undefined;
+
+        const totalTokens = isNumber(run.usage?.total_tokens)
+          ? run.usage.total_tokens
+          : undefined;
+
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
+          usage: {
+            duration,
+            totalTokens,
+            model: prompt.model || "",
+            provider: prompt.provider || "",
+          },
         });
 
         logProcessor.log({

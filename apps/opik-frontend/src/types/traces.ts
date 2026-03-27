@@ -19,6 +19,13 @@ export enum TRACE_VISIBILITY_MODE {
   hidden = "hidden",
 }
 
+export enum LOGS_SOURCE {
+  sdk = "sdk",
+  experiment = "experiment",
+  playground = "playground",
+  optimization = "optimization",
+}
+
 export type FeedbackScoreValueByAuthorMap = Record<
   string,
   {

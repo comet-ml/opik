@@ -3,7 +3,7 @@ import { ExternalLink } from "lucide-react";
 import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
@@ -66,6 +66,7 @@ const AddEditEvaluationSuiteDialog = ({
   csvRequired = false,
 }: AddEditEvaluationSuiteDialogProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
   const isCsvUploadEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.CSV_UPLOAD_ENABLED,
@@ -324,6 +325,7 @@ const AddEditEvaluationSuiteDialog = ({
             name,
             ...(description && { description }),
             type,
+            ...(activeProjectId && { project_id: activeProjectId }),
           },
         },
         {
@@ -339,6 +341,7 @@ const AddEditEvaluationSuiteDialog = ({
     name,
     description,
     type,
+    activeProjectId,
     createMutate,
     onCreateSuccessHandler,
     setOpen,

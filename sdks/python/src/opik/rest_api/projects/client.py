@@ -11,6 +11,7 @@ from ..types.dashboard_page_public import DashboardPagePublic
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.feedback_score_names import FeedbackScoreNames
+from ..types.kpi_card_response import KpiCardResponse
 from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
@@ -23,6 +24,7 @@ from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_thread_filter_public import TraceThreadFilterPublic
 from .raw_client import AsyncRawProjectsClient, RawProjectsClient
+from .types.kpi_card_request_entity_type import KpiCardRequestEntityType
 from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
 from .types.project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
 from .types.project_update_visibility import ProjectUpdateVisibility
@@ -643,6 +645,56 @@ class ProjectsClient:
         client.projects.find_token_usage_names(id='id', )
         """
         _response = self._raw_client.find_token_usage_names(id, request_options=request_options)
+        return _response.data
+
+    def get_project_kpi_cards(
+        self,
+        id: str,
+        *,
+        entity_type: KpiCardRequestEntityType,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        filters: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> KpiCardResponse:
+        """
+        Gets KPI card metrics for a project
+
+        Parameters
+        ----------
+        id : str
+
+        entity_type : KpiCardRequestEntityType
+
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        KpiCardResponse
+            KPI Card Metrics
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.get_project_kpi_cards(id='id', entity_type="traces", interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        """
+        _response = self._raw_client.get_project_kpi_cards(
+            id,
+            entity_type=entity_type,
+            interval_start=interval_start,
+            interval_end=interval_end,
+            filters=filters,
+            request_options=request_options,
+        )
         return _response.data
 
     def get_project_metrics(
@@ -1434,6 +1486,59 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_token_usage_names(id, request_options=request_options)
+        return _response.data
+
+    async def get_project_kpi_cards(
+        self,
+        id: str,
+        *,
+        entity_type: KpiCardRequestEntityType,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        filters: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> KpiCardResponse:
+        """
+        Gets KPI card metrics for a project
+
+        Parameters
+        ----------
+        id : str
+
+        entity_type : KpiCardRequestEntityType
+
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        KpiCardResponse
+            KPI Card Metrics
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.get_project_kpi_cards(id='id', entity_type="traces", interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_project_kpi_cards(
+            id,
+            entity_type=entity_type,
+            interval_start=interval_start,
+            interval_end=interval_end,
+            filters=filters,
+            request_options=request_options,
+        )
         return _response.data
 
     async def get_project_metrics(

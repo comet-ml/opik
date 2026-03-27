@@ -5,6 +5,9 @@ import { SpanType } from "@/rest_api/api/types/SpanType";
 import { Span } from "@/tracer/Span";
 import { Trace } from "@/tracer/Trace";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { getPresetTraceId } from "@/runner/context";
+import { register, extractParams, type Param } from "@/runner/registry";
+import { activateRunner } from "@/runner/activate";
 
 type TrackContext =
   | {
@@ -57,9 +60,11 @@ function logSpan({
   let spanTrace = trace;
 
   if (!spanTrace) {
+    const presetTraceId = getPresetTraceId();
     spanTrace = getTrackOpikClient().trace({
       name,
       projectName,
+      ...(presetTraceId ? { id: presetTraceId } : {}),
     });
   }
 
@@ -270,6 +275,18 @@ type TrackOptions = {
    * @returns An object with fields to merge into the span (usage, model, provider, metadata, etc.)
    */
   enrichSpan?: (result: any) => Record<string, unknown>;
+  /**
+   * When true, registers this function as a runner entrypoint.
+   * The function will be available for remote execution via the Opik runner.
+   * Only effective when used with the function wrapper syntax: track({ entrypoint: true }, fn)
+   */
+  entrypoint?: boolean;
+  /**
+   * Explicit parameter descriptors for the entrypoint function.
+   * Use this when the SDK is bundled/minified (parameter names are mangled at build time).
+   * If omitted, parameter names are extracted from the function source at runtime.
+   */
+  params?: Param[];
 };
 
 type OriginalFunction = (...args: any[]) => any;
@@ -285,7 +302,11 @@ export function track(
   const options = optionsOrOriginalFunction;
 
   if (originalFunction) {
-    return executeTrack(options, originalFunction);
+    const wrapped = executeTrack(options, originalFunction);
+    if (options.entrypoint) {
+      applyEntrypoint(originalFunction, wrapped, options);
+    }
+    return wrapped;
   }
 
   return function (...args: any[]): any {
@@ -323,6 +344,32 @@ export function track(
     descriptor.value = executeTrack(options, originalMethod);
     return descriptor;
   };
+}
+
+function applyEntrypoint(
+  originalFn: OriginalFunction,
+  wrappedFn: OriginalFunction,
+  options: TrackOptions
+): void {
+  const agentName = options.name || originalFn.name;
+  if (!agentName) {
+    throw new Error(
+      "entrypoint functions must have a name. Provide one via track({ name: '...' }) or use a named function."
+    );
+  }
+  const agentProject =
+    options.projectName || getTrackOpikClient().config.projectName;
+  const params = options.params ?? extractParams(originalFn);
+
+  register({
+    func: wrappedFn,
+    name: agentName,
+    project: agentProject,
+    params,
+    docstring: "",
+  });
+
+  activateRunner();
 }
 
 let _cachedTrackOpikClient: OpikClient | null = null;

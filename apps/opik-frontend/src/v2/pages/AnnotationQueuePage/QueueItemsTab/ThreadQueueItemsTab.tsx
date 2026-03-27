@@ -26,7 +26,7 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { Thread } from "@/types/traces";
+import { Thread, LOGS_SOURCE } from "@/types/traces";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
@@ -309,6 +309,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
       size: size as number,
       search: search as string,
       truncate: truncationEnabled,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       placeholderData: keepPreviousData,
