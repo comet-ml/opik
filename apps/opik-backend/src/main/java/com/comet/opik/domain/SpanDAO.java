@@ -1209,6 +1209,18 @@ public class SpanDAO {
             ;
             """;
 
+    // Lightweight pre-delete count for observability. Omits the experiment_items exclusion subquery
+    // to avoid the join cost; this makes it an upper-bound ceiling with >99% precision in practice
+    // (very few traces are linked to experiments).
+    private static final String COUNT_FOR_RETENTION = """
+            SELECT count() FROM spans
+            WHERE workspace_id IN :workspace_ids
+            AND trace_id >= :lower_bound
+            AND trace_id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String ESTIMATE_VELOCITY_FOR_RETENTION = """
             SELECT
                 toUInt64(if(count() = 0, 0,
@@ -2819,6 +2831,33 @@ public class SpanDAO {
     }
 
     /**
+     * Lightweight pre-delete count for observability.
+     * Counts spans in [lowerBound, cutoffId) without the experiment_items exclusion subquery
+     * to avoid join cost. This is an upper-bound ceiling with >99% precision (very few traces
+     * are linked to experiments in practice).
+     */
+    public Mono<Long> countForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+            @NonNull UUID lowerBound) {
+        if (workspaceIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_spans", null,
+                workspaceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("cutoff_id", cutoffId)
+                            .bind("lower_bound", lowerBound);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, meta) -> row.get(0, Long.class))));
+                });
+    }
+
+    /**
      * Bulk delete spans for data retention enforcement (applyToPast=false).
      * Each workspace has its own lower bound.
      */
@@ -2879,7 +2918,7 @@ public class SpanDAO {
      * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
      */
     public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
-        log.info("Estimating retention velocity for workspace '{}'", workspaceId);
+        log.debug("Estimating retention velocity for workspace '{}'", workspaceId);
 
         var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
                 "retention_estimate_velocity", workspaceId, "");

@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.FilterTestUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -465,36 +466,6 @@ class FindSpansResourceTest {
                     arguments("/spans/search", spanStreamTestAssertion, arg.get()[0], arg.get()[1])));
         }
 
-        private String getValidValue(Field field) {
-            return switch (field.getType()) {
-                case STRING, STRING_EXACT, LIST, DICTIONARY, DICTIONARY_STATE_DB, MAP, ENUM, ERROR_CONTAINER,
-                        STRING_STATE_DB, CUSTOM ->
-                    RandomStringUtils.secure().nextAlphanumeric(10);
-                case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
-                case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
-            };
-        }
-
-        private String getKey(Field field) {
-            return switch (field.getType()) {
-                case STRING, STRING_EXACT, NUMBER, DURATION, DATE_TIME, LIST, ENUM, ERROR_CONTAINER,
-                        STRING_STATE_DB, DATE_TIME_STATE_DB ->
-                    null;
-                case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
-                case DICTIONARY, DICTIONARY_STATE_DB, MAP -> "";
-            };
-        }
-
-        private String getInvalidValue(Field field) {
-            return switch (field.getType()) {
-                case STRING, STRING_EXACT, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER,
-                        STRING_STATE_DB, DATE_TIME_STATE_DB ->
-                    " ";
-                case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER ->
-                    RandomStringUtils.secure().nextAlphanumeric(10);
-            };
-        }
-
         private Stream<Arguments> getFilterInvalidOperatorForFieldTypeArgs() {
             return filterQueryBuilder.getUnSupportedOperators(SpanField.values())
                     .entrySet()
@@ -505,20 +476,20 @@ class FindSpansResourceTest {
                                     Arguments.of("/stats", SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .key(getKey(filter.getKey()))
-                                            .value(getValidValue(filter.getKey()))
+                                            .key(FilterTestUtils.getKey(filter.getKey()))
+                                            .value(FilterTestUtils.getValidValue(filter.getKey()))
                                             .build()),
                                     Arguments.of("", SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .key(getKey(filter.getKey()))
-                                            .value(getValidValue(filter.getKey()))
+                                            .key(FilterTestUtils.getKey(filter.getKey()))
+                                            .value(FilterTestUtils.getValidValue(filter.getKey()))
                                             .build()),
                                     Arguments.of("/search", SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .key(getKey(filter.getKey()))
-                                            .value(getValidValue(filter.getKey()))
+                                            .key(FilterTestUtils.getKey(filter.getKey()))
+                                            .value(FilterTestUtils.getValidValue(filter.getKey()))
                                             .build()))));
         }
 
@@ -536,7 +507,7 @@ class FindSpansResourceTest {
                                                 .field(filter.getKey())
                                                 .operator(operator)
                                                 .key(null)
-                                                .value(getValidValue(filter.getKey()))
+                                                .value(FilterTestUtils.getValidValue(filter.getKey()))
                                                 .build(),
                                         SpanFilter.builder()
                                                 .field(filter.getKey())
@@ -544,8 +515,8 @@ class FindSpansResourceTest {
                                                 // if no value is expected, create an invalid filter by an empty key
                                                 .key(Operator.NO_VALUE_OPERATORS.contains(operator)
                                                         ? ""
-                                                        : getKey(filter.getKey()))
-                                                .value(getInvalidValue(filter.getKey()))
+                                                        : FilterTestUtils.getKey(filter.getKey()))
+                                                .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                                 .build());
                                 case ERROR_CONTAINER -> Stream.of();
                                 case LIST -> {
@@ -557,13 +528,13 @@ class FindSpansResourceTest {
                                     yield Stream.of(SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .value(getInvalidValue(filter.getKey()))
+                                            .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                             .build());
                                 }
                                 default -> Stream.of(SpanFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
-                                        .value(getInvalidValue(filter.getKey()))
+                                        .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                         .build());
                             }));
 
