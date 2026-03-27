@@ -5,7 +5,6 @@ import collections
 import inspect
 import logging
 import random
-import signal
 import threading
 import time
 from typing import Callable, Optional
@@ -62,8 +61,6 @@ class InProcessRunnerLoop:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def run(self) -> None:
-        self._install_signal_handlers()
-
         heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
             daemon=True,
@@ -262,16 +259,3 @@ class InProcessRunnerLoop:
     def _backoff_wait(self, backoff: float) -> None:
         wait = min(backoff, self._backoff_cap_seconds) * (0.5 + random.random() * 0.5)
         self._shutdown_event.wait(wait)
-
-    def _install_signal_handlers(self) -> None:
-        shutdown = self._shutdown_event
-
-        def handler(signum: int, frame: object) -> None:
-            LOGGER.info("Received signal %s, shutting down", signum)
-            shutdown.set()
-
-        try:
-            signal.signal(signal.SIGTERM, handler)
-            signal.signal(signal.SIGINT, handler)
-        except ValueError:
-            LOGGER.warning("Cannot install signal handlers outside main thread")
