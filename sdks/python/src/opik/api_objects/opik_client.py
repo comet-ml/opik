@@ -2356,7 +2356,7 @@ class Opik:
                 project_name=project.name,
             )
         except Exception as e:
-            LOGGER.debug(
+            LOGGER.warning(
                 f"Failed to get project for optimization with ID: {id}, reason: {e}"
             )
 
