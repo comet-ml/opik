@@ -33,8 +33,10 @@ function UseEvaluationSuiteDropdown({
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const {
-    permissions: { canViewExperiments, canCreateExperiments },
+    permissions: { canViewExperiments, canCreateExperiments, canUsePlayground },
   } = usePermissions();
+
+  const hasAnyAction = canUsePlayground || canCreateExperiments;
 
   const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
     useLoadPlayground();
@@ -54,6 +56,8 @@ function UseEvaluationSuiteDropdown({
       setOpenConfirmDialog(true);
     }
   };
+
+  if (!hasAnyAction) return null;
 
   return (
     <>
@@ -86,20 +90,22 @@ function UseEvaluationSuiteDropdown({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-80">
-          <DropdownMenuItem
-            onClick={handleOpenPlaygroundClick}
-            disabled={disabled || isPendingProviderKeys}
-          >
-            <Blocks className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
-            <div className="comet-body-s flex flex-col">
-              <span>Open in Playground</span>
-              <span className="text-light-slate">
-                Test prompts over your{" "}
-                {isEvalSuite ? "evaluation suite" : "dataset"} and run
-                evaluations interactively
-              </span>
-            </div>
-          </DropdownMenuItem>
+          {canUsePlayground && (
+            <DropdownMenuItem
+              onClick={handleOpenPlaygroundClick}
+              disabled={disabled || isPendingProviderKeys}
+            >
+              <Blocks className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
+              <div className="comet-body-s flex flex-col">
+                <span>Open in Playground</span>
+                <span className="text-light-slate">
+                  Test prompts over your{" "}
+                  {isEvalSuite ? "evaluation suite" : "dataset"} and run
+                  evaluations interactively
+                </span>
+              </div>
+            </DropdownMenuItem>
+          )}
           {canCreateExperiments && (
             <DropdownMenuItem
               onClick={() => {

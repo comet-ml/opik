@@ -12,6 +12,7 @@ import get from "lodash/get";
 import { FileTerminal, GitCommitVertical } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import TryInPlaygroundButton from "@/v1/pages/PromptPage/TryInPlaygroundButton";
 import PromptContentView, {
@@ -71,6 +72,10 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   data,
   search,
 }) => {
+  const {
+    permissions: { canUsePlayground },
+  } = usePermissions();
+
   const rawPrompts = get(
     data.metadata as Record<string, unknown>,
     "opik_prompts",
@@ -129,10 +134,12 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
               search={search}
               templateStructure={rawPrompts[index]?.template_structure}
               playgroundButton={
-                <TryInPlaygroundButton
-                  prompt={promptInfo}
-                  ButtonComponent={CustomUseInPlaygroundButton}
-                />
+                canUsePlayground ? (
+                  <TryInPlaygroundButton
+                    prompt={promptInfo}
+                    ButtonComponent={CustomUseInPlaygroundButton}
+                  />
+                ) : null
               }
             />
           </AccordionContent>
