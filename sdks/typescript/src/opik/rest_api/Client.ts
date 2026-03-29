@@ -3,7 +3,6 @@
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
-import { AssistantSidebarsClient } from "./api/resources/assistantSidebars/client/Client.js";
 import { AttachmentsClient } from "./api/resources/attachments/client/Client.js";
 import { AutomationRuleEvaluatorsClient } from "./api/resources/automationRuleEvaluators/client/Client.js";
 import { ChatCompletionsClient } from "./api/resources/chatCompletions/client/Client.js";
@@ -53,7 +52,6 @@ export class OpikApiClient {
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _alerts: AlertsClient | undefined;
     protected _annotationQueues: AnnotationQueuesClient | undefined;
-    protected _assistantSidebars: AssistantSidebarsClient | undefined;
     protected _attachments: AttachmentsClient | undefined;
     protected _check: CheckClient | undefined;
     protected _automationRuleEvaluators: AutomationRuleEvaluatorsClient | undefined;
@@ -101,10 +99,6 @@ export class OpikApiClient {
 
     public get annotationQueues(): AnnotationQueuesClient {
         return (this._annotationQueues ??= new AnnotationQueuesClient(this._options));
-    }
-
-    public get assistantSidebars(): AssistantSidebarsClient {
-        return (this._assistantSidebars ??= new AssistantSidebarsClient(this._options));
     }
 
     public get attachments(): AttachmentsClient {

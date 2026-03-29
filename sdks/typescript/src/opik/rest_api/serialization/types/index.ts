@@ -50,7 +50,6 @@ export * from "./AssertionScoreAverage.js";
 export * from "./AssertionScoreAveragePublic.js";
 export * from "./AssistantMessage.js";
 export * from "./AssistantMessageRole.js";
-export * from "./AssistantSidebarConfigResponse.js";
 export * from "./Attachment.js";
 export * from "./AttachmentPage.js";
 export * from "./AudioUrl.js";
