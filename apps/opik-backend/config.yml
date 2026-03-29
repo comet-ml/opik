@@ -821,12 +821,6 @@ ollieStateConfig:
   # Description: Maximum upload size in bytes for ollie state persistence
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
-# Assistant Sidebar CDN configuration (runtime)
-# Full URL to the ollie-console manifest on CDN
-assistantSidebar:
-  # Default: https://cdn.comet.com/ollie/v1/manifest.json (always latest version)
-  # Description: Full CDN URL to the ollie-console manifest. Override to pin a specific version.
-  manifestUrl: ${ASSISTANT_SIDEBAR_MANIFEST_URL:-"https://cdn.comet.com/ollie/v1/manifest.json"}
 
 # Attachments configuration
 attachmentsConfig:
@@ -916,9 +910,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not the Assistant Sidebar feature is enabled
-  assistantSidebarEnabled: ${TOGGLE_ASSISTANT_SIDEBAR_ENABLED:-"false"}
   # Default: version_1
   # Description: Forces ALL workspaces to a specific navigation version. Highest priority override.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
