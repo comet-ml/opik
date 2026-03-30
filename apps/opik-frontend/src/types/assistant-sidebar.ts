@@ -4,6 +4,7 @@ export type NotificationType = "success" | "error" | "info";
 export interface BridgeContext {
   workspaceId: string;
   workspaceName: string;
+  organizationId?: string | null;
   projectId: string | null;
   projectName: string | null;
   baseApiUrl: string;

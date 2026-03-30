@@ -209,10 +209,13 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
   const projectName = project?.name ?? null;
   const resolvedProjectId = projectId ?? null;
 
+  const organizationId = workspace?.organizationId ?? null;
+
   return useMemo<BridgeContext>(
     () => ({
       workspaceId,
       workspaceName,
+      organizationId,
       projectId: resolvedProjectId,
       projectName,
       baseApiUrl: BASE_API_URL,
@@ -222,6 +225,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
     [
       workspaceId,
       workspaceName,
+      organizationId,
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
