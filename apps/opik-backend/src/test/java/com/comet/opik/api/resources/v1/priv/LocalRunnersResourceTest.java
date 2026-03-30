@@ -1102,7 +1102,7 @@ class LocalRunnersResourceTest {
             UUID jobId = createRunningJob(runnerId, AGENT_NAME, projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callReportResult(jobId,
-                    LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.RUNNING).build(),
+                    LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.PENDING).build(),
                     ctx.apiKey, ctx.workspace)) {
                 assertThat(response.getStatus()).isEqualTo(400);
             }
@@ -1130,6 +1130,61 @@ class LocalRunnersResourceTest {
                     OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
+        }
+
+        @Test
+        void supportsInFlightTraceIdReporting() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("rr-in-flight-trace", projectId, ctx.apiKey, ctx.workspace);
+            UUID jobId = createRunningJob(runnerId, AGENT_NAME, projectId, ctx.apiKey, ctx.workspace);
+
+            UUID traceId = randomUUID();
+            runnersClient.reportResult(jobId,
+                    LocalRunnerJobResultRequest.builder()
+                            .status(LocalRunnerJobStatus.RUNNING)
+                            .traceId(traceId)
+                            .build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob runningJob = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(runningJob.status().getValue()).isEqualTo("running");
+            assertThat(runningJob.traceId()).isEqualTo(traceId);
+            assertThat(runningJob.completedAt()).isNull();
+        }
+
+        @Test
+        void inFlightTraceIdIsPreservedWhenJobCompletes() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("rr-in-flight-complete", projectId, ctx.apiKey, ctx.workspace);
+            UUID jobId = createRunningJob(runnerId, AGENT_NAME, projectId, ctx.apiKey, ctx.workspace);
+
+            UUID traceId = randomUUID();
+            runnersClient.reportResult(jobId,
+                    LocalRunnerJobResultRequest.builder()
+                            .status(LocalRunnerJobStatus.RUNNING)
+                            .traceId(traceId)
+                            .build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob runningJob = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(runningJob.traceId()).isEqualTo(traceId);
+            assertThat(runningJob.status().getValue()).isEqualTo("running");
+
+            JsonNode result = new ObjectMapper().createObjectNode().put("output", "completed");
+            runnersClient.reportResult(jobId,
+                    LocalRunnerJobResultRequest.builder()
+                            .status(LocalRunnerJobStatus.COMPLETED)
+                            .result(result)
+                            .build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob completedJob = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(completedJob.status().getValue()).isEqualTo("completed");
+            assertThat(completedJob.traceId()).isEqualTo(traceId);
+            assertThat(completedJob.completedAt()).isNotNull();
+            assertThat(completedJob.result().get("output").asText()).isEqualTo("completed");
         }
     }
 
