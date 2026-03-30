@@ -12,7 +12,7 @@ import opik_optimizer
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_driving_hazard_dataset() -> opik.Dataset:
+def setup_driving_hazard_dataset(setup_environment) -> opik.Dataset:
     """
     Create the driving_hazard dataset before any tests run.
 
