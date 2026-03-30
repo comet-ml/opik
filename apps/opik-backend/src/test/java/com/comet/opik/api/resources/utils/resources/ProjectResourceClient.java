@@ -4,10 +4,12 @@ import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.TokenUsageNames;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -19,6 +21,9 @@ import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -166,11 +171,21 @@ public class ProjectResourceClient {
 
     public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
             @NonNull String workspaceName) {
+        return getProjectStatsSummary(projectName, apiKey, workspaceName, null);
+    }
+
+    public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
+            @NonNull String workspaceName, List<TraceFilter> filters) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("/stats");
 
         if (StringUtils.isEmpty(projectName)) {
             webTarget = webTarget.queryParam("name", projectName);
+        }
+
+        if (filters != null && !filters.isEmpty()) {
+            webTarget = webTarget.queryParam("filters",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8));
         }
 
         Response actualResponse = webTarget

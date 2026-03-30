@@ -13,9 +13,12 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
@@ -115,7 +118,8 @@ public interface TraceDAO {
 
     Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
-    Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
+    Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId,
+            List<? extends Filter> filters);
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
@@ -3616,7 +3620,7 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     public Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(@NonNull List<UUID> projectIds,
-            @NonNull String workspaceId) {
+            @NonNull String workspaceId, List<? extends Filter> filters) {
 
         if (projectIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -3629,9 +3633,18 @@ class TraceDAOImpl implements TraceDAO {
 
                     template.add("project_stats", true);
 
+                    if (!CollectionUtils.isEmpty(filters)) {
+                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                                .ifPresent(traceFilters -> template.add("filters", traceFilters));
+                    }
+
                     Statement statement = connection.createStatement(template.render())
                             .bind("project_ids", projectIds)
                             .bind("workspace_id", workspaceId);
+
+                    if (!CollectionUtils.isEmpty(filters)) {
+                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                    }
 
                     return Mono.from(statement.execute())
                             .flatMapMany(result -> result.map((row, rowMetadata) -> Map.of(

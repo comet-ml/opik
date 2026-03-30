@@ -13,11 +13,15 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -1526,6 +1530,7 @@ class ProjectsResourceTest {
                         .isEqualTo(expectedLastTraceByProjectId);
             });
         }
+
     }
 
     private ProjectStatsSummaryItem mapFromProjectToSummary(Project project) {
@@ -1950,6 +1955,71 @@ class ProjectsResourceTest {
 
             // Error count might be null or have count = 0, also verify thread count
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary.reversed());
+        }
+
+        @Test
+        @DisplayName("when source filter is applied, then exclude non-SDK traces from stats")
+        void getProjectStats__whenSourceFilterApplied__thenExcludeNonSdkTraces() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            Instant startTime = Instant.now();
+            Trace sdkTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .source(Source.SDK)
+                    .startTime(startTime)
+                    .endTime(startTime.plusSeconds(1))
+                    .errorInfo(null)
+                    .usage(null)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+
+            Trace experimentTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .source(Source.EXPERIMENT)
+                    .startTime(startTime)
+                    .endTime(startTime.plusSeconds(1))
+                    .errorInfo(null)
+                    .usage(null)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+
+            Trace playgroundTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .source(Source.PLAYGROUND)
+                    .startTime(startTime)
+                    .endTime(startTime.plusSeconds(1))
+                    .errorInfo(null)
+                    .usage(null)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(sdkTrace, experimentTrace, playgroundTrace), apiKey,
+                    workspaceName);
+
+            var sourceFilter = new TraceFilter(TraceField.SOURCE, Operator.EQUAL, null, Source.SDK.getValue());
+
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = List.of(
+                    mapFromProjectToSummary(
+                            createProjectSummary(project.toBuilder().id(projectId).build(), List.of(sdkTrace)),
+                            List.of(sdkTrace)));
+
+            var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
+                    workspaceName, List.of(sourceFilter));
+
+            assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
         }
 
         private void assertSummaryResponse(ProjectStatsSummary actualProjectsSummary,
