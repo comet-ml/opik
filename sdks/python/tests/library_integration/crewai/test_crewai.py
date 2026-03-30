@@ -152,10 +152,13 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         ),
                                         total_cost=ANY,
                                         spans=[],
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                     # Second task - summary task
                     SpanModel(
@@ -198,14 +201,19 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         ),
                                         total_cost=ANY,
                                         spans=[],
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

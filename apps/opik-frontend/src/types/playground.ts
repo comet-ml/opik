@@ -30,6 +30,7 @@ export interface PlaygroundPromptType {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
+  skipInitialPromptLoad?: boolean;
 }
 
 export interface ChatCompletionMessageChoiceType {
@@ -84,6 +85,7 @@ export interface LogTrace {
   input: { messages: ProviderMessageType[] };
   output: { output: string | null };
   metadata?: Record<string, unknown>;
+  source?: string;
 }
 
 export interface LogSpan {

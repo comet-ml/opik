@@ -169,14 +169,11 @@ class InProcessRunnerLoop:
         entry = entrypoints.get(agent_name)
         if entry is None:
             LOGGER.error("Unknown agent '%s' for job %s", agent_name, job_id)
-            try:
-                self._api.runners.report_job_result(
-                    job_id=job_id,
-                    status="failed",
-                    error=f"Unknown agent: {agent_name}",
-                )
-            except Exception:
-                LOGGER.debug("Failed to report error for job %s", job_id, exc_info=True)
+            self._safe_report_job_result(
+                job_id=job_id,
+                status="failed",
+                error=f"Unknown agent: {agent_name}",
+            )
             return
 
         func: Callable = entry["func"]
@@ -184,6 +181,12 @@ class InProcessRunnerLoop:
 
         trace_id = id_helpers.generate_id()
         _inject_trace_id(inputs, trace_id)
+
+        self._safe_report_job_result(
+            job_id=job_id,
+            status="running",
+            trace_id=trace_id,
+        )
 
         try:
             timeout = job.timeout
@@ -215,22 +218,15 @@ class InProcessRunnerLoop:
             if not isinstance(result, (dict, str, int, float, bool, list, type(None))):
                 result = str(result)
 
-            try:
-                self._api.runners.report_job_result(
-                    job_id=job_id,
-                    status="completed",
-                    result={"result": result}
-                    if not isinstance(result, dict)
-                    else result,
-                    trace_id=trace_id,
-                )
-            except Exception:
-                LOGGER.debug(
-                    "Failed to report result for job %s", job_id, exc_info=True
-                )
+            self._safe_report_job_result(
+                job_id=job_id,
+                status="completed",
+                result={"result": result} if not isinstance(result, dict) else result,
+                trace_id=trace_id,
+            )
         except asyncio.TimeoutError:
             LOGGER.warning("Job %s timed out", job_id)
-            self._api.runners.report_job_result(
+            self._safe_report_job_result(
                 job_id=job_id,
                 status="failed",
                 error="Job timed out",
@@ -238,15 +234,19 @@ class InProcessRunnerLoop:
             )
         except Exception as e:
             LOGGER.error("Job %s failed: %s", job_id, e, exc_info=True)
-            try:
-                self._api.runners.report_job_result(
-                    job_id=job_id,
-                    status="failed",
-                    error=f"{type(e).__name__}: {e}",
-                    trace_id=trace_id,
-                )
-            except Exception:
-                LOGGER.debug("Failed to report error for job %s", job_id, exc_info=True)
+            self._safe_report_job_result(
+                job_id=job_id,
+                status="failed",
+                error=f"{type(e).__name__}: {e}",
+                trace_id=trace_id,
+            )
+
+    def _safe_report_job_result(self, job_id: str, **kwargs: object) -> None:
+        """Report a job result, logging and swallowing any exception."""
+        try:
+            self._api.runners.report_job_result(job_id=job_id, **kwargs)
+        except Exception:
+            LOGGER.debug("Failed to report status for job %s", job_id, exc_info=True)
 
     def _prune_cancelled_jobs(self, now: float) -> None:
         """Remove expired entries and enforce max size. Caller must hold self._lock."""

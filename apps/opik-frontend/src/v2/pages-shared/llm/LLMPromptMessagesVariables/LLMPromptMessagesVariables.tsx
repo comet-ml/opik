@@ -28,7 +28,6 @@ interface LLMPromptMessagesVariablesProps {
   projectId: string;
   description?: string;
   errorText?: string;
-  projectName?: string;
   datasetColumnNames?: string[];
   type?: TRACE_DATA_TYPE;
   includeIntermediateNodes?: boolean;
@@ -42,7 +41,6 @@ const LLMPromptMessagesVariables = ({
   projectId,
   description = DEFAULT_DESCRIPTION,
   errorText = DEFAULT_ERROR_TEXT,
-  projectName,
   datasetColumnNames,
   type = TRACE_DATA_TYPE.traces,
   includeIntermediateNodes = false,
@@ -87,7 +85,6 @@ const LLMPromptMessagesVariables = ({
             errorText={validationErrors?.[variable.label]?.message}
             onChange={(changes) => handleChangeVariables(changes)}
             projectId={projectId}
-            projectName={projectName}
             datasetColumnNames={datasetColumnNames}
             type={type}
             includeIntermediateNodes={includeIntermediateNodes}

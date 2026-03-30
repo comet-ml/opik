@@ -116,3 +116,4 @@ const mutation = useMutation({
 - [testing.md](testing.md) - When to test, Vitest patterns
 - [code-quality.md](code-quality.md) - Lodash imports, naming, deps:validate
 - [performance.md](performance.md) - Bundle optimization, rendering, memoization
+- [permissions.md](permissions.md) - `usePermissions()` guard guidance for UI actions

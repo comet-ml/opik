@@ -8,7 +8,7 @@ import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryLi
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import AgentConfigurationHistoryTimeline from "./AgentConfigurationHistoryTimeline";
 import AgentConfigurationDetailView from "./AgentConfigurationDetailView";
-import AgentConfigurationEditView from "./AgentConfigurationEditView";
+import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
 
 type AgentConfigurationTabProps = {
   projectId: string;

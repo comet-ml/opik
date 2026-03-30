@@ -9,6 +9,7 @@ from ..types.result import Result
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
+from ..types.workspace_version import WorkspaceVersion
 from .raw_client import AsyncRawWorkspacesClient, RawWorkspacesClient
 
 # this is used as the default value for optional parameters
@@ -257,6 +258,40 @@ class WorkspacesClient:
             start_before_end=start_before_end,
             request_options=request_options,
         )
+        return _response.data
+
+    def get_workspace_version(self, *, request_options: typing.Optional[RequestOptions] = None) -> WorkspaceVersion:
+        """
+        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+        or Opik V2 (project-first) navigation. The backend is the single authority for this
+        determination, clients must never derive the version themselves.
+
+        Determination logic (priority order):
+        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        2) Auth one-way V2 gate (authenticated mode only)
+        3) Version 1 entity check (entities without project_id)
+        4) Fallback on failure
+
+        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+        Called by the frontend on workspace load.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceVersion
+            Workspace version
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.get_workspace_version()
+        """
+        _response = self._raw_client.get_workspace_version(request_options=request_options)
         return _response.data
 
     def metrics_summary(
@@ -566,6 +601,45 @@ class AsyncWorkspacesClient:
             start_before_end=start_before_end,
             request_options=request_options,
         )
+        return _response.data
+
+    async def get_workspace_version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> WorkspaceVersion:
+        """
+        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+        or Opik V2 (project-first) navigation. The backend is the single authority for this
+        determination, clients must never derive the version themselves.
+
+        Determination logic (priority order):
+        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        2) Auth one-way V2 gate (authenticated mode only)
+        3) Version 1 entity check (entities without project_id)
+        4) Fallback on failure
+
+        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+        Called by the frontend on workspace load.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceVersion
+            Workspace version
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.get_workspace_version()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_workspace_version(request_options=request_options)
         return _response.data
 
     async def metrics_summary(

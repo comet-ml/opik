@@ -2975,6 +2975,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       responses:
         "200":
           description: Feedback Scores resource
@@ -5192,6 +5197,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TokenUsageNames"
+  /v1/private/projects/{id}/kpi-cards:
+    post:
+      tags:
+      - Projects
+      summary: Get Project KPI Cards
+      description: Gets KPI card metrics for a project
+      operationId: getProjectKpiCards
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KpiCardRequest"
+      responses:
+        "200":
+          description: KPI Card Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KpiCardResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -5257,6 +5294,10 @@ paths:
         schema:
           type: string
           description: "Filter projects by name (partial match, case insensitive)"
+      - name: filters
+        in: query
+        schema:
+          type: string
       - name: sorting
         in: query
         schema:
@@ -7507,6 +7548,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
       deprecated: true
+  /v1/private/workspaces/versions:
+    get:
+      tags:
+      - Workspaces
+      summary: Get workspace version
+      description: |-
+        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+        or Opik V2 (project-first) navigation. The backend is the single authority for this
+        determination, clients must never derive the version themselves.
+
+        Determination logic (priority order):
+        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        2) Auth one-way V2 gate (authenticated mode only)
+        3) Version 1 entity check (entities without project_id)
+        4) Fallback on failure
+
+        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+        Called by the frontend on workspace load.
+      operationId: getWorkspaceVersion
+      responses:
+        "200":
+          description: Workspace version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceVersion"
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
@@ -16531,6 +16598,50 @@ components:
           type: array
           items:
             type: string
+    KpiCardResponse:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiMetric"
+    KpiMetric:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - count
+          - errors
+          - avg_duration
+          - total_cost
+        current_value:
+          type: number
+          format: double
+        previous_value:
+          type: number
+          format: double
+    KpiCardRequest:
+      required:
+      - entity_type
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum:
+          - traces
+          - spans
+          - threads
+        filters:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
     DataPointNumber_Public:
       required:
       - time
@@ -16563,6 +16674,13 @@ components:
           - SPAN_COUNT
           - SPAN_DURATION
           - SPAN_TOKEN_USAGE
+          - TRACE_AVERAGE_DURATION
+          - TRACE_ERROR_RATE
+          - SPAN_AVERAGE_DURATION
+          - SPAN_COST
+          - SPAN_ERROR_RATE
+          - THREAD_AVERAGE_DURATION
+          - THREAD_COST
         interval:
           type: string
           enum:
@@ -16621,6 +16739,13 @@ components:
           - SPAN_COUNT
           - SPAN_DURATION
           - SPAN_TOKEN_USAGE
+          - TRACE_AVERAGE_DURATION
+          - TRACE_ERROR_RATE
+          - SPAN_AVERAGE_DURATION
+          - SPAN_COST
+          - SPAN_ERROR_RATE
+          - THREAD_AVERAGE_DURATION
+          - THREAD_COST
         interval:
           type: string
           enum:
@@ -17399,6 +17524,15 @@ components:
           type: string
           format: date-time
           readOnly: true
+        catch_up_cursor:
+          type: string
+          description: Current position of historical data cleanup
+          format: uuid
+          readOnly: true
+        catch_up_done:
+          type: boolean
+          description: Whether historical catch-up is complete
+          readOnly: true
     RetentionRule_Write:
       required:
       - retention
@@ -17440,7 +17574,6 @@ components:
       required:
       - alertsEnabled
       - anthropicProviderEnabled
-      - assistantSidebarEnabled
       - bedrockProviderEnabled
       - collaboratorsTabEnabled
       - csvUploadEnabled
@@ -17448,6 +17581,7 @@ components:
       - datasetExportEnabled
       - datasetVersioningEnabled
       - exportEnabled
+      - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
@@ -17507,8 +17641,9 @@ components:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
-        assistantSidebarEnabled:
-          type: boolean
+        forceWorkspaceVersion:
+          minLength: 1
+          type: string
     SpanBatchUpdate:
       required:
       - ids
@@ -18912,6 +19047,22 @@ components:
               \ values (e.g. #FF0000). Max 10000 entries."
           description: "Workspace-level color map. Maps label names to hex color values\
             \ (e.g. #FF0000). Max 10000 entries."
+    WorkspaceVersion:
+      type: object
+      properties:
+        opik_version:
+          type: string
+          description: |-
+            The determined Opik navigation version for this workspace.
+            'version_1' = legacy workspace-scoped navigation,
+            'version_2' = new project-first navigation.
+          enum:
+          - version_1
+          - version_2
+      description: |-
+        Workspace version response.
+        The opik_version field indicates which navigation mode the frontend should render:
+        'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

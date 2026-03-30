@@ -13,9 +13,12 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
@@ -115,7 +118,8 @@ public interface TraceDAO {
 
     Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
-    Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
+    Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId,
+            List<? extends Filter> filters);
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
@@ -148,6 +152,23 @@ public interface TraceDAO {
      * @param lowerBound      global lower bound for experiment_items subquery
      */
     Mono<Long> deleteForRetentionBounded(Map<String, UUID> workspaceMinIds, UUID cutoffId, UUID lowerBound);
+
+    /**
+     * Lightweight pre-delete count for observability.
+     * Counts traces in [lowerBound, cutoffId) without the experiment_items exclusion subquery
+     * to avoid join cost. This is an upper-bound ceiling with >99% precision (very few traces
+     * are linked to experiments in practice).
+     */
+    Mono<Long> countForRetention(List<String> workspaceIds, UUID cutoffId, UUID lowerBound);
+
+    /**
+     * Scout for the first day with trace data in a month-sized range.
+     * Used to find the actual start of data for huge workspaces where the full estimation query fails.
+     *
+     * @return the first date with data as an Instant (start of day UTC), or empty if no data in range.
+     *         Throws with code 158 if even the month range exceeds row limits.
+     */
+    Mono<Instant> scoutFirstDayWithData(String workspaceId, UUID rangeStart, UUID rangeEnd);
 }
 
 @Slf4j
@@ -835,7 +856,17 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH feedback_scores_combined_raw AS (
+            WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
+                SELECT DISTINCT id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(last_received_id)> AND id \\< :last_received_id <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -853,8 +884,11 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                  <else>
                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  <endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -873,8 +907,11 @@ class TraceDAOImpl implements TraceDAO {
                  WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
+                   <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                   <else>
                    <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                    <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                   <endif>
              ),
              feedback_scores_with_ranking AS (
                  SELECT workspace_id,
@@ -981,8 +1018,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    <endif>
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
@@ -992,8 +1032,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                <endif>
             ),
             span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -1162,8 +1205,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                <endif>
                 GROUP BY workspace_id, project_id, trace_id
             ), comments_agg AS (
                 SELECT
@@ -1183,8 +1229,11 @@ class TraceDAOImpl implements TraceDAO {
                     FROM comments
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    <endif>
                     ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
@@ -1199,8 +1248,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE aq.scope = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                      <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             )
@@ -1216,8 +1268,11 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT DISTINCT experiment_id, trace_id, dataset_item_id
                     FROM experiment_items
                     WHERE workspace_id = :workspace_id
+                    <if(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                    <else>
                     <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                    <endif>
                 ) ei
                 LEFT JOIN (
                     SELECT id, dataset_item_id
@@ -1226,8 +1281,11 @@ class TraceDAOImpl implements TraceDAO {
                     AND id IN (
                         SELECT dataset_item_id FROM experiment_items
                         WHERE workspace_id = :workspace_id
+                        <if(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                        <else>
                         <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                         <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                        <endif>
                     )
                 ) div ON div.id = ei.dataset_item_id
                 INNER JOIN (
@@ -1789,6 +1847,30 @@ class TraceDAOImpl implements TraceDAO {
                 AND trace_id \\< :cutoff_id
             )
             SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    // Lightweight pre-delete count for observability. Omits the experiment_items exclusion subquery
+    // to avoid the join cost; this makes it an upper-bound ceiling with >99% precision in practice
+    // (very few traces are linked to experiments).
+    private static final String COUNT_FOR_RETENTION = """
+            SELECT count() FROM traces
+            WHERE workspace_id IN :workspace_ids
+            AND id >= :lower_bound
+            AND id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SCOUT_FIRST_DAY_WITH_DATA = """
+            SELECT toDate(UUIDv7ToDateTime(toUUID(id))) AS day
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id >= :range_start AND id \\< :range_end
+            GROUP BY day
+            ORDER BY day
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -3140,6 +3222,33 @@ class TraceDAOImpl implements TraceDAO {
                 || sortFields.contains("total_estimated_cost");
     }
 
+    /**
+     * Determines whether to activate the trace_id_prefilter CTE for narrowing feedback_scores,
+     * comments, spans, guardrails, annotations, and experiments scans. Uses template attributes
+     * already computed by newTraceThreadFindTemplate to avoid redundant toAnalyticsDbFilters calls.
+     *
+     * <p>Only activates for filters that narrow beyond what time-range alone provides:
+     * uuidFromTime/uuidToTime are excluded because the if/else fallback applies them directly
+     * to each CTE; lastReceivedId is excluded because it's a pagination cursor, not a
+     * semantic filter.
+     *
+     * <p>Guardrails filters inject {@code gagg.guardrails_result} into the {@code <filters>}
+     * template variable, which references the guardrails_agg CTE alias. Since the prefilter
+     * CTE only queries the traces table, these references would fail. Guard against them.
+     */
+    private boolean shouldUseTraceIdPrefilter(TraceSearchCriteria criteria, ST template) {
+        boolean hasCteDependentFilters = template.getAttribute("feedback_scores_filters") != null
+                || template.getAttribute("feedback_scores_empty_filters") != null
+                || template.getAttribute("span_feedback_scores_filters") != null
+                || template.getAttribute("span_feedback_scores_empty_filters") != null
+                || template.getAttribute("guardrails_filters") != null;
+
+        boolean hasNarrowingFilters = criteria.searchText() != null
+                || template.getAttribute("filters") != null;
+
+        return !hasCteDependentFilters && hasNarrowingFilters;
+    }
+
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
 
@@ -3155,13 +3264,20 @@ class TraceDAOImpl implements TraceDAO {
             template.add("offset", offset);
             template.add("log_comment", logComment);
 
-            var finalTemplate = template;
-            Optional.ofNullable(
-                    sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(),
-                            TraceSortingFactory.EXPERIMENT_FIELD_MAPPING))
-                    .ifPresent(sortFields -> {
+            var orderBySql = sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(),
+                    TraceSortingFactory.EXPERIMENT_FIELD_MAPPING);
+            boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)
+                    .map(sortFields -> sortFields.contains("feedback_scores"))
+                    .orElse(false);
 
-                        if (sortFields.contains("feedback_scores")) {
+            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template) && !sortHasFeedbackScores) {
+                template.add("trace_id_prefilter", true);
+            }
+
+            var finalTemplate = template;
+            Optional.ofNullable(orderBySql)
+                    .ifPresent(sortFields -> {
+                        if (sortHasFeedbackScores) {
                             finalTemplate.add("sort_has_feedback_scores", true);
                         }
 
@@ -3509,7 +3625,7 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     public Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(@NonNull List<UUID> projectIds,
-            @NonNull String workspaceId) {
+            @NonNull String workspaceId, List<? extends Filter> filters) {
 
         if (projectIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -3522,9 +3638,18 @@ class TraceDAOImpl implements TraceDAO {
 
                     template.add("project_stats", true);
 
+                    if (!CollectionUtils.isEmpty(filters)) {
+                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                                .ifPresent(traceFilters -> template.add("filters", traceFilters));
+                    }
+
                     Statement statement = connection.createStatement(template.render())
                             .bind("project_ids", projectIds)
                             .bind("workspace_id", workspaceId);
+
+                    if (!CollectionUtils.isEmpty(filters)) {
+                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                    }
 
                     return Mono.from(statement.execute())
                             .flatMapMany(result -> result.map((row, rowMetadata) -> Map.of(
@@ -3735,6 +3860,10 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE);
             template.add("log_comment", logComment);
 
+            if (shouldUseTraceIdPrefilter(criteria, template)) {
+                template.add("trace_id_prefilter", true);
+            }
+
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             var statement = connection.createStatement(template.render())
@@ -3880,6 +4009,28 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
+    public Mono<Long> countForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+            @NonNull UUID lowerBound) {
+        if (workspaceIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_traces", null,
+                workspaceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("cutoff_id", cutoffId)
+                            .bind("lower_bound", lowerBound);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, meta) -> row.get(0, Long.class))));
+                });
+    }
+
+    @Override
     public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds,
             @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
         Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
@@ -3920,6 +4071,31 @@ class TraceDAOImpl implements TraceDAO {
 
                     return Mono.from(statement.execute())
                             .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    @Override
+    public Mono<Instant> scoutFirstDayWithData(@NonNull String workspaceId,
+            @NonNull UUID rangeStart, @NonNull UUID rangeEnd) {
+        log.debug("Scouting first day with data for workspace '{}', range=['{}', '{}')",
+                workspaceId, rangeStart, rangeEnd);
+
+        var template = getSTWithLogComment(SCOUT_FIRST_DAY_WITH_DATA,
+                "retention_scout_first_day", workspaceId, "");
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("range_start", rangeStart)
+                            .bind("range_end", rangeEnd);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, metadata) -> {
+                                var day = row.get("day", java.time.LocalDate.class);
+                                return day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+                            })))
+                            .defaultIfEmpty(Instant.MAX); // sentinel: no data in range
                 });
     }
 }

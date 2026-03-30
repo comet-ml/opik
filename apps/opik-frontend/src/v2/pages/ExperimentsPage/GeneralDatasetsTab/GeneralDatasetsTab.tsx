@@ -41,7 +41,6 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
-  COLUMN_PROJECT_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -83,9 +82,6 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
-import { EXPERIMENT_TYPE } from "@/types/datasets";
-
-const ALL_EXPERIMENT_TYPES = Object.values(EXPERIMENT_TYPE);
 const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
@@ -116,7 +112,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
-  COLUMN_PROJECT_ID,
   "prompt",
   COLUMN_COMMENTS_ID,
   "tags",
@@ -211,18 +206,6 @@ const GeneralDatasetsTab: React.FC = () => {
         accessorFn: (row: GroupedExperiment) =>
           row.dataset_version_summary?.version_name || "",
         cell: DatasetVersionCell as never,
-      },
-      {
-        id: COLUMN_PROJECT_ID,
-        label: "Project",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        accessorFn: (row) => row.project_id,
-        customMeta: {
-          nameKey: "project_name",
-          idKey: "project_id",
-          resource: RESOURCE_TYPE.project,
-        },
       },
       {
         id: "created_at",
@@ -368,13 +351,14 @@ const GeneralDatasetsTab: React.FC = () => {
   }, []);
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
-    useExperimentsFeedbackScores();
+    useExperimentsFeedbackScores({ projectId: activeProjectId ?? undefined });
 
   const { groups, setGroups, filtersAndGroupsConfig } =
     useExperimentsGroupsAndFilters({
       storageKeyPrefix: STORAGE_KEY_PREFIX,
       sortedColumns,
       filters,
+      projectId: activeProjectId,
     });
 
   const expandingConfig = useExpandingConfig({
@@ -385,11 +369,11 @@ const GeneralDatasetsTab: React.FC = () => {
   const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useGroupedExperimentsList({
       workspaceName,
+      projectId: activeProjectId ?? undefined,
       groupLimit,
       filters,
       sorting: sortedColumns,
       groups,
-      types: ALL_EXPERIMENT_TYPES,
       search: search!,
       page: page!,
       size: size!,
@@ -489,18 +473,14 @@ const GeneralDatasetsTab: React.FC = () => {
     [setGroupLimit],
   );
 
-  // Filter out name and dataset/project columns when grouping by dataset/project
+  // Filter out name and dataset columns when grouping by dataset
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
     );
-    const isGroupingByProject = groups.some(
-      (g) => g.field === COLUMN_PROJECT_ID,
-    );
 
     return columnsDef.filter((col) => {
       if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
-      if (isGroupingByProject && col.id === COLUMN_PROJECT_ID) return false;
       if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
       return true;
     });
@@ -784,6 +764,7 @@ const GeneralDatasetsTab: React.FC = () => {
         open={openDialog}
         setOpen={setOpenDialog}
         datasetName={query?.datasetName}
+        projectId={activeProjectId}
       />
     </>
   );

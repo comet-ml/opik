@@ -2,7 +2,8 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, TRACES_REST_ENDPOINT } from "@/api/api";
 import { ColumnsStatistic } from "@/types/shared";
 import { Filters } from "@/types/filters";
-import { processFilters } from "@/lib/filters";
+import { generateLogsSourceFilter, processFilters } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 
 type UseThreadsStatisticParams = {
   projectId: string;
@@ -10,6 +11,7 @@ type UseThreadsStatisticParams = {
   search?: string;
   fromTime?: string;
   toTime?: string;
+  logsSource?: LOGS_SOURCE;
 };
 
 export type UseThreadsStatisticResponse = {
@@ -18,7 +20,14 @@ export type UseThreadsStatisticResponse = {
 
 const getThreadsStatistic = async (
   { signal }: QueryFunctionContext,
-  { projectId, filters, search, fromTime, toTime }: UseThreadsStatisticParams,
+  {
+    projectId,
+    filters,
+    search,
+    fromTime,
+    toTime,
+    logsSource,
+  }: UseThreadsStatisticParams,
 ) => {
   const { data } = await api.get<UseThreadsStatisticResponse>(
     `${TRACES_REST_ENDPOINT}threads/stats`,
@@ -26,7 +35,10 @@ const getThreadsStatistic = async (
       signal,
       params: {
         project_id: projectId,
-        ...processFilters(filters),
+        ...processFilters(
+          filters,
+          logsSource ? generateLogsSourceFilter(logsSource) : undefined,
+        ),
         ...(search && { search }),
         ...(fromTime && { from_time: fromTime }),
         ...(toTime && { to_time: toTime }),

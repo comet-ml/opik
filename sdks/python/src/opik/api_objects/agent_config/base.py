@@ -26,6 +26,7 @@ class _OpikState:
     project: typing.Optional[str] = None
     env: typing.Optional[str] = None
     mask_id: typing.Optional[str] = None
+    version: typing.Optional[str] = None
     manager: typing.Any = None
     blueprint_id: typing.Optional[str] = None
     blueprint_version: typing.Optional[str] = None
@@ -127,7 +128,9 @@ class AgentConfig:
     def _resolve_field(self, attr: str) -> typing.Any:
         state = self._state
         project = typing.cast(str, state.project)  # guarded by __getattribute__
-        instance_cache = cache_mod.get_cached_config(project, state.env, state.mask_id)
+        instance_cache = cache_mod.get_cached_config(
+            project, state.env, state.mask_id, state.version
+        )
         state.blueprint_id = instance_cache.blueprint_id
         state.blueprint_version = instance_cache.blueprint_version
         state.is_fallback = instance_cache.blueprint_id is None
@@ -163,11 +166,13 @@ class AgentConfig:
         if missing_locally:
             return False
 
-        for key, (py_type, value, _desc) in fields_with_values.items():
+        for key, (py_type, value, desc) in fields_with_values.items():
             bp_value = blueprint.get(key)
             local_ser = type_helpers.python_value_to_backend_value(value, py_type)
             bp_ser = type_helpers.python_value_to_backend_value(bp_value, py_type)
             if local_ser != bp_ser:
+                return False
+            if desc != blueprint.get_field_description(key):
                 return False
         return True
 
@@ -308,7 +313,12 @@ class AgentConfig:
                 exc_info=True,
             )
             cache_mod.init_cache_entry(
-                project_name, resolved_env, mask_id, field_types, manager
+                project_name,
+                resolved_env,
+                mask_id,
+                field_types,
+                manager,
+                version=version,
             )
             return fallback
 
@@ -335,6 +345,7 @@ class AgentConfig:
         state.project = project_name
         state.env = resolved_env
         state.mask_id = mask_id
+        state.version = version
         state.manager = manager
         state.blueprint_id = bp.id
         state.blueprint_version = bp.name
@@ -342,7 +353,13 @@ class AgentConfig:
         state.is_fallback = False
 
         cache_mod.init_cache_entry(
-            project_name, resolved_env, mask_id, field_types, manager, blueprint=bp
+            project_name,
+            resolved_env,
+            mask_id,
+            field_types,
+            manager,
+            blueprint=bp,
+            version=version,
         )
 
         return instance

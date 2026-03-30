@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.infrastructure.RedisConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -13,9 +15,11 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
 import org.testcontainers.lifecycle.Startables;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,9 +28,12 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class AuthCredentialsCacheServiceTest {
-    private final AuthCredentialsCacheService cacheService;
 
     private static final int CACHE_TTL_IN_SECONDS = 1;
+
+    private final AuthCredentialsCacheService cacheService;
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
@@ -52,8 +59,10 @@ public class AuthCredentialsCacheServiceTest {
                 .isEmpty())
                 .isTrue();
 
-        cacheService.cache(apiKey, workspaceName, requiredPermissions, userName, workspaceId, resolvedWorkspaceName,
-                quotas);
+        cacheService.cache(apiKey, workspaceName, requiredPermissions,
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(resolvedWorkspaceName).quotas(quotas).build());
 
         Optional<CacheService.AuthCredentials> credentials = cacheService
                 .resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, requiredPermissions);
@@ -85,7 +94,10 @@ public class AuthCredentialsCacheServiceTest {
         List<String> requiredPermissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue(),
                 WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
 
-        cacheService.cache(apiKey, workspaceName, requiredPermissions, userName, workspaceId, workspaceName, null);
+        cacheService.cache(apiKey, workspaceName, requiredPermissions,
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(workspaceName).build());
 
         resolveAndAssertOnValidCache(apiKey, workspaceName, requiredPermissions, userName, workspaceId);
     }
@@ -101,7 +113,10 @@ public class AuthCredentialsCacheServiceTest {
         List<String> resolvedPermissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue(),
                 WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
 
-        cacheService.cache(apiKey, workspaceName, cachedPermissions, userName, workspaceId, workspaceName, null);
+        cacheService.cache(apiKey, workspaceName, cachedPermissions,
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(workspaceName).build());
         var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName,
                 resolvedPermissions);
 
@@ -118,7 +133,10 @@ public class AuthCredentialsCacheServiceTest {
         var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, null);
         assertThat(resolved).isEmpty();
 
-        cacheService.cache(apiKey, workspaceName, null, userName, workspaceId, workspaceName, null);
+        cacheService.cache(apiKey, workspaceName, null,
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(workspaceName).build());
 
         resolveAndAssertOnValidCache(apiKey, workspaceName, null, userName, workspaceId);
     }
@@ -133,9 +151,13 @@ public class AuthCredentialsCacheServiceTest {
                 WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
 
         cacheService.cache(apiKey, workspaceName, List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue()),
-                userName, workspaceId, workspaceName, null);
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(workspaceName).build());
         cacheService.cache(apiKey, workspaceName, List.of(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()),
-                userName, workspaceId, workspaceName, null);
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(workspaceName).build());
 
         resolveAndAssertOnValidCache(apiKey, workspaceName, bothPermissions, userName, workspaceId);
     }
@@ -148,7 +170,10 @@ public class AuthCredentialsCacheServiceTest {
         String workspaceId = getRandomId();
         List<String> permissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue());
 
-        cacheService.cache(apiKey, workspaceName, permissions, userName, workspaceId, workspaceName, null);
+        cacheService.cache(apiKey, workspaceName, permissions,
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(workspaceName).build());
         resolveAndAssertOnValidCache(apiKey, workspaceName, permissions, userName, workspaceId);
 
         var resolvedWithDifferentApiKey = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(
@@ -164,7 +189,10 @@ public class AuthCredentialsCacheServiceTest {
         String workspaceId = getRandomId();
         String resolvedWorkspaceName = getRandomId();
 
-        cacheService.cache(apiKey, workspaceName, null, userName, workspaceId, resolvedWorkspaceName, null);
+        cacheService.cache(apiKey, workspaceName, null,
+                CacheService.AuthCredentials.builder()
+                        .userName(userName).workspaceId(workspaceId)
+                        .workspaceName(resolvedWorkspaceName).build());
 
         var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, null);
         assertThat(resolved).isPresent();
@@ -178,6 +206,29 @@ public class AuthCredentialsCacheServiceTest {
         assertThat(resolvedWithEmptyList.get().userName()).isEqualTo(userName);
     }
 
+    Stream<Arguments> testCacheAndRetrieveOpikVersion() {
+        return Stream.of(
+                arguments(named("opikVersion=null", null)),
+                arguments(named("opikVersion=version_1", OpikVersion.VERSION_1)),
+                arguments(named("opikVersion=version_2", OpikVersion.VERSION_2)));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void testCacheAndRetrieveOpikVersion(OpikVersion opikVersion) {
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        var expectedAuthCredentials = podamFactory.manufacturePojo(CacheService.AuthCredentials.class).toBuilder()
+                .opikVersion(opikVersion)
+                .build();
+        cacheService.cache(apiKey, expectedAuthCredentials.workspaceName(), List.of(), expectedAuthCredentials);
+
+        var actualAuthCredentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(
+                apiKey, expectedAuthCredentials.workspaceName(), List.of());
+
+        assertThat(actualAuthCredentials).isPresent();
+        assertThat(actualAuthCredentials.get()).isEqualTo(expectedAuthCredentials);
+    }
+
     private void resolveAndAssertOnValidCache(String apiKey, String workspaceName, List<String> bothPermissions,
             String expectedUserName, String expectedWorkspaceId) {
         var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, bothPermissions);
@@ -188,7 +239,6 @@ public class AuthCredentialsCacheServiceTest {
     }
 
     private String getRandomId() {
-        return RandomStringUtils.secure().nextAlphanumeric(10);
+        return RandomStringUtils.secure().nextAlphanumeric(32);
     }
-
 }

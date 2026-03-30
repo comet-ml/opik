@@ -44,6 +44,7 @@ type TraceDetailsPanelProps = {
   open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
+  container?: HTMLElement | null;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -57,6 +58,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onClose,
   open,
   onRowChange,
+  container,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -293,6 +295,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       horizontalNavigation={horizontalNavigation}
       verticalNavigation={verticalNavigation}
       minWidth={700}
+      container={container}
     >
       {renderContent()}
     </ResizableSidePanel>

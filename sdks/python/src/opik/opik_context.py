@@ -203,7 +203,7 @@ def trace_context(
             trace data.
     """
     if client.config.log_start_trace_span:
-        client.trace(**trace_data.as_start_parameters)
+        client.__internal_api__trace__(**trace_data.as_start_parameters)
 
     error_info: Optional[ErrorInfoDict] = None
     try:
@@ -222,7 +222,7 @@ def trace_context(
 
         trace_data.init_end_time()
 
-        client.trace(**trace_data.as_parameters)
+        client.__internal_api__trace__(**trace_data.as_parameters)
 
 
 __all__ = [

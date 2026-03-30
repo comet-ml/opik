@@ -16,6 +16,7 @@ from ..types.result import Result
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
+from ..types.workspace_version import WorkspaceVersion
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -400,6 +401,53 @@ class RawWorkspacesClient:
                         ),
                     ),
                 )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_workspace_version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[WorkspaceVersion]:
+        """
+        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+        or Opik V2 (project-first) navigation. The backend is the single authority for this
+        determination, clients must never derive the version themselves.
+
+        Determination logic (priority order):
+        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        2) Auth one-way V2 gate (authenticated mode only)
+        3) Version 1 entity check (entities without project_id)
+        4) Fallback on failure
+
+        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+        Called by the frontend on workspace load.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[WorkspaceVersion]
+            Workspace version
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/versions",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WorkspaceVersion,
+                    parse_obj_as(
+                        type_=WorkspaceVersion,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -856,6 +904,53 @@ class AsyncRawWorkspacesClient:
                         ),
                     ),
                 )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_workspace_version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[WorkspaceVersion]:
+        """
+        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+        or Opik V2 (project-first) navigation. The backend is the single authority for this
+        determination, clients must never derive the version themselves.
+
+        Determination logic (priority order):
+        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        2) Auth one-way V2 gate (authenticated mode only)
+        3) Version 1 entity check (entities without project_id)
+        4) Fallback on failure
+
+        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+        Called by the frontend on workspace load.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[WorkspaceVersion]
+            Workspace version
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/versions",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WorkspaceVersion,
+                    parse_obj_as(
+                        type_=WorkspaceVersion,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

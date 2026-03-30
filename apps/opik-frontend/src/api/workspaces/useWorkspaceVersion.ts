@@ -4,24 +4,21 @@ import { WorkspaceVersion, useActiveWorkspaceName } from "@/store/AppStore";
 import { DEFAULT_WORKSPACE_VERSION } from "@/lib/workspaceVersion";
 
 type WorkspaceVersionResponse = {
-  opikVersion: "opik1" | "opik2";
+  opik_version: "version_1" | "version_2";
 };
 
 const VERSION_MAP: Record<
-  WorkspaceVersionResponse["opikVersion"],
+  WorkspaceVersionResponse["opik_version"],
   WorkspaceVersion
 > = {
-  opik1: "v1",
-  opik2: "v2",
+  version_1: "v1",
+  version_2: "v2",
 };
 
 export async function fetchWorkspaceVersion(opts?: {
   workspaceName?: string;
   signal?: AbortSignal;
 }): Promise<WorkspaceVersion> {
-  // TODO: remove early return when BE endpoint (OPIK-5171) is implemented
-  return DEFAULT_WORKSPACE_VERSION;
-
   try {
     const { workspaceName, signal } = opts ?? {};
     const config = {
@@ -31,10 +28,10 @@ export async function fetchWorkspaceVersion(opts?: {
       }),
     };
     const { data } = await api.get<WorkspaceVersionResponse>(
-      WORKSPACES_REST_ENDPOINT + "version",
+      WORKSPACES_REST_ENDPOINT + "versions",
       config,
     );
-    return VERSION_MAP[data.opikVersion] ?? DEFAULT_WORKSPACE_VERSION;
+    return VERSION_MAP[data.opik_version] ?? DEFAULT_WORKSPACE_VERSION;
   } catch {
     return DEFAULT_WORKSPACE_VERSION;
   }

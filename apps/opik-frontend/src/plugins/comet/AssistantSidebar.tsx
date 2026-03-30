@@ -10,18 +10,96 @@ import {
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
+import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
+import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import { BASE_API_URL } from "@/api/api";
+import { Spinner } from "@/ui/spinner";
 
 const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
-
-const ASSISTANT_BRIDGE_VERSION = 1;
-const PROD_BASE = import.meta.env.VITE_ASSISTANT_SIDEBAR_CDN_URL;
-const FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
-const FAILURE_KEY = "assistant_load_failure_ts";
 const IS_DEV = import.meta.env.DEV;
-const ASSISTANT_BACKEND_URL =
-  import.meta.env.VITE_ASSISTANT_BACKEND_URL || "/assistant-api";
+const BRIDGE_PROTOCOL_VERSION = 1;
+
+const LOADER_DEFAULT_WIDTH = 400;
+const LOADER_COLLAPSED_WIDTH = 33;
+
+function getStoredSidebarWidth(): number {
+  try {
+    const parsed = parseInt(
+      localStorage.getItem("assistant-sidebar-width") ?? "",
+      10,
+    );
+    if (parsed > 0) return parsed;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return LOADER_DEFAULT_WIDTH;
+}
+
+function getStoredSidebarOpen(): boolean {
+  try {
+    const stored = localStorage.getItem("assistant-sidebar-open");
+    return stored === null ? true : stored === "true";
+  } catch {
+    return true;
+  }
+}
+
+const PHASE_MESSAGES: Partial<
+  Record<AssistantBackendPhase | "manifest", string>
+> = {
+  compute: "Starting assistant\u2026",
+  health: "Connecting\u2026",
+  manifest: "Loading interface\u2026",
+};
+
+interface AssistantSidebarLoaderProps {
+  phase: AssistantBackendPhase | "manifest";
+  error: string | null;
+  onWidthChange: (width: number) => void;
+}
+
+const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
+  phase,
+  error,
+  onWidthChange,
+}) => {
+  const isOpen = useRef(getStoredSidebarOpen());
+  const initialWidth = useRef(
+    isOpen.current ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+  );
+
+  useEffect(() => {
+    onWidthChange(initialWidth.current);
+  }, [onWidthChange]);
+
+  const collapsed = !isOpen.current;
+
+  if (error) {
+    return (
+      <div className="flex size-full flex-col items-center justify-center gap-3 border-l bg-background px-6 text-center">
+        <div className="text-sm font-medium text-destructive">
+          Unable to load assistant
+        </div>
+        <p className="text-xs text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  const message = PHASE_MESSAGES[phase] ?? "Loading\u2026";
+
+  return (
+    <div className="relative size-full border-l">
+      <div className="absolute inset-0 animate-pulse bg-muted" />
+      <div className="relative flex size-full items-center justify-center">
+        <Spinner size={collapsed ? "xs" : "small"} />
+        {!collapsed && (
+          <span className="ml-2 text-sm text-light-slate">{message}</span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const stopPropagation = (e: Event) => e.stopPropagation();
 
@@ -35,34 +113,8 @@ function useLatestRef<T>(value: T): React.MutableRefObject<T> {
 interface AssistantManifest {
   js: string;
   css?: string;
-}
-
-const isInCooldown = (): boolean => {
-  const ts = sessionStorage.getItem(FAILURE_KEY);
-  if (!ts) return false;
-  return Date.now() - Number(ts) < FAILURE_COOLDOWN_MS;
-};
-
-const markFailure = (): void => {
-  sessionStorage.setItem(FAILURE_KEY, String(Date.now()));
-};
-
-const clearFailure = (): void => {
-  sessionStorage.removeItem(FAILURE_KEY);
-};
-
-async function fetchManifest(
-  baseUrl: string,
-  retry = true,
-): Promise<AssistantManifest> {
-  try {
-    const res = await fetch(`${baseUrl}/manifest.json`);
-    if (!res.ok) throw new Error(`manifest ${res.status}`);
-    return (await res.json()) as AssistantManifest;
-  } catch (err) {
-    if (retry) return fetchManifest(baseUrl, false);
-    throw err;
-  }
+  shell: string;
+  ver: string;
 }
 
 type HostListeners = {
@@ -88,7 +140,7 @@ interface BridgeRefs {
 }
 
 const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
-  version: ASSISTANT_BRIDGE_VERSION,
+  version: BRIDGE_PROTOCOL_VERSION,
   getContext: () => refs.context.current,
   subscribe: (event, callback) => {
     const set = refs.listeners.current[event as keyof HostEventMap] as
@@ -101,23 +153,31 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
     };
   },
   emit: (event, data) => {
-    if (event === "navigate") {
-      refs.navigate.current((data as SidebarEventMap["navigate"]).path);
-    } else if (event === "sidebar:resized") {
-      refs.onWidthChange.current(
-        (data as SidebarEventMap["sidebar:resized"]).width,
-      );
-    } else if (event === "notification") {
-      refs.onNotification.current(data as SidebarEventMap["notification"]);
-    } else if (event === "sidebar:request-open") {
-      refs.onRequestVisibility.current(true);
-    } else if (event === "sidebar:request-close") {
-      refs.onRequestVisibility.current(false);
-    } else if (IS_DEV) {
-      console.warn(
-        `[AssistantBridge] Unhandled sidebar event: "${event}"`,
-        data,
-      );
+    switch (event) {
+      case "navigate":
+        refs.navigate.current((data as SidebarEventMap["navigate"]).path);
+        break;
+      case "sidebar:resized":
+        refs.onWidthChange.current(
+          (data as SidebarEventMap["sidebar:resized"]).width,
+        );
+        break;
+      case "notification":
+        refs.onNotification.current(data as SidebarEventMap["notification"]);
+        break;
+      case "sidebar:request-open":
+        refs.onRequestVisibility.current(true);
+        break;
+      case "sidebar:request-close":
+        refs.onRequestVisibility.current(false);
+        break;
+      default:
+        if (IS_DEV) {
+          console.warn(
+            `[AssistantBridge] Unhandled sidebar event: "${event}"`,
+            data,
+          );
+        }
     }
   },
 });
@@ -133,7 +193,7 @@ function emitHostEvent<E extends keyof HostEventMap>(
   }
 }
 
-function useBridgeContext(): BridgeContext {
+function useBridgeContext(assistantBackendUrl: string): BridgeContext {
   const workspaceName = useActiveWorkspaceName();
   const workspace = useWorkspace();
 
@@ -149,52 +209,69 @@ function useBridgeContext(): BridgeContext {
   const projectName = project?.name ?? null;
   const resolvedProjectId = projectId ?? null;
 
+  const organizationId = workspace?.organizationId ?? null;
+
   return useMemo<BridgeContext>(
     () => ({
       workspaceId,
       workspaceName,
+      organizationId,
       projectId: resolvedProjectId,
       projectName,
       baseApiUrl: BASE_API_URL,
-      assistantBackendUrl: ASSISTANT_BACKEND_URL,
+      assistantBackendUrl,
       theme: "light",
     }),
-    [workspaceId, workspaceName, resolvedProjectId, projectName],
+    [
+      workspaceId,
+      workspaceName,
+      organizationId,
+      resolvedProjectId,
+      projectName,
+      assistantBackendUrl,
+    ],
   );
 }
 
 interface AssistantMeta {
   scriptUrl: string;
   cssUrl?: string;
+  shellUrl: string;
+  version: string;
 }
 
-function useAssistantMeta(): AssistantMeta | null {
-  const versionBase = `${PROD_BASE}/v${ASSISTANT_BRIDGE_VERSION}`;
+function resolveManifestUrl(backendUrl: string | null): string | null {
+  if (DEV_BASE_URL) return `${DEV_BASE_URL}/manifest.json`;
+  if (backendUrl) return `${backendUrl}/console/manifest.json`;
+  return null;
+}
+
+function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
+  const manifestUrl = resolveManifestUrl(backendUrl);
+
+  const manifestBase = manifestUrl
+    ? manifestUrl.substring(0, manifestUrl.lastIndexOf("/"))
+    : null;
 
   const { data } = useQuery<AssistantMeta>({
-    queryKey: ["assistant-manifest", versionBase],
+    queryKey: ["assistant-manifest", manifestUrl],
     queryFn: async () => {
-      try {
-        const manifest = await fetchManifest(versionBase);
-        clearFailure();
-        return {
-          scriptUrl: `${versionBase}/${manifest.js}`,
-          cssUrl: manifest.css ? `${versionBase}/${manifest.css}` : undefined,
-        };
-      } catch (err) {
-        markFailure();
-        throw err;
-      }
+      const res = await fetch(manifestUrl!);
+      if (!res.ok) throw new Error(`manifest ${res.status}`);
+      const manifest: AssistantManifest = await res.json();
+      return {
+        scriptUrl: `${manifestBase}/${manifest.js}`,
+        cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
+        shellUrl: IS_DEV
+          ? "/assistant/shell"
+          : `${manifestBase}/${manifest.shell}`,
+        version: manifest.ver,
+      };
     },
-    enabled: !IS_DEV && !!PROD_BASE && !isInCooldown(),
+    enabled: !!manifestUrl,
     staleTime: Infinity,
-    retry: false,
+    retry: 1,
   });
-
-  // In dev mode, return meta directly from env var — no fetch needed
-  if (IS_DEV && DEV_BASE_URL) {
-    return { scriptUrl: `${DEV_BASE_URL}/assistant.js` };
-  }
 
   return data ?? null;
 }
@@ -206,8 +283,14 @@ interface AssistantSidebarProps {
 const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   onWidthChange,
 }) => {
-  const meta = useAssistantMeta();
-  const context = useBridgeContext();
+  const {
+    backendUrl,
+    isReady: isBackendReady,
+    error,
+    phase,
+  } = useAssistantBackend();
+  const meta = useAssistantMeta(backendUrl);
+  const context = useBridgeContext(backendUrl ?? "");
   const router = useRouter();
 
   const { toast } = useToast();
@@ -287,12 +370,22 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     }
   }, []);
 
-  if (!meta) return null;
+  if (!meta || !isBackendReady) {
+    if (phase === "disabled") return null;
+    const effectivePhase = isBackendReady && !meta ? "manifest" : phase;
+    return (
+      <AssistantSidebarLoader
+        phase={effectivePhase}
+        error={error}
+        onWidthChange={onWidthChange}
+      />
+    );
+  }
 
   return (
     <iframe
       ref={setIframeRef}
-      src="/assistant/shell"
+      src={meta.shellUrl}
       className="size-full border-none"
       // Radix's DismissableLayer sets pointer-events:none on the body when a
       // modal dialog is open — this keeps the iframe clickable.

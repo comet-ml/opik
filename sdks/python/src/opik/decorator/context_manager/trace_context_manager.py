@@ -6,6 +6,7 @@ import opik.context_storage as context_storage
 from opik import datetime_helpers
 from opik.api_objects import trace, opik_client, helpers
 from .. import error_info_collector
+from ...types import TraceSource
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ def start_as_current_trace(
     project_name: Optional[str] = None,
     thread_id: Optional[str] = None,
     flush: bool = False,
+    source: TraceSource = "sdk",
 ) -> Generator[trace.TraceData, Any, None]:
     """
     Starts a trace context manager to collect and manage tracing data during the
@@ -39,6 +41,7 @@ def start_as_current_trace(
             specific thread.
         flush: A boolean indicating whether to flush the trace data immediately
             after finishing the trace context.
+        source: The source of the trace, indicating where the trace is initiated.
 
     Yields:
         Provides the initialized trace data for manipulation during execution in the context.
@@ -53,13 +56,14 @@ def start_as_current_trace(
         tags=tags,
         project_name=project_name,
         thread_id=thread_id,
+        source=source,
     )
 
     context_storage.set_trace_data(trace_data)
 
     client = opik_client.get_client_cached()
     if client.config.log_start_trace_span:
-        client.trace(**trace_data.as_start_parameters)
+        client.__internal_api__trace__(**trace_data.as_start_parameters)
 
     try:
         yield trace_data
@@ -75,7 +79,7 @@ def start_as_current_trace(
     finally:
         try:
             client = opik_client.get_client_cached()
-            client.trace(**trace_data.init_end_time().as_parameters)
+            client.__internal_api__trace__(**trace_data.init_end_time().as_parameters)
 
             if flush:
                 client.flush()

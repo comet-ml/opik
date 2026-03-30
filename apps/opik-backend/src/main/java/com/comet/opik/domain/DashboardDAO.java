@@ -36,6 +36,9 @@ import java.util.UUID;
 @RegisterConstructorMapper(Dashboard.class)
 public interface DashboardDAO {
 
+    @SqlQuery("SELECT EXISTS(SELECT 1 FROM dashboards WHERE workspace_id = :workspaceId AND project_id IS NULL)")
+    boolean hasVersion1Dashboards(@Bind("workspaceId") String workspaceId);
+
     @SqlUpdate("INSERT INTO dashboards(id, workspace_id, project_id, name, slug, description, config, type, scope, created_by, last_updated_by) "
             +
             "VALUES (:dashboard.id, :workspaceId, :dashboard.projectId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.type, :dashboard.scope, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
@@ -78,9 +81,6 @@ public interface DashboardDAO {
     @AllowUnusedBindings
     Optional<Dashboard> findByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name,
             @Define("project_id") @Bind("projectId") UUID projectId);
-
-    @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND slug = :slug")
-    Optional<Dashboard> findBySlug(@Bind("workspaceId") String workspaceId, @Bind("slug") String slug);
 
     @SqlUpdate("""
             DELETE FROM dashboards WHERE id = :id AND workspace_id = :workspaceId

@@ -87,7 +87,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   queue: defaultQueue,
 }) => {
   const {
-    permissions: { canCreateAnnotationQueues },
+    permissions: { canCreateAnnotationQueues, canEditAnnotationQueues },
   } = usePermissions();
 
   const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
@@ -162,7 +162,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   return (
     <Dialog
-      open={open && (isEdit || canCreateAnnotationQueues)}
+      open={
+        open && (isEdit ? canEditAnnotationQueues : canCreateAnnotationQueues)
+      }
       onOpenChange={setOpen}
     >
       <DialogContent

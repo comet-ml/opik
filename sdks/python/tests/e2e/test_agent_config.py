@@ -9,6 +9,7 @@ from opik.api_objects.agent_config.config import AgentConfigManager
 from opik.api_objects.agent_config.context import agent_config_context
 
 from opik.api_objects.prompt.text.prompt import Prompt
+from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.rest_api import core as rest_api_core
 from . import verifiers
 from ..testlib import ANY_DICT, ANY_BUT_NONE
@@ -206,18 +207,30 @@ def test_prompt_field_and_trace_metadata__happyflow(
     opik_client: opik.Opik,
     project_name: str,
 ):
-    """Prompt-typed field survives the roundtrip; field access inside a tracked
-    function injects agent_configuration into trace and span metadata."""
+    """Prompt-typed and ChatPrompt-typed fields survive the roundtrip with the correct
+    class; field access inside a tracked function injects agent_configuration into
+    trace and span metadata."""
 
     prompt_name = f"e2e-prompt-{uuid.uuid4().hex[:8]}"
+    chat_prompt_name = f"e2e-chat-prompt-{uuid.uuid4().hex[:8]}"
+
     prompt_v1 = opik_client.create_prompt(name=prompt_name, prompt="Hello v1")
+    chat_prompt_v1 = opik_client.create_chat_prompt(
+        name=chat_prompt_name,
+        messages=[{"role": "user", "content": "Hi v1"}],
+    )
 
     class PromptConfig(opik.AgentConfig):
         system_prompt: Prompt
+        chat_template: ChatPrompt
         temperature: float
 
     opik_client.create_agent_config_version(
-        PromptConfig(system_prompt=prompt_v1, temperature=0.3),
+        PromptConfig(
+            system_prompt=prompt_v1,
+            chat_template=chat_prompt_v1,
+            temperature=0.3,
+        ),
         project_name=project_name,
     )
 
@@ -228,7 +241,11 @@ def test_prompt_field_and_trace_metadata__happyflow(
     @opik.track(project_name=project_name)
     def run():
         cfg = opik_client.get_agent_config(
-            fallback=PromptConfig(system_prompt=prompt_v1, temperature=0.0),
+            fallback=PromptConfig(
+                system_prompt=prompt_v1,
+                chat_template=chat_prompt_v1,
+                temperature=0.0,
+            ),
             project_name=project_name,
             latest=True,
         )
@@ -236,15 +253,22 @@ def test_prompt_field_and_trace_metadata__happyflow(
         id_storage["span_id"] = opik_context.get_current_span_data().id
         id_storage["system_prompt"] = cfg.system_prompt
         id_storage["system_prompt_version_id"] = cfg.system_prompt.version_id
+        id_storage["chat_template"] = cfg.chat_template
+        id_storage["chat_template_version_id"] = cfg.chat_template.version_id
         _ = cfg.temperature
         return cfg
 
     run()
     opik.flush_tracker()
 
-    # Prompt field roundtrip.
+    # Prompt field roundtrip — must come back as Prompt, not ChatPrompt.
     assert isinstance(id_storage["system_prompt"], Prompt)
+    assert not isinstance(id_storage["system_prompt"], ChatPrompt)
     assert id_storage["system_prompt_version_id"] == prompt_v1.version_id
+
+    # ChatPrompt field roundtrip — must come back as ChatPrompt, not plain Prompt.
+    assert isinstance(id_storage["chat_template"], ChatPrompt)
+    assert id_storage["chat_template_version_id"] == chat_prompt_v1.version_id
 
     expected_meta = {
         "_blueprint_id": ANY_BUT_NONE,

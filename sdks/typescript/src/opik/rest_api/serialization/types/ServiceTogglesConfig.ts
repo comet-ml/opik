@@ -30,7 +30,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     customllmProviderEnabled: core.serialization.boolean(),
     ollamaProviderEnabled: core.serialization.boolean(),
     collaboratorsTabEnabled: core.serialization.boolean(),
-    assistantSidebarEnabled: core.serialization.boolean(),
+    forceWorkspaceVersion: core.serialization.string(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -57,6 +57,6 @@ export declare namespace ServiceTogglesConfig {
         customllmProviderEnabled: boolean;
         ollamaProviderEnabled: boolean;
         collaboratorsTabEnabled: boolean;
-        assistantSidebarEnabled: boolean;
+        forceWorkspaceVersion: string;
     }
 }

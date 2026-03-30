@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { Copy, RotateCcw, Save, Wand2 } from "lucide-react";
+import { Save, Sparkles, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 import isEqual from "fast-deep-equal";
 
@@ -14,7 +14,6 @@ import { OnChangeFn } from "@/types/shared";
 import { LLMMessage, MessageContent } from "@/types/llm";
 import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_VERSION_KEY } from "@/constants/llm";
-import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptById from "@/api/prompts/usePromptById";
@@ -35,7 +34,7 @@ import {
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 
-type ConfirmType = "load" | "reset" | "save";
+type ConfirmType = "load" | "save";
 
 export interface ImprovePromptConfig {
   model: string;
@@ -57,7 +56,6 @@ type LLMPromptLibraryActionsProps = {
   setIsLoading: OnChangeFn<boolean>;
   setIsHoldActionsVisible: OnChangeFn<boolean>;
   improvePromptConfig?: ImprovePromptConfig;
-  disabled?: boolean;
 };
 
 const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
@@ -68,7 +66,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   setIsLoading,
   setIsHoldActionsVisible,
   improvePromptConfig,
-  disabled = false,
 }) => {
   const activeProjectId = useActiveProjectId();
   const resetKeyRef = useRef(0);
@@ -76,7 +73,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const selectedPromptIdRef = useRef<string | undefined>();
   const tempPromptIdRef = useRef<string | undefined>();
   const isPromptSelectBoxOpenedRef = useRef<boolean>(false);
-  const isPromptSaveWarningRef = useRef<boolean>(false);
   const [showImproveWizard, setShowImproveWizard] = useState(false);
 
   const { toast } = useToast();
@@ -105,8 +101,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const promptButtonTooltip = !hasModel
     ? "Configure model first"
     : hasContent
-      ? "Improve prompt with AI"
-      : "Generate prompt with AI";
+      ? "Improve prompt"
+      : "Generate prompt";
 
   const handleOpenWizard = useCallback(() => {
     setShowImproveWizard(true);
@@ -164,12 +160,12 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage, setIsLoading],
   );
 
-  const resetHandler = useCallback(() => {
+  const handleDetachPrompt = useCallback(() => {
     onChangeMessage({
-      content: parsePromptVersionContent(promptData!.latest_version),
-      promptVersionId: promptData!.latest_version?.id,
+      promptId: undefined,
+      promptVersionId: undefined,
     });
-  }, [onChangeMessage, promptData]);
+  }, [onChangeMessage]);
 
   const onSaveHandler = useCallback(
     (version: PromptVersion) => {
@@ -182,32 +178,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage],
   );
 
-  const handleCopyJson = useCallback(async () => {
-    try {
-      const jsonString = convertMessageToMessagesJson(message);
-      await navigator.clipboard.writeText(jsonString);
-      toast({
-        title: "Copied to clipboard",
-        description: "Prompt copied successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Failed to copy",
-        description: "Could not copy to clipboard",
-        variant: "destructive",
-      });
-    }
-  }, [message, toast]);
-
-  const resetDisabled =
-    !promptId ||
-    promptData?.id !== promptId ||
-    (promptData?.id === promptId &&
-      isEqual(
-        message.content,
-        parsePromptVersionContent(promptData?.latest_version),
-      ));
-
   const saveDisabled = message.content === "";
   const saveWarning = Boolean(
     !saveDisabled &&
@@ -218,45 +188,31 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         parsePromptVersionContent(promptData?.latest_version),
       ),
   );
-  isPromptSaveWarningRef.current = saveWarning;
   const saveTooltip = saveWarning
     ? !datasetId
       ? "This prompt version hasn't been saved"
       : "This prompt version hasn't been saved. Save it to link it to the experiment and make comparisons easier."
-    : "Save changes";
+    : "Save to prompt library";
 
   const onPromptSelectBoxOpenChange = useCallback(
     (open: boolean) => {
       isPromptSelectBoxOpenedRef.current = open;
-      setIsHoldActionsVisible(
-        isPromptSelectBoxOpenedRef.current || isPromptSaveWarningRef.current,
-      );
+      setIsHoldActionsVisible(isPromptSelectBoxOpenedRef.current);
     },
     [setIsHoldActionsVisible],
   );
 
   const confirmConfig = useMemo(() => {
-    const isReset = open === "reset";
-
     return {
       onConfirm: () => {
-        isReset
-          ? resetHandler()
-          : handleUpdateExternalPromptId(tempPromptIdRef.current);
+        handleUpdateExternalPromptId(tempPromptIdRef.current);
       },
-      title: isReset ? "Reset prompt" : "Load prompt",
-      description: isReset
-        ? "Resetting the prompt will discard all unsaved changes. This action can’t be undone. Are you sure you want to continue?"
-        : "You have unsaved changes in your message field. Loading a new prompt will overwrite them with the prompt’s content. This action cannot be undone.",
-      confirmText: isReset ? "Reset prompt" : "Load prompt",
+      title: "Load prompt",
+      description:
+        "You have unsaved changes in your message field. Loading a new prompt will overwrite them with the prompt's content. This action cannot be undone.",
+      confirmText: "Load prompt",
     };
-  }, [handleUpdateExternalPromptId, open, resetHandler]);
-
-  // This effect is used to set the visibility of hold actions
-  // based on the prompt select box state and save warning
-  useEffect(() => {
-    setIsHoldActionsVisible(isPromptSelectBoxOpenedRef.current || saveWarning);
-  }, [saveWarning, setIsHoldActionsVisible]);
+  }, [handleUpdateExternalPromptId]);
 
   // This effect is used to set the template and promptVersionId after it is loaded,
   // after it was set in handleUpdateExternalPromptId function
@@ -311,106 +267,81 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
   return (
     <>
-      <div className="flex h-full flex-1 cursor-default flex-nowrap items-center justify-start gap-2">
-        {showGenerateButton && (
-          <TooltipWrapper content={promptButtonTooltip}>
-            <span>
+      <div className="flex min-w-0 cursor-default flex-nowrap items-center">
+        <div className="shrink-0">
+          {showGenerateButton && (
+            <div className="shrink-0">
+              <TooltipWrapper content={promptButtonTooltip}>
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleOpenWizard}
+                  type="button"
+                  disabled={isPromptButtonDisabled}
+                >
+                  <Sparkles />
+                </Button>
+              </TooltipWrapper>
+            </div>
+          )}
+          {showImproveButton && (
+            <TooltipWrapper content={promptButtonTooltip}>
               <Button
-                variant="outline"
-                size="sm"
+                variant="minimal"
+                size="icon-sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={disabled || isPromptButtonDisabled}
+                disabled={isPromptButtonDisabled}
               >
-                <Wand2 className="mr-2 size-4" />
-                Generate prompt
+                <Wand2 />
               </Button>
-            </span>
-          </TooltipWrapper>
-        )}
-        {showImproveButton && (
-          <TooltipWrapper content={promptButtonTooltip}>
-            <span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenWizard}
-                type="button"
-                disabled={disabled || isPromptButtonDisabled}
-              >
-                <Wand2 className="mr-2 size-4" />
-                Improve prompt
-              </Button>
-            </span>
-          </TooltipWrapper>
-        )}
-        <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
-          <PromptsSelectBox
-            projectId={activeProjectId!}
-            value={promptId}
-            onValueChange={(id) => {
-              if (id !== promptId) {
-                if (content === "" || isUndefined(id)) {
-                  handleUpdateExternalPromptId(id);
-                } else {
-                  setOpen("load");
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                  tempPromptIdRef.current = id;
-                }
-              }
-            }}
-            onOpenChange={onPromptSelectBoxOpenChange}
-            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
-            refetchOnMount
-            disabled={disabled}
-          />
+            </TooltipWrapper>
+          )}
         </div>
-        <TooltipWrapper content="Discard changes">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={disabled || resetDisabled}
-            onClick={() => {
-              resetKeyRef.current = resetKeyRef.current + 1;
-              setOpen("reset");
-            }}
-          >
-            <RotateCcw />
-          </Button>
-        </TooltipWrapper>
 
-        <TooltipWrapper content={saveTooltip}>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={disabled || saveDisabled}
-            badge={saveWarning}
-            onClick={() => {
-              resetKeyRef.current = resetKeyRef.current + 1;
-              setOpen("save");
-            }}
-          >
-            <Save />
-          </Button>
-        </TooltipWrapper>
+        <PromptsSelectBox
+          compact
+          projectId={activeProjectId!}
+          refetchOnMount
+          value={promptId}
+          onValueChange={(id) => {
+            if (id !== promptId) {
+              if (content === "" || isUndefined(id)) {
+                handleUpdateExternalPromptId(id);
+              } else {
+                setOpen("load");
+                resetKeyRef.current = resetKeyRef.current + 1;
+                tempPromptIdRef.current = id;
+              }
+            }
+          }}
+          onOpenChange={onPromptSelectBoxOpenChange}
+          onClear={handleDetachPrompt}
+          filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
+          hasUnsavedChanges={saveWarning}
+          promptName={promptData?.name}
+        />
 
-        <TooltipWrapper content="Copy prompt">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={disabled || saveDisabled}
-            onClick={handleCopyJson}
-            type="button"
-          >
-            <Copy />
-          </Button>
-        </TooltipWrapper>
-
-        <Separator orientation="vertical" className="ml-1 mr-2 h-6" />
+        {!saveDisabled && (
+          <div className="shrink-0">
+            <TooltipWrapper content={saveTooltip}>
+              <Button
+                variant="minimal"
+                size="icon-sm"
+                onClick={() => {
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                  setOpen("save");
+                }}
+              >
+                <Save />
+              </Button>
+            </TooltipWrapper>
+          </div>
+        )}
 
         <ConfirmDialog
           key={`confirm-${resetKeyRef.current}`}
-          open={open === "load" || open === "reset"}
+          open={open === "load"}
           setOpen={setOpen}
           {...confirmConfig}
         />

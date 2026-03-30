@@ -8,6 +8,7 @@ const OptimizationsNewPageContent: React.FC = () => {
   const {
     form,
     isSubmitting,
+    activeProjectId,
     optimizerType,
     metricType,
     model,
@@ -49,6 +50,7 @@ const OptimizationsNewPageContent: React.FC = () => {
 
         <OptimizationsNewConfigSidebar
           form={form}
+          projectId={activeProjectId}
           optimizerType={optimizerType}
           metricType={metricType}
           datasetSample={datasetSample}

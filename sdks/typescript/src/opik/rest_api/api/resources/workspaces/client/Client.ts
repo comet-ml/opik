@@ -523,6 +523,87 @@ export class WorkspacesClient {
     }
 
     /**
+     * Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+     * or Opik V2 (project-first) navigation. The backend is the single authority for this
+     * determination, clients must never derive the version themselves.
+     *
+     * Determination logic (priority order):
+     * 1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+     * 2) Auth one-way V2 gate (authenticated mode only)
+     * 3) Version 1 entity check (entities without project_id)
+     * 4) Fallback on failure
+     *
+     * In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+     * Called by the frontend on workspace load.
+     *
+     * @param {WorkspacesClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.workspaces.getWorkspaceVersion()
+     */
+    public getWorkspaceVersion(
+        requestOptions?: WorkspacesClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.WorkspaceVersion> {
+        return core.HttpResponsePromise.fromPromise(this.__getWorkspaceVersion(requestOptions));
+    }
+
+    private async __getWorkspaceVersion(
+        requestOptions?: WorkspacesClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.WorkspaceVersion>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/workspaces/versions",
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.WorkspaceVersion.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/workspaces/versions",
+        );
+    }
+
+    /**
      * Get metrics summary
      *
      * @param {OpikApi.WorkspaceMetricsSummaryRequest} request

@@ -396,6 +396,9 @@ from .json_node_detail import JsonNodeDetail
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
 from .json_schema import JsonSchema
+from .kpi_card_response import KpiCardResponse
+from .kpi_metric import KpiMetric
+from .kpi_metric_type import KpiMetricType
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -651,6 +654,8 @@ from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
+from .workspace_version import WorkspaceVersion
+from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -1004,6 +1009,9 @@ __all__ = [
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
+    "KpiCardResponse",
+    "KpiMetric",
+    "KpiMetricType",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1257,4 +1265,6 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
 ]

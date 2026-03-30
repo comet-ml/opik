@@ -8,6 +8,7 @@ const DEFAULT_PAGE_SIZE = 100;
 
 type UseOptimizationsViewParams = {
   workspaceName: string;
+  projectId?: string;
   datasetId?: string;
   search?: string;
   page: number;
@@ -16,6 +17,7 @@ type UseOptimizationsViewParams = {
 
 export const useOptimizationsView = ({
   workspaceName,
+  projectId,
   datasetId,
   search,
   page,
@@ -25,6 +27,7 @@ export const useOptimizationsView = ({
     useOptimizationsList(
       {
         workspaceName,
+        projectId,
         datasetId: datasetId || "",
         search: search || "",
         page,

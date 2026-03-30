@@ -1,20 +1,20 @@
 import { Check, Loader2 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import PlaygroundOutputTable from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputTable";
-import PlaygroundOutputActions from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
-import PlaygroundOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
+import PlaygroundExperimentOutputActions from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundExperimentOutputActions";
+import PlaygroundPromptOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundPromptOutput";
 import StatusMessage from "@/shared/StatusMessage/StatusMessage";
+import { JsonObject } from "@/types/shared";
 import {
   usePromptIds,
   useSetDatasetVariables,
+  useSetDatasetSampleData,
   useDatasetFilters,
-  useSetDatasetFilters,
   useDatasetPage,
   useSetDatasetPage,
   useDatasetSize,
   useSetDatasetSize,
-  useResetDatasetFilters,
 } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
@@ -24,66 +24,38 @@ import {
   DatasetItemColumn,
   DATASET_STATUS,
 } from "@/types/datasets";
-import { Filter, Filters } from "@/types/filters";
-import { COLUMN_DATA_ID } from "@/types/shared";
+import { transformDataColumnFilters } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface PlaygroundOutputsProps {
-  workspaceName: string;
   datasetId: string | null;
-  versionName?: string;
   versionHash?: string;
-  onChangeDatasetId: (id: string | null) => void;
+  runSingle: (promptId: string) => void;
+  stopSingle: (promptId: string) => void;
 }
 
 const EMPTY_ITEMS: DatasetItem[] = [];
 const EMPTY_COLUMNS: DatasetItemColumn[] = [];
 const POLLING_INTERVAL_MS = 3000;
 
-/**
- * Transform data column filters from "data.columnName" format to backend format.
- * This converts field="data.columnName" to field="data" with key="columnName".
- * This transformation is specific to dataset item filtering and should not be in generic filter processing.
- */
-const transformDataColumnFilters = (filters: Filters): Filters => {
-  const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
-
-  return filters.map((filter: Filter) => {
-    if (filter.field.startsWith(dataFieldPrefix)) {
-      const columnKey = filter.field.slice(dataFieldPrefix.length);
-      return {
-        ...filter,
-        field: COLUMN_DATA_ID,
-        key: columnKey,
-      };
-    }
-    return filter;
-  });
-};
-
 const PlaygroundOutputs = ({
-  workspaceName,
   datasetId,
-  versionName,
   versionHash,
-  onChangeDatasetId,
+  runSingle,
+  stopSingle,
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
+  const setDatasetSampleData = useSetDatasetSampleData();
   const filters = useDatasetFilters();
-  const setFilters = useSetDatasetFilters();
   const page = useDatasetPage();
   const setPage = useSetDatasetPage();
   const size = useDatasetSize();
   const setSize = useSetDatasetSize();
-  const resetDatasetFilters = useResetDatasetFilters();
 
   // Parse datasetId to extract plain ID for API calls (handles both "id" and "id::versionId" formats)
-  const parsedDatasetId = useMemo(() => {
-    if (!datasetId) return null;
-    const parsed = parseDatasetVersionKey(datasetId);
-    return parsed?.datasetId || datasetId;
-  }, [datasetId]);
+  const parsed = useMemo(() => parseDatasetVersionKey(datasetId), [datasetId]);
+  const parsedDatasetId = parsed?.datasetId || datasetId;
 
   const { data: dataset } = useDatasetById(
     { datasetId: parsedDatasetId! },
@@ -133,86 +105,68 @@ const PlaygroundOutputs = ({
   const datasetColumns = datasetItemsData?.columns || EMPTY_COLUMNS;
   const total = datasetItemsData?.total || 0;
 
-  const handleChangeDatasetId = useCallback(
-    (id: string | null) => {
-      resetDatasetFilters();
-      if (!id) {
-        setDatasetVariables([]);
-      }
-      onChangeDatasetId(id);
-    },
-    [onChangeDatasetId, resetDatasetFilters, setDatasetVariables],
-  );
-
-  const renderResult = () => {
-    if (parsedDatasetId) {
-      return (
-        <div className="flex w-full flex-col pb-4 pt-2">
-          {isProcessing && (
-            <StatusMessage
-              icon={Loader2}
-              iconClassName="animate-spin"
-              title="Evaluation suite still loading"
-              description="Experiments will run, but may not use the full evaluation suite until loading completes."
-              className="mb-2"
-            />
-          )}
-          {showSuccessMessage && (
-            <StatusMessage
-              icon={Check}
-              title="Evaluation suite fully loaded"
-              description="All items are now available."
-              className="mb-2"
-            />
-          )}
-          <PlaygroundOutputTable
-            promptIds={promptIds}
-            datasetItems={datasetItems}
-            datasetColumns={datasetColumns}
-            isLoadingDatasetItems={isLoadingDatasetItems}
-            isFetchingData={isFetchingDatasetItems && isPlaceholderDatasetItems}
-          />
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex w-full gap-[var(--item-gap)] pb-4 pt-2">
-        {promptIds?.map((promptId) => (
-          <PlaygroundOutput
-            key={`output-${promptId}`}
-            promptId={promptId}
-            totalOutputs={promptIds.length}
-          />
-        ))}
-      </div>
-    );
-  };
+  const isExperimentMode = !!parsedDatasetId;
 
   useEffect(() => {
     setDatasetVariables(datasetColumns.map((c) => c.name));
-  }, [setDatasetVariables, datasetColumns]);
+    setDatasetSampleData((datasetItems[0]?.data as JsonObject) ?? null);
+  }, [setDatasetVariables, setDatasetSampleData, datasetColumns, datasetItems]);
 
   return (
-    <div className="flex min-w-full flex-col">
-      <PlaygroundOutputActions
-        datasetId={datasetId}
-        versionName={versionName}
-        onChangeDatasetId={handleChangeDatasetId}
-        datasetItems={datasetItems}
-        datasetColumns={datasetColumns}
-        workspaceName={workspaceName}
-        loadingDatasetItems={isLoadingDatasetItems}
-        filters={filters}
-        onFiltersChange={setFilters}
-        page={page}
-        onChangePage={setPage}
-        size={size}
-        onChangeSize={setSize}
-        total={total}
-        isLoadingTotal={isProcessing}
-      />
-      {renderResult()}
+    <div className="flex min-w-full flex-1 flex-col">
+      {isExperimentMode ? (
+        <>
+          <PlaygroundExperimentOutputActions
+            datasetId={datasetId}
+            page={page}
+            onChangePage={setPage}
+            size={size}
+            onChangeSize={setSize}
+            total={total}
+            isLoadingTotal={isProcessing}
+          />
+          <div className="flex w-full flex-col pb-4 pt-0">
+            {isProcessing && (
+              <StatusMessage
+                icon={Loader2}
+                iconClassName="animate-spin"
+                title="Evaluation suite still loading"
+                description="Experiments will run, but may not use the full evaluation suite until loading completes."
+                className="mb-2"
+              />
+            )}
+            {showSuccessMessage && (
+              <StatusMessage
+                icon={Check}
+                title="Evaluation suite fully loaded"
+                description="All items are now available."
+                className="mb-2"
+              />
+            )}
+            <PlaygroundOutputTable
+              promptIds={promptIds}
+              datasetItems={datasetItems}
+              datasetColumns={datasetColumns}
+              isLoadingDatasetItems={isLoadingDatasetItems}
+              isFetchingData={
+                isFetchingDatasetItems && isPlaceholderDatasetItems
+              }
+            />
+          </div>
+        </>
+      ) : (
+        <div className="flex w-full flex-1 border-t">
+          {promptIds?.map((promptId, idx) => (
+            <PlaygroundPromptOutput
+              key={`output-${promptId}`}
+              promptId={promptId}
+              promptIndex={idx}
+              onRun={() => runSingle(promptId)}
+              onStop={() => stopSingle(promptId)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

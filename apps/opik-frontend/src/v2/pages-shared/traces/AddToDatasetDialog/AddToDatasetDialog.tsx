@@ -4,7 +4,7 @@ import { Database, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Span, Trace } from "@/types/traces";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -19,7 +19,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/ui/accordion";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import Loader from "@/shared/Loader/Loader";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -63,6 +63,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   setOpen,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
@@ -88,15 +89,16 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
   const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
 
-  const { data, isPending } = useDatasetsList(
+  const { data, isPending } = useProjectDatasetsList(
     {
-      workspaceName,
+      projectId: activeProjectId!,
       search,
       page,
       size,
     },
     {
       placeholderData: keepPreviousData,
+      enabled: !!activeProjectId,
     },
   );
 

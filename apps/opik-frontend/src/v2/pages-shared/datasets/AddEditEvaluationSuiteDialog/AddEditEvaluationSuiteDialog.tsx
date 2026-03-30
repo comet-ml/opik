@@ -3,7 +3,7 @@ import { ExternalLink } from "lucide-react";
 import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
@@ -66,6 +66,7 @@ const AddEditEvaluationSuiteDialog = ({
   csvRequired = false,
 }: AddEditEvaluationSuiteDialogProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
   const isCsvUploadEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.CSV_UPLOAD_ENABLED,
@@ -194,6 +195,61 @@ const AddEditEvaluationSuiteDialog = ({
     [assertions, runsPerItem, passThreshold, changesMutate],
   );
 
+  const uploadItems = useCallback(
+    (datasetId: string, onDone: () => void) => {
+      if (isCsvUploadEnabled && csvFile) {
+        createItemsFromCsvMutate(
+          { datasetId, csvFile },
+          {
+            onSuccess: () => {
+              toast({
+                title: "CSV upload accepted",
+                description:
+                  "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
+              });
+            },
+            onError: (error: unknown) => {
+              console.error("Error uploading CSV file:", error);
+              const errorMessage =
+                (
+                  error as { response?: { data?: { errors?: string[] } } }
+                ).response?.data?.errors?.join(", ") ||
+                (error as { message?: string }).message ||
+                "Failed to upload CSV file";
+              toast({
+                title: "Error uploading CSV file",
+                description: errorMessage,
+                variant: "destructive",
+              });
+            },
+            onSettled: onDone,
+          },
+        );
+      } else if (!isCsvUploadEnabled && csvData) {
+        createItemsMutate(
+          {
+            datasetId,
+            workspaceName,
+            datasetItems: csvData.map((row) => ({
+              data: row,
+              source: DATASET_ITEM_SOURCE.manual,
+            })),
+          },
+          { onSettled: onDone },
+        );
+      }
+    },
+    [
+      isCsvUploadEnabled,
+      csvFile,
+      csvData,
+      createItemsFromCsvMutate,
+      createItemsMutate,
+      workspaceName,
+      toast,
+    ],
+  );
+
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
       const navigateToDataset = () => {
@@ -206,75 +262,24 @@ const AddEditEvaluationSuiteDialog = ({
       }
 
       if (hasValidCsvFile && newDataset.id) {
-        const applyThenNavigate = () => {
-          applyEvaluationCriteria(newDataset.id, navigateToDataset);
+        const uploadThenNavigate = () => {
+          uploadItems(newDataset.id, navigateToDataset);
         };
 
-        if (isCsvUploadEnabled && csvFile) {
-          // CSV mode: Upload CSV file directly to backend
-          createItemsFromCsvMutate(
-            {
-              datasetId: newDataset.id,
-              csvFile,
-            },
-            {
-              onSuccess: () => {
-                toast({
-                  title: "CSV upload accepted",
-                  description:
-                    "Your CSV file is being processed in the background. Items will appear automatically when ready. If you don't see them, try refreshing the page.",
-                });
-              },
-              onError: (error: unknown) => {
-                console.error("Error uploading CSV file:", error);
-                const errorMessage =
-                  (
-                    error as { response?: { data?: { errors?: string[] } } }
-                  ).response?.data?.errors?.join(", ") ||
-                  (error as { message?: string }).message ||
-                  "Failed to upload CSV file";
-                toast({
-                  title: "Error uploading CSV file",
-                  description: errorMessage,
-                  variant: "destructive",
-                });
-              },
-              onSettled: applyThenNavigate,
-            },
-          );
-        } else if (!isCsvUploadEnabled && csvData) {
-          // JSON mode: Send parsed JSON data
-          createItemsMutate(
-            {
-              datasetId: newDataset.id,
-              workspaceName,
-              datasetItems: csvData.map((row) => ({
-                data: row,
-                source: DATASET_ITEM_SOURCE.manual,
-              })),
-            },
-            {
-              onSettled: applyThenNavigate,
-            },
-          );
-        }
+        // Apply evaluation criteria first (creates the initial version),
+        // then upload items. This matches the Python SDK order and avoids
+        // a backend rejection when items create a version before criteria.
+        applyEvaluationCriteria(newDataset.id, uploadThenNavigate);
       } else {
-        // No CSV — wait for evaluation criteria before navigating
         applyEvaluationCriteria(newDataset.id, navigateToDataset);
       }
     },
     [
       applyEvaluationCriteria,
+      uploadItems,
       hasValidCsvFile,
-      isCsvUploadEnabled,
-      csvFile,
-      csvData,
-      createItemsFromCsvMutate,
-      createItemsMutate,
-      workspaceName,
       onDatasetCreated,
       setOpen,
-      toast,
     ],
   );
 
@@ -324,6 +329,7 @@ const AddEditEvaluationSuiteDialog = ({
             name,
             ...(description && { description }),
             type,
+            ...(activeProjectId && { project_id: activeProjectId }),
           },
         },
         {
@@ -339,6 +345,7 @@ const AddEditEvaluationSuiteDialog = ({
     name,
     description,
     type,
+    activeProjectId,
     createMutate,
     onCreateSuccessHandler,
     setOpen,

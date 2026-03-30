@@ -1209,6 +1209,31 @@ public class SpanDAO {
             ;
             """;
 
+    // Lightweight pre-delete count for observability. Omits the experiment_items exclusion subquery
+    // to avoid the join cost; this makes it an upper-bound ceiling with >99% precision in practice
+    // (very few traces are linked to experiments).
+    private static final String COUNT_FOR_RETENTION = """
+            SELECT count() FROM spans
+            WHERE workspace_id IN :workspace_ids
+            AND trace_id >= :lower_bound
+            AND trace_id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String ESTIMATE_VELOCITY_FOR_RETENTION = """
+            SELECT
+                toUInt64(if(count() = 0, 0,
+                    uniq(id) / greatest(dateDiff('week', UUIDv7ToDateTime(toUUID(min(id))), now()), 1)
+                )) AS spans_per_week,
+                UUIDv7ToDateTime(toUUID(min(id))) AS oldest_span_time
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND trace_id \\< :cutoff_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
             SELECT
                 DISTINCT id, workspace_id
@@ -2814,6 +2839,33 @@ public class SpanDAO {
     }
 
     /**
+     * Lightweight pre-delete count for observability.
+     * Counts spans in [lowerBound, cutoffId) without the experiment_items exclusion subquery
+     * to avoid join cost. This is an upper-bound ceiling with >99% precision (very few traces
+     * are linked to experiments in practice).
+     */
+    public Mono<Long> countForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+            @NonNull UUID lowerBound) {
+        if (workspaceIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_spans", null,
+                workspaceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                            .bind("cutoff_id", cutoffId)
+                            .bind("lower_bound", lowerBound);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, meta) -> row.get(0, Long.class))));
+                });
+    }
+
+    /**
      * Bulk delete spans for data retention enforcement (applyToPast=false).
      * Each workspace has its own lower bound.
      */
@@ -2857,6 +2909,38 @@ public class SpanDAO {
 
                     return Mono.from(statement.execute())
                             .flatMap(result -> Mono.from(result.getRowsUpdated()));
+                });
+    }
+
+    /**
+     * Result of the velocity estimation query: spans/week and the oldest span timestamp.
+     */
+    public record VelocityEstimate(long spansPerWeek, Instant oldestSpanTime) {
+    }
+
+    /**
+     * Estimate the span velocity (spans/week) for a workspace in the catch-up range.
+     * Also returns the oldest span timestamp to use as the catch-up cursor start.
+     *
+     * @return velocity estimate with oldest span time, or empty Mono if no data exists
+     * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
+     */
+    public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
+        log.debug("Estimating retention velocity for workspace '{}'", workspaceId);
+
+        var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
+                "retention_estimate_velocity", workspaceId, "");
+
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("cutoff_id", cutoffId);
+
+                    return Mono.from(statement.execute())
+                            .flatMap(result -> Mono.from(result.map((row, metadata) -> new VelocityEstimate(
+                                    row.get("spans_per_week", Long.class),
+                                    row.get("oldest_span_time", Instant.class)))));
                 });
     }
 

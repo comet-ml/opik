@@ -4,6 +4,7 @@ export type NotificationType = "success" | "error" | "info";
 export interface BridgeContext {
   workspaceId: string;
   workspaceName: string;
+  organizationId?: string | null;
   projectId: string | null;
   projectName: string | null;
   baseApiUrl: string;
@@ -46,6 +47,11 @@ declare global {
       unmount: (element: HTMLElement) => void;
     };
     opikBridge?: AssistantSidebarBridge;
-    __opikAssistantMeta__?: { scriptUrl: string; cssUrl?: string };
+    __opikAssistantMeta__?: {
+      scriptUrl: string;
+      cssUrl?: string;
+      shellUrl: string;
+      version: string;
+    };
   }
 }

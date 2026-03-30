@@ -50,14 +50,14 @@ import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
-import { BaseTraceData, Span, Trace } from "@/types/traces";
+import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import NoTracesPage from "@/v2/pages/LogsPage/NoTracesPage";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import TracesActionsPanel from "@/v2/pages/LogsPage/TracesSpansTab/TracesActionsPanel";
+import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -90,7 +90,6 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
-import ExperimentsSelectBox from "@/v2/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -111,7 +110,7 @@ import {
 import { GuardrailResult } from "@/types/guardrails";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import SpanTypeCell from "@/shared/DataTableCells/SpanTypeCell";
-import { Filter, FilterOperator } from "@/types/filters";
+import { Filter } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
@@ -492,15 +491,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
-              [COLUMN_EXPERIMENT_ID]: {
-                keyComponent: ExperimentsSelectBox,
-                keyComponentProps: {
-                  className: "w-full min-w-72",
-                  projectId,
-                },
-                defaultOperator: "=" as FilterOperator,
-                operators: [{ label: "=", value: "=" as FilterOperator }],
-              },
             }
           : {}),
         error_type: {
@@ -578,6 +568,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         fromTime: intervalStart,
         toTime: intervalEnd,
         exclude: excludeFields,
+        logsSource: LOGS_SOURCE.sdk,
       },
       {
         enabled: isTableDataEnabled,
@@ -599,6 +590,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       fromTime: intervalStart,
       toTime: intervalEnd,
       exclude: excludeFields,
+      logsSource: LOGS_SOURCE.sdk,
     },
     {
       enabled: false,
@@ -615,6 +607,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         search: trimmedSearch,
         fromTime: intervalStart,
         toTime: intervalEnd,
+        logsSource: LOGS_SOURCE.sdk,
       },
       {
         refetchInterval: REFETCH_INTERVAL,
@@ -1030,11 +1023,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: "thread_id",
               label: "Thread ID",
-              type: COLUMN_TYPE.string,
-            },
-            {
-              id: COLUMN_EXPERIMENT_ID,
-              label: "Experiment",
               type: COLUMN_TYPE.string,
             },
             {

@@ -49,12 +49,14 @@ import { useClearDraft, useHasDraft } from "@/store/EvaluationSuiteDraftStore";
 import { DATASET_STATUS, DATASET_TYPE } from "@/types/datasets";
 import { useEffectiveSuiteAssertions } from "@/hooks/useEffectiveSuiteAssertions";
 import { AssertionsListTooltipContent } from "@/v2/pages-shared/experiments/EvaluationSuiteExperiment/AssertionsListTooltipContent";
+import { useActiveProjectId } from "@/store/AppStore";
 import UseEvaluationSuiteDropdown from "./UseEvaluationSuiteDropdown";
 
 const POLLING_INTERVAL_MS = 3000;
 
 function EvaluationSuiteItemsPage(): React.ReactElement {
   const suiteId = useSuiteIdFromURL();
+  const activeProjectId = useActiveProjectId();
 
   const [tab, setTab] = useQueryParam("tab", StringParam);
   const [addVersionDialogOpen, setAddVersionDialogOpen] = useState(false);
@@ -107,11 +109,12 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
   );
   const latestVersionData = versionsData?.content?.[0];
   const versionEvaluators = latestVersionData?.evaluators ?? [];
-  const { buildPayload } = useEvaluationSuiteSavePayload({
-    suiteId,
-    suite,
-    versionEvaluators,
-  });
+  const { buildPayload, buildInitialVersionPayload, hasNoVersion } =
+    useEvaluationSuiteSavePayload({
+      suiteId,
+      suite,
+      versionEvaluators,
+    });
 
   const effectiveAssertions = useEffectiveSuiteAssertions(suiteId);
 
@@ -179,23 +182,66 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
     },
   });
 
+  const onSaveSuccess = async (version?: { id?: string }) => {
+    setAddVersionDialogOpen(false);
+    showSuccessToast(version?.id);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["dataset-items", { datasetId: suiteId }],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["dataset-versions"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: suiteId }],
+      }),
+    ]);
+    clearDraft();
+  };
+
   const handleSaveChanges = (tags?: string[], changeDescription?: string) => {
     if (changesMutation.isPending) return;
 
+    if (hasNoVersion) {
+      // Two-step save: create initial metadata version first, then apply
+      // item changes on top of it. The backend requires base_version=null
+      // with no items for the first version.
+      changesMutation.mutate(
+        buildInitialVersionPayload({ tags, changeDescription }),
+        {
+          onSuccess: (initialVersion) => {
+            const itemPayload = buildPayload({
+              baseVersionOverride: initialVersion?.id,
+              tags,
+              changeDescription,
+            });
+
+            const hasItemChanges =
+              itemPayload.payload.added_items.length > 0 ||
+              itemPayload.payload.edited_items.length > 0 ||
+              itemPayload.payload.deleted_ids.length > 0;
+
+            if (!hasItemChanges) {
+              onSaveSuccess(initialVersion);
+              return;
+            }
+
+            changesMutation.mutate(itemPayload, {
+              onSuccess: onSaveSuccess,
+              onError: (error) => {
+                if ((error as AxiosError).response?.status === 409) {
+                  setPendingVersionData({ tags, changeDescription });
+                }
+              },
+            });
+          },
+        },
+      );
+      return;
+    }
+
     changesMutation.mutate(buildPayload({ tags, changeDescription }), {
-      onSuccess: async (version) => {
-        setAddVersionDialogOpen(false);
-        showSuccessToast(version?.id);
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["dataset-items", { datasetId: suiteId }],
-          }),
-          queryClient.invalidateQueries({
-            queryKey: ["dataset-versions"],
-          }),
-        ]);
-        clearDraft();
-      },
+      onSuccess: onSaveSuccess,
       onError: (error) => {
         if ((error as AxiosError).response?.status === 409) {
           setPendingVersionData({ tags, changeDescription });
@@ -211,19 +257,9 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
       buildPayload({ ...pendingVersionData, override: true }),
       {
         onSuccess: async (version) => {
-          setAddVersionDialogOpen(false);
           setOverrideDialogOpen(false);
           setPendingVersionData(null);
-          showSuccessToast(version?.id);
-          await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: ["dataset-items", { datasetId: suiteId }],
-            }),
-            queryClient.invalidateQueries({
-              queryKey: ["dataset-versions"],
-            }),
-          ]);
-          clearDraft();
+          await onSaveSuccess(version);
         },
       },
     );
@@ -326,6 +362,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               datasetId={suiteId}
               datasetVersionId={latestVersion?.id}
               isEvalSuite={isEvaluationSuite}
+              projectId={activeProjectId}
             />
             {isEvaluationSuite && (
               <Button

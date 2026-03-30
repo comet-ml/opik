@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
+  ChevronUp,
   MoreHorizontal,
   Pencil,
   Settings2,
@@ -38,6 +39,7 @@ import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
 
 const ProjectSelector: React.FC = () => {
@@ -68,7 +70,6 @@ const ProjectSelector: React.FC = () => {
 
   const handleSelect = useCallback(
     (projectId: string) => {
-      setActiveProject(workspaceName, projectId);
       setOpen(false);
       setSearch("");
       navigate({
@@ -82,47 +83,45 @@ const ProjectSelector: React.FC = () => {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
-        <div className="flex w-full items-center gap-1">
-          {isLoading ? (
-            <span className="flex flex-1 items-center gap-2 rounded-md px-2 py-1">
-              <Spinner size="xs" />
-              <span className="comet-body-s text-muted-slate">Loading…</span>
-            </span>
-          ) : activeProject ? (
-            <Link
-              to="/$workspaceName/projects/$projectId/home"
-              params={{ workspaceName, projectId: activeProject.id }}
-              activeOptions={{ exact: true }}
-              className="comet-body-s-accented flex-1 truncate rounded-md px-2 py-1 text-left text-foreground hover:bg-primary-foreground data-[status=active]:bg-muted"
-            >
-              {activeProject.name}
-            </Link>
-          ) : (
-            <span className="comet-body-s-accented flex-1 truncate rounded-md px-2 py-1 text-left text-muted-slate">
-              Select project
-            </span>
-          )}
-          <PopoverTrigger asChild>
-            <button
-              className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-primary-foreground",
-                open && "bg-primary-foreground",
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              "flex w-full items-center gap-1 rounded-md px-2 py-1",
+              open ? "bg-primary-foreground" : "hover:bg-primary-foreground",
+            )}
+          >
+            {isLoading ? (
+              <>
+                <Spinner size="xs" />
+                <span className="comet-body-s flex-1 text-left text-muted-slate">
+                  Loading…
+                </span>
+              </>
+            ) : activeProject ? (
+              <TooltipWrapper content={activeProject.name}>
+                <span className="comet-body-s-accented flex-1 truncate text-left text-foreground">
+                  {activeProject.name}
+                </span>
+              </TooltipWrapper>
+            ) : (
+              <span className="comet-body-s-accented flex-1 truncate text-left text-muted-slate">
+                Select project
+              </span>
+            )}
+            <span className="shrink-0 text-muted-slate">
+              {open ? (
+                <ChevronUp className="size-3.5" />
+              ) : (
+                <ChevronDown className="size-3.5" />
               )}
-            >
-              <ChevronDown
-                className={cn(
-                  "size-3.5 text-muted-slate",
-                  open && "rotate-180",
-                )}
-              />
-            </button>
-          </PopoverTrigger>
-        </div>
+            </span>
+          </button>
+        </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent
         align="start"
         side="bottom"
-        className="w-[216px] p-1"
+        className="w-[320px] p-1"
         sideOffset={4}
       >
         <div className="px-3 py-2">
@@ -146,6 +145,7 @@ const ProjectSelector: React.FC = () => {
               key={project.id}
               project={project}
               isSelected={project.id === activeProjectId}
+              workspaceName={workspaceName}
               onSelect={handleSelect}
               onDelete={
                 project.id === activeProjectId
@@ -185,6 +185,7 @@ const ProjectSelector: React.FC = () => {
 interface ProjectItemProps {
   project: Project;
   isSelected: boolean;
+  workspaceName: string;
   onSelect: (projectId: string) => void;
   onDelete?: () => void;
 }
@@ -192,6 +193,7 @@ interface ProjectItemProps {
 const ProjectItem: React.FC<ProjectItemProps> = ({
   project,
   isSelected,
+  workspaceName,
   onSelect,
   onDelete,
 }) => {
@@ -230,12 +232,18 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
         confirmText="Delete project"
         confirmButtonVariant="destructive"
       />
-      <div
+      <Link
+        to="/$workspaceName/projects/$projectId/home"
+        params={{ workspaceName, projectId: project.id }}
         className={cn(
-          "group flex cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 hover:bg-primary-foreground",
+          "group relative flex h-8 items-center gap-2 rounded-md px-3 hover:bg-primary-foreground hover:pr-9",
           isSelected && "bg-muted",
         )}
-        onClick={() => onSelect(project.id)}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          onSelect(project.id);
+        }}
       >
         <Check
           className={cn(
@@ -243,16 +251,18 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
             isSelected ? "text-foreground" : "invisible",
           )}
         />
-        <span className="comet-body-s flex-1 truncate text-foreground">
-          {project.name}
-        </span>
+        <TooltipWrapper content={project.name}>
+          <span className="comet-body-s flex-1 truncate text-foreground">
+            {project.name}
+          </span>
+        </TooltipWrapper>
         {hasActions && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="minimal"
                 size="icon-2xs"
-                className="invisible shrink-0 group-hover:visible"
+                className="invisible absolute right-3 top-1/2 -translate-y-1/2 rounded pl-2 group-hover:visible"
               >
                 <MoreHorizontal className="size-3.5" />
               </Button>
@@ -287,7 +297,7 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-      </div>
+      </Link>
     </>
   );
 };

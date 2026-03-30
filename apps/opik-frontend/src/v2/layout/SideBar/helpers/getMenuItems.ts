@@ -10,6 +10,7 @@ import {
   Sparkles,
   UserPen,
   Brain,
+  GitBranch,
   Workflow,
 } from "lucide-react";
 import {
@@ -135,6 +136,14 @@ const getMenuItems = ({
           type: MENU_ITEM_TYPE.router,
           icon: Workflow,
           label: "Agent configuration",
+          disabled: !projectPrefix,
+        },
+        {
+          id: "agent_runner",
+          path: projectPath("/agent-runner"),
+          type: MENU_ITEM_TYPE.router,
+          icon: GitBranch,
+          label: "Agent sandbox",
           disabled: !projectPrefix,
         },
       ],

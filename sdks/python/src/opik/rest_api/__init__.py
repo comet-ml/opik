@@ -354,6 +354,9 @@ from .types import (
     JsonNodePublic,
     JsonNodeWrite,
     JsonSchema,
+    KpiCardResponse,
+    KpiMetric,
+    KpiMetricType,
     LlmAsJudgeCode,
     LlmAsJudgeCodePublic,
     LlmAsJudgeCodeWrite,
@@ -607,6 +610,8 @@ from .types import (
     WorkspaceSpansCount,
     WorkspaceTraceCount,
     WorkspaceUserPermissions,
+    WorkspaceVersion,
+    WorkspaceVersionOpikVersion,
 )
 from .errors import (
     BadGatewayError,
@@ -671,6 +676,7 @@ from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
 from .projects import (
+    KpiCardRequestEntityType,
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
     ProjectUpdateVisibility,
@@ -1059,6 +1065,10 @@ __all__ = [
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
+    "KpiCardRequestEntityType",
+    "KpiCardResponse",
+    "KpiMetric",
+    "KpiMetricType",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1333,6 +1343,8 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
     "agent_configs",
     "alerts",
     "annotation_queues",
