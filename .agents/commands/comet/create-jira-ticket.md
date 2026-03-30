@@ -108,6 +108,21 @@ Use these prefixes in the summary based on the work area:
 - `[DOCS]` - Documentation updates
 - `[INFRA]` - Infrastructure/DevOps changes
 
+## Confirmation Output
+
+After successfully creating a ticket, always display the ticket key as a **clickable markdown link** in the confirmation message:
+
+```
+[OPIK-{number}](https://comet-ml.atlassian.net/browse/OPIK-{number})
+```
+
+For example, if the created ticket key is `OPIK-5316`, display:
+```
+[OPIK-5316](https://comet-ml.atlassian.net/browse/OPIK-5316)
+```
+
+Never display the ticket key as plain text — always wrap it in a markdown link to the Jira ticket URL.
+
 ## Notes
 
 - The project key is always `OPIK`
