@@ -11,10 +11,7 @@ import threading
 import time
 from typing import Any, Callable, Dict, Optional
 
-from ..api_objects.type_helpers import (
-    backend_value_to_python_value,
-    python_type_to_backend_type,
-)
+from ..api_objects import type_helpers
 
 from ..api_objects.agent_config.context import agent_config_context
 from .. import id_helpers
@@ -69,8 +66,8 @@ def cast_input_value(value: object, type_name: str) -> object:
     if py_type is str and isinstance(value, (dict, list)):
         return json.dumps(value)
 
-    backend_type = python_type_to_backend_type(py_type)
-    return backend_value_to_python_value(
+    backend_type = type_helpers.python_type_to_backend_type(py_type)
+    return type_helpers.backend_value_to_python_value(
         value, backend_type=backend_type, py_type=py_type
     )
 
