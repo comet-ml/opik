@@ -205,8 +205,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_errors,
                 AVGIf(tf.duration, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_duration,
                 AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
-                AVGIf(tc.cost, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_cost,
-                AVGIf(tc.cost, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_cost
+                SUMIf(tc.cost, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_total_cost,
+                SUMIf(tc.cost, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_total_cost
             FROM traces_filtered tf
             LEFT JOIN trace_costs tc ON tf.id = tc.trace_id
             SETTINGS log_comment = '<log_comment>';
@@ -339,8 +339,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start) AS previous_errors,
                 AVGIf(duration, id >= :id_current_start AND id \\<= :id_end) AS current_avg_duration,
                 AVGIf(duration, id >= :id_prior_start AND id \\< :id_current_start) AS previous_avg_duration,
-                AVGIf(total_estimated_cost, id >= :id_current_start AND id \\<= :id_end) AS current_avg_cost,
-                AVGIf(total_estimated_cost, id >= :id_prior_start AND id \\< :id_current_start) AS previous_avg_cost
+                SUMIf(total_estimated_cost, id >= :id_current_start AND id \\<= :id_end) AS current_total_cost,
+                SUMIf(total_estimated_cost, id >= :id_prior_start AND id \\< :id_current_start) AS previous_total_cost
             FROM spans_filtered
             SETTINGS log_comment = '<log_comment>';
             """;
@@ -512,8 +512,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 COUNTIf(tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_count,
                 AVGIf(tf.duration, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_avg_duration,
                 AVGIf(tf.duration, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_avg_duration,
-                AVGIf(tc.cost, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_avg_cost,
-                AVGIf(tc.cost, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_avg_cost
+                SUMIf(tc.cost, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_total_cost,
+                SUMIf(tc.cost, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_total_cost
             FROM threads_filtered tf
             LEFT JOIN thread_costs tc ON tf.id = tc.thread_id
             SETTINGS log_comment = '<log_comment>';
@@ -668,9 +668,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     .build());
 
             stats.add(KpiMetric.builder()
-                    .type(KpiMetricType.AVG_COST)
-                    .currentValue(filterNan(row.get("current_avg_cost", Double.class)))
-                    .previousValue(filterNan(row.get("previous_avg_cost", Double.class)))
+                    .type(KpiMetricType.TOTAL_COST)
+                    .currentValue(filterNan(row.get("current_total_cost", Double.class)))
+                    .previousValue(filterNan(row.get("previous_total_cost", Double.class)))
                     .build());
 
             if (entityType != EntityType.THREADS) {
