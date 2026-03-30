@@ -236,7 +236,7 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
         to="/$workspaceName/projects/$projectId/home"
         params={{ workspaceName, projectId: project.id }}
         className={cn(
-          "group flex items-center gap-2 rounded-md px-3 py-1.5 hover:bg-primary-foreground",
+          "group relative flex h-8 items-center gap-2 rounded-md px-3 hover:bg-primary-foreground hover:pr-9",
           isSelected && "bg-muted",
         )}
         onClick={(e) => {
@@ -262,7 +262,7 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
               <Button
                 variant="minimal"
                 size="icon-2xs"
-                className="invisible shrink-0 group-hover:visible"
+                className="invisible absolute right-3 top-1/2 -translate-y-1/2 rounded pl-2 group-hover:visible"
               >
                 <MoreHorizontal className="size-3.5" />
               </Button>

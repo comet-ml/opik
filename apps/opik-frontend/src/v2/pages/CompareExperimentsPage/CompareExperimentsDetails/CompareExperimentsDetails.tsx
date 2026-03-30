@@ -21,6 +21,8 @@ import {
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
 import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { LOGS_SOURCE } from "@/types/traces";
+import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
 
 type CompareExperimentsDetailsProps = {
@@ -46,10 +48,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
     return () => setBreadcrumbParam("compare", "Compare", "");
   }, [title, setBreadcrumbParam]);
 
-  const experimentTracesSearch = useMemo(
-    () => ({
-      traces_filters: generateExperimentIdFilter(experimentsIds[0]),
-    }),
+  const experimentSourceFilters = useMemo(
+    () => generateExperimentIdFilter(experimentsIds[0]),
     [experimentsIds],
   );
 
@@ -120,12 +120,10 @@ const CompareExperimentsDetails: React.FunctionComponent<
             />
           )}
         {!isCompare && experiment?.project_id && (
-          <NavigationTag
-            resource={RESOURCE_TYPE.traces}
-            id={experiment.project_id}
-            name="Go to traces"
-            search={experimentTracesSearch}
-            tooltipContent="View all traces for this experiment"
+          <TraceLogsSidebarButton
+            projectId={experiment.project_id}
+            logsSource={LOGS_SOURCE.experiment}
+            sourceFilters={experimentSourceFilters}
           />
         )}
         {!isCompare &&

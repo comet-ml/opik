@@ -10,6 +10,9 @@ import RunOnDatasetDialog from "@/v2/pages/PlaygroundPage/RunOnDatasetDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Link } from "@tanstack/react-router";
 import { generateDefaultPrompt } from "@/lib/playground";
+import { LOGS_SOURCE } from "@/types/traces";
+import { useActiveProjectId } from "@/store/AppStore";
+import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Filters } from "@/types/filters";
 import {
@@ -104,6 +107,7 @@ const PlaygroundHeader = ({
   );
 
   const isExperimentMode = !!datasetId;
+  const activeProjectId = useActiveProjectId();
 
   const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
@@ -371,7 +375,16 @@ const PlaygroundHeader = ({
         className="flex items-center justify-between px-4 py-3"
         style={maxWidth ? { maxWidth } : undefined}
       >
-        <h1 className="comet-title-xs">Playground</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="comet-title-xs">Playground</h1>
+          {activeProjectId && (
+            <TraceLogsSidebarButton
+              projectId={activeProjectId}
+              logsSource={LOGS_SOURCE.playground}
+              variant="button"
+            />
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {renderExperimentChipOrButton()}
           {renderRunButton()}

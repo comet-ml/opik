@@ -55,6 +55,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE } from "@/constants/traces";
+import { LOGS_SOURCE } from "@/types/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
@@ -336,6 +337,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         }),
         page: page!,
         size: size!,
+        logsSource: LOGS_SOURCE.sdk,
       },
       {
         placeholderData: keepPreviousData,
