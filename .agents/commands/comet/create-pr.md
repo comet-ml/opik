@@ -196,7 +196,7 @@ Before creating the PR, validate the generated title and body against the same r
   - `## Testing`
   - `## Documentation`
 
-- **Details section non-empty**: Extract content between `## Details` and the next `##` heading. Verify it is not empty after stripping HTML comments (`<!-- ... -->`).
+- **Details section non-empty**: Extract content between `## Details` and the next `##` heading. Verify it is not empty after trimming whitespace (matching CI's `getSectionContent` which only calls `.trim()`). Note: HTML comment placeholders are handled separately in the template placeholder cleanup step below — do not strip them during this validation check.
 
 - **Issues section ticket reference**: Extract content of `## Issues`. Unless the PR title starts with `[NA]`, verify it references at least one ticket matching: `#\d+`, `OPIK-\d+`, `DND-\d+`, `DEV-\d+`, or `CUST-\d+`.
 
