@@ -138,6 +138,7 @@ class InProcessRunnerLoop:
         try:
             self._loop.run_until_complete(self._job_consumer())
         finally:
+            self._loop.run_until_complete(self._log_streamer.stop())
             self._loop.close()
 
     async def _job_consumer(self) -> None:

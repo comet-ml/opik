@@ -441,11 +441,7 @@ class TestJobLogs:
             lp._log_streamer.start()
             await coro
             await asyncio.sleep(0.1)
-            lp._log_streamer._task.cancel()
-            try:
-                await lp._log_streamer._task
-            except asyncio.CancelledError:
-                pass
+            await lp._log_streamer.stop()
 
         loop.run_until_complete(_wrapper())
         loop.close()

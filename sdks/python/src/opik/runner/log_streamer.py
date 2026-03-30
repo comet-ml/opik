@@ -38,7 +38,12 @@ class _CaptureStream(io.TextIOBase):
             job_id = get_current_job_id()
             if job_id is not None:
                 entry = LocalRunnerLogEntry(stream=self._stream_name, text=s)
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, (job_id, entry))
+                try:
+                    self._loop.call_soon_threadsafe(
+                        self._queue.put_nowait, (job_id, entry)
+                    )
+                except RuntimeError:
+                    pass
         return self._stream.write(s)
 
     def flush(self) -> None:
@@ -66,6 +71,14 @@ class LogStreamer:
 
     def start(self) -> None:
         self._task = self._loop.create_task(self._run())
+
+    async def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
 
     async def _run(self) -> None:
         pending: typing.Dict[str, typing.List[LocalRunnerLogEntry]] = {}
