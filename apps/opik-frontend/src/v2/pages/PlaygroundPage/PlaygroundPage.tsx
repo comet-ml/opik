@@ -197,7 +197,7 @@ const PlaygroundPage = () => {
     projectName: activeProject?.name,
   });
 
-  const isExperimentMode = !!datasetId;
+  const isExperimentMode = !!datasetId && canViewDatasets;
 
   useEffect(() => {
     return () => stopAll();
