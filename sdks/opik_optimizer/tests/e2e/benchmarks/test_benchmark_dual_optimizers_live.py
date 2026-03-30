@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import opik
 import opik_optimizer
 import pytest
 from opik.evaluation.metrics.heuristics.equals import Equals
@@ -99,6 +100,7 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
         dataset_name: str | None = None,
         **kwargs: Any,
     ) -> Any:
+        kwargs.pop("test_mode", None)
         return real_tiny_test(
             split=split,
             count=1 if count is None else count,
@@ -111,14 +113,26 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _remove_old_datasets() -> None:
+    client = opik.Opik()
+    names = ["tiny_test_live", "tiny_test_live_sample"]
+    for name in names:
+        try:
+            client.delete_dataset(name)
+        except Exception as e:
+            print("failed to delete dataset", name, "ignoring", e)
+
+
 def test_dual_optimizer_run_live(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, setup_environment
 ) -> None:
     """Run two benchmark tasks (few_shot + evolutionary) against tiny_test with a live model."""
     _skip_without_openai()
     _patch_benchmark_config(monkeypatch)
     _patch_dataset_loader(monkeypatch)
     monkeypatch.setattr(local_engine, "ProcessPoolExecutor", InlineExecutor)
+
+    _remove_old_datasets()
 
     runner = local_engine.BenchmarkRunner(
         max_workers=1,

@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, Generator
 
 import pytest
 
 
-@pytest.fixture(scope="session", autouse=True)
+_E2E_PROJECT_NAME = f"e2e-optimizer-tests"
+
+
+@pytest.fixture(scope="session")
 def setup_environment() -> Generator[None, Any, None]:
     """Setup environment for e2e optimizer tests."""
-    _E2E_PROJECT_NAME = f"e2e-optimizer-tests-{uuid.uuid4().hex[:8]}"
-
     with pytest.MonkeyPatch.context() as m:
         m.setenv("OPIK_PROJECT_NAME", _E2E_PROJECT_NAME)
         yield
