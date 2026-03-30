@@ -935,6 +935,7 @@ class ThreadDAOImpl implements ThreadDAO {
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
+            SETTINGS use_skip_indexes_if_final = 1
             """;
 
     /***
