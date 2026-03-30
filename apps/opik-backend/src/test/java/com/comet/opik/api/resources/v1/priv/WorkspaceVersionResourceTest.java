@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
@@ -219,6 +220,7 @@ class WorkspaceVersionResourceTest {
         private AutomationRuleEvaluatorResourceClient evaluatorClient;
         private ExperimentResourceClient experimentClient;
         private OptimizationResourceClient optimizationClient;
+        private AlertResourceClient alertClient;
 
         @BeforeAll
         void beforeAll(ClientSupport clientSupport) {
@@ -231,6 +233,7 @@ class WorkspaceVersionResourceTest {
             evaluatorClient = new AutomationRuleEvaluatorResourceClient(clientSupport, baseUrl);
             experimentClient = new ExperimentResourceClient(clientSupport, baseUrl, podamFactory);
             optimizationClient = new OptimizationResourceClient(clientSupport, baseUrl, podamFactory);
+            alertClient = new AlertResourceClient(clientSupport);
         }
 
         @AfterAll
@@ -383,6 +386,23 @@ class WorkspaceVersionResourceTest {
                     .datasetName(dataset.name())
                     .build(),
                     API_KEY, workspaceName);
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
+        }
+
+        @Test
+        void workspaceVersion__whenAlertWithoutProject__returnsVersion1() {
+            var workspaceName = mockWorkspace();
+
+            // Project-scoped alert (projectId column) does not trigger version_1
+            alertClient.createAlert(
+                    AlertResourceTest.generateAlertForProject(podamFactory, UUID.randomUUID()),
+                    API_KEY, workspaceName, 201);
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
+
+            // Workspace level alert triggers version_1
+            alertClient.createAlert(
+                    AlertResourceTest.generateAlert(podamFactory),
+                    API_KEY, workspaceName, 201);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
         }
     }

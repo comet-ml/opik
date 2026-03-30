@@ -2,6 +2,7 @@ package com.comet.opik.domain.workspaces;
 
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.WorkspaceVersion;
+import com.comet.opik.domain.AlertDAO;
 import com.comet.opik.domain.DashboardDAO;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
@@ -211,7 +212,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 log.info("Found version_1 datasets in workspace '{}'", workspaceId);
                 return true;
             }
-            // TODO: alerts — no project_id column yet. Skipped until column is added.
+            if (handle.attach(AlertDAO.class).hasVersion1Alerts(workspaceId)) {
+                log.info("Found version_1 alerts in workspace '{}'", workspaceId);
+                return true;
+            }
             return false;
         });
     }

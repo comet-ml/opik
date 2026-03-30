@@ -45,7 +45,7 @@ import java.util.UUID;
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 @RegisterArgumentFactory(AlertTypeArgumentFactory.class)
 @RegisterColumnMapper(AlertTypeColumnMapper.class)
-interface AlertDAO {
+public interface AlertDAO {
 
     String FIND = """
             WITH target_alerts AS (
@@ -139,6 +139,9 @@ interface AlertDAO {
             """)
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
             @Bind("webhookId") UUID webhookId);
+
+    @SqlQuery("SELECT EXISTS(SELECT 1 FROM alerts WHERE workspace_id = :workspaceId AND project_id IS NULL)")
+    boolean hasVersion1Alerts(@Bind("workspaceId") String workspaceId);
 
     @SqlQuery(FIND)
     @UseStringTemplateEngine
