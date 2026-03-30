@@ -56,7 +56,14 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 Map.entry(MetricType.SPAN_FEEDBACK_SCORES, projectMetricsDAO::getSpanFeedbackScores),
                 Map.entry(MetricType.SPAN_COUNT, projectMetricsDAO::getSpanCount),
                 Map.entry(MetricType.SPAN_DURATION, projectMetricsDAO::getSpanDuration),
-                Map.entry(MetricType.SPAN_TOKEN_USAGE, projectMetricsDAO::getSpanTokenUsage));
+                Map.entry(MetricType.SPAN_TOKEN_USAGE, projectMetricsDAO::getSpanTokenUsage),
+                Map.entry(MetricType.TRACE_AVERAGE_DURATION, projectMetricsDAO::getTraceAverageDuration),
+                Map.entry(MetricType.TRACE_ERROR_RATE, projectMetricsDAO::getTraceErrorRate),
+                Map.entry(MetricType.SPAN_AVERAGE_DURATION, projectMetricsDAO::getSpanAverageDuration),
+                Map.entry(MetricType.SPAN_COST, projectMetricsDAO::getSpanCost),
+                Map.entry(MetricType.SPAN_ERROR_RATE, projectMetricsDAO::getSpanErrorRate),
+                Map.entry(MetricType.THREAD_AVERAGE_DURATION, projectMetricsDAO::getThreadAverageDuration),
+                Map.entry(MetricType.THREAD_COST, projectMetricsDAO::getThreadCost));
         this.projectService = projectService;
         this.instantToUUIDMapper = instantToUUIDMapper;
         this.projectMetricsDAO = projectMetricsDAO;
