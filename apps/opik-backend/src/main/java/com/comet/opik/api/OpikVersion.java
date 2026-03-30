@@ -25,7 +25,7 @@ public enum OpikVersion {
 
     public static Optional<OpikVersion> findByValue(String value) {
         return Arrays.stream(values())
-                .filter(opikVersion -> opikVersion.value.equals(value))
+                .filter(opikVersion -> opikVersion.value.equalsIgnoreCase(value))
                 .findFirst();
     }
 }

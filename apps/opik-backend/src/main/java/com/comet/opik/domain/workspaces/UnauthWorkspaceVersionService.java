@@ -10,11 +10,9 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.util.Optional;
-
 /**
  * Unauthenticated deployment ({@code authentication.enabled=false}).
- * No external auth service available. Auth-suggested version is always empty;
+ * No external auth service available. Auth-suggested version is always null;
  * fallback on failure is version_1 (safe default).
  */
 @Slf4j
@@ -31,12 +29,7 @@ public class UnauthWorkspaceVersionService extends AbstractWorkspaceVersionServi
     }
 
     @Override
-    protected Optional<OpikVersion> getAuthSuggestedVersion(String workspaceId) {
-        return Optional.empty();
-    }
-
-    @Override
-    protected OpikVersion getFallbackVersion(String workspaceId) {
+    protected OpikVersion getFallbackVersion(String workspaceId, OpikVersion authSuggestedVersion) {
         log.warn("Unauth fallback: returning version_1 for workspace '{}'", workspaceId);
         return OpikVersion.VERSION_1;
     }
