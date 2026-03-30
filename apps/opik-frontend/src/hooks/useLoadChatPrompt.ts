@@ -10,6 +10,7 @@ export interface UseLoadChatPromptOptions {
   selectedChatPromptId: string | undefined;
   messages: LLMMessage[];
   onMessagesLoaded: (messages: LLMMessage[], promptName: string) => void;
+  skipInitialLoad?: boolean;
 }
 
 export interface UseLoadChatPromptReturn {
@@ -26,7 +27,9 @@ const useLoadChatPrompt = ({
   selectedChatPromptId,
   messages,
   onMessagesLoaded,
+  skipInitialLoad = false,
 }: UseLoadChatPromptOptions): UseLoadChatPromptReturn => {
+  const skippedRef = useRef(false);
   const loadedChatPromptRef = useRef<string | null>(null);
 
   const { data: chatPromptData, isSuccess: chatPromptDataLoaded } =
@@ -120,6 +123,15 @@ const useLoadChatPrompt = ({
       chatPromptKey &&
       loadedChatPromptRef.current !== chatPromptKey // prevent duplicate loads
     ) {
+      // Skip the first load for duplicated prompts that already have messages.
+      // We still mark the key as loaded so the hook won't re-trigger and
+      // overwrite the duplicated messages with the saved library version.
+      if (skipInitialLoad && !skippedRef.current) {
+        skippedRef.current = true;
+        loadedChatPromptRef.current = chatPromptKey;
+        return;
+      }
+
       try {
         // Mark this chat prompt as loaded to prevent race conditions
         loadedChatPromptRef.current = chatPromptKey;
@@ -150,6 +162,7 @@ const useLoadChatPrompt = ({
     chatPromptData,
     chatPromptVersionDataLoaded,
     onMessagesLoaded,
+    skipInitialLoad,
   ]);
 
   return {

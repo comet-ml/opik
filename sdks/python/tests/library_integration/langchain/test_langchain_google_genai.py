@@ -91,6 +91,7 @@ def test_langchain__google_genai_llm_is_used__token_usage_is_logged__happy_flow(
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -106,9 +107,11 @@ def test_langchain__google_genai_llm_is_used__token_usage_is_logged__happy_flow(
                 model=ANY_STRING.starting_with("gemini-2.0-flash"),
                 provider="google_ai",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

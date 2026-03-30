@@ -58,6 +58,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
     ) as DashboardWidget & ExperimentsFeedbackScoresWidgetType;
     const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
     const runtimeConfig = useDashboardStore(selectRuntimeConfig);
+    const runtimeProjectId = runtimeConfig?.projectIds?.[0] ?? null;
 
     const { config } = widgetData;
 
@@ -226,6 +227,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<WidgetEditorHandle>(
                 groups={widgetGroups}
                 onFiltersChange={handleFiltersChange}
                 onGroupsChange={handleGroupsChange}
+                projectId={runtimeProjectId}
               />
               <FormField
                 control={form.control}

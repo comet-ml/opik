@@ -78,8 +78,10 @@ def test_litellm_completion_create__happyflow(fake_backend, model, expected_prov
                 spans=[],
                 model=ANY_STRING,
                 provider=expected_provider,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -142,8 +144,10 @@ async def test_litellm_acompletion_create__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",  # Actual LLM provider, not "litellm"
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -197,8 +201,10 @@ def test_litellm_completion_error_handling__exception_logged(fake_backend):
                 spans=[],
                 model="invalid-model-name",
                 provider=None,  # Provider is None for invalid model
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -274,8 +280,10 @@ def test_litellm_completion_with_tools__tools_logged(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -346,8 +354,10 @@ def test_litellm_completion_create__opik_args__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",  # Actual LLM provider, not "litellm"
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -419,8 +429,121 @@ async def test_litellm_acompletion_create__opik_args__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING,
                 provider="openai",  # Actual LLM provider, not "litellm"
+                source="sdk",
             )
         ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_litellm_completion_create__with_source__source_set_on_trace(fake_backend):
+    """Test that source parameter is propagated to trace and span."""
+    tracked_completion = track_completion(source="optimization")(litellm.completion)
+
+    messages = [
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    response = tracked_completion(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_tokens=10,
+    )
+
+    opik.flush_tracker()
+
+    assert isinstance(response, litellm.types.utils.ModelResponse)
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="completion",
+        input={"messages": messages},
+        output={"choices": ANY_LIST},
+        tags=["litellm"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="completion",
+                input={"messages": messages},
+                output={"choices": ANY_LIST},
+                tags=["litellm"],
+                metadata=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
+                total_cost=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                model=ANY_STRING,
+                provider="openai",
+                source="optimization",
+            )
+        ],
+        source="optimization",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_litellm_acompletion_create__with_source__source_set_on_trace(
+    fake_backend,
+):
+    """Test that source parameter is propagated to trace and span for async completion."""
+    tracked_acompletion = track_completion(source="optimization")(litellm.acompletion)
+
+    messages = [
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    response = await tracked_acompletion(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_tokens=10,
+    )
+
+    opik.flush_tracker()
+
+    assert isinstance(response, litellm.types.utils.ModelResponse)
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="acompletion",
+        input={"messages": messages},
+        output={"choices": ANY_LIST},
+        tags=["litellm"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="acompletion",
+                input={"messages": messages},
+                output={"choices": ANY_LIST},
+                tags=["litellm"],
+                metadata=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
+                total_cost=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                model=ANY_STRING,
+                provider="openai",
+                source="optimization",
+            )
+        ],
+        source="optimization",
     )
 
     assert len(fake_backend.trace_trees) == 1

@@ -14,6 +14,10 @@ on:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -49,6 +53,7 @@ jobs:
         env:
           OPIK_USAGE_REPORT_ENABLED: false
           COMPOSE_BAKE: false
+          TOGGLE_RUNNERS_ENABLED: "true"
         run: |
           cd ${{ github.workspace }}
           ./opik.sh --backend --port-mapping --build

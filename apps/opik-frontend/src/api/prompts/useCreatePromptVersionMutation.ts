@@ -18,6 +18,7 @@ type UseCreatePromptVersionMutationParams = {
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   type?: PROMPT_TYPE;
   excludeBlueprintUpdateForProjects?: string[];
+  projectId?: string;
   onSuccess: (promptVersion: PromptVersion) => void;
 };
 
@@ -34,6 +35,7 @@ const useCreatePromptVersionMutation = () => {
       templateStructure,
       type,
       excludeBlueprintUpdateForProjects,
+      projectId,
     }: UseCreatePromptVersionMutationParams) => {
       const { data } = await api.post(`${PROMPTS_REST_ENDPOINT}versions`, {
         name,
@@ -48,6 +50,7 @@ const useCreatePromptVersionMutation = () => {
           exclude_blueprint_update_for_projects:
             excludeBlueprintUpdateForProjects,
         }),
+        ...(projectId && { project_id: projectId }),
       });
 
       return data;
@@ -84,6 +87,10 @@ const useCreatePromptVersionMutation = () => {
           "promptId" in query.queryKey[1] &&
           query.queryKey[1].promptId === data.prompt_id,
       });
+
+      // Invalidate prompt list queries so version_count and last_updated_at refresh
+      queryClient.invalidateQueries({ queryKey: ["project-prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });
 };

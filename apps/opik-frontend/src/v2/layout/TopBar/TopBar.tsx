@@ -4,6 +4,7 @@ import usePluginsStore from "@/store/PluginsStore";
 import AppDebugInfo from "@/v2/layout/AppDebugInfo/AppDebugInfo";
 import SettingsMenu from "../SettingsMenu/SettingsMenu";
 import SupportHub from "@/v2/layout/SupportHub/SupportHub";
+import GitHubStarButton from "@/v2/layout/TopBar/GitHubStarButton";
 
 type TopBarProps = {
   startSlot?: React.ReactNode;
@@ -11,6 +12,7 @@ type TopBarProps = {
 
 const TopBar: React.FunctionComponent<TopBarProps> = ({ startSlot }) => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
+  const UpgradeButton = usePluginsStore((state) => state.UpgradeButton);
 
   return (
     <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
@@ -23,6 +25,8 @@ const TopBar: React.FunctionComponent<TopBarProps> = ({ startSlot }) => {
 
       <div className="flex items-center gap-2">
         <AppDebugInfo />
+        {UpgradeButton && <UpgradeButton />}
+        <GitHubStarButton />
         <SupportHub />
         {UserMenu ? <UserMenu /> : <SettingsMenu />}
       </div>

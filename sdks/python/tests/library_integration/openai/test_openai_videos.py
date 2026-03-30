@@ -152,6 +152,7 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                         model=VIDEO_MODEL_FOR_TESTS,
                         provider="openai",
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -173,8 +174,10 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                         model=None,
                         provider=None,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
     )
@@ -211,8 +214,10 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                 model=None,
                 provider=None,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     EXPECTED_WRITE_TO_FILE_TRACE = TraceModel(
@@ -261,8 +266,10 @@ def test_openai_client_videos_create_and_poll_and_download__happyflow(fake_backe
                         content_type="video/mp4",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     # Find traces by name
@@ -379,10 +386,13 @@ def test_openai_client_videos_create_and_poll__error_handling(fake_backend):
                             "traceback": ANY_STRING,
                         },
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -503,6 +513,7 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                         model=VIDEO_MODEL_FOR_TESTS,
                         provider="openai",
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -524,10 +535,13 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                         model=None,
                         provider=None,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     EXPECTED_DOWNLOAD_TRACE = TraceModel(
@@ -562,8 +576,10 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                 model=None,
                 provider=None,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     EXPECTED_WRITE_TO_FILE_TRACE = TraceModel(
@@ -612,8 +628,10 @@ async def test_openai_async_client_videos_create_and_poll_and_download__happyflo
                         content_type="video/mp4",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     # Find traces by name
@@ -728,10 +746,13 @@ async def test_openai_async_client_videos_create_and_poll__error_handling(fake_b
                             "traceback": ANY_STRING,
                         },
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)

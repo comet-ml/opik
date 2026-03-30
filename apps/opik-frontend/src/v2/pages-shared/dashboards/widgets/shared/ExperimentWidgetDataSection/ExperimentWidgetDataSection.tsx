@@ -86,6 +86,7 @@ interface ExperimentWidgetDataSectionProps<T extends FieldValues> {
   groups?: Groups;
   onFiltersChange?: (filters: Filters) => void;
   onGroupsChange?: (groups: Groups) => void;
+  projectId?: string | null;
   className?: string;
 }
 
@@ -97,6 +98,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
   groups,
   onFiltersChange,
   onGroupsChange,
+  projectId,
   className = "",
 }: ExperimentWidgetDataSectionProps<T>) => {
   const { field: filtersField } = useController({
@@ -133,6 +135,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
           },
           keyComponentProps: {
             className: "w-full min-w-72",
+            ...(projectId && { projectId }),
           },
           defaultOperator: "=" as FilterOperator,
           operators: [{ label: "=", value: "=" as FilterOperator }],
@@ -152,7 +155,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
         },
       },
     }),
-    [],
+    [projectId],
   );
 
   const setFilters = useCallback(

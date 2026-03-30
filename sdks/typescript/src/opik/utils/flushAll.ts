@@ -6,8 +6,8 @@ export const flushAll = async () => {
   logger.debug("Starting flushAll operation");
   try {
     await Promise.all([
-      getTrackOpikClient().flush(),
-      ...clients.map((c) => c.flush()),
+      getTrackOpikClient().flush({ silent: true }),
+      ...clients.map((c) => c.flush({ silent: true })),
     ]);
     logger.debug("flushAll operation completed successfully");
   } catch (error) {

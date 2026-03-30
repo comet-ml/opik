@@ -28,6 +28,7 @@ import DatasetSamplePreview from "./DatasetSamplePreview";
 
 type OptimizationsNewConfigSidebarProps = {
   form: UseFormReturn<OptimizationConfigFormType>;
+  projectId?: string | null;
   optimizerType: OPTIMIZER_TYPE;
   metricType: METRIC_TYPE;
   datasetSample: Record<string, unknown> | null;
@@ -44,6 +45,7 @@ const OptimizationsNewConfigSidebar: React.FC<
   OptimizationsNewConfigSidebarProps
 > = ({
   form,
+  projectId,
   optimizerType,
   metricType,
   datasetSample,
@@ -116,6 +118,7 @@ const OptimizationsNewConfigSidebar: React.FC<
                 <DatasetSelectBox
                   value={field.value}
                   onValueChange={(id) => onDatasetChange(id)}
+                  projectId={projectId}
                   className="h-10 w-full"
                 />
               </FormControl>

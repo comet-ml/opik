@@ -3,6 +3,7 @@ package com.comet.opik.domain.alerts;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.utils.JsonUtils;
+import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
@@ -12,10 +13,8 @@ import java.util.UUID;
 
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
 
-public final class AlertScopeUtils {
-
-    private AlertScopeUtils() {
-    }
+@UtilityClass
+public class AlertScopeUtils {
 
     /**
      * Returns the project IDs that define the scope of an alert trigger.

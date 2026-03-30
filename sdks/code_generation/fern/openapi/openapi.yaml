@@ -42,6 +42,8 @@ tags:
   description: Alert resources
 - name: Annotation Queues
   description: Private annotation queue operations
+- name: Assistant Sidebars
+  description: Assistant Sidebar configuration
 - name: Attachments
   description: Attachments related resources
 - name: Check
@@ -60,6 +62,8 @@ tags:
   description: Feedback definitions related resources
 - name: Guardrails
   description: Guardrails related resources
+- name: Insights Views
+  description: Insights View resources
 - name: LLM Models
   description: LLM model registry resources
 - name: LlmProviderKey
@@ -1042,6 +1046,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/assistant-sidebars/config:
+    get:
+      tags:
+      - Assistant Sidebars
+      summary: Get Assistant Sidebar configuration
+      description: Get CDN configuration for loading the assistant sidebar at runtime
+      operationId: getAssistantSidebarConfig
+      responses:
+        "200":
+          description: Assistant Sidebar config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantSidebarConfigResponse"
   /v1/private/attachment/list:
     get:
       tags:
@@ -2973,6 +2991,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       responses:
         "200":
           description: Feedback Scores resource
@@ -3396,6 +3419,162 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/insights-views:
+    get:
+      tags:
+      - Insights Views
+      summary: Find insights views
+      description: Find insights views in a workspace
+      operationId: findInsightsViews
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter insights views by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Insights view page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPage_Public"
+    post:
+      tags:
+      - Insights Views
+      summary: Create insights view
+      description: Create a new insights view in a workspace
+      operationId: createInsightsView
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dashboard_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/insights-views/{insightsViewId}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+  /v1/private/insights-views/{insightsViewId}:
+    get:
+      tags:
+      - Insights Views
+      summary: Get insights view by id
+      description: Get insights view by id
+      operationId: getInsightsViewById
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Insights view resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Insights view not found
+    delete:
+      tags:
+      - Insights Views
+      summary: Delete insights view
+      description: Delete insights view by id
+      operationId: deleteInsightsView
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+    patch:
+      tags:
+      - Insights Views
+      summary: Update insights view
+      description: Update insights view by id. Partial updates are supported - only
+        provided fields will be updated.
+      operationId: updateInsightsView
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardUpdate_Public"
+      responses:
+        "200":
+          description: Updated insights view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Insights view not found
+        "409":
+          description: Conflict - insights view with this name already exists
+  /v1/private/insights-views/delete-batch:
+    post:
+      tags:
+      - Insights Views
+      summary: Delete insights views
+      description: Delete insights views batch
+      operationId: deleteInsightsViewsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No content
   /v1/private/llm/models:
     get:
       tags:
@@ -4484,6 +4663,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/projects/{projectId}/alerts:
+    get:
+      tags:
+      - Projects
+      summary: Find alerts by project
+      description: Find alerts scoped to a project
+      operationId: findAlertsByProject
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Alerts page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/projects/{projectId}/dashboards:
     get:
       tags:
@@ -4985,6 +5213,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TokenUsageNames"
+  /v1/private/projects/{id}/kpi-cards:
+    post:
+      tags:
+      - Projects
+      summary: Get Project KPI Cards
+      description: Gets KPI card metrics for a project
+      operationId: getProjectKpiCards
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KpiCardRequest"
+      responses:
+        "200":
+          description: KPI Card Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KpiCardResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -7300,6 +7560,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
       deprecated: true
+  /v1/private/workspaces/versions:
+    get:
+      tags:
+      - Workspaces
+      summary: Get workspace version
+      description: |-
+        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
+        or Opik V2 (project-first) navigation. The backend is the single authority for this
+        determination, clients must never derive the version themselves.
+
+        Determination logic (priority order):
+        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        2) Auth one-way V2 gate (authenticated mode only, not yet implemented)
+        3) Version 1 entity check (entities without project_id)
+        4) Fallback on failure
+
+        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
+        Called by the frontend on workspace load.
+      operationId: getWorkspaceVersion
+      responses:
+        "200":
+          description: Workspace version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceVersion"
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
@@ -7941,6 +8227,14 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        project_id:
+          type: string
+          description: "Optional project scope for this alert. When set, the alert\
+            \ is scoped to the specified project. Do NOT also provide a 'scope:project'\
+            \ trigger config — the system will create it automatically from this field.\
+            \ Sending both project_id and a scope:project trigger config will result\
+            \ in an error."
+          format: uuid
     AlertTrigger:
       required:
       - event_type
@@ -8125,6 +8419,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AlertTrigger_Write"
+        project_id:
+          type: string
+          description: "Optional project scope for this alert. When set, the alert\
+            \ is scoped to the specified project. Do NOT also provide a 'scope:project'\
+            \ trigger config — the system will create it automatically from this field.\
+            \ Sending both project_id and a scope:project trigger config will result\
+            \ in an error."
+          format: uuid
     Webhook_Write:
       required:
       - url
@@ -8297,6 +8599,14 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        project_id:
+          type: string
+          description: "Optional project scope for this alert. When set, the alert\
+            \ is scoped to the specified project. Do NOT also provide a 'scope:project'\
+            \ trigger config — the system will create it automatically from this field.\
+            \ Sending both project_id and a scope:project trigger config will result\
+            \ in an error."
+          format: uuid
     Webhook_Public:
       required:
       - url
@@ -8630,6 +8940,13 @@ components:
           items:
             minLength: 1
             type: string
+    AssistantSidebarConfigResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        manifest_url:
+          type: string
     Attachment:
       required:
       - file_name
@@ -10683,6 +11000,7 @@ components:
           - experiments
         scope:
           type: string
+          readOnly: true
           enum:
           - workspace
           - insights
@@ -10733,11 +11051,6 @@ components:
           enum:
           - multi_project
           - experiments
-        scope:
-          type: string
-          enum:
-          - workspace
-          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -10777,11 +11090,6 @@ components:
           enum:
           - multi_project
           - experiments
-        scope:
-          type: string
-          enum:
-          - workspace
-          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -16309,6 +16617,50 @@ components:
           type: array
           items:
             type: string
+    KpiCardResponse:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiMetric"
+    KpiMetric:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - count
+          - errors
+          - avg_duration
+          - avg_cost
+        current_value:
+          type: number
+          format: double
+        previous_value:
+          type: number
+          format: double
+    KpiCardRequest:
+      required:
+      - entity_type
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum:
+          - traces
+          - spans
+          - threads
+        filters:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
     DataPointNumber_Public:
       required:
       - time
@@ -17177,6 +17529,15 @@ components:
           type: string
           format: date-time
           readOnly: true
+        catch_up_cursor:
+          type: string
+          description: Current position of historical data cleanup
+          format: uuid
+          readOnly: true
+        catch_up_done:
+          type: boolean
+          description: Whether historical catch-up is complete
+          readOnly: true
     RetentionRule_Write:
       required:
       - retention
@@ -17218,6 +17579,7 @@ components:
       required:
       - alertsEnabled
       - anthropicProviderEnabled
+      - assistantSidebarEnabled
       - bedrockProviderEnabled
       - collaboratorsTabEnabled
       - csvUploadEnabled
@@ -17225,6 +17587,7 @@ components:
       - datasetExportEnabled
       - datasetVersioningEnabled
       - exportEnabled
+      - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
@@ -17284,6 +17647,11 @@ components:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
+        assistantSidebarEnabled:
+          type: boolean
+        forceWorkspaceVersion:
+          minLength: 1
+          type: string
     SpanBatchUpdate:
       required:
       - ids
@@ -18687,6 +19055,22 @@ components:
               \ values (e.g. #FF0000). Max 10000 entries."
           description: "Workspace-level color map. Maps label names to hex color values\
             \ (e.g. #FF0000). Max 10000 entries."
+    WorkspaceVersion:
+      type: object
+      properties:
+        opik_version:
+          type: string
+          description: |-
+            The determined Opik navigation version for this workspace.
+            'version_1' = legacy workspace-scoped navigation,
+            'version_2' = new project-first navigation.
+          enum:
+          - version_1
+          - version_2
+      description: |-
+        Workspace version response.
+        The opik_version field indicates which navigation mode the frontend should render:
+        'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

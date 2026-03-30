@@ -86,7 +86,14 @@ class RetentionPolicyServiceTest {
                 .redisUrl(REDIS.getRedisURI())
                 .customConfigs(List.of(
                         new TestDropwizardAppExtensionUtils.CustomConfig("retention.enabled", "true"),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.executionsPerDay", "48")))
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.executionsPerDay", "48"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.enabled", "true"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.smallThreshold", "10000"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.largeThreshold", "100000"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.smallBatchSize", "200"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.mediumBatchSize", "10"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.mediumChunkDays", "7"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.largeChunkDays", "1")))
                 .build();
 
         APP = newTestDropwizardAppExtension(contextConfig);
@@ -98,16 +105,21 @@ class RetentionPolicyServiceTest {
     private TraceResourceClient traceClient;
     private SpanResourceClient spanClient;
     private RetentionPolicyService retentionPolicyService;
+    private RetentionCatchUpService catchUpService;
+    private RetentionEstimationService estimationService;
     private TransactionTemplateAsync templateAsync;
     private IdGenerator idGenerator;
 
     @BeforeAll
     void beforeAll(ClientSupport client, RetentionPolicyService retentionPolicyService,
+            RetentionCatchUpService catchUpService, RetentionEstimationService estimationService,
             TransactionTemplateAsync templateAsync, IdGenerator idGenerator) {
         this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
         this.retentionPolicyService = retentionPolicyService;
+        this.estimationService = estimationService;
+        this.catchUpService = catchUpService;
         this.templateAsync = templateAsync;
         this.idGenerator = idGenerator;
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
@@ -436,6 +448,110 @@ class RetentionPolicyServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Catch-up job")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CatchUpJob {
+
+        // Small workspace for catch-up integration test
+        private static final String WS_SMALL = "0000000a-0000-0000-0000-000000000000";
+        private static final String WS_SMALL_API_KEY = UUID.randomUUID().toString();
+        private static final String WS_SMALL_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
+        private static final String WS_SMALL_USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+        // No-apply workspace: applyToPast=false, catch-up should be marked done immediately
+        private static final String WS_NOAPPLY = "0000000c-0000-0000-0000-000000000000";
+        private static final String WS_NOAPPLY_API_KEY = UUID.randomUUID().toString();
+        private static final String WS_NOAPPLY_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
+        private static final String WS_NOAPPLY_USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+        // NOTE: The TOO_MANY_ROWS / large workspace / scouting paths are tested in
+        // RetentionRuleServiceVelocityTest using mocked DAOs, because ClickHouse's
+        // max_rows_to_read profile setting also blocks normal INSERT/SELECT operations.
+
+        @BeforeAll
+        void setUp() {
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), WS_SMALL_API_KEY, WS_SMALL_NAME,
+                    WS_SMALL, WS_SMALL_USER);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), WS_NOAPPLY_API_KEY, WS_NOAPPLY_NAME,
+                    WS_NOAPPLY, WS_NOAPPLY_USER);
+        }
+
+        @Test
+        @DisplayName("applyToPast=false marks catch-up as done immediately")
+        void noApplyToPast_catchUpDoneImmediately() {
+            var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.SHORT_14D)
+                    .applyToPast(false).build();
+            var created = retentionClient.createAndGet(rule, WS_NOAPPLY_API_KEY, WS_NOAPPLY_NAME);
+
+            assertThat(created.catchUpDone()).isTrue();
+            assertThat(created.catchUpCursor()).isNull();
+        }
+
+        @Test
+        @DisplayName("Small workspace: velocity estimated, catch-up deletes old data in one shot")
+        void smallWorkspace_oneShotCatchUp() {
+            Instant now = Instant.now();
+
+            // Insert old data (18 days ago — beyond 14d retention + 3d sliding window)
+            // Needs enough spans for non-zero velocity: uniq(id)/weeks >= 1
+            Instant oldTime = now.minus(18, ChronoUnit.DAYS);
+            UUID oldTraceId1 = idGenerator.generateId(oldTime);
+            UUID oldTraceId2 = idGenerator.generateId(oldTime.plusSeconds(1));
+
+            createTestTrace(oldTraceId1, WS_SMALL_API_KEY, WS_SMALL_NAME);
+            createTestTrace(oldTraceId2, WS_SMALL_API_KEY, WS_SMALL_NAME);
+            for (int i = 0; i < 5; i++) {
+                createTestSpan(idGenerator.generateId(oldTime.plusMillis(i)), oldTraceId1,
+                        WS_SMALL_API_KEY, WS_SMALL_NAME);
+            }
+            for (int i = 0; i < 5; i++) {
+                createTestSpan(idGenerator.generateId(oldTime.plusSeconds(1).plusMillis(i)), oldTraceId2,
+                        WS_SMALL_API_KEY, WS_SMALL_NAME);
+            }
+
+            // Insert recent data (5 days ago — within retention period, should survive)
+            Instant recentTime = now.minus(5, ChronoUnit.DAYS);
+            UUID recentTraceId = idGenerator.generateId(recentTime);
+            UUID recentSpanId = idGenerator.generateId(recentTime);
+
+            createTestTrace(recentTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
+            createTestSpan(recentSpanId, recentTraceId, WS_SMALL_API_KEY, WS_SMALL_NAME);
+
+            waitForRows("traces", WS_SMALL, 3);
+            waitForRows("spans", WS_SMALL, 11);
+
+            // Create rule with applyToPast=true — saved as pending estimation (no velocity/cursor yet)
+            var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.SHORT_14D)
+                    .applyToPast(true).build();
+            var created = retentionClient.createAndGet(rule, WS_SMALL_API_KEY, WS_SMALL_NAME);
+
+            // Rule pending estimation: no velocity, no cursor, not done
+            assertThat(created.catchUpDone()).isFalse();
+            assertThat(created.catchUpVelocity()).isNull();
+            assertThat(created.catchUpCursor()).isNull();
+
+            // Run estimation job — populates velocity + cursor
+            estimationService.estimatePendingRules();
+
+            // Run catch-up — small workspace should be processed in one shot
+            catchUpService.executeCatchUpCycle(now).block();
+
+            // Old data should be deleted, recent data kept
+            assertThat(countRows("traces", WS_SMALL)).isEqualTo(1);
+            assertThat(countRows("spans", WS_SMALL)).isEqualTo(1);
+            assertThat(countRowsById("traces", recentTraceId)).isEqualTo(1);
+            assertThat(countRowsById("traces", oldTraceId1)).isZero();
+            assertThat(countRowsById("traces", oldTraceId2)).isZero();
+
+            // Catch-up should be marked done
+            var updated = retentionClient.get(created.id(), WS_SMALL_API_KEY, WS_SMALL_NAME, 200);
+            assertThat(updated.catchUpDone()).isTrue();
+            assertThat(updated.catchUpCursor()).isNull();
+        }
+
+    }
+
     // -- Resource client insert helpers --
 
     private void createTestTrace(UUID id, String apiKey, String wsName) {
@@ -489,4 +605,5 @@ class RetentionPolicyServiceTest {
                         .as("Expected %d rows in %s for workspace %s", expected, table, wsId)
                         .isEqualTo(expected));
     }
+
 }

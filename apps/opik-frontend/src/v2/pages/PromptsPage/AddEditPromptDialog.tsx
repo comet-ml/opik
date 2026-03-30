@@ -150,6 +150,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
           template_structure: templateStructure,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
           ...(description && { description }),
+          project_id: activeProjectId ?? undefined,
         },
       },
       { onSuccess: onPromptCreated },

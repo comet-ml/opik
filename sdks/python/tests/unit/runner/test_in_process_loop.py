@@ -156,7 +156,7 @@ class TestJobExecution:
     def test_execute_job__sync_entrypoint__calls_function(
         self, mock_api, shutdown_event
     ):
-        def my_agent(q):
+        def my_agent(q, **kwargs):
             return f"answer: {q}"
 
         registry.register("my_agent", my_agent, "proj", [], "")
@@ -180,7 +180,7 @@ class TestJobExecution:
     def test_execute_job__async_entrypoint__calls_function(
         self, mock_api, shutdown_event
     ):
-        async def my_agent(q):
+        async def my_agent(q, **kwargs):
             return f"answer: {q}"
 
         registry.register("my_agent", my_agent, "proj", [], "")
@@ -218,7 +218,7 @@ class TestJobExecution:
         assert "Unknown agent" in call_kwargs["error"]
 
     def test_execute_job__exception__reports_failed(self, mock_api, shutdown_event):
-        def bad_agent():
+        def bad_agent(**kwargs):
             raise ValueError("boom")
 
         registry.register("bad", bad_agent, "proj", [], "")
@@ -240,7 +240,7 @@ class TestJobExecution:
         assert "ValueError" in call_kwargs["error"]
 
     def test_execute_job__timeout__reports_failed(self, mock_api, shutdown_event):
-        def slow_agent():
+        def slow_agent(**kwargs):
             time.sleep(5)
 
         registry.register("slow", slow_agent, "proj", [], "")
@@ -262,7 +262,7 @@ class TestJobExecution:
         assert "timed out" in call_kwargs["error"].lower()
 
     def test_execute_job__cancelled__skipped(self, mock_api, shutdown_event):
-        def my_agent():
+        def my_agent(**kwargs):
             return "ok"
 
         registry.register("my_agent", my_agent, "proj", [], "")
@@ -306,21 +306,20 @@ class TestJobExecution:
                     "span": {"metadata": {"k": "v"}},
                 }
             },
-            trace_id="t-123",
         )
 
         loop = asyncio.new_event_loop()
         loop.run_until_complete(lp._execute_job(job))
         loop.close()
 
-        assert captured_kwargs["opik_args"]["trace"]["id"] == "t-123"
+        assert len(captured_kwargs["opik_args"]["trace"]["id"]) > 0  # injected trace ID
         assert captured_kwargs["opik_args"]["trace"]["tags"] == ["existing"]
         assert captured_kwargs["opik_args"]["span"]["metadata"] == {"k": "v"}
 
     def test_execute_job__report_failure__does_not_raise(
         self, mock_api, shutdown_event
     ):
-        def my_agent():
+        def my_agent(**kwargs):
             return "ok"
 
         registry.register("my_agent", my_agent, "proj", [], "")
@@ -340,3 +339,40 @@ class TestJobExecution:
         loop.close()
 
         mock_api.runners.report_job_result.assert_called_once()
+
+
+class TestInjectTraceId:
+    def test_absent_key__injects_fresh_opik_args(self):
+        inputs: dict = {}
+        in_process_loop._inject_trace_id(inputs, "tid-1")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-1"
+
+    def test_dict_value__merges_trace_id(self):
+        inputs = {"opik_args": {"trace": {"tags": ["t"]}, "span": {"k": "v"}}}
+        in_process_loop._inject_trace_id(inputs, "tid-2")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-2"
+        assert inputs["opik_args"]["trace"]["tags"] == ["t"]
+        assert inputs["opik_args"]["span"] == {"k": "v"}
+
+    def test_explicit_none__leaves_inputs_unchanged(self):
+        inputs: dict = {"opik_args": None}
+        in_process_loop._inject_trace_id(inputs, "tid-3")
+        assert inputs["opik_args"] is None
+
+    def test_trace_none__treats_as_empty(self):
+        inputs = {"opik_args": {"trace": None}}
+        in_process_loop._inject_trace_id(inputs, "tid-4")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-4"
+
+    def test_non_dict_opik_args__replaces_with_fresh(self):
+        inputs: dict = {"opik_args": "unexpected"}
+        in_process_loop._inject_trace_id(inputs, "tid-5")
+        assert inputs["opik_args"]["trace"]["id"] == "tid-5"
+
+    def test_does_not_mutate_original_dict(self):
+        original_trace = {"tags": ["x"]}
+        original_opik = {"trace": original_trace}
+        inputs = {"opik_args": original_opik}
+        in_process_loop._inject_trace_id(inputs, "tid-6")
+        assert original_opik.get("trace", {}).get("id") is None
+        assert original_trace.get("id") is None

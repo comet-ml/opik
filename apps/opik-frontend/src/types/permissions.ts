@@ -6,10 +6,12 @@ export interface Permissions {
   canEditDashboards: boolean;
   canDeleteDashboards: boolean;
   canViewDatasets: boolean;
+  canCreateDatasets: boolean;
   canEditDatasets: boolean;
   canDeleteDatasets: boolean;
   canDeleteProjects: boolean;
   canCreateAnnotationQueues: boolean;
+  canEditAnnotationQueues: boolean;
   canDeleteAnnotationQueues: boolean;
   canDeleteTraces: boolean;
   canDeletePrompts: boolean;
@@ -38,10 +40,12 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canEditDashboards: true,
     canDeleteDashboards: true,
     canViewDatasets: true,
+    canCreateDatasets: true,
     canEditDatasets: true,
     canDeleteDatasets: true,
     canDeleteProjects: true,
     canCreateAnnotationQueues: true,
+    canEditAnnotationQueues: true,
     canDeleteAnnotationQueues: true,
     canDeleteTraces: true,
     canDeletePrompts: true,

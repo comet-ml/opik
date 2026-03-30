@@ -15,6 +15,7 @@ from opik.types import (
     ErrorInfoDict,
     LLMProvider,
     SpanType,
+    TraceSource,
 )
 from .. import constants, validation_helpers, helpers
 
@@ -29,6 +30,7 @@ class Span:
         project_name: str,
         message_streamer: streamer.Streamer,
         url_override: str,
+        source: TraceSource,
         parent_span_id: Optional[str] = None,
     ):
         """
@@ -40,6 +42,7 @@ class Span:
         self._streamer = message_streamer
         self._project_name = project_name
         self._url_override = url_override
+        self.source = source
 
     def end(
         self,
@@ -150,6 +153,7 @@ class Span:
             provider=provider,
             error_info=error_info,
             total_cost=total_cost,
+            source=self.source,
         )
 
     def span(
@@ -219,6 +223,7 @@ class Span:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=self.source,
         )
 
     def log_feedback_score(
@@ -285,6 +290,7 @@ def create_span(
     error_info: Optional[ErrorInfoDict] = None,
     total_cost: Optional[float] = None,
     attachments: Optional[List[attachment.Attachment]] = None,
+    source: TraceSource = "sdk",
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -319,6 +325,7 @@ def create_span(
         error_info=error_info,
         total_cost=total_cost,
         last_updated_at=datetime_helpers.local_timestamp(),
+        source=source,
     )
     message_streamer.put(create_span_message)
 
@@ -340,6 +347,7 @@ def create_span(
         message_streamer=message_streamer,
         project_name=project_name,
         url_override=url_override,
+        source=source,
     )
 
 
@@ -350,6 +358,7 @@ def update_span(
     project_name: str,
     url_override: str,
     message_streamer: streamer.Streamer,
+    source: TraceSource,
     end_time: Optional[datetime.datetime] = None,
     metadata: Optional[Dict[str, Any]] = None,
     input: Optional[Dict[str, Any]] = None,
@@ -386,6 +395,7 @@ def update_span(
         provider=provider,
         error_info=error_info,
         total_cost=total_cost,
+        source=source,
     )
 
     if attachments is not None:

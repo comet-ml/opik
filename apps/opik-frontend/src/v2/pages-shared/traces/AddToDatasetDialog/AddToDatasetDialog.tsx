@@ -4,7 +4,7 @@ import { Database, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Span, Trace } from "@/types/traces";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -19,7 +19,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/ui/accordion";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import Loader from "@/shared/Loader/Loader";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -38,6 +38,7 @@ import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescrip
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/ui/toast";
 import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_SIZE = 100;
 
@@ -62,6 +63,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   setOpen,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
@@ -70,6 +72,9 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
+  const {
+    permissions: { canCreateDatasets },
+  } = usePermissions();
 
   // Enrichment options state - all checked by default (opt-out design)
   const [enrichmentOptions, setEnrichmentOptions] = useState({
@@ -84,15 +89,16 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
   const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
 
-  const { data, isPending } = useDatasetsList(
+  const { data, isPending } = useProjectDatasetsList(
     {
-      workspaceName,
+      projectId: activeProjectId!,
       search,
       page,
       size,
     },
     {
       placeholderData: keepPreviousData,
+      enabled: !!activeProjectId,
     },
   );
 
@@ -402,17 +408,19 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             {hasOnlySpans && renderMetadataConfiguration("span")}
             <div className="my-2 flex items-center justify-between">
               <h3 className="comet-title-xs">Select an evaluation suite</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setOpenDialog(true);
-                }}
-                disabled={noValidRows}
-              >
-                <Plus className="mr-2 size-4" />
-                Create new evaluation suite
-              </Button>
+              {canCreateDatasets && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setOpenDialog(true);
+                  }}
+                  disabled={noValidRows}
+                >
+                  <Plus className="mr-2 size-4" />
+                  Create new evaluation suite
+                </Button>
+              )}
             </div>
             <SearchInput
               searchText={search}

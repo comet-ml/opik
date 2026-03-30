@@ -1,4 +1,5 @@
 export type { DeleteProjectByIdRequest } from "./DeleteProjectByIdRequest.js";
+export type { FindAlertsByProjectRequest } from "./FindAlertsByProjectRequest.js";
 export type { FindDashboardsByProjectRequest } from "./FindDashboardsByProjectRequest.js";
 export type { FindDatasetsByProjectRequest } from "./FindDatasetsByProjectRequest.js";
 export type { FindExperimentsByProjectRequest } from "./FindExperimentsByProjectRequest.js";
@@ -9,6 +10,7 @@ export type { FindTokenUsageNamesRequest } from "./FindTokenUsageNamesRequest.js
 export type { GetProjectByIdRequest } from "./GetProjectByIdRequest.js";
 export type { GetProjectStatsRequest } from "./GetProjectStatsRequest.js";
 export type { GetPromptsByProjectRequest } from "./GetPromptsByProjectRequest.js";
+export type { KpiCardRequest } from "./KpiCardRequest.js";
 export type { ProjectMetricRequestPublic } from "./ProjectMetricRequestPublic.js";
 export type { ProjectRetrieveDetailed } from "./ProjectRetrieveDetailed.js";
 export type { ProjectUpdate } from "./ProjectUpdate.js";

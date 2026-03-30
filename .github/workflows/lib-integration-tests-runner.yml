@@ -51,6 +51,10 @@ on:
     paths:
       - 'sdks/python/**'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}

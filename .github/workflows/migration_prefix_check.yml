@@ -11,6 +11,10 @@ on:
       - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   check-migration-prefix-conflicts:
     runs-on: ubuntu-latest

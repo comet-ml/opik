@@ -25,6 +25,7 @@ def test_preprocess_message_does_not_wrap_create_span_without_end_time():
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
@@ -50,6 +51,7 @@ def test_preprocess_message_does_not_wrap_create_trace_without_end_time():
         error_info=None,
         thread_id=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
@@ -93,6 +95,7 @@ def test_preprocess_message_avoids_double_wrapping():
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     # Mark the message as already preprocessed
@@ -127,6 +130,7 @@ def test_preprocess_message_avoids_wrapping_message_with_empty_candidate_fields(
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
@@ -158,6 +162,7 @@ def test_preprocess_message_wraps_create_span_with_end_time():
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
@@ -182,6 +187,7 @@ def test_preprocess_message_wraps_create_trace_with_end_time():
         error_info=None,
         thread_id=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
@@ -208,6 +214,7 @@ def test_preprocess_message_wraps_update_span():
         provider=None,
         error_info=None,
         total_cost=None,
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
@@ -229,6 +236,7 @@ def test_preprocess_message_wraps_update_trace():
         tags=None,
         error_info=None,
         thread_id=None,
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
@@ -259,6 +267,7 @@ def test_preprocess_message_does_not_wrap_create_span_with_end_time_but_empty_fi
         error_info=None,
         total_cost=None,
         last_updated_at=mock.Mock(),
+        source="sdk",
     )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()

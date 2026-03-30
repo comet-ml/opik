@@ -1,13 +1,15 @@
 import React, { useEffect } from "react";
-import Loader from "@/shared/Loader/Loader";
 import { StringParam, useQueryParams } from "use-query-params";
-import useAppStore from "@/store/AppStore";
-import { Link, Navigate, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 import useDatasetItemByName from "@/api/datasets/useDatasetItemByName";
+import useDatasetById from "@/api/datasets/useDatasetById";
 import { Button } from "@/ui/button";
 
-const RedirectDatasets = () => {
+const RedirectDatasets: React.FC = () => {
   const [query] = useQueryParams({
     id: StringParam,
     name: StringParam,
@@ -15,6 +17,12 @@ const RedirectDatasets = () => {
 
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
+
+  const { data: datasetById, isPending: isPendingDatasetById } = useDatasetById(
+    { datasetId: query.id || "" },
+    { enabled: !!query.id },
+  );
 
   const { data: datasetByName, isPending: isPendingDatasetByName } =
     useDatasetItemByName(
@@ -22,25 +30,44 @@ const RedirectDatasets = () => {
       { enabled: !!query.name && !query.id },
     );
 
-  useEffect(() => {
-    if (datasetByName?.id) {
-      navigate({
-        to: "/$workspaceName/evaluation-suites/$suiteId/items",
-        params: {
-          suiteId: datasetByName.id,
-          workspaceName,
-        },
-      });
-    }
-  }, [datasetByName?.id, workspaceName, navigate]);
+  const dataset = datasetById || datasetByName;
+  const isPending = query.id ? isPendingDatasetById : isPendingDatasetByName;
 
-  if (query.id) {
-    return (
-      <Navigate to={`/${workspaceName}/evaluation-suites/${query.id}/items`} />
-    );
+  useEffect(() => {
+    if (dataset?.id) {
+      const projectId = dataset.project_id || activeProjectId;
+      if (projectId) {
+        navigate({
+          to: "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+          params: {
+            suiteId: dataset.id,
+            workspaceName,
+            projectId,
+          },
+          replace: true,
+        });
+      } else {
+        // Legacy fallback: dataset exists but has no project_id and no active project
+        navigate({
+          to: "/$workspaceName/home",
+          params: { workspaceName },
+          replace: true,
+        });
+      }
+    }
+  }, [
+    dataset?.id,
+    dataset?.project_id,
+    activeProjectId,
+    workspaceName,
+    navigate,
+  ]);
+
+  if (!query.id && !query.name) {
+    return <NoData message="No evaluation suite params set" />;
   }
 
-  if (!isPendingDatasetByName && !datasetByName) {
+  if (!isPending && !dataset) {
     return (
       <NoData
         icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
@@ -54,10 +81,6 @@ const RedirectDatasets = () => {
         </div>
       </NoData>
     );
-  }
-
-  if (!query.id && !query.name) {
-    return <NoData message="No evaluation suite params set" />;
   }
 
   return <Loader />;

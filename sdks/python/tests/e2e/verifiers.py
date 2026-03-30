@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 import opik
 from opik import Attachment, Prompt, ChatPrompt, synchronization
+from opik.api_objects import rest_helpers
 from opik.api_objects.attachment import decoder_helpers
 from opik.api_objects.dataset import dataset_item
 from opik.rest_api import ExperimentPublic, FeedbackScore, FeedbackScorePublic
@@ -15,7 +16,7 @@ from opik.rest_api.types import (
     span_public,
     trace_public,
 )
-from opik.types import ErrorInfoDict, FeedbackScoreDict
+from opik.types import ErrorInfoDict, FeedbackScoreDict, TraceSource
 from opik import url_helpers
 from .. import testlib
 
@@ -58,6 +59,7 @@ def verify_trace(
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     thread_id: Optional[str] = mock.ANY,  # type: ignore
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
+    source: Optional[TraceSource] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: opik_client.get_trace_content(id=trace_id) is not None,
@@ -71,6 +73,7 @@ def verify_trace(
     testlib.assert_equal(input, trace.input)
     testlib.assert_equal(output, trace.output)
     testlib.assert_equal(metadata, trace.metadata)
+    testlib.assert_equal(source, trace.source)
 
     if tags is not mock.ANY:
         testlib.assert_equal(_try_build_set(tags), _try_build_set(trace.tags))
@@ -138,6 +141,7 @@ def verify_span(
     provider: Optional[str] = mock.ANY,  # type: ignore
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     total_cost: Optional[float] = mock.ANY,  # type: ignore
+    source: Optional[TraceSource] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: opik_client.get_span_content(id=span_id) is not None,
@@ -162,6 +166,7 @@ def verify_span(
     testlib.assert_equal(input, span.input)
     testlib.assert_equal(output, span.output)
     testlib.assert_equal(metadata, span.metadata)
+    testlib.assert_equal(source, span.source)
 
     if tags is not mock.ANY:
         testlib.assert_equal(_try_build_set(tags), _try_build_set(span.tags))
@@ -192,7 +197,7 @@ def verify_dataset(
     name: str,
     description: str = mock.ANY,
     dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
-    project_name: Optional[str] = mock.ANY,
+    project_name: Optional[str] = None,
 ):
     if not synchronization.until(
         lambda: opik_client.get_dataset(name=name) is not None,
@@ -200,10 +205,11 @@ def verify_dataset(
     ):
         raise AssertionError(f"Failed to get dataset with name {name}.")
 
-    actual_dataset = opik_client.get_dataset(name=name)
+    actual_dataset = opik_client.get_dataset(name=name, project_name=project_name)
     assert actual_dataset.description == description
     assert actual_dataset.name == name
-    assert actual_dataset.project_name == project_name
+    if project_name is not None:
+        assert actual_dataset.project_name == project_name
 
     actual_dataset_items = list(
         actual_dataset.__internal_api__stream_items_as_dataclasses__()
@@ -533,6 +539,7 @@ def verify_optimization(
     dataset_name: Optional[str] = mock.ANY,  # type: ignore
     status: Optional[str] = mock.ANY,  # type: ignore
     objective_name: Optional[str] = mock.ANY,  # type: ignore
+    project_name: Optional[str] = None,
 ) -> None:
     if not synchronization.until(
         lambda: opik_client.get_optimization_by_id(optimization_id) is not None,
@@ -557,6 +564,14 @@ def verify_optimization(
     assert optimization_content.objective_name == objective_name, (
         f"{optimization_content.objective_name} != {objective_name}"
     )
+
+    if project_name is not None:
+        project_id = rest_helpers.resolve_project_id_by_name(
+            rest_client=opik_client.rest_client, project_name=project_name
+        )
+        assert optimization_content.project_id == project_id, (
+            f"{optimization_content.project_id} != {project_id}"
+        )
 
 
 def verify_thread(

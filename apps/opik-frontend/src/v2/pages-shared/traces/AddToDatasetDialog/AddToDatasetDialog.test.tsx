@@ -4,13 +4,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AddToDatasetDialog from "./AddToDatasetDialog";
 import { Trace, Span, SPAN_TYPE } from "@/types/traces";
 import { ReactNode } from "react";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
+import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 
 // Create mock functions that can be accessed in tests
 const mockAddTracesToDataset = vi.fn();
 const mockAddSpansToDataset = vi.fn();
 
 // Mock the API hooks
-vi.mock("@/api/datasets/useDatasetsList", () => ({
+vi.mock("@/api/datasets/useProjectDatasetsList", () => ({
   default: vi.fn(() => ({
     data: {
       content: [
@@ -90,7 +92,11 @@ describe("AddToDatasetDialog", () => {
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+        {children}
+      </PermissionsProvider>
+    </QueryClientProvider>
   );
 
   const mockTrace: Trace = {

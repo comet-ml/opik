@@ -79,6 +79,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_CREATE),
+    [checkNullablePermission],
+  );
+
   const canEditDatasets = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.DATASET_EDIT),
     [checkNullablePermission],
@@ -133,6 +138,12 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
       checkNullablePermission(
         ManagementPermissionsNames.ANNOTATION_QUEUE_CREATE,
       ),
+    [checkNullablePermission],
+  );
+
+  const canEditAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.ANNOTATION_QUEUE_EDIT),
     [checkNullablePermission],
   );
 
@@ -222,11 +233,13 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canEditDashboards,
     canDeleteDashboards,
     canViewDatasets,
+    canCreateDatasets,
     canEditDatasets,
     canDeleteDatasets,
     canCreateProjects,
     canDeleteProjects,
     canCreateAnnotationQueues,
+    canEditAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
     canDeletePrompts,

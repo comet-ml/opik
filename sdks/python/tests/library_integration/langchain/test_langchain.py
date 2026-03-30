@@ -82,6 +82,7 @@ def test_langchain__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -98,8 +99,10 @@ def test_langchain__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -124,7 +127,7 @@ def test_langchain__distributed_headers__happyflow(
         tags=["tag_d1", "tag_d2"],
     )
     trace_data.init_end_time()
-    client.trace(**trace_data.__dict__)
+    client.__internal_api__trace__(**trace_data.__dict__)
 
     span_data = span.SpanData(
         trace_id=trace_data.id,
@@ -139,7 +142,7 @@ def test_langchain__distributed_headers__happyflow(
     span_data.init_end_time().update(
         output={"output": "custom-distributed-headers--output"},
     )
-    client.span(**span_data.__dict__)
+    client.__internal_api__span__(**span_data.__dict__)
 
     distributed_headers = DistributedTraceHeadersDict(
         opik_trace_id=span_data.trace_id,
@@ -216,6 +219,7 @@ def test_langchain__distributed_headers__happyflow(
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -234,12 +238,16 @@ def test_langchain__distributed_headers__happyflow(
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -329,6 +337,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -347,12 +356,16 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -437,6 +450,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -452,10 +466,13 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -499,7 +516,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.__internal_api__span__(**span_data.__dict__)
     opik.flush_tracker()
 
     EXPECTED_SPANS_TREE = SpanModel(
@@ -537,6 +554,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -552,10 +570,13 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.span_trees) == 1
@@ -647,6 +668,7 @@ def test_langchain_callback__skip_error_callback__error_output_skipped(
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -660,9 +682,11 @@ def test_langchain_callback__skip_error_callback__error_output_skipped(
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -719,6 +743,7 @@ def test_langchain__tool_with_description__description_attached_to_span_metadata
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -731,6 +756,7 @@ def test_langchain__tool_with_description__description_attached_to_span_metadata
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -747,8 +773,10 @@ def test_langchain__tool_with_description__description_attached_to_span_metadata
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

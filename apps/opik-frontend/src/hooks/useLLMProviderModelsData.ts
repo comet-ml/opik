@@ -649,6 +649,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "kwaipilot/kat-coder-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO_V2,
+      label: "kwaipilot/kat-coder-pro-v2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO_FREE,
       label: "kwaipilot/kat-coder-pro:free",
     },
@@ -1669,6 +1673,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "raifle/sorcererlm-8x22b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.REKA_REKA_EDGE,
+      label: "reka/reka-edge",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.RELACE_RELACE_APPLY_3,
       label: "relace/relace-apply-3",
     },
@@ -1906,6 +1914,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash-Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,
+      label: "Lyria 3 Clip Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LYRIA_3_PRO_PREVIEW,
+      label: "Lyria 3 Pro Preview",
     },
   ],
 

@@ -32,7 +32,7 @@ import TextCell from "@/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/feedback-scores";
 import useGroupedExperimentsList, {
   GroupedExperiment,
@@ -114,6 +114,7 @@ interface ExperimentsTabProps {
 
 const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -159,17 +160,18 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     (row: GroupedExperiment) => {
       const experimentResource = RESOURCE_MAP[RESOURCE_TYPE.experiment];
       navigate({
-        to: experimentResource.url,
+        to: experimentResource.projectUrl,
         params: {
           [experimentResource.param]: row.dataset_id,
           workspaceName,
+          projectId: activeProjectId!,
         },
         search: {
           experiments: [row.id],
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, activeProjectId],
   );
 
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
@@ -352,7 +354,9 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   }, []);
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
-    useExperimentsFeedbackScores();
+    useExperimentsFeedbackScores({
+      projectId: activeProjectId ?? undefined,
+    });
 
   const { groups, setGroups, filtersAndGroupsConfig } =
     useExperimentsGroupsAndFilters({
@@ -360,6 +364,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       sortedColumns,
       filters,
       promptId,
+      projectId: activeProjectId,
     });
 
   const expandingConfig = useExpandingConfig({
@@ -370,6 +375,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const { data, isPending, isPlaceholderData, isFetching } =
     useGroupedExperimentsList({
       workspaceName,
+      projectId: activeProjectId ?? undefined,
       groupLimit,
       promptId,
       filters,

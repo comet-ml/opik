@@ -1,9 +1,11 @@
 package com.comet.opik.domain.retention;
 
 import com.comet.opik.api.retention.RetentionLevel;
+import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.api.retention.RetentionRule;
 import com.comet.opik.api.retention.RetentionRule.RetentionRulePage;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -12,8 +14,8 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
@@ -37,14 +39,26 @@ public interface RetentionRuleService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class RetentionRuleServiceImpl implements RetentionRuleService {
 
     private static final String RULE_NOT_FOUND = "Retention rule not found";
 
-    private final @NonNull TransactionTemplate template;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull IdGenerator idGenerator;
+    private final TransactionTemplate template;
+    private final Provider<RequestContext> requestContext;
+    private final IdGenerator idGenerator;
+    private final RetentionConfig config;
+
+    @Inject
+    RetentionRuleServiceImpl(
+            @NonNull TransactionTemplate template,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull IdGenerator idGenerator,
+            @NonNull @Config("retention") RetentionConfig config) {
+        this.template = template;
+        this.requestContext = requestContext;
+        this.idGenerator = idGenerator;
+        this.config = config;
+    }
 
     @Override
     public RetentionRule create(@NonNull RetentionRule rule) {
@@ -55,15 +69,28 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
         IdGenerator.validateVersion(id, "retention_rule");
 
         RetentionLevel level = inferLevel(rule);
+        boolean applyToPast = Optional.ofNullable(rule.applyToPast()).orElse(true);
+
+        // Catch-up scheduling: when applyToPast=true, mark rule as pending estimation.
+        // The RetentionEstimationJob will pick it up, estimate velocity + cursor,
+        // and the RetentionCatchUpJob will then process it by tier.
+        // Note: we intentionally ignore catchUp.enabled here — the operator may temporarily
+        // disable catch-up jobs but still want rules to be processed when re-enabled.
+        final boolean needsCatchUp = applyToPast
+                && rule.retention() != RetentionPeriod.UNLIMITED;
+        final boolean catchUpDone = !needsCatchUp;
 
         var newRule = rule.toBuilder()
                 .id(id)
                 .workspaceId(workspaceId)
                 .level(level)
-                .applyToPast(Optional.ofNullable(rule.applyToPast()).orElse(true))
+                .applyToPast(applyToPast)
                 .enabled(true)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
+                .catchUpVelocity(null)
+                .catchUpCursor(null)
+                .catchUpDone(catchUpDone)
                 .build();
 
         return template.inTransaction(WRITE, handle -> {
@@ -76,8 +103,8 @@ class RetentionRuleServiceImpl implements RetentionRuleService {
                     userName);
 
             dao.save(workspaceId, newRule);
-            log.info("Created retention rule '{}' (level={}) for project '{}' in workspace '{}'",
-                    id, level, newRule.projectId(), workspaceId);
+            log.info("Created retention rule '{}' (level='{}') for project '{}' in workspace '{}', catchUpDone='{}'",
+                    id, level, newRule.projectId(), workspaceId, catchUpDone);
 
             return dao.findById(id, workspaceId).orElseThrow();
         });

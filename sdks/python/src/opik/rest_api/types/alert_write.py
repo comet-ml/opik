@@ -17,6 +17,10 @@ class AlertWrite(UniversalBaseModel):
     metadata: typing.Optional[typing.Dict[str, str]] = None
     webhook: WebhookWrite
     triggers: typing.Optional[typing.List[AlertTriggerWrite]] = None
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

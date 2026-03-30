@@ -12,7 +12,7 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/shared/Loader/Loader";
 import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
@@ -191,7 +191,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canEditDatasets, canDeleteDatasets },
+    permissions: { canCreateDatasets, canEditDatasets, canDeleteDatasets },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -221,19 +221,21 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
-    {
-      workspaceName,
-      filters,
-      sorting: sortedColumns,
-      search: search!,
-      page,
-      size,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useProjectDatasetsList(
+      {
+        projectId: activeProjectId!,
+        filters,
+        sorting: sortedColumns,
+        search: search!,
+        page,
+        size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        enabled: !!activeProjectId,
+      },
+    );
 
   const datasets = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(
@@ -336,14 +338,14 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const handleRowClick = useCallback(
     (row: Dataset) => {
-      if (!row.id) return;
+      if (!row.id || !activeProjectId) return;
 
       navigate({
         to: "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId",
         params: {
           suiteId: row.id,
           workspaceName,
-          projectId: activeProjectId!,
+          projectId: activeProjectId,
         },
       });
     },
@@ -407,9 +409,11 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
-            Create new
-          </Button>
+          {canCreateDatasets && (
+            <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
+              Create new
+            </Button>
+          )}
         </div>
       </div>
       <DataTable
@@ -426,7 +430,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateDatasets && (
               <Button variant="link" onClick={handleNewSuiteClick}>
                 Create new
               </Button>

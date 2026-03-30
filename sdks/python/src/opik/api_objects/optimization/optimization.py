@@ -12,13 +12,19 @@ class Optimization:
         self,
         id: str,
         rest_client: rest_api_client.OpikApi,
+        project_name: Optional[str] = None,
     ) -> None:
         self._id = id
         self._rest_client = rest_client
+        self._project_name = project_name
 
     @property
     def id(self) -> str:
         return self._id
+
+    @property
+    def project_name(self) -> Optional[str]:
+        return self._project_name
 
     def update(
         self,

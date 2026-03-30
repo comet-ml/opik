@@ -108,7 +108,9 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
             opik.context_storage.pop_span_data(ensure_id=current_span_data.id)
             current_span_data.init_end_time()
             if opik.is_tracing_active():
-                self.opik_client.span(**current_span_data.as_parameters)
+                self.opik_client.__internal_api__span__(
+                    **current_span_data.as_parameters
+                )
             current_span_data = opik.context_storage.top_span_data()
 
         try:
@@ -155,7 +157,7 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
         if trace_data is not None:
             trace_data.init_end_time()
             if opik.is_tracing_active():
-                self.opik_client.trace(**trace_data.as_parameters)
+                self.opik_client.__internal_api__trace__(**trace_data.as_parameters)
 
     def _ensure_span_is_finalized(self, span_id: str) -> None:
         opik.context_storage.trim_span_data_stack_to_certain_span(span_id)
@@ -164,7 +166,7 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
         if span_data is not None:
             span_data.init_end_time()
             if opik.is_tracing_active():
-                self.opik_client.span(**span_data.as_parameters)
+                self.opik_client.__internal_api__span__(**span_data.as_parameters)
 
 
 def _prepare_trace_and_span_to_be_finalized(

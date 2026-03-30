@@ -6,24 +6,16 @@ import { Groups } from "@/types/groups";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
-  COLUMN_PROJECT_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
 import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
 export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
-  {
-    id: COLUMN_PROJECT_ID,
-    label: "Project",
-    type: COLUMN_TYPE.string,
-    disposable: true,
-  },
   {
     id: COLUMN_DATASET_ID,
     label: "Evaluation suite",
@@ -50,6 +42,7 @@ export type UseExperimentsGroupsAndFiltersProps = {
   sortedColumns: ColumnSort[];
   filters: Filters;
   promptId?: string;
+  projectId?: string | null;
 };
 
 export const useExperimentsGroupsAndFilters = ({
@@ -57,6 +50,7 @@ export const useExperimentsGroupsAndFilters = ({
   sortedColumns,
   filters,
   promptId,
+  projectId,
 }: UseExperimentsGroupsAndFiltersProps) => {
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
     localStorageKey: `${storageKeyPrefix}-columns-groups`,
@@ -68,19 +62,11 @@ export const useExperimentsGroupsAndFilters = ({
   const filtersAndGroupsConfig = useMemo(
     () => ({
       rowsMap: {
-        [COLUMN_PROJECT_ID]: {
-          keyComponent: ProjectsSelectBox,
-          keyComponentProps: {
-            className: "w-full min-w-72",
-          },
-          defaultOperator: "=",
-          operators: [{ label: "=", value: "=" }],
-          sortingMessage: "Last updated at",
-        },
         [COLUMN_DATASET_ID]: {
           keyComponent: DatasetSelectBox,
           keyComponentProps: {
             className: "w-full min-w-72",
+            ...(projectId && { projectId }),
           },
           defaultOperator: "=",
           operators: [{ label: "=", value: "=" }],
@@ -98,7 +84,7 @@ export const useExperimentsGroupsAndFilters = ({
         },
       },
     }),
-    [filters, sortedColumns, promptId],
+    [filters, sortedColumns, promptId, projectId],
   );
 
   return {
