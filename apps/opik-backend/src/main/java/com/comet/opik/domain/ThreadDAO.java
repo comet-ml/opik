@@ -391,7 +391,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
             <endif>
             LIMIT :limit <if(offset)>OFFSET :offset<endif>
-            SETTINGS use_skip_indexes_if_final = 1 
+            SETTINGS use_skip_indexes_if_final = 1
             ;
             """;
 
@@ -1050,7 +1050,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         created_at,
                         last_updated_at,
                         feedback_scores.last_updated_by AS author
-                    FROM feedback_scores 
+                    FROM feedback_scores
                     WHERE entity_type = 'thread'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_id
