@@ -315,7 +315,7 @@ class TestJobExecution:
         assert captured_kwargs["opik_args"]["trace"]["tags"] == ["existing"]
         assert captured_kwargs["opik_args"]["span"]["metadata"] == {"k": "v"}
 
-    def test_execute_job__reports_running_before_function(
+    def test_execute_job__reports_running_before_function__running_precedes_func_and_completed(
         self, mock_api, shutdown_event
     ):
         call_order = []
@@ -340,7 +340,7 @@ class TestJobExecution:
 
         assert call_order == ["running", "func", "completed"]
 
-    def test_execute_job__running_report_uses_generated_trace_id(
+    def test_execute_job__running_report__uses_same_generated_trace_id_as_completed(
         self, mock_api, shutdown_event
     ):
         def my_agent(**kwargs):

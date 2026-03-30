@@ -143,8 +143,6 @@ describe("InProcessRunnerLoop", () => {
   });
 
   it("reports running before invoking the agent function", async () => {
-    vi.useRealTimers();
-
     const api = createMockApi();
     const job = createJob({ agentName: "ordered-agent" });
 
@@ -182,7 +180,9 @@ describe("InProcessRunnerLoop", () => {
     const loop = new InProcessRunnerLoop(api, "runner-1");
     loop.start();
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Drain microtasks — the first poll fires immediately (no timer delay),
+    // picks up the job, and runs executeJob entirely via resolved promises.
+    await vi.advanceTimersByTimeAsync(0);
     loop.shutdown();
 
     expect(callOrder).toEqual(["running", "func", "completed"]);
