@@ -537,7 +537,7 @@ class LocalRunnerServiceImplTest {
         }
 
         @Test
-        void inFlightRunning_setsTraceIdWithoutCompletingJob() {
+        void inFlightRunningSetsTraceIdWithoutCompletingJob() {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
@@ -561,7 +561,7 @@ class LocalRunnerServiceImplTest {
         }
 
         @Test
-        void inFlightRunning_thenTerminalCompletes() {
+        void inFlightRunningThenTerminalCompletes() {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
