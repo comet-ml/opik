@@ -12,11 +12,20 @@ interface ComputeResult {
   enabled: boolean;
 }
 
+export type AssistantBackendPhase =
+  | "idle"
+  | "compute"
+  | "health"
+  | "ready"
+  | "error"
+  | "disabled";
+
 interface UseAssistantBackendResult {
   backendUrl: string | null;
   isReady: boolean;
   isLoading: boolean;
   error: string | null;
+  phase: AssistantBackendPhase;
 }
 
 const DEV_RESULT: UseAssistantBackendResult = {
@@ -24,13 +33,18 @@ const DEV_RESULT: UseAssistantBackendResult = {
   isReady: true,
   isLoading: false,
   error: null,
+  phase: "ready",
 };
 
-const notReadyResult = (error: string | null): UseAssistantBackendResult => ({
+const notReadyResult = (
+  error: string | null,
+  phase: AssistantBackendPhase,
+): UseAssistantBackendResult => ({
   backendUrl: null,
   isReady: false,
   isLoading: false,
   error,
+  phase,
 });
 
 interface UseAssistantBackendOptions {
@@ -136,18 +150,26 @@ export default function useAssistantBackend(
   // Dev mode — static URL, no network calls (queries are disabled via enabled: !IS_DEV)
   if (IS_DEV) return DEV_RESULT;
 
-  if (computeResult && !computeResult.enabled) return notReadyResult(null);
-  if (computeError) return notReadyResult((computeError as Error).message);
+  if (computeResult && !computeResult.enabled)
+    return notReadyResult(null, "disabled");
+  if (computeError)
+    return notReadyResult((computeError as Error).message, "error");
   if (isTimedOut && !healthResult?.ready) {
-    return notReadyResult("Assistant pod failed to become ready");
+    return notReadyResult("Assistant pod failed to become ready", "error");
   }
 
   const isReady = healthResult?.ready === true;
+
+  let phase: AssistantBackendPhase = "idle";
+  if (isReady) phase = "ready";
+  else if (isComputeLoading) phase = "compute";
+  else if (shouldPollHealth) phase = "health";
 
   return {
     backendUrl: isReady ? baseUrl : null,
     isReady,
     isLoading: isComputeLoading || (shouldPollHealth && !isReady),
     error: null,
+    phase,
   };
 }
