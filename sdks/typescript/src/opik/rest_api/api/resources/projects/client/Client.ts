@@ -1371,11 +1371,12 @@ export class ProjectsClient {
         request: OpikApi.GetProjectStatsRequest = {},
         requestOptions?: ProjectsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsSummary>> {
-        const { page, size, name, sorting } = request;
+        const { page, size, name, filters, sorting } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             name,
+            filters,
             sorting,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

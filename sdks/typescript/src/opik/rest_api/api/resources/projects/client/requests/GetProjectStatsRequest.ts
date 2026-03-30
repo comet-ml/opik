@@ -8,5 +8,6 @@ export interface GetProjectStatsRequest {
     page?: number;
     size?: number;
     name?: string;
+    filters?: string;
     sorting?: string;
 }
