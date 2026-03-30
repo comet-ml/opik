@@ -2,4 +2,4 @@
 
 import typing
 
-KpiMetricType = typing.Union[typing.Literal["count", "errors", "avg_duration", "avg_cost"], typing.Any]
+KpiMetricType = typing.Union[typing.Literal["count", "errors", "avg_duration", "total_cost"], typing.Any]
