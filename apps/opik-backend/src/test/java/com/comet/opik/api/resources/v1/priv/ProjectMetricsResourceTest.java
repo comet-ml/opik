@@ -1924,7 +1924,7 @@ class ProjectMetricsResourceTest {
                 List<Trace> traces = IntStream
                         .range(0, tracesPerThread == null || threadIdIdx != 0 ? 2 : tracesPerThread) // 2 traces per thread except for the first thread, needed for number of messages filter
                         .mapToObj(i -> {
-                            Instant traceStartTime = marker.plusSeconds((long) threadIdIdx * (i + 1));
+                            Instant traceStartTime = marker.plusSeconds((long) threadIdIdx * 10 + i + 1);
                             return factory.manufacturePojo(Trace.class).toBuilder()
                                     .id(idGenerator.generateId(traceStartTime))
                                     .projectName(projectName)
