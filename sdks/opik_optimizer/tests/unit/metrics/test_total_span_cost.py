@@ -32,6 +32,7 @@ def make_span(
         usage=usage,
         total_cost=total_cost,
         spans=spans or [],
+        source="optimization",
     )
 
 
