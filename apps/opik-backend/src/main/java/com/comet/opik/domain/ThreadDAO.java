@@ -262,7 +262,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     entity_id,
                     workspace_id,
                     project_id
-                FROM comments final
+                FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
@@ -391,7 +391,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
             <endif>
             LIMIT :limit <if(offset)>OFFSET :offset<endif>
-            SETTINGS use_skip_indexes_if_final = 1
+            SETTINGS use_skip_indexes_if_final = 1 
             ;
             """;
 
@@ -678,7 +678,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ) AS t
-            SETTINGS use_skip_indexes_if_final = 1
             """;
 
     /***
@@ -697,7 +696,7 @@ class ThreadDAOImpl implements ThreadDAO {
             WITH traces_ids AS (
                 SELECT
                     id
-                FROM traces FINAL
+                FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id = :thread_id
@@ -733,8 +732,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id = :thread_id
-                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -893,7 +890,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     entity_id,
                     workspace_id,
                     project_id
-                FROM comments final
+                FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
@@ -959,7 +956,6 @@ class ThreadDAOImpl implements ThreadDAO {
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
-            SETTINGS use_skip_indexes_if_final = 1
             """;
 
     /***
@@ -999,8 +995,9 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS error_count
             FROM (
                 WITH traces_final AS (
-                    SELECT *
-                    FROM traces FINAL
+                    SELECT
+                        *
+                    FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND thread_id \\<> ''
@@ -1050,7 +1047,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         created_at,
                         last_updated_at,
                         feedback_scores.last_updated_by AS author
-                    FROM feedback_scores
+                    FROM feedback_scores 
                     WHERE entity_type = 'thread'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_id
