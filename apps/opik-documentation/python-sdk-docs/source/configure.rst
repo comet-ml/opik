@@ -1,4 +1,0 @@
-configure
-=========
-
-.. autofunction:: opik.configure

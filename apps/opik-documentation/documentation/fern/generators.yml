@@ -1,4 +1,0 @@
-api:
-  specs:
-    - openapi: ./openapi/opik.yaml
-      overrides: ./openapi/overrides.yml

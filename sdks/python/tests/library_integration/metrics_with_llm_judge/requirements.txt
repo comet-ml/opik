@@ -1,7 +1,0 @@
-openai
-openai-agents
-langchain
-langchain_openai
-ragas<0.3.2; python_version<"3.10"
-ragas; python_version>="3.10"
-pillow # for ragas 0.3.0 to work
