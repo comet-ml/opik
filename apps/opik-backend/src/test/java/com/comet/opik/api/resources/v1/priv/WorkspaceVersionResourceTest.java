@@ -239,16 +239,35 @@ class WorkspaceVersionResourceTest {
         }
 
         private String mockWorkspace() {
+            return mockWorkspace(null);
+        }
+
+        private String mockWorkspace(OpikVersion opikVersion) {
             var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var workspaceId = UUID.randomUUID().toString();
             var user = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, user);
+            AuthTestUtils.mockTargetWorkspace(
+                    wireMock.server(), API_KEY, workspaceName, workspaceId, user, null, opikVersion);
             return workspaceName;
         }
 
         @Test
+        void workspaceVersion__whenAuthSaysVersion2__locksToVersion2() {
+            var workspaceName = mockWorkspace(OpikVersion.VERSION_2);
+
+            // Creating a V1 entity
+            datasetClient.createDataset(podamFactory.manufacturePojo(Dataset.class).toBuilder()
+                    .projectId(null)
+                    .projectName(null)
+                    .build(), API_KEY, workspaceName);
+            // Auth says version_2 — one-way gate locks to V2 even with v1 entities
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
+        }
+
+        @Test
         void workspaceVersion__whenDatasetEntities__returnsExpectedVersion() {
-            var workspaceName = mockWorkspace();
+            // When Auth says Version1 entity check still runs
+            var workspaceName = mockWorkspace(OpikVersion.VERSION_1);
 
             // Demo-only datasets do not trigger version_1
             datasetClient.createDataset(podamFactory.manufacturePojo(Dataset.class).toBuilder()
@@ -262,6 +281,7 @@ class WorkspaceVersionResourceTest {
                     .projectId(null)
                     .build(),
                     API_KEY, workspaceName);
+            // Auth says version_1 — not a one-way gate, project scoped workspace still returns V2
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
 
             // Version 1 dataset triggers version_1
@@ -274,6 +294,7 @@ class WorkspaceVersionResourceTest {
 
         @Test
         void workspaceVersion__whenPromptWithoutProject__returnsVersion1() {
+            // Auth doesn't include opikVersion — defensive, entity check is primary signal
             var workspaceName = mockWorkspace();
 
             // Empty workspace returns version_2
