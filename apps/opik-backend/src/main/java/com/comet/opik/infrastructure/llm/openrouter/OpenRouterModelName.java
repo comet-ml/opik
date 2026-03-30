@@ -144,6 +144,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     INFLECTION_INFLECTION_3_PI("inflection/inflection-3-pi"),
     INFLECTION_INFLECTION_3_PRODUCTIVITY("inflection/inflection-3-productivity"),
     KWAIPILOT_KAT_CODER_PRO("kwaipilot/kat-coder-pro"),
+    KWAIPILOT_KAT_CODER_PRO_V2("kwaipilot/kat-coder-pro-v2"),
     KWAIPILOT_KAT_CODER_PRO_FREE("kwaipilot/kat-coder-pro:free"),
     LIQUID_LFM_2_24B_A2B("liquid/lfm-2-24b-a2b"),
     LIQUID_LFM_2_2_6B("liquid/lfm-2.2-6b"),
