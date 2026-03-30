@@ -1628,74 +1628,55 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         }
     }
 
+    private Mono<List<Entry>> fetchSingleMetric(@NonNull UUID projectId, @NonNull ProjectMetricRequest request,
+            @NonNull String query, @NonNull String segmentName,
+            @NonNull Function<Row, String> nameSupplier, @NonNull Function<Row, ? extends Number> valueExtractor) {
+        rejectBreakdown(request);
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection, query, segmentName)
+                .flatMapMany(result -> rowToDataPoint(result, nameSupplier, valueExtractor))
+                .collectList());
+    }
+
     @Override
     public Mono<List<Entry>> getTraceAverageDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        rejectBreakdown(request);
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_TRACE_AVERAGE_DURATION, "traceAverageDuration")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACE_AVERAGE_DURATION,
-                        row -> toSafeBigDecimal(row.get("avg_duration", Double.class))))
-                .collectList());
+        return fetchSingleMetric(projectId, request, GET_TRACE_AVERAGE_DURATION, "traceAverageDuration",
+                row -> NAME_TRACE_AVERAGE_DURATION, row -> toSafeBigDecimal(row.get("avg_duration", Double.class)));
     }
 
     @Override
     public Mono<List<Entry>> getTraceErrorRate(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        rejectBreakdown(request);
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_TRACE_ERROR_RATE, "traceErrorRate")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_TRACE_ERROR_RATE,
-                        row -> toSafeBigDecimal(row.get("error_rate", Double.class))))
-                .collectList());
+        return fetchSingleMetric(projectId, request, GET_TRACE_ERROR_RATE, "traceErrorRate",
+                row -> NAME_TRACE_ERROR_RATE, row -> toSafeBigDecimal(row.get("error_rate", Double.class)));
     }
 
     @Override
     public Mono<List<Entry>> getSpanAverageDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        rejectBreakdown(request);
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_SPAN_AVERAGE_DURATION, "spanAverageDuration")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_SPAN_AVERAGE_DURATION,
-                        row -> toSafeBigDecimal(row.get("avg_duration", Double.class))))
-                .collectList());
+        return fetchSingleMetric(projectId, request, GET_SPAN_AVERAGE_DURATION, "spanAverageDuration",
+                row -> NAME_SPAN_AVERAGE_DURATION, row -> toSafeBigDecimal(row.get("avg_duration", Double.class)));
     }
 
     @Override
     public Mono<List<Entry>> getSpanCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        rejectBreakdown(request);
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_SPAN_COST, "spanCost")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_SPAN_COST,
-                        row -> row.get("value", BigDecimal.class)))
-                .collectList());
+        return fetchSingleMetric(projectId, request, GET_SPAN_COST, "spanCost",
+                row -> NAME_SPAN_COST, row -> row.get("value", BigDecimal.class));
     }
 
     @Override
     public Mono<List<Entry>> getSpanErrorRate(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        rejectBreakdown(request);
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_SPAN_ERROR_RATE, "spanErrorRate")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_SPAN_ERROR_RATE,
-                        row -> toSafeBigDecimal(row.get("error_rate", Double.class))))
-                .collectList());
+        return fetchSingleMetric(projectId, request, GET_SPAN_ERROR_RATE, "spanErrorRate",
+                row -> NAME_SPAN_ERROR_RATE, row -> toSafeBigDecimal(row.get("error_rate", Double.class)));
     }
 
     @Override
     public Mono<List<Entry>> getThreadAverageDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        rejectBreakdown(request);
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_THREAD_AVERAGE_DURATION, "threadAverageDuration")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_THREAD_AVERAGE_DURATION,
-                        row -> toSafeBigDecimal(row.get("avg_duration", Double.class))))
-                .collectList());
+        return fetchSingleMetric(projectId, request, GET_THREAD_AVERAGE_DURATION, "threadAverageDuration",
+                row -> NAME_THREAD_AVERAGE_DURATION, row -> toSafeBigDecimal(row.get("avg_duration", Double.class)));
     }
 
     @Override
     public Mono<List<Entry>> getThreadCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        rejectBreakdown(request);
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                GET_THREAD_COST, "threadCost")
-                .flatMapMany(result -> rowToDataPoint(result, row -> NAME_THREAD_COST,
-                        row -> row.get("value", BigDecimal.class)))
-                .collectList());
+        return fetchSingleMetric(projectId, request, GET_THREAD_COST, "threadCost",
+                row -> NAME_THREAD_COST, row -> row.get("value", BigDecimal.class));
     }
 
     private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,
