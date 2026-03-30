@@ -19,7 +19,7 @@ import MetricSelector from "@/v2/pages/PlaygroundPage/MetricSelector";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -96,14 +96,27 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     }
   }, [open, initialDatasetId, initialSelectedRuleIds, initialFilters]);
 
-  const { data: datasetsData } = useDatasetsList(
-    { workspaceName, page: 1, size: DEFAULT_LOADED_DATASETS },
-    { enabled: open },
+  const {
+    data: playgroundProject,
+    isError: isProjectError,
+    error: projectError,
+  } = useProjectByName(
+    { projectName: PLAYGROUND_PROJECT_NAME },
+    { enabled: !!workspaceName && open, retry: false },
   );
-  const datasets = datasetsData?.content || EMPTY_DATASETS;
 
   const parsedDatasetId = parseDatasetVersionKey(datasetId);
   const plainDatasetId = parsedDatasetId?.datasetId || datasetId;
+
+  const { data: datasetsData } = useProjectDatasetsList(
+    {
+      projectId: playgroundProject?.id ?? "",
+      page: 1,
+      size: DEFAULT_LOADED_DATASETS,
+    },
+    { enabled: open && !!playgroundProject?.id },
+  );
+  const datasets = datasetsData?.content || EMPTY_DATASETS;
   const datasetName =
     datasets.find((ds) => ds.id === plainDatasetId)?.name || null;
 
@@ -154,15 +167,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   const filtersColumnData = useMemo(
     () => buildDatasetFilterColumns(datasetColumns),
     [datasetColumns],
-  );
-
-  const {
-    data: playgroundProject,
-    isError: isProjectError,
-    error: projectError,
-  } = useProjectByName(
-    { projectName: PLAYGROUND_PROJECT_NAME },
-    { enabled: !!workspaceName && open, retry: false },
   );
 
   const isProjectNotFound =
@@ -271,7 +275,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                     value={datasetId}
                     versionName={versionName}
                     onChange={handleDatasetChange}
-                    workspaceName={workspaceName}
+                    projectId={playgroundProject?.id}
                     buttonClassName="w-full"
                   />
                 </div>

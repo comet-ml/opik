@@ -9,7 +9,6 @@ import WelcomeWizardDialog from "@/v2/pages-shared/WelcomeWizard/WelcomeWizardDi
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import useAssistantSidebarConfig from "@/api/assistant-sidebar/useAssistantSidebarConfig";
 import QuickstartDialog from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { PortalContainerProvider } from "@/lib/portal-container";
@@ -38,10 +37,7 @@ const PageLayout = () => {
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
 
-  const { data: assistantConfig } = useAssistantSidebarConfig({
-    enabled: !!AssistantSidebar,
-  });
-  const showAssistantSidebar = !!AssistantSidebar && !!assistantConfig?.enabled;
+  const showAssistantSidebar = !!AssistantSidebar;
 
   const isMobile = useMediaQuery("(max-width: 1023px)");
   const pinned = isMobile ? false : storedPinned;

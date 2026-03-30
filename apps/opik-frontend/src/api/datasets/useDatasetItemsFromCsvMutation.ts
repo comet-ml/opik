@@ -55,6 +55,7 @@ const useDatasetItemsFromCsvMutation = () => {
       if (context) {
         queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

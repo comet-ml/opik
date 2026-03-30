@@ -12,7 +12,7 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/shared/Loader/Loader";
 import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
@@ -221,20 +221,21 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
-    {
-      workspaceName,
-      projectId: activeProjectId,
-      filters,
-      sorting: sortedColumns,
-      search: search!,
-      page,
-      size,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useProjectDatasetsList(
+      {
+        projectId: activeProjectId!,
+        filters,
+        sorting: sortedColumns,
+        search: search!,
+        page,
+        size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        enabled: !!activeProjectId,
+      },
+    );
 
   const datasets = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(

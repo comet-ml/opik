@@ -672,7 +672,6 @@ retention:
   executionsPerDay: ${RETENTION_EXECUTIONS_PER_DAY:-48}
   workspaceBatchSize: ${RETENTION_WORKSPACE_BATCH_SIZE:-1000}
   slidingWindowDays: ${RETENTION_SLIDING_WINDOW_DAYS:-3}
-  lockTimeoutSeconds: ${RETENTION_LOCK_TIMEOUT_SECONDS:-1800}
   # Progressive catch-up for apply-to-past rules. Deletes historical data older than the sliding window.
   # At rule creation, estimates workspace span velocity (spans/week) to triage into tiers:
   #   small  (<smallThreshold/week): batch one-shot delete, up to smallBatchSize workspaces per cycle
@@ -691,6 +690,10 @@ retention:
     largeChunkDays: ${RETENTION_CATCH_UP_LARGE_CHUNK_DAYS:-1}
     # Assumed velocity when the estimation query fails with TOO_MANY_ROWS (>20M rows)
     defaultVelocity: ${RETENTION_CATCH_UP_DEFAULT_VELOCITY:-1000000}
+    # Interval in minutes between catch-up cycles (default: 45)
+    intervalMinutes: ${RETENTION_CATCH_UP_INTERVAL_MINUTES:-45}
+    # Interval in minutes between estimation cycles for new rules (default: 5)
+    estimationIntervalMinutes: ${RETENTION_CATCH_UP_ESTIMATION_INTERVAL_MINUTES:-5}
     # Earliest date for catch-up cursor start (service launch date)
     serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
 
@@ -818,12 +821,6 @@ ollieStateConfig:
   # Description: Maximum upload size in bytes for ollie state persistence
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
-# Assistant Sidebar CDN configuration (runtime)
-# Full URL to the ollie-console manifest on CDN
-assistantSidebar:
-  # Default: https://cdn.comet.com/ollie/v1/manifest.json (always latest version)
-  # Description: Full CDN URL to the ollie-console manifest. Override to pin a specific version.
-  manifestUrl: ${ASSISTANT_SIDEBAR_MANIFEST_URL:-"https://cdn.comet.com/ollie/v1/manifest.json"}
 
 # Attachments configuration
 attachmentsConfig:
@@ -913,9 +910,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not the Assistant Sidebar feature is enabled
-  assistantSidebarEnabled: ${TOGGLE_ASSISTANT_SIDEBAR_ENABLED:-"false"}
   # Default: version_1
   # Description: Forces ALL workspaces to a specific navigation version. Highest priority override.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).

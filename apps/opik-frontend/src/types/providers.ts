@@ -230,6 +230,7 @@ export enum PROVIDER_MODEL_TYPE {
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
   INFLECTION_INFLECTION_3_PRODUCTIVITY = "inflection/inflection-3-productivity",
   KWAIPILOT_KAT_CODER_PRO = "kwaipilot/kat-coder-pro",
+  KWAIPILOT_KAT_CODER_PRO_V2 = "kwaipilot/kat-coder-pro-v2",
   KWAIPILOT_KAT_CODER_PRO_FREE = "kwaipilot/kat-coder-pro:free",
   LIQUID_LFM_2_24B_A2B = "liquid/lfm-2-24b-a2b",
   LIQUID_LFM_2_2_6B = "liquid/lfm-2.2-6b",
@@ -556,10 +557,10 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_1_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
-  NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
-  TEXT_EMBEDDING = "text-embedding-004",
   LYRIA_3_CLIP_PREVIEW = "lyria-3-clip-preview",
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
+  NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
+  TEXT_EMBEDDING = "text-embedding-004",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

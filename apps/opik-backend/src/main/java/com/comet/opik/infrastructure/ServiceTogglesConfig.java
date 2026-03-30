@@ -56,7 +56,5 @@ public class ServiceTogglesConfig {
     @NotNull boolean ollamaProviderEnabled;
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
-    @JsonProperty
-    @NotNull boolean assistantSidebarEnabled;
     @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
 }

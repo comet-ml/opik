@@ -13,7 +13,6 @@ import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import { BASE_API_URL } from "@/api/api";
-import useAssistantSidebarConfig from "@/api/assistant-sidebar/useAssistantSidebarConfig";
 
 const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
 const IS_DEV = import.meta.env.DEV;
@@ -154,32 +153,33 @@ interface AssistantMeta {
   version: string;
 }
 
-function useAssistantMeta(): AssistantMeta | null {
-  const { data: config } = useAssistantSidebarConfig();
-
-  // Local env var overrides the manifest base URL from the config endpoint
-  const resolvedManifestUrl = DEV_BASE_URL
+function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
+  const manifestUrl = DEV_BASE_URL
     ? `${DEV_BASE_URL}/manifest.json`
-    : config?.manifest_url || null;
+    : backendUrl
+      ? `${backendUrl}/console/manifest.json`
+      : null;
 
-  const manifestBase = resolvedManifestUrl
-    ? resolvedManifestUrl.substring(0, resolvedManifestUrl.lastIndexOf("/"))
+  const manifestBase = manifestUrl
+    ? manifestUrl.substring(0, manifestUrl.lastIndexOf("/"))
     : null;
 
   const { data } = useQuery<AssistantMeta>({
-    queryKey: ["assistant-manifest", resolvedManifestUrl],
+    queryKey: ["assistant-manifest", manifestUrl],
     queryFn: async () => {
-      const res = await fetch(resolvedManifestUrl!);
+      const res = await fetch(manifestUrl!);
       if (!res.ok) throw new Error(`manifest ${res.status}`);
       const manifest: AssistantManifest = await res.json();
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: IS_DEV ? "/assistant/shell" : `/assistant/${manifest.shell}`,
+        shellUrl: IS_DEV
+          ? "/assistant/shell"
+          : `${manifestBase}/${manifest.shell}`,
         version: manifest.ver,
       };
     },
-    enabled: !!resolvedManifestUrl && !!config?.enabled,
+    enabled: !!manifestUrl,
     staleTime: Infinity,
     retry: 1,
   });
@@ -194,11 +194,8 @@ interface AssistantSidebarProps {
 const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   onWidthChange,
 }) => {
-  const meta = useAssistantMeta();
-  const { data: sidebarConfig } = useAssistantSidebarConfig();
-  const { backendUrl, isReady: isBackendReady } = useAssistantBackend({
-    enabled: sidebarConfig?.enabled,
-  });
+  const { backendUrl, isReady: isBackendReady } = useAssistantBackend();
+  const meta = useAssistantMeta(backendUrl);
   const context = useBridgeContext(backendUrl ?? "");
   const router = useRouter();
 
