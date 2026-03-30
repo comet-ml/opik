@@ -709,6 +709,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
@@ -738,6 +739,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
@@ -764,6 +766,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
@@ -797,6 +800,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
