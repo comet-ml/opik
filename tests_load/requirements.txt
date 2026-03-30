@@ -1,5 +1,0 @@
-opik
-click
-anthropic
-datasets
-pillow

@@ -1,1 +1,0 @@
-"""Hotpot benchmark package components."""

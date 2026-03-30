@@ -1,1 +1,0 @@
-"""HoVer benchmark package."""

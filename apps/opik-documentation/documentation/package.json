@@ -1,8 +1,0 @@
-{
-  "scripts": {
-    "dev": "cd fern && fern docs dev"
-  },
-  "dependencies": {
-    "fern-api": "^0.94.6"
-  }
-}

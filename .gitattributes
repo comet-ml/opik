@@ -1,8 +1,0 @@
-*.java linguist-detectable=false
-*.mdx linguist-detectable=false
-*.sh text eol=lf
-
-# Prevent EOL normalization drift in symlink blobs.
-.cursor -text
-.codex -text
-CLAUDE.md -text

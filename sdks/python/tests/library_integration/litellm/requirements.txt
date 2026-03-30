@@ -1,2 +1,0 @@
-litellm
-boto3 # for bedrock litellm-bedrock

@@ -1,2 +1,0 @@
-boto3
-mypy-boto3-bedrock-runtime
