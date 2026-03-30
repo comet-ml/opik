@@ -356,6 +356,7 @@ class BaseOptimizer(ABC):
                 metadata=build_optimization_metadata(self),
                 name=self.name,
                 optimization_id=optimization_id,
+                project_name=self.project_name,
             )
             self.current_optimization_id = (
                 opik_optimization.id if opik_optimization is not None else None
