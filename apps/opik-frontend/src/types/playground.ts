@@ -85,6 +85,7 @@ export interface LogTrace {
   input: { messages: ProviderMessageType[] };
   output: { output: string | null };
   metadata?: Record<string, unknown>;
+  source?: string;
 }
 
 export interface LogSpan {

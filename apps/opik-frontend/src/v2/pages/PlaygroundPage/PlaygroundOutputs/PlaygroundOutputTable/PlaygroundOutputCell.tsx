@@ -17,9 +17,7 @@ import { cn } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import { generateTracesURL } from "@/lib/annotation-queues";
-import useAppStore from "@/store/AppStore";
-import useProjectByName from "@/api/projects/useProjectByName";
-import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 
@@ -66,21 +64,14 @@ const PlaygroundOutputCell: React.FunctionComponent<
     originalRow.dataItemId,
   );
 
-  const { data: playgroundProject } = useProjectByName(
-    {
-      projectName: PLAYGROUND_PROJECT_NAME,
-    },
-    {
-      enabled: !!traceId && !!workspaceName,
-    },
-  );
+  const activeProjectId = useActiveProjectId();
 
   const handleTraceLinkClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (traceId && playgroundProject?.id) {
+    if (traceId && activeProjectId) {
       const url = generateTracesURL(
         workspaceName,
-        playgroundProject.id,
+        activeProjectId,
         "traces",
         traceId,
       );
@@ -118,7 +109,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
     >
       {hasOutput ? (
         <div className="group relative flex size-full flex-col">
-          {traceId && playgroundProject?.id && (
+          {traceId && activeProjectId && (
             <TooltipWrapper content="Click to open original trace">
               <Button
                 size="icon-xs"

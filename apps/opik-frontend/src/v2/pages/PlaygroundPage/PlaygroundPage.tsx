@@ -12,7 +12,8 @@ import { Separator } from "@/ui/separator";
 import PlaygroundOutputs from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 import PlaygroundAddVariant from "@/v2/pages/PlaygroundPage/PlaygroundAddVariant";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import useProjectById from "@/api/projects/useProjectById";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import PlaygroundPrompts from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
 import PlaygroundHeader from "@/v2/pages/PlaygroundPage/PlaygroundHeader";
@@ -44,6 +45,11 @@ const EMPTY_DATASETS: Dataset[] = [];
 
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
+  const { data: activeProject } = useProjectById(
+    { projectId: activeProjectId! },
+    { enabled: !!activeProjectId },
+  );
   const {
     permissions: { canViewDatasets },
   } = usePermissions();
@@ -144,6 +150,7 @@ const PlaygroundPage = () => {
     datasetItems,
     datasetName,
     datasetVersionId: parsedVersionId || undefined,
+    projectName: activeProject?.name,
   });
 
   const isExperimentMode = !!datasetId;

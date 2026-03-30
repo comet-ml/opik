@@ -40,6 +40,7 @@ interface UseActionButtonActionsArguments {
   workspaceName: string;
   datasetName: string | null;
   datasetVersionId?: string;
+  projectName?: string;
 }
 
 const useActionButtonActions = ({
@@ -47,6 +48,7 @@ const useActionButtonActions = ({
   workspaceName,
   datasetName,
   datasetVersionId,
+  projectName,
 }: UseActionButtonActionsArguments) => {
   const queryClient = useQueryClient();
 
@@ -215,7 +217,10 @@ const useActionButtonActions = ({
     setAllRunning(true);
     clearCreatedExperiments();
 
-    const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
+    const logProcessor = createLogPlaygroundProcessor({
+      ...logProcessorHandlers,
+      projectName,
+    });
 
     const combinations = createCombinations();
     const totalCombinations = combinations.length;
@@ -254,6 +259,7 @@ const useActionButtonActions = ({
     logProcessorHandlers,
     maxConcurrentRequests,
     setProgress,
+    projectName,
   ]);
 
   const runSingle = useCallback(
@@ -263,7 +269,10 @@ const useActionButtonActions = ({
 
       isToStopRef.current = false;
       setPromptRunning(promptId, true);
-      const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
+      const logProcessor = createLogPlaygroundProcessor({
+        ...logProcessorHandlers,
+        projectName,
+      });
 
       try {
         await processCombination({ prompt }, logProcessor);
@@ -272,7 +281,7 @@ const useActionButtonActions = ({
         setPromptRunning(promptId, false);
       }
     },
-    [setPromptRunning, logProcessorHandlers, processCombination],
+    [setPromptRunning, logProcessorHandlers, processCombination, projectName],
   );
 
   return {
