@@ -10,8 +10,9 @@ from opik.evaluation.metrics.heuristics.equals import Equals
 from benchmarks.packages import registry as benchmark_config
 from benchmarks.core.types import TaskSpec
 from benchmarks.engines.local import engine as local_engine
-from tests.e2e.optimizers.utils import system_message, user_message
+
 from ._benchmark_test_helpers import InlineExecutor
+from ..optimizers.utils import system_message, user_message
 
 pytestmark = pytest.mark.integration
 

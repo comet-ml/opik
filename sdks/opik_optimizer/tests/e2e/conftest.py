@@ -8,7 +8,7 @@ from typing import Any, Generator
 import pytest
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def setup_environment() -> Generator[None, Any, None]:
     """Setup environment for e2e optimizer tests."""
     _E2E_PROJECT_NAME = f"e2e-optimizer-tests-{uuid.uuid4().hex[:8]}"
