@@ -285,7 +285,10 @@ class TestBackendValueToPythonValue:
             ("0.6", float, 0.6),
             (0.6, float, 0.6),
             ("true", bool, True),
+            ("1", bool, True),
+            ("yes", bool, True),
             ("false", bool, False),
+            ("0", bool, False),
             (True, bool, True),
         ],
         ids=[
@@ -296,7 +299,10 @@ class TestBackendValueToPythonValue:
             "float_from_str",
             "float_native",
             "bool_true_str",
+            "bool_one_str",
+            "bool_yes_str",
             "bool_false_str",
+            "bool_zero_str",
             "bool_native",
         ],
     )

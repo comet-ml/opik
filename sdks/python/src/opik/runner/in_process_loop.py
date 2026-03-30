@@ -213,13 +213,7 @@ class InProcessRunnerLoop:
         func: Callable = entry["func"]
         mask_id = job.mask_id
 
-        params_by_name = {p.name: p for p in entry["params"]}
-        for key in list(inputs.keys()):
-            if key in params_by_name:
-                inputs[key] = cast_input_value(inputs[key], params_by_name[key].type)
-
         trace_id = id_helpers.generate_id()
-        _inject_trace_id(inputs, trace_id)
 
         self._safe_report_job_result(
             job_id=job_id,
@@ -228,6 +222,14 @@ class InProcessRunnerLoop:
         )
 
         try:
+            params_by_name = {p.name: p for p in entry["params"]}
+            for key in list(inputs.keys()):
+                if key in params_by_name:
+                    inputs[key] = cast_input_value(
+                        inputs[key], params_by_name[key].type
+                    )
+
+            _inject_trace_id(inputs, trace_id)
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
                 with agent_config_context(mask_id):

@@ -396,6 +396,30 @@ class TestJobExecution:
         assert type(captured["score"]) is float
         assert type(captured["active"]) is bool
 
+    def test_execute_job__invalid_input_type__reports_failed(
+        self, mock_api, shutdown_event
+    ):
+        def my_agent(count: int, **kwargs):
+            pass
+
+        params = registry.extract_params(my_agent)
+        registry.register("typed_fail", my_agent, "proj", params, "")
+
+        lp = in_process_loop.InProcessRunnerLoop(mock_api, "r-1", shutdown_event)
+        job = LocalRunnerJob(
+            id="j-1",
+            agent_name="typed_fail",
+            inputs={"count": "3.9"},
+        )
+
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(lp._execute_job(job))
+        loop.close()
+
+        call_kwargs = mock_api.runners.report_job_result.call_args[1]
+        assert call_kwargs["status"] == "failed"
+        assert "TypeError" in call_kwargs["error"]
+
     def test_execute_job__report_failure__does_not_raise(
         self, mock_api, shutdown_event
     ):

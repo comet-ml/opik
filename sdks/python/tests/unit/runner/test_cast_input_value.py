@@ -35,7 +35,8 @@ def test_cast_input_value__none_input__returns_none(type_name: str) -> None:
         ("False", False),
         ("FALSE", False),
         ("0", False),
-        ("1", False),
+        ("1", True),
+        ("yes", True),
     ],
 )
 def test_cast_input_value__bool__string_input__returns_bool(

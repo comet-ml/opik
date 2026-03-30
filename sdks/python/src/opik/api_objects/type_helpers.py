@@ -117,7 +117,7 @@ def backend_value_to_python_value(
     if py_type is bool:
         if isinstance(value, bool):
             return value
-        return str(value).lower() == "true"
+        return str(value).lower() in ("true", "1", "yes")
 
     if py_type is int:
         if isinstance(value, bool):
