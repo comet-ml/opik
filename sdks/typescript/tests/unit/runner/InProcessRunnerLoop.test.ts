@@ -133,12 +133,62 @@ describe("InProcessRunnerLoop", () => {
 
     expect(api.runners.reportJobResult).toHaveBeenCalledWith(
       "job-1",
+      expect.objectContaining({ status: "running", traceId: "trace-1" })
+    );
+    expect(api.runners.reportJobResult).toHaveBeenCalledWith(
+      "job-1",
       expect.objectContaining({
         status: "completed",
         result: { result: "echo: hello" },
         traceId: "trace-1",
       })
     );
+  });
+
+  it("reports running before invoking the agent function", async () => {
+    vi.useRealTimers();
+
+    const api = createMockApi();
+    const job = createJob({ agentName: "ordered-agent" });
+
+    const callOrder: string[] = [];
+
+    (api.runners.reportJobResult as ReturnType<typeof vi.fn>).mockImplementation(
+      (_jobId: string, payload: { status: string }) => {
+        callOrder.push(payload.status);
+        return createMockHttpResponsePromise(undefined);
+      }
+    );
+
+    register({
+      func: () => {
+        callOrder.push("func");
+        return "done";
+      },
+      name: "ordered-agent",
+      project: "default",
+      params: [],
+      docstring: "",
+    });
+
+    let callCount = 0;
+    (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(
+      () => {
+        callCount++;
+        if (callCount === 1) {
+          return createMockHttpResponsePromise(job);
+        }
+        throw new OpikApiError({ statusCode: 204 });
+      }
+    );
+
+    const loop = new InProcessRunnerLoop(api, "runner-1");
+    loop.start();
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    loop.shutdown();
+
+    expect(callOrder).toEqual(["running", "func", "completed"]);
   });
 
   it("reports failure for unknown agent", async () => {

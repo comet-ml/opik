@@ -186,6 +186,17 @@ class InProcessRunnerLoop:
         _inject_trace_id(inputs, trace_id)
 
         try:
+            self._api.runners.report_job_result(
+                job_id=job_id,
+                status="running",
+                trace_id=trace_id,
+            )
+        except Exception:
+            LOGGER.debug(
+                "Failed to report running status for job %s", job_id, exc_info=True
+            )
+
+        try:
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
                 with agent_config_context(mask_id):

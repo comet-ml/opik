@@ -165,6 +165,8 @@ export class InProcessRunnerLoop {
       return;
     }
 
+    await this.reportJobResult(jobId, { status: "running", traceId: job.traceId });
+
     try {
       const result = await this.invokeAgent(job, jobId);
       await flushAll().catch((err) => {
