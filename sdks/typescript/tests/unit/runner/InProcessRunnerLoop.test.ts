@@ -316,8 +316,6 @@ describe("InProcessRunnerLoop", () => {
   });
 
   it("casts string-encoded inputs to declared param types before calling the function", async () => {
-    vi.useRealTimers();
-
     const api = createMockApi();
     const captured: Record<string, unknown> = {};
 
@@ -354,7 +352,7 @@ describe("InProcessRunnerLoop", () => {
 
     const loop = new InProcessRunnerLoop(api, "runner-1");
     loop.start();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await vi.advanceTimersByTimeAsync(0);
     loop.shutdown();
 
     expect(api.runners.reportJobResult).toHaveBeenCalledWith(
