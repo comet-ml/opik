@@ -649,6 +649,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "kwaipilot/kat-coder-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO_V2,
+      label: "kwaipilot/kat-coder-pro-v2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO_FREE,
       label: "kwaipilot/kat-coder-pro:free",
     },
