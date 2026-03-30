@@ -6,6 +6,7 @@ import type { LocalRunnerJobResultRequest } from "@/rest_api/api/resources/runne
 import { OpikApiError } from "@/rest_api/errors/OpikApiError";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
 import { agentConfigContext } from "@/agent-config/configContext";
+import { deserializeValue } from "@/agent-config/typeHelpers";
 import { flushAll } from "@/utils/flushAll";
 import { logger } from "@/utils/logger";
 import { generateId } from "@/utils/generateId";
@@ -302,14 +303,19 @@ export function castInputValue(value: unknown, type: string): unknown {
   switch (type) {
     case "boolean":
       if (typeof value === "boolean") return value;
-      return String(value).toLowerCase() === "true";
-    case "number":
+      return deserializeValue(String(value), "boolean");
+    case "number": {
       if (typeof value === "number") return value;
-      return Number(value);
+      const result = deserializeValue(String(value), "float");
+      if (typeof result === "number" && Number.isNaN(result)) {
+        throw new TypeError(`Cannot cast "${value}" to number`);
+      }
+      return result;
+    }
     case "string":
     default:
       if (typeof value === "string") return value;
-      if (typeof value === "object" || Array.isArray(value))
+      if (Array.isArray(value) || (typeof value === "object" && value !== null))
         return JSON.stringify(value);
       return String(value);
   }

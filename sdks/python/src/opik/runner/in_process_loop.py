@@ -9,7 +9,12 @@ import random
 import signal
 import threading
 import time
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
+
+from ..api_objects.agent_config.type_helpers import (
+    backend_value_to_python_value,
+    python_type_to_backend_type,
+)
 
 from ..api_objects.agent_config.context import agent_config_context
 from .. import id_helpers
@@ -25,38 +30,49 @@ _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
 
+_TYPE_NAME_MAP: Dict[str, type] = {
+    "str": str,
+    "string": str,
+    "int": int,
+    "integer": int,
+    "float": float,
+    "bool": bool,
+    "boolean": bool,
+}
+
+
 def cast_input_value(value: object, type_name: str) -> object:
     """Cast *value* to the native Python type indicated by *type_name*.
 
-    Supported type names mirror Python annotation ``__name__`` values:
-    ``"bool"``, ``"int"``, ``"float"``, and ``"str"`` (default / fallback).
-    Complex values (dict, list) are JSON-serialised when the target type is
-    ``"str"``.  ``None`` is always returned unchanged.
+    Accepts both Python annotation names (``"str"``, ``"int"``, ``"float"``,
+    ``"bool"``) and backend type names (``"string"``, ``"integer"``,
+    ``"boolean"``).  Complex values (dict, list) are JSON-serialised when the
+    target type is ``"str"``/``"string"``.  ``None`` is always returned
+    unchanged.  Delegates to
+    :func:`opik.api_objects.agent_config.type_helpers.backend_value_to_python_value`
+    for the actual conversion.
     """
     if value is None:
         return value
 
-    if type_name == "bool":
-        if isinstance(value, bool):
+    py_type: Any = _TYPE_NAME_MAP.get(type_name)
+    if py_type is None:
+        # Unknown type: pass strings through, JSON-serialize complex types, str() otherwise
+        if isinstance(value, str):
             return value
-        return str(value).lower() == "true"
+        if isinstance(value, (dict, list)):
+            return json.dumps(value)
+        return str(value)
 
-    if type_name == "int":
-        if isinstance(value, int) and not isinstance(value, bool):
-            return value
-        return int(value)  # type: ignore[call-overload]
-
-    if type_name == "float":
-        if isinstance(value, float):
-            return value
-        return float(value)  # type: ignore[arg-type]
-
-    # "str" or any unknown type — fall back to string behaviour
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (dict, list)):
+    # backend_value_to_python_value uses str(value) for the str case, which gives
+    # Python repr for dicts/lists instead of JSON — handle that separately first.
+    if py_type is str and isinstance(value, (dict, list)):
         return json.dumps(value)
-    return str(value)
+
+    backend_type = python_type_to_backend_type(py_type)
+    return backend_value_to_python_value(
+        value, backend_type=backend_type, py_type=py_type
+    )
 
 
 def _inject_trace_id(inputs: dict, trace_id: str) -> None:

@@ -5,6 +5,8 @@ import inspect
 import threading
 from typing import Any, Callable, Dict, List
 
+from opik.api_objects.agent_config.type_helpers import unwrap_optional
+
 _lock = threading.Lock()
 REGISTRY: Dict[str, Dict[str, Any]] = {}
 _listeners: List[Callable[[str], None]] = []
@@ -55,6 +57,9 @@ def extract_params(fn: Callable) -> List[Param]:
             type_name = "str"
         else:
             ann = param.annotation
+            inner = unwrap_optional(ann)
+            if inner is not None:
+                ann = inner
             type_name = ann.__name__ if hasattr(ann, "__name__") else str(ann)
         params.append(Param(name=param_name, type=type_name))
     return params

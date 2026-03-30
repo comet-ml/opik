@@ -42,6 +42,13 @@ describe("castInputValue", () => {
     expect(castInputValue(input, "number")).toBe(expected);
   });
 
+  it.each(["abc", "not-a-number"])(
+    'number: non-numeric string "%s" → throws TypeError',
+    (input) => {
+      expect(() => castInputValue(input, "number")).toThrow(TypeError);
+    }
+  );
+
   it.each([
     { input: 42, expected: 42 },
     { input: 3.14, expected: 3.14 },

@@ -1,19 +1,26 @@
 """Unit tests for cast_input_value in in_process_loop."""
 
+from typing import Optional
+
 import pytest
 
 from opik.runner.in_process_loop import cast_input_value
+from opik.runner.registry import extract_params
 
 
-# --- null passthrough ---
+# ---------------------------------------------------------------------------
+# None passthrough
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("type_name", ["bool", "int", "float", "str", "unknown"])
-def test_none_passthrough(type_name: str) -> None:
+def test_cast_input_value__none_input__returns_none(type_name: str) -> None:
     assert cast_input_value(None, type_name) is None
 
 
-# --- bool ---
+# ---------------------------------------------------------------------------
+# bool
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -29,17 +36,20 @@ def test_none_passthrough(type_name: str) -> None:
         ("1", False),
     ],
 )
-def test_bool_from_string(value: str, expected: bool) -> None:
+def test_cast_input_value__bool__string_input__returns_bool(
+    value: str, expected: bool
+) -> None:
     assert cast_input_value(value, "bool") is expected
 
 
 @pytest.mark.parametrize("value", [True, False])
-def test_bool_native_passthrough(value: bool) -> None:
-    result = cast_input_value(value, "bool")
-    assert result is value
+def test_cast_input_value__bool__native_bool_input__passthrough(value: bool) -> None:
+    assert cast_input_value(value, "bool") is value
 
 
-# --- int ---
+# ---------------------------------------------------------------------------
+# int
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -48,26 +58,31 @@ def test_bool_native_passthrough(value: bool) -> None:
         ("42", 42),
         ("-7", -7),
         ("0", 0),
+        ("3.9", 3),  # int(float("3.9")) truncates
     ],
 )
-def test_int_from_string(value: str, expected: int) -> None:
+def test_cast_input_value__int__string_input__returns_int(
+    value: str, expected: int
+) -> None:
     assert cast_input_value(value, "int") == expected
 
 
 @pytest.mark.parametrize("value", [42, -7, 0])
-def test_int_native_passthrough(value: int) -> None:
+def test_cast_input_value__int__native_int_input__passthrough(value: int) -> None:
     result = cast_input_value(value, "int")
     assert result == value
     assert type(result) is int
 
 
-def test_int_does_not_treat_bool_as_int() -> None:
-    # True is an int subclass in Python; we want it re-cast to 1 via int()
+def test_cast_input_value__int__bool_input__converts_to_int() -> None:
+    # True is an int subclass; boolean → int conversion should still work numerically
     assert cast_input_value(True, "int") == 1
     assert cast_input_value(False, "int") == 0
 
 
-# --- float ---
+# ---------------------------------------------------------------------------
+# float
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -78,24 +93,30 @@ def test_int_does_not_treat_bool_as_int() -> None:
         ("42", 42.0),
     ],
 )
-def test_float_from_string(value: str, expected: float) -> None:
+def test_cast_input_value__float__string_input__returns_float(
+    value: str, expected: float
+) -> None:
     assert cast_input_value(value, "float") == pytest.approx(expected)
 
 
 @pytest.mark.parametrize("value", [3.14, -0.5, 0.0])
-def test_float_native_passthrough(value: float) -> None:
+def test_cast_input_value__float__native_float_input__passthrough(
+    value: float,
+) -> None:
     result = cast_input_value(value, "float")
     assert result == pytest.approx(value)
     assert type(result) is float
 
 
-def test_float_from_int() -> None:
+def test_cast_input_value__float__int_input__returns_float() -> None:
     result = cast_input_value(5, "float")
     assert result == pytest.approx(5.0)
     assert type(result) is float
 
 
-# --- str ---
+# ---------------------------------------------------------------------------
+# str
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -105,7 +126,9 @@ def test_float_from_int() -> None:
         ("", ""),
     ],
 )
-def test_str_passthrough(value: str, expected: str) -> None:
+def test_cast_input_value__str__string_input__passthrough(
+    value: str, expected: str
+) -> None:
     assert cast_input_value(value, "str") == expected
 
 
@@ -118,34 +141,111 @@ def test_str_passthrough(value: str, expected: str) -> None:
         (False, "False"),
     ],
 )
-def test_str_from_primitive(value: object, expected: str) -> None:
+def test_cast_input_value__str__primitive_input__str_coercion(
+    value: object, expected: str
+) -> None:
     assert cast_input_value(value, "str") == expected
 
 
-def test_str_dict_json_serialised() -> None:
+def test_cast_input_value__str__dict_input__json_serialised() -> None:
     assert cast_input_value({"a": 1, "b": "x"}, "str") == '{"a": 1, "b": "x"}'
 
 
-def test_str_list_json_serialised() -> None:
+def test_cast_input_value__str__list_input__json_serialised() -> None:
     assert cast_input_value([1, "two", True], "str") == '[1, "two", true]'
 
 
-# --- unknown type falls back to str ---
+# ---------------------------------------------------------------------------
+# backend type name aliases (e.g. user-provided params using backend names)
+# ---------------------------------------------------------------------------
 
 
-def test_unknown_type_string_passthrough() -> None:
+@pytest.mark.parametrize(
+    "value, type_name, expected",
+    [
+        ("true", "boolean", True),
+        ("false", "boolean", False),
+        ("42", "integer", 42),
+        ("3.14", "float", 3.14),
+        ("hello", "string", "hello"),
+    ],
+)
+def test_cast_input_value__backend_type_aliases__correct_cast(
+    value: str, type_name: str, expected: object
+) -> None:
+    result = cast_input_value(value, type_name)
+    if isinstance(expected, float):
+        assert result == pytest.approx(expected)
+    else:
+        assert result == expected
+
+
+# ---------------------------------------------------------------------------
+# unknown type falls back to str behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_cast_input_value__unknown_type__string_input__passthrough() -> None:
     assert cast_input_value("hello", "MyCustomType") == "hello"
 
 
-def test_unknown_type_non_string_coerced() -> None:
+def test_cast_input_value__unknown_type__non_string_input__str_coercion() -> None:
     assert cast_input_value(99, "MyCustomType") == "99"
 
 
-def test_unknown_type_dict_json_serialised() -> None:
+def test_cast_input_value__unknown_type__dict_input__json_serialised() -> None:
     assert cast_input_value({"x": 1}, "MyCustomType") == '{"x": 1}'
 
 
-# --- multi-param combination tests ---
+# ---------------------------------------------------------------------------
+# extract_params: Optional[T] unwrapping (comment #3009010639)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_params__optional_int__unwraps_to_int() -> None:
+    def fn(x: Optional[int]) -> None:
+        pass
+
+    params = extract_params(fn)
+    assert len(params) == 1
+    assert params[0].name == "x"
+    assert params[0].type == "int"
+
+
+def test_extract_params__optional_bool__unwraps_to_bool() -> None:
+    def fn(flag: Optional[bool]) -> None:
+        pass
+
+    params = extract_params(fn)
+    assert params[0].type == "bool"
+
+
+def test_extract_params__plain_annotation__unchanged() -> None:
+    def fn(query: str, limit: int, score: float, active: bool) -> None:
+        pass
+
+    params = extract_params(fn)
+    assert [(p.name, p.type) for p in params] == [
+        ("query", "str"),
+        ("limit", "int"),
+        ("score", "float"),
+        ("active", "bool"),
+    ]
+
+
+def test_cast_input_value__optional_int_unwrapped__casts_string_to_int() -> None:
+    """End-to-end: Optional[int] param stores type='int', cast still works."""
+
+    def fn(x: Optional[int]) -> None:
+        pass
+
+    params = extract_params(fn)
+    assert cast_input_value("42", params[0].type) == 42
+
+
+# ---------------------------------------------------------------------------
+# multi-param combination tests
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -189,7 +289,7 @@ def test_unknown_type_dict_json_serialised() -> None:
         ),
     ],
 )
-def test_combination(
+def test_cast_input_value__multi_param_combinations(
     label: str,
     inputs: dict,
     params: list,
