@@ -33,7 +33,7 @@ public record KpiCardResponse(List<KpiMetric> stats) {
         COUNT("count"),
         ERRORS("errors"),
         AVG_DURATION("avg_duration"),
-        AVG_COST("avg_cost");
+        TOTAL_COST("total_cost");
 
         @JsonValue
         private final String value;
@@ -44,7 +44,7 @@ public record KpiCardResponse(List<KpiMetric> stats) {
                     .filter(type -> type.value.equalsIgnoreCase(value))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException(
-                            "Unknown KPI metric type '%s'. Valid values are: count, errors, avg_duration, avg_cost"
+                            "Unknown KPI metric type '%s'. Valid values are: count, errors, avg_duration, total_cost"
                                     .formatted(value)));
         }
     }
