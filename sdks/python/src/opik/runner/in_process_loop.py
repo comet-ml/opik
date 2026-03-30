@@ -3,6 +3,7 @@
 import asyncio
 import collections
 import inspect
+import json
 import logging
 import random
 import signal
@@ -22,6 +23,40 @@ LOGGER = logging.getLogger(__name__)
 POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
+
+
+def cast_input_value(value: object, type_name: str) -> object:
+    """Cast *value* to the native Python type indicated by *type_name*.
+
+    Supported type names mirror Python annotation ``__name__`` values:
+    ``"bool"``, ``"int"``, ``"float"``, and ``"str"`` (default / fallback).
+    Complex values (dict, list) are JSON-serialised when the target type is
+    ``"str"``.  ``None`` is always returned unchanged.
+    """
+    if value is None:
+        return value
+
+    if type_name == "bool":
+        if isinstance(value, bool):
+            return value
+        return str(value).lower() == "true"
+
+    if type_name == "int":
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        return int(value)  # type: ignore[call-overload]
+
+    if type_name == "float":
+        if isinstance(value, float):
+            return value
+        return float(value)  # type: ignore[arg-type]
+
+    # "str" or any unknown type — fall back to string behaviour
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return str(value)
 
 
 def _inject_trace_id(inputs: dict, trace_id: str) -> None:
@@ -178,6 +213,11 @@ class InProcessRunnerLoop:
 
         func: Callable = entry["func"]
         mask_id = job.mask_id
+
+        params_by_name = {p.name: p for p in entry["params"]}
+        for key in list(inputs.keys()):
+            if key in params_by_name:
+                inputs[key] = cast_input_value(inputs[key], params_by_name[key].type)
 
         trace_id = id_helpers.generate_id()
         _inject_trace_id(inputs, trace_id)

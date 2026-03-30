@@ -208,7 +208,7 @@ export class InProcessRunnerLoop {
     const maskId = job.maskId;
 
     const entry = getAll().get(agentName)!;
-    const args = entry.params.map((p) => inputs[p.name]);
+    const args = entry.params.map((p) => castInputValue(inputs[p.name], p.type));
 
     const run = () =>
       runWithJobContext({ traceId, jobId }, () => {
@@ -294,6 +294,24 @@ export class InProcessRunnerLoop {
 
   private jitteredBackoff(backoff: number): number {
     return Math.min(backoff, this.backoffCapMs) * (0.5 + Math.random() * 0.5);
+  }
+}
+
+export function castInputValue(value: unknown, type: string): unknown {
+  if (value === null || value === undefined) return value;
+  switch (type) {
+    case "boolean":
+      if (typeof value === "boolean") return value;
+      return String(value).toLowerCase() === "true";
+    case "number":
+      if (typeof value === "number") return value;
+      return Number(value);
+    case "string":
+    default:
+      if (typeof value === "string") return value;
+      if (typeof value === "object" || Array.isArray(value))
+        return JSON.stringify(value);
+      return String(value);
   }
 }
 
