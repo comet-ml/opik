@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any, Generator
 
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="session")
-def setup_environment(monkeypatch) -> None:
+@pytest.fixture
+def setup_environment() -> Generator[None, Any, None]:
     """Setup environment for e2e optimizer tests."""
     _E2E_PROJECT_NAME = f"e2e-optimizer-tests-{uuid.uuid4().hex[:8]}"
-    monkeypatch.setenv("OPIK_PROJECT_NAME", _E2E_PROJECT_NAME)
+
+    with pytest.MonkeyPatch.context() as m:
+        m.setenv("OPIK_PROJECT_NAME", _E2E_PROJECT_NAME)
+        yield
 
 
 @pytest.fixture(autouse=True)
