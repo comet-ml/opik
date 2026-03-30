@@ -2,6 +2,7 @@
 
 import asyncio
 import collections
+import contextvars
 import inspect
 import logging
 import random
@@ -15,6 +16,8 @@ from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
 from . import registry
+from .context import reset_job_id, set_job_id
+from .log_streamer import LogStreamer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +62,7 @@ class InProcessRunnerLoop:
         self._lock = threading.Lock()
         self._job_queue: asyncio.Queue[LocalRunnerJob] = asyncio.Queue()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._log_streamer: Optional[LogStreamer] = None
 
     def run(self) -> None:
         heartbeat_thread = threading.Thread(
@@ -129,12 +133,16 @@ class InProcessRunnerLoop:
 
     def _run_job_loop(self) -> None:
         self._loop = asyncio.new_event_loop()
+        self._log_streamer = LogStreamer(self._api, self._loop)
+        self._log_streamer.install()
         try:
             self._loop.run_until_complete(self._job_consumer())
         finally:
             self._loop.close()
 
     async def _job_consumer(self) -> None:
+        assert self._log_streamer is not None
+        self._log_streamer.start()
         tasks: set[asyncio.Task] = set()
         while not self._shutdown_event.is_set():
             try:
@@ -185,6 +193,8 @@ class InProcessRunnerLoop:
             trace_id=trace_id,
         )
 
+        token = set_job_id(job_id)
+        ctx = contextvars.copy_context()
         try:
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
@@ -203,13 +213,13 @@ class InProcessRunnerLoop:
                 if timeout:
                     result = await asyncio.wait_for(
                         asyncio.get_running_loop().run_in_executor(
-                            None, _run_with_mask
+                            None, ctx.run, _run_with_mask
                         ),
                         timeout=timeout,
                     )
                 else:
                     result = await asyncio.get_running_loop().run_in_executor(
-                        None, _run_with_mask
+                        None, ctx.run, _run_with_mask
                     )
 
             if not isinstance(result, (dict, str, int, float, bool, list, type(None))):
@@ -237,6 +247,8 @@ class InProcessRunnerLoop:
                 error=f"{type(e).__name__}: {e}",
                 trace_id=trace_id,
             )
+        finally:
+            reset_job_id(token)
 
     def _safe_report_job_result(self, job_id: str, **kwargs: object) -> None:
         """Report a job result, logging and swallowing any exception."""

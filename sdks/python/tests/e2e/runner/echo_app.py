@@ -12,6 +12,7 @@ import opik
 
 @opik.track(entrypoint=True)
 def echo(message: str) -> str:
+    print(f"echo stdout: {message}")
     return f"echo: {message}"
 
 
