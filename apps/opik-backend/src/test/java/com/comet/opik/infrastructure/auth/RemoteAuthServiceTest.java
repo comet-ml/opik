@@ -106,6 +106,8 @@ class RemoteAuthServiceTest {
         var apiKey = "apiKey-" + UUID.randomUUID();
         var workspaceName = "workspace-" + UUID.randomUUID();
 
+        // Serialize via Map to inject the raw opikVersionStr (e.g. "VERSION_1", "version_unknown")
+        // directly into JSON, bypassing @JsonValue which would normalize the casing
         Map<String, Object> responseMap = OBJECT_MAPPER.readValue(
                 OBJECT_MAPPER.writeValueAsString(authResponse), Map.class);
         responseMap.put("opikVersion", opikVersionStr);
@@ -247,6 +249,7 @@ class RemoteAuthServiceTest {
         var sessionTokenValue = "session-" + UUID.randomUUID();
         var workspaceName = "workspace-" + UUID.randomUUID();
 
+        // Serialize via Map to inject raw opikVersionStr, bypassing @JsonValue normalization
         Map<String, Object> responseMap = OBJECT_MAPPER.readValue(
                 OBJECT_MAPPER.writeValueAsString(authResponse), Map.class);
         responseMap.put("opikVersion", opikVersionStr);
