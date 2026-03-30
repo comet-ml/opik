@@ -168,7 +168,7 @@ export class InProcessRunnerLoop {
 
     const traceId = generateId();
 
-    await this.reportJobResult(jobId, { status: "running", traceId });
+    await this.api.runners.reportJobResult(jobId, { status: "running", traceId });
 
     try {
       const result = await this.invokeAgent(job, jobId, traceId);

@@ -185,16 +185,11 @@ class InProcessRunnerLoop:
         trace_id = id_helpers.generate_id()
         _inject_trace_id(inputs, trace_id)
 
-        try:
-            self._api.runners.report_job_result(
-                job_id=job_id,
-                status="running",
-                trace_id=trace_id,
-            )
-        except Exception:
-            LOGGER.debug(
-                "Failed to report running status for job %s", job_id, exc_info=True
-            )
+        self._api.runners.report_job_result(
+            job_id=job_id,
+            status="running",
+            trace_id=trace_id,
+        )
 
         try:
             timeout = job.timeout

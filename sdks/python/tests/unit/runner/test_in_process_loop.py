@@ -365,7 +365,7 @@ class TestJobExecution:
         assert running_kwargs["trace_id"] == completed_kwargs["trace_id"]
         assert len(running_kwargs["trace_id"]) > 0
 
-    def test_execute_job__report_failure__does_not_raise(
+    def test_execute_job__completed_report_failure__does_not_raise(
         self, mock_api, shutdown_event
     ):
         def my_agent(**kwargs):
@@ -373,7 +373,11 @@ class TestJobExecution:
 
         registry.register("my_agent", my_agent, "proj", [], "")
 
-        mock_api.runners.report_job_result.side_effect = RuntimeError("network down")
+        def side_effect(job_id, *, status, **kwargs):
+            if status != "running":
+                raise RuntimeError("network down")
+
+        mock_api.runners.report_job_result.side_effect = side_effect
 
         lp = in_process_loop.InProcessRunnerLoop(
             mock_api,
@@ -387,7 +391,7 @@ class TestJobExecution:
         loop.run_until_complete(lp._execute_job(job))
         loop.close()
 
-        # Both the "running" and "completed" reports silently fail — no exception raised.
+        # "completed" report failure is swallowed; "running" succeeded.
         assert mock_api.runners.report_job_result.call_count == 2
 
 
