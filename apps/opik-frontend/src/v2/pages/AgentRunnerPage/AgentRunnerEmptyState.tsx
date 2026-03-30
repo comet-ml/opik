@@ -76,7 +76,7 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
   const command = `opik connect --pair ${pairCode}`;
 
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    createdAt && expiresInSeconds
+    createdAt !== undefined && expiresInSeconds !== undefined
       ? getRemainingSeconds(createdAt, expiresInSeconds)
       : 0,
   );
@@ -84,7 +84,7 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
   onRefreshRef.current = onRefreshPairCode;
 
   useEffect(() => {
-    if (!createdAt || !expiresInSeconds) return;
+    if (createdAt === undefined || expiresInSeconds === undefined) return;
     setRemainingSeconds(getRemainingSeconds(createdAt, expiresInSeconds));
     const interval = setInterval(() => {
       setRemainingSeconds((prev) => {

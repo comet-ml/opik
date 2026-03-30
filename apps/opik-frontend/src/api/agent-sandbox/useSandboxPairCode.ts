@@ -37,9 +37,7 @@ export default function useSandboxPairCode({
     staleTime: (query) => {
       const data = query.state.data;
       if (!data) return 0;
-      const elapsed = Date.now() - data.created_at;
-      return Math.max(0, data.expires_in_seconds * 1000 - elapsed);
+      return data.expires_in_seconds * 1000;
     },
-    gcTime: Infinity,
   });
 }

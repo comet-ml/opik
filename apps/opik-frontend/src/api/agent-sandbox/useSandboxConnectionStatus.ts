@@ -3,7 +3,8 @@ import { useQuery, UseQueryOptions } from "@tanstack/react-query";
 import api, { AGENT_SANDBOX_KEY, LOCAL_RUNNERS_REST_ENDPOINT } from "@/api/api";
 import { LocalRunner, SandboxConnectionStatus } from "@/types/agent-sandbox";
 
-const POLL_INTERVAL = 3000;
+const POLL_INTERVAL_WHILE_DISCONNECTED = 3000;
+const POLL_INTERVAL_WHILE_CONNECTED = 10000;
 
 type UseSandboxConnectionStatusParams = {
   projectId: string;
@@ -41,8 +42,8 @@ export default function useSandboxConnectionStatus(
     enabled: !!projectId,
     refetchInterval: (query) =>
       query.state.data?.status === SandboxConnectionStatus.CONNECTED
-        ? 10000
-        : POLL_INTERVAL,
+        ? POLL_INTERVAL_WHILE_CONNECTED
+        : POLL_INTERVAL_WHILE_DISCONNECTED,
     ...options,
   });
 }

@@ -1,7 +1,5 @@
 import React, { useState } from "react";
-import { Save } from "lucide-react";
 
-import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import { LocalRunner } from "@/types/agent-sandbox";
@@ -57,14 +55,10 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
         <TabsContent value="configuration" className="flex-1 p-6">
           {latestConfig ? (
             <div>
-              <div className="mb-4 flex items-center gap-3">
+              <div className="mb-4">
                 <span className="comet-body-xs text-muted-slate">
                   Configuration: {configVersionLabel} (Prod)
                 </span>
-                <Button variant="outline" size="xs">
-                  <Save className="mr-1 size-3" />
-                  Save as new version
-                </Button>
               </div>
               <AgentRunnerConfigEditor
                 item={latestConfig}
