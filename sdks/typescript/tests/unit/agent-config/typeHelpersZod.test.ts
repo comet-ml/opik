@@ -6,7 +6,7 @@ import {
   serializeFields,
   deserializeToShape,
   matchesBlueprint,
-} from "@/agent-config/typeHelpers";
+} from "@/typeHelpers";
 import { Blueprint } from "@/agent-config/Blueprint";
 import type * as OpikApi from "@/rest_api/api";
 

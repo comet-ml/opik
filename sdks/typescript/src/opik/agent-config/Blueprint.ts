@@ -3,7 +3,7 @@ import type * as OpikApi from "@/rest_api/api";
 import { Prompt } from "@/prompt/Prompt";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
-import { deserializeValue } from "./typeHelpers";
+import { deserializeValue } from "@/typeHelpers";
 
 export interface BlueprintData {
   id: string;

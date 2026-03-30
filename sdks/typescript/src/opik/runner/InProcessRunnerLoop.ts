@@ -6,7 +6,7 @@ import type { LocalRunnerJobResultRequest } from "@/rest_api/api/resources/runne
 import { OpikApiError } from "@/rest_api/errors/OpikApiError";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
 import { agentConfigContext } from "@/agent-config/configContext";
-import { deserializeValue } from "@/agent-config/typeHelpers";
+import { deserializeValue } from "@/typeHelpers";
 import { flushAll } from "@/utils/flushAll";
 import { logger } from "@/utils/logger";
 import { generateId } from "@/utils/generateId";

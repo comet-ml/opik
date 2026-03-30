@@ -7,7 +7,7 @@ from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
-from . import type_helpers
+from .. import type_helpers
 
 
 def _resolve_prompt_from_commit(

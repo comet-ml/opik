@@ -5,7 +5,7 @@ import inspect
 import threading
 from typing import Any, Callable, Dict, List
 
-from opik.api_objects.agent_config.type_helpers import unwrap_optional
+from opik.api_objects.type_helpers import unwrap_optional
 
 _lock = threading.Lock()
 REGISTRY: Dict[str, Dict[str, Any]] = {}

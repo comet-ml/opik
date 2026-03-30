@@ -11,7 +11,7 @@ import threading
 import time
 from typing import Any, Callable, Dict, Optional
 
-from ..api_objects.agent_config.type_helpers import (
+from ..api_objects.type_helpers import (
     backend_value_to_python_value,
     python_type_to_backend_type,
 )
@@ -49,7 +49,7 @@ def cast_input_value(value: object, type_name: str) -> object:
     ``"boolean"``).  Complex values (dict, list) are JSON-serialised when the
     target type is ``"str"``/``"string"``.  ``None`` is always returned
     unchanged.  Delegates to
-    :func:`opik.api_objects.agent_config.type_helpers.backend_value_to_python_value`
+    :func:`opik.api_objects.type_helpers.backend_value_to_python_value`
     for the actual conversion.
     """
     if value is None:

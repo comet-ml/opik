@@ -4,7 +4,7 @@ import typing
 
 from opik.exceptions import AgentConfigNotFound
 from opik.rest_api import core as rest_api_core
-from . import type_helpers
+from .. import type_helpers
 from . import cache as cache_mod
 from .context import get_active_config_mask
 
