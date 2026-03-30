@@ -31,6 +31,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -89,21 +90,27 @@ class RemoteAuthServiceTest {
     static Stream<Arguments> successfulAuthArgs() {
         return Stream.of(
                 arguments(true, null),
-                arguments(false, OpikVersion.VERSION_1),
-                arguments(false, OpikVersion.VERSION_2));
+                arguments(false, "VERSION_1"),
+                arguments(false, "version_2"),
+                arguments(false, "version_unknown"));
     }
 
     @ParameterizedTest
     @MethodSource("successfulAuthArgs")
-    void testAuthSuccessful(boolean workspaceViaHeader, OpikVersion opikVersion)
+    void testAuthSuccessful(boolean workspaceViaHeader, String opikVersionStr)
             throws JsonProcessingException {
+        var opikVersion = OpikVersion.fromValue(opikVersionStr);
         var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class).toBuilder()
                 .opikVersion(opikVersion)
                 .build();
         var apiKey = "apiKey-" + UUID.randomUUID();
         var workspaceName = "workspace-" + UUID.randomUUID();
-        WIRE_MOCK.server().stubFor(post("/opik/auth")
-                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
+
+        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(
+                OBJECT_MAPPER.writeValueAsString(authResponse), Map.class);
+        responseMap.put("opikVersion", opikVersionStr);
+        var responseJson = OBJECT_MAPPER.writeValueAsString(responseMap);
+        WIRE_MOCK.server().stubFor(post("/opik/auth").willReturn(okJson(responseJson)));
 
         remoteAuthService.authenticate(
                 getHeadersMock(workspaceViaHeader ? workspaceName : null, apiKey), null,
@@ -231,16 +238,22 @@ class RemoteAuthServiceTest {
 
     @ParameterizedTest
     @MethodSource("successfulAuthArgs")
-    void testSessionAuthSuccessful(boolean workspaceViaHeader, OpikVersion opikVersion)
+    void testSessionAuthSuccessful(boolean workspaceViaHeader, String opikVersionStr)
             throws JsonProcessingException {
+        var opikVersion = OpikVersion.fromValue(opikVersionStr);
         var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class).toBuilder()
                 .opikVersion(opikVersion)
                 .build();
         var sessionTokenValue = "session-" + UUID.randomUUID();
         var workspaceName = "workspace-" + UUID.randomUUID();
+
+        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(
+                OBJECT_MAPPER.writeValueAsString(authResponse), Map.class);
+        responseMap.put("opikVersion", opikVersionStr);
+        var responseJson = OBJECT_MAPPER.writeValueAsString(responseMap);
         WIRE_MOCK.server().stubFor(post("/opik/auth-session")
                 .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
-                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
+                .willReturn(okJson(responseJson)));
 
         remoteAuthService.authenticate(
                 getHeadersMock(workspaceViaHeader ? workspaceName : null, ""),
