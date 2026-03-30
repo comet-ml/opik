@@ -592,7 +592,6 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             return;
         }
 
-        jobMap.put(FIELD_STATUS, resultStatus.getValue());
         if (result.result() != null) {
             jobMap.put(FIELD_RESULT, JsonUtils.writeValueAsString(result.result()));
         }
@@ -604,6 +603,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         }
 
         if (TERMINAL_JOB_STATUSES.contains(resultStatus)) {
+            jobMap.put(FIELD_STATUS, resultStatus.getValue());
             jobMap.put(FIELD_COMPLETED_AT, Instant.now().toString());
 
             String runnerIdStr = fields.get(FIELD_RUNNER_ID);
