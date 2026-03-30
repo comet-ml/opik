@@ -1,7 +1,18 @@
 import signal
 import threading
 
+import pytest
+
 from opik.runner.activate import install_signal_handlers
+
+
+@pytest.fixture(autouse=True)
+def restore_signal_handlers():
+    prev_term = signal.getsignal(signal.SIGTERM)
+    prev_int = signal.getsignal(signal.SIGINT)
+    yield
+    signal.signal(signal.SIGTERM, prev_term)
+    signal.signal(signal.SIGINT, prev_int)
 
 
 def test_install_signal_handlers__sets_shutdown_event_on_sigterm():
