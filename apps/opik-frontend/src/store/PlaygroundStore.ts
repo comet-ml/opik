@@ -94,6 +94,7 @@ const updateAllStaleStatusesForPromptOutput = (
 };
 
 export type PlaygroundStore = {
+  lastActiveProjectId: string | null;
   promptIds: string[];
   promptMap: Record<string, PlaygroundPromptType>;
   outputMap: PlaygroundOutputMap;
@@ -149,11 +150,13 @@ export type PlaygroundStore = {
   resetDatasetFilters: () => void;
   setProgress: (completed: number, total: number) => void;
   resetProgress: () => void;
+  setLastActiveProjectId: (projectId: string | null) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
   persist(
     (set) => ({
+      lastActiveProjectId: null,
       promptIds: [],
       promptMap: {},
       outputMap: {},
@@ -408,6 +411,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setLastActiveProjectId: (projectId) => {
+        set((state) => ({ ...state, lastActiveProjectId: projectId }));
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -619,5 +625,11 @@ export const useSetProgress = () =>
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);
+
+export const useLastActiveProjectId = () =>
+  usePlaygroundStore((state) => state.lastActiveProjectId);
+
+export const useSetLastActiveProjectId = () =>
+  usePlaygroundStore((state) => state.setLastActiveProjectId);
 
 export default usePlaygroundStore;

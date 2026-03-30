@@ -133,6 +133,7 @@ const PromptModelConfigs = ({
         className="max-h-[70vh] overflow-y-auto p-6"
         side="bottom"
         align="end"
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
         <ExplainerDescription
           className="mb-5 w-72"
