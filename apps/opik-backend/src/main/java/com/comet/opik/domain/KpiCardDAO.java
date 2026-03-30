@@ -575,7 +575,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private ST buildTemplate(String query, KpiCardCriteria criteria, String workspaceId,
             String queryName) {
-        return getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, criteria.projectId().toString());
+        return getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, "", criteria.projectId().toString());
     }
 
     private Statement buildStatement(Connection connection, ST template,

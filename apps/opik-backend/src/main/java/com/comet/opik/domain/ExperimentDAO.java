@@ -1740,7 +1740,7 @@ public class ExperimentDAO {
     public Mono<Boolean> hasVersion1Experiments(@NonNull String workspaceId,
             @NonNull List<String> demoExperimentNames) {
         var template = getSTWithLogComment(HAS_VERSION1_EXPERIMENTS,
-                "has_version1_experiments", workspaceId, demoExperimentNames);
+                "has_version1_experiments", workspaceId, "", demoExperimentNames);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)

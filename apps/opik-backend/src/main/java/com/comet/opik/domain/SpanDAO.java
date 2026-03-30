@@ -2823,7 +2823,7 @@ public class SpanDAO {
         log.info("Retention delete spans: workspaces='{}', cutoffId='{}', lowerBound='{}'",
                 workspaceIds.size(), cutoffId, lowerBound);
 
-        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null,
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null, "",
                 workspaceIds.size());
 
         return Mono.from(connectionFactory.create())
@@ -2850,7 +2850,7 @@ public class SpanDAO {
             return Mono.just(0L);
         }
 
-        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_spans", null,
+        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_spans", null, "",
                 workspaceIds.size());
 
         return Mono.from(connectionFactory.create())
@@ -2875,7 +2875,7 @@ public class SpanDAO {
 
         log.info("Retention delete spans (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
-        var logComment = getLogComment("retention_delete_spans_bounded", null, workspaceMinIds.size());
+        var logComment = getLogComment("retention_delete_spans_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
         var sb = new StringBuilder("DELETE FROM spans WHERE (");
@@ -2929,7 +2929,7 @@ public class SpanDAO {
         log.debug("Estimating retention velocity for workspace '{}'", workspaceId);
 
         var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
-                "retention_estimate_velocity", workspaceId, "");
+                "retention_estimate_velocity", workspaceId, "", "");
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {

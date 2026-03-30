@@ -3993,7 +3993,7 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Retention delete traces: workspaces='{}', cutoffId='{}', lowerBound='{}'",
                 workspaceIds.size(), cutoffId, lowerBound);
 
-        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null,
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null, "",
                 workspaceIds.size());
 
         return Mono.from(connectionFactory.create())
@@ -4015,7 +4015,7 @@ class TraceDAOImpl implements TraceDAO {
             return Mono.just(0L);
         }
 
-        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_traces", null,
+        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_traces", null, "",
                 workspaceIds.size());
 
         return Mono.from(connectionFactory.create())
@@ -4037,7 +4037,7 @@ class TraceDAOImpl implements TraceDAO {
 
         log.info("Retention delete traces (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
-        var logComment = getLogComment("retention_delete_traces_bounded", null, workspaceMinIds.size());
+        var logComment = getLogComment("retention_delete_traces_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
         var sb = new StringBuilder("DELETE FROM traces WHERE (");
@@ -4081,7 +4081,7 @@ class TraceDAOImpl implements TraceDAO {
                 workspaceId, rangeStart, rangeEnd);
 
         var template = getSTWithLogComment(SCOUT_FIRST_DAY_WITH_DATA,
-                "retention_scout_first_day", workspaceId, "");
+                "retention_scout_first_day", workspaceId, "", "");
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
