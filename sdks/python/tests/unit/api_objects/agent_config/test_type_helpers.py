@@ -276,17 +276,17 @@ class TestPythonValueToBackendValue:
 
 class TestBackendValueToPythonValue:
     @pytest.mark.parametrize(
-        "value, backend_type, py_type, expected",
+        "value, py_type, expected",
         [
-            ("hello", "string", str, "hello"),
-            ("42", "integer", int, 42),
-            ("42.0", "integer", int, 42),
-            (42, "integer", int, 42),
-            ("0.6", "float", float, 0.6),
-            (0.6, "float", float, 0.6),
-            ("true", "boolean", bool, True),
-            ("false", "boolean", bool, False),
-            (True, "boolean", bool, True),
+            ("hello", str, "hello"),
+            ("42", int, 42),
+            ("42.0", int, 42),
+            (42, int, 42),
+            ("0.6", float, 0.6),
+            (0.6, float, 0.6),
+            ("true", bool, True),
+            ("false", bool, False),
+            (True, bool, True),
         ],
         ids=[
             "str",
@@ -300,13 +300,8 @@ class TestBackendValueToPythonValue:
             "bool_native",
         ],
     )
-    def test_primitives__deserialized_correctly(
-        self, value, backend_type, py_type, expected
-    ):
-        assert (
-            type_helpers.backend_value_to_python_value(value, backend_type, py_type)
-            == expected
-        )
+    def test_primitives__deserialized_correctly(self, value, py_type, expected):
+        assert type_helpers.backend_value_to_python_value(value, py_type) == expected
 
     @pytest.mark.parametrize(
         "value, py_type, expected",
@@ -319,13 +314,10 @@ class TestBackendValueToPythonValue:
         ids=["list_from_json", "list_native", "dict_from_json", "dict_native"],
     )
     def test_collections__deserialized_correctly(self, value, py_type, expected):
-        assert (
-            type_helpers.backend_value_to_python_value(value, "string", py_type)
-            == expected
-        )
+        assert type_helpers.backend_value_to_python_value(value, py_type) == expected
 
     def test_none__returns_none(self):
-        assert type_helpers.backend_value_to_python_value(None, "string", str) is None
+        assert type_helpers.backend_value_to_python_value(None, str) is None
 
     @pytest.mark.parametrize(
         "py_type",
@@ -333,9 +325,7 @@ class TestBackendValueToPythonValue:
         ids=["Prompt", "ChatPrompt", "BasePrompt"],
     )
     def test_prompt_type__returns_raw_version_id_string(self, py_type):
-        result = type_helpers.backend_value_to_python_value(
-            "ver-xyz", "prompt", py_type
-        )
+        result = type_helpers.backend_value_to_python_value("ver-xyz", py_type)
         assert result == "ver-xyz"
 
     @pytest.mark.parametrize(
@@ -344,21 +334,17 @@ class TestBackendValueToPythonValue:
         ids=["Prompt", "ChatPrompt", "BasePrompt"],
     )
     def test_prompt_type__none_value__returns_none(self, py_type):
-        assert (
-            type_helpers.backend_value_to_python_value(None, "prompt", py_type) is None
-        )
+        assert type_helpers.backend_value_to_python_value(None, py_type) is None
 
     def test_prompt_version_type__returns_raw_version_id_string(self):
         result = type_helpers.backend_value_to_python_value(
-            "ver-pv-xyz", "prompt_version", PromptVersionDetail
+            "ver-pv-xyz", PromptVersionDetail
         )
         assert result == "ver-pv-xyz"
 
     def test_prompt_version_type__none_value__returns_none(self):
         assert (
-            type_helpers.backend_value_to_python_value(
-                None, "prompt_version", PromptVersionDetail
-            )
+            type_helpers.backend_value_to_python_value(None, PromptVersionDetail)
             is None
         )
 
@@ -386,11 +372,8 @@ class TestRoundTrip:
         ],
     )
     def test_serialize_then_deserialize__recovers_original(self, value, py_type):
-        backend_type = type_helpers.python_type_to_backend_type(py_type)
         backend_value = type_helpers.python_value_to_backend_value(value, py_type)
-        restored = type_helpers.backend_value_to_python_value(
-            backend_value, backend_type, py_type
-        )
+        restored = type_helpers.backend_value_to_python_value(backend_value, py_type)
         assert restored == value
         assert isinstance(restored, py_type)
 

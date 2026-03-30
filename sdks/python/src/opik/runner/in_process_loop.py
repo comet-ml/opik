@@ -9,7 +9,7 @@ import random
 import signal
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 from ..api_objects import type_helpers
 
@@ -27,32 +27,21 @@ _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
 
-_TYPE_NAME_MAP: Dict[str, type] = {
-    "str": str,
-    "string": str,
-    "int": int,
-    "integer": int,
-    "float": float,
-    "bool": bool,
-    "boolean": bool,
-}
-
-
 def cast_input_value(value: object, type_name: str) -> object:
     """Cast *value* to the native Python type indicated by *type_name*.
 
-    Accepts both Python annotation names (``"str"``, ``"int"``, ``"float"``,
-    ``"bool"``) and backend type names (``"string"``, ``"integer"``,
-    ``"boolean"``).  Complex values (dict, list) are JSON-serialised when the
-    target type is ``"str"``/``"string"``.  ``None`` is always returned
-    unchanged.  Delegates to
-    :func:`opik.api_objects.type_helpers.backend_value_to_python_value`
-    for the actual conversion.
+    *type_name* is a backend type name (``"integer"``, ``"boolean"``,
+    ``"float"``, ``"string"``).  Unknown names are treated as ``"string"``.
+
+    Raises :exc:`TypeError` for values that cannot be safely cast (e.g.
+    ``"3.9"`` for ``"integer"``, or a ``bool`` for ``"integer"``).
+    ``None`` is always returned unchanged.  ``dict``/``list`` values are
+    JSON-serialised when the target type is ``"string"``.
     """
     if value is None:
         return value
 
-    py_type: Any = _TYPE_NAME_MAP.get(type_name)
+    py_type: Any = type_helpers.backend_type_to_python_type(type_name)
     if py_type is None:
         # Unknown type: pass strings through, JSON-serialize complex types, str() otherwise
         if isinstance(value, str):
@@ -66,10 +55,7 @@ def cast_input_value(value: object, type_name: str) -> object:
     if py_type is str and isinstance(value, (dict, list)):
         return json.dumps(value)
 
-    backend_type = type_helpers.python_type_to_backend_type(py_type)
-    return type_helpers.backend_value_to_python_value(
-        value, backend_type=backend_type, py_type=py_type
-    )
+    return type_helpers.backend_value_to_python_value(value, py_type)
 
 
 def _inject_trace_id(inputs: dict, trace_id: str) -> None:

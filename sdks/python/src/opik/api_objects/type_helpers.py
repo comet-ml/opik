@@ -109,7 +109,6 @@ def python_value_to_metadata_value(
 
 def backend_value_to_python_value(
     value: typing.Any,
-    backend_type: str,
     py_type: typing.Any,
 ) -> typing.Any:
     if value is None:
@@ -121,7 +120,17 @@ def backend_value_to_python_value(
         return str(value).lower() == "true"
 
     if py_type is int:
-        return int(float(value)) if not isinstance(value, int) else value
+        if isinstance(value, bool):
+            raise TypeError("Cannot cast bool to int")
+        if isinstance(value, int):
+            return value
+        try:
+            f = float(value)  # type: ignore[arg-type]
+        except (ValueError, TypeError):
+            raise TypeError(f"Cannot cast {value!r} to int")
+        if f != int(f):
+            raise TypeError(f"Cannot cast {value!r} to int: not a whole number")
+        return int(f)
 
     if py_type is float:
         return float(value) if not isinstance(value, float) else value

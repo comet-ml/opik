@@ -47,7 +47,7 @@ def _convert_primitives(
 
         if py_type is not None:
             values[param.key] = type_helpers.backend_value_to_python_value(
-                param.value, param.type, py_type
+                param.value, py_type
             )
         else:
             values[param.key] = param.value
