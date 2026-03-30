@@ -4,15 +4,17 @@ Pytest fixtures for multimodal e2e tests.
 This module ensures the driving_hazard dataset is created once before
 any tests run, allowing parallel test execution.
 """
+from typing import Any, Generator
 
 import pytest
 
 import opik
 import opik_optimizer
+from opik import Dataset
 
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_driving_hazard_dataset(setup_environment) -> opik.Dataset:
+@pytest.fixture(scope="session")
+def setup_driving_hazard_dataset(setup_environment) -> Generator[Dataset, Any, None]:
     """
     Create the driving_hazard dataset before any tests run.
 
