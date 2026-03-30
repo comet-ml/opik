@@ -9,7 +9,7 @@ from .utils import MultiPromptTestAgent
 
 
 @pytest.fixture(scope="session")
-def tiny_dataset() -> Dataset:
+def tiny_dataset(setup_environment) -> Dataset:
     """Shared tiny dataset for e2e optimizer tests."""
     try:
         return opik_optimizer.datasets.tiny_test()
