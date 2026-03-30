@@ -136,7 +136,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_at,
                     last_updated_at,
                     feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'thread'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_id
@@ -156,7 +156,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_at,
                     last_updated_at,
                     author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
                    AND project_id IN :project_id
@@ -267,6 +267,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND project_id = :project_id
                 AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
             ), thread_annotation_queue_ids AS (
@@ -390,6 +391,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
             <endif>
             LIMIT :limit <if(offset)>OFFSET :offset<endif>
+            SETTINGS use_skip_indexes_if_final = 1 
             ;
             """;
 
@@ -457,7 +459,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_at,
                     last_updated_at,
                     feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
@@ -477,7 +479,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_at,
                     last_updated_at,
                     author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
@@ -676,6 +678,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ) AS t
+            SETTINGS use_skip_indexes_if_final = 1
             """;
 
     /***
@@ -691,7 +694,14 @@ class ThreadDAOImpl implements ThreadDAO {
      *  - The creation time of the thread, which is the created_at of the first trace in the list.
      ***/
     private static final String SELECT_TRACES_THREAD_BY_ID = """
-            WITH traces_final AS (
+            WITH traces_ids AS (
+                SELECT
+                    id
+                FROM traces FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id = :thread_id
+            ), traces_final AS (
                 SELECT
                     *,
                     truncated_input,
@@ -699,10 +709,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     input_length,
                     output_length,
                     truncation_threshold
-                FROM traces final
+                FROM traces
                 WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND thread_id = :thread_id
+                AND project_id = :project_id
+                AND id IN (SELECT id FROM traces_ids)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -712,8 +724,17 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
                 GROUP BY workspace_id, project_id, trace_id
+            ), trace_threads_ids AS (
+                SELECT
+                    id as thread_model_id
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id = :thread_id
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -726,10 +747,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_by,
                     created_at,
                     last_updated_at
-                FROM trace_threads final
+                FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id = :thread_id
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -744,11 +767,11 @@ class ThreadDAOImpl implements ThreadDAO {
                        created_at,
                        last_updated_at,
                        feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'thread'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                  AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -764,11 +787,11 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_at,
                     last_updated_at,
                     author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
              ),
              feedback_scores_with_ranking AS (
                  SELECT workspace_id,
@@ -873,8 +896,9 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM comments final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
             )
@@ -975,9 +999,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS error_count
             FROM (
                 WITH traces_final AS (
-                    SELECT
-                        *
-                    FROM traces final
+                    SELECT *
+                    FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND thread_id \\<> ''
@@ -1008,7 +1031,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at
-                    FROM trace_threads final
+                    FROM trace_threads FINAL
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND thread_id IN (SELECT thread_id FROM traces_final)
@@ -1027,7 +1050,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         created_at,
                         last_updated_at,
                         feedback_scores.last_updated_by AS author
-                    FROM feedback_scores FINAL
+                    FROM feedback_scores 
                     WHERE entity_type = 'thread'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_id
@@ -1047,7 +1070,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         created_at,
                         last_updated_at,
                         author
-                    FROM authored_feedback_scores FINAL
+                    FROM authored_feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_id
@@ -1231,6 +1254,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ) AS threads
             GROUP BY threads.workspace_id, threads.project_id
+            SETTINGS use_skip_indexes_if_final = 1
             ;
             """;
 
