@@ -5,7 +5,6 @@ export * as alerts from "./alerts/index.js";
 export * from "./alerts/types/index.js";
 export * from "./annotationQueues/client/requests/index.js";
 export * as annotationQueues from "./annotationQueues/index.js";
-export * as assistantSidebars from "./assistantSidebars/index.js";
 export * from "./attachments/client/requests/index.js";
 export * as attachments from "./attachments/index.js";
 export * from "./attachments/types/index.js";

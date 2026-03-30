@@ -42,8 +42,6 @@ tags:
   description: Alert resources
 - name: Annotation Queues
   description: Private annotation queue operations
-- name: Assistant Sidebars
-  description: Assistant Sidebar configuration
 - name: Attachments
   description: Attachments related resources
 - name: Check
@@ -1046,20 +1044,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/assistant-sidebars/config:
-    get:
-      tags:
-      - Assistant Sidebars
-      summary: Get Assistant Sidebar configuration
-      description: Get CDN configuration for loading the assistant sidebar at runtime
-      operationId: getAssistantSidebarConfig
-      responses:
-        "200":
-          description: Assistant Sidebar config
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AssistantSidebarConfigResponse"
   /v1/private/attachment/list:
     get:
       tags:
@@ -5310,6 +5294,10 @@ paths:
         schema:
           type: string
           description: "Filter projects by name (partial match, case insensitive)"
+      - name: filters
+        in: query
+        schema:
+          type: string
       - name: sorting
         in: query
         schema:
@@ -8940,13 +8928,6 @@ components:
           items:
             minLength: 1
             type: string
-    AssistantSidebarConfigResponse:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-        manifest_url:
-          type: string
     Attachment:
       required:
       - file_name
@@ -9358,9 +9339,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -9803,9 +9784,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10258,9 +10239,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -17579,7 +17560,6 @@ components:
       required:
       - alertsEnabled
       - anthropicProviderEnabled
-      - assistantSidebarEnabled
       - bedrockProviderEnabled
       - collaboratorsTabEnabled
       - csvUploadEnabled
@@ -17646,8 +17626,6 @@ components:
         ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
-          type: boolean
-        assistantSidebarEnabled:
           type: boolean
         forceWorkspaceVersion:
           minLength: 1
