@@ -94,7 +94,7 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
 );
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 

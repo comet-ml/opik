@@ -29,6 +29,7 @@ import DataTableWrapper, {
 import DataTableBody, {
   DataTableBodyProps,
 } from "@/shared/DataTable/DataTableBody";
+import DataTableSkeletonBody from "@/shared/DataTable/DataTableSkeletonBody";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
@@ -40,6 +41,7 @@ import {
 } from "@/types/shared";
 import {
   calculateHeightStyle,
+  computePinnedColumnIds,
   getCommonPinningClasses,
   getCommonPinningStyles,
 } from "@/shared/DataTable/utils";
@@ -141,6 +143,7 @@ interface DataTableProps<TData, TValue> {
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
   >;
   showLoadingOverlay?: boolean;
+  showSkeleton?: boolean;
 }
 
 const DataTable = <TData, TValue>({
@@ -171,6 +174,7 @@ const DataTable = <TData, TValue>({
   meta,
   getSubRows,
   showLoadingOverlay = false,
+  showSkeleton = false,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
   const isRowClickable = isFunction(onRowClick);
@@ -228,6 +232,8 @@ const DataTable = <TData, TValue>({
   });
 
   const rowClickWrapper = useCustomRowClick();
+  const { lastLeftPinnedColumnId, lastRightPinnedColumnId } =
+    computePinnedColumnIds(table);
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
@@ -313,7 +319,7 @@ const DataTable = <TData, TValue>({
     const pinningStyles = getCommonPinningStyles({
       column: cell.column,
       applyStickyWorkaround: stickyBorderWorkaround,
-      table,
+      lastRightPinnedColumnId,
     });
 
     if (cell.getIsGrouped()) {
@@ -325,11 +331,12 @@ const DataTable = <TData, TValue>({
             column: cell.column,
             applyStickyWorkaround: stickyBorderWorkaround,
             forceGroup: true,
-            table,
+            lastRightPinnedColumnId,
           })}
           className={getCommonPinningClasses({
             column: cell.column,
             forceGroup: true,
+            lastLeftPinnedColumnId,
           })}
         >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -360,7 +367,10 @@ const DataTable = <TData, TValue>({
           key={cell.id}
           data-cell-id={cell.id}
           style={pinningStyles}
-          className={getCommonPinningClasses({ column: cell.column })}
+          className={getCommonPinningClasses({
+            column: cell.column,
+            lastLeftPinnedColumnId,
+          })}
         />
       );
     }
@@ -370,7 +380,10 @@ const DataTable = <TData, TValue>({
         key={cell.id}
         data-cell-id={cell.id}
         style={pinningStyles}
-        className={getCommonPinningClasses({ column: cell.column })}
+        className={getCommonPinningClasses({
+          column: cell.column,
+          lastLeftPinnedColumnId,
+        })}
       >
         {flexRender(cell.column.columnDef.cell, cell.getContext())}
       </TableCell>
@@ -394,82 +407,90 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <TableWrapper>
-      <DataTableTooltipContext>
-        <Table
-          ref={tableRef}
-          style={{
-            ...(!autoWidth && { minWidth: table.getTotalSize() }),
-            ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
-          }}
-        >
-          <colgroup>
-            {cols.map((i) => (
-              <col key={i.id} style={{ width: `${i.size}px` }} />
-            ))}
-          </colgroup>
-          <TableHeader
-            className={cn(stickyHeader && "sticky z-10")}
-            {...(stickyHeader && {
-              ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
-            })}
+    <div className={cn(showSkeleton && "mask-fade-to-bottom")}>
+      <TableWrapper>
+        <DataTableTooltipContext>
+          <Table
+            ref={tableRef}
+            className="comet-cell-borders"
+            style={{
+              ...(!autoWidth && { minWidth: table.getTotalSize() }),
+              ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
+            }}
           >
-            {table.getHeaderGroups().map((headerGroup, index, groups) => {
-              const isLastRow = index === groups.length - 1;
+            <colgroup>
+              {cols.map((i) => (
+                <col key={i.id} style={{ width: `${i.size}px` }} />
+              ))}
+            </colgroup>
+            <TableHeader
+              className={cn(stickyHeader && "sticky z-10")}
+              {...(stickyHeader && {
+                ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
+              })}
+            >
+              {table.getHeaderGroups().map((headerGroup, index, groups) => {
+                const isLastRow = index === groups.length - 1;
 
-              return (
-                <TableRow
-                  key={headerGroup.id}
-                  className={cn(
-                    "bg-soft-background",
-                    !isLastRow && "!border-b-0",
-                  )}
-                >
-                  {headerGroup.headers.map((header) => {
-                    return (
-                      <TableHead
-                        key={header.id}
-                        data-header-id={header.id}
-                        style={{
-                          zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
-                          ...getCommonPinningStyles({
+                return (
+                  <TableRow
+                    key={headerGroup.id}
+                    className={cn(
+                      "bg-soft-background",
+                      !isLastRow && "!border-b-0",
+                    )}
+                  >
+                    {headerGroup.headers.map((header) => {
+                      return (
+                        <TableHead
+                          key={header.id}
+                          data-header-id={header.id}
+                          style={{
+                            zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
+                            ...getCommonPinningStyles({
+                              column: header.column,
+                              isHeader: true,
+                              isLastHeaderRow: isLastRow,
+                              lastRightPinnedColumnId,
+                            }),
+                          }}
+                          className={getCommonPinningClasses({
                             column: header.column,
                             isHeader: true,
-                            isLastHeaderRow: isLastRow,
-                            table,
-                          }),
-                        }}
-                        className={getCommonPinningClasses({
-                          column: header.column,
-                          isHeader: true,
-                        })}
-                        colSpan={header.colSpan}
-                      >
-                        {header.isPlaceholder
-                          ? ""
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                        {isResizable ? (
-                          <DataTableColumnResizer header={header} />
-                        ) : null}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              );
-            })}
-          </TableHeader>
-          <TableBody
-            table={table}
-            renderRow={renderRow}
-            renderNoData={renderNoData}
-            showLoadingOverlay={showLoadingOverlay}
-          />
-        </Table>
-      </DataTableTooltipContext>
-    </TableWrapper>
+                            lastLeftPinnedColumnId,
+                          })}
+                          colSpan={header.colSpan}
+                        >
+                          {header.isPlaceholder
+                            ? ""
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                          {isResizable ? (
+                            <DataTableColumnResizer header={header} />
+                          ) : null}
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
+            </TableHeader>
+            {showSkeleton ? (
+              <DataTableSkeletonBody table={table} />
+            ) : (
+              <TableBody
+                table={table}
+                renderRow={renderRow}
+                renderNoData={renderNoData}
+                showLoadingOverlay={showLoadingOverlay}
+              />
+            )}
+          </Table>
+        </DataTableTooltipContext>
+      </TableWrapper>
+    </div>
   );
 };
 

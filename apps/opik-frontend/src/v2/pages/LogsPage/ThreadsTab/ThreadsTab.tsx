@@ -16,10 +16,8 @@ import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
-import {
-  useMetricDateRangeWithQueryAndStorage,
-  MetricDateRangeSelect,
-} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 
 import {
   COLUMN_COMMENTS_ID,
@@ -44,12 +42,12 @@ import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import NoThreadsPage from "@/v2/pages/LogsPage/ThreadsTab/NoThreadsPage";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
+import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
@@ -64,6 +62,7 @@ import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import ThreadsActionsPanel from "@/v2/pages/LogsPage/ThreadsTab/ThreadsActionsPanel";
+import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -92,6 +91,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "input",
+      colorIndicator: true,
     },
   },
   {
@@ -102,6 +102,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "output",
+      colorIndicator: true,
     },
   },
   {
@@ -124,7 +125,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
-    iconType: "tags",
     cell: ListCell as never,
   },
   {
@@ -434,8 +434,24 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
-  const noData = !search && filters.length === 0;
-  const noDataText = noData ? `There are no threads yet` : "No search results";
+  const { data: existenceData } = useThreadList(
+    {
+      projectId,
+      page: 1,
+      size: 1,
+      logsSource: LOGS_SOURCE.sdk,
+    },
+    {
+      enabled: isTableDataEnabled,
+    },
+  );
+  const hasProjectData = (existenceData?.total ?? 0) > 0;
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setFilters([]);
+    setPage(1);
+  }, [setSearch, setFilters, setPage]);
 
   const filtersConfig = useMemo(
     () => ({
@@ -640,62 +656,30 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
 
   const isTableLoading = isPending || isFeedbackScoresNamesPending;
   const showEmptyState =
-    !isTableLoading && noData && rows.length === 0 && page === 1;
+    !isTableLoading && !hasProjectData && rows.length === 0 && page === 1;
 
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4 pb-0"
         direction="bidirectional"
         limitWidth
       >
         <div className="flex items-center gap-2">
           <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
-          <SearchInput
-            searchText={search as string}
-            setSearchText={setSearch}
-            placeholder="Search threads..."
-            className="w-[320px]"
-            dimension="sm"
-          />
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            filters={filters}
-            onChange={setFilters}
-            config={filtersConfig as never}
-            layout="icon"
-          />
         </div>
         <div className="flex items-center gap-2">
-          <ThreadsActionsPanel
-            projectId={projectId}
-            projectName={projectName}
-            getDataForExport={getDataForExport}
-            selectedRows={selectedRows}
-            columnsToExport={columnsToExport}
-          />
-          <Separator orientation="vertical" className="mx-2 h-4" />
           <MetricDateRangeSelect
             value={dateRange}
             onChangeValue={handleDateRangeChange}
             minDate={minDate}
             maxDate={maxDate}
           />
-          <TooltipWrapper content={`Refresh threads list`}>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => {
-                refetch();
-              }}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
+          <Separator orientation="vertical" className="mx-1 h-6" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
+            layout="labeled"
           />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -704,14 +688,68 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
-          ></ColumnsButton>
+            layout="labeled"
+          />
+          <Separator orientation="vertical" className="mx-1 h-6" />
+          <TooltipWrapper content="Refresh threads list">
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                refetch();
+              }}
+            >
+              <RotateCw className="mr-1.5 size-3.5" />
+              Refresh
+            </Button>
+          </TooltipWrapper>
         </div>
       </PageBodyStickyContainer>
+      {selectedRows.length > 0 ? (
+        <SelectionActionBar
+          selectedCount={selectedRows.length}
+          onDeselectAll={() => setRowSelection({})}
+        >
+          <ThreadsActionsPanel
+            projectId={projectId}
+            projectName={projectName}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
+            columnsToExport={columnsToExport}
+            buttonVariant="ghostInverted"
+          />
+        </SelectionActionBar>
+      ) : (
+        <PageBodyStickyContainer
+          className="py-2"
+          direction="bidirectional"
+          limitWidth
+        >
+          <div className="flex h-10 items-center gap-2">
+            <SearchInput
+              searchText={search as string}
+              setSearchText={setSearch}
+              placeholder="Search threads..."
+              className="w-[320px]"
+              dimension="sm"
+            />
+            <FiltersButton
+              columns={FILTER_COLUMNS}
+              filters={filters}
+              onChange={setFilters}
+              config={filtersConfig as never}
+              layout="icon"
+            />
+          </div>
+        </PageBodyStickyContainer>
+      )}
 
       <DataTableStateHandler
         isLoading={isTableLoading}
         isEmpty={showEmptyState}
         emptyState={<NoThreadsPage />}
+        skeleton
       >
         <DataTable
           columns={columns}
@@ -721,6 +759,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           activeRowId={activeRowId ?? ""}
           sortConfig={sortConfig}
           resizeConfig={resizeConfig}
+          showSkeleton={isTableLoading}
           selectionConfig={{
             rowSelection,
             setRowSelection,
@@ -728,14 +767,20 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           getRowId={getRowId}
           rowHeight={height as ROW_HEIGHT}
           columnPinning={DEFAULT_COLUMN_PINNING}
-          noData={<DataTableNoData title={noDataText} />}
+          noData={
+            <DataTableNoMatchingData
+              onClearFilters={
+                search || filters.length > 0 ? handleClearFilters : undefined
+              }
+            />
+          }
           TableWrapper={PageBodyStickyTableWrapper}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}
         />
         <PageBodyStickyContainer
-          className="py-4"
+          className="bottom-0 -mt-px border-t border-border py-2 pb-4"
           direction="horizontal"
           limitWidth
         >

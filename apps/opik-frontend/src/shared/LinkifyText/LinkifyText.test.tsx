@@ -219,8 +219,8 @@ describe("LinkifyText", () => {
         <LinkifyText>{"https://example.com"}</LinkifyText>,
       );
       const link = getLinks(container)[0];
-      expect(link.className).toContain("text-blue-600");
-      expect(link.className).toContain("underline");
+      expect(link.className).toContain("text-foreground");
+      expect(link.className).toContain("border-b");
     });
   });
 
