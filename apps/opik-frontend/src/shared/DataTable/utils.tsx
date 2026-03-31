@@ -56,7 +56,8 @@ export const computePinnedColumnIds = <TData,>(
     if (col.getIsGrouped?.()) continue;
     const pin = col.getIsPinned();
     if (pin === "left") lastLeftPinnedColumnId = col.id;
-    else if (pin === "right") lastRightPinnedColumnId = col.id;
+    else if (pin === "right" && !lastRightPinnedColumnId)
+      lastRightPinnedColumnId = col.id;
   }
 
   return { lastLeftPinnedColumnId, lastRightPinnedColumnId };

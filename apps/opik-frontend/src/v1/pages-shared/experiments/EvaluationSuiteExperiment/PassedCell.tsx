@@ -6,8 +6,7 @@ import VerticallySplitCellWrapper, {
 } from "@/shared/DataTableCells/VerticallySplitCellWrapper";
 import AssertionsBreakdownTooltip from "./AssertionsBreakdownTooltip";
 import { Tag, TagProps } from "@/ui/tag";
-import { ROW_HEIGHT } from "@/types/shared";
-import { TAG_SIZE_MAP } from "@/constants/shared";
+import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import {
   AssertionResult,
   ExperimentItem,
@@ -145,8 +144,7 @@ const PassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
   const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { experimentsIds } = (custom ?? {}) as Partial<CustomMeta>;
-  const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
-  const tagSize = TAG_SIZE_MAP[rowHeight];
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   if (experimentsIds) {
     const renderContent = (
