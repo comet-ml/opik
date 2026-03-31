@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { AlertCircle, FileOutput, Text } from "lucide-react";
 
 import Loader from "@/shared/Loader/Loader";
+import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { SandboxJob, SandboxJobStatus } from "@/types/agent-sandbox";
 
 type AgentRunnerResultProps = {
@@ -9,6 +10,12 @@ type AgentRunnerResultProps = {
 };
 
 const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({ job }) => {
+  const resultData = useMemo((): object | null => {
+    if (job?.result == null) return null;
+    if (typeof job.result === "object") return job.result as object;
+    return { output: job.result };
+  }, [job?.result]);
+
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
@@ -42,13 +49,12 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({ job }) => {
         </div>
       )}
 
-      {job?.status === SandboxJobStatus.COMPLETED && (
+      {job?.status === SandboxJobStatus.COMPLETED && resultData && (
         <div className="py-2">
-          <pre className="comet-body-s whitespace-pre-wrap rounded-md bg-slate-50 p-4">
-            {typeof job.result === "string"
-              ? job.result
-              : JSON.stringify(job.result, null, 2)}
-          </pre>
+          <SyntaxHighlighter
+            data={resultData}
+            prettifyConfig={{ fieldType: "output" }}
+          />
         </div>
       )}
 
