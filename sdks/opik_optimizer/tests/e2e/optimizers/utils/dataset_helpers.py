@@ -9,5 +9,3 @@ def remove_old_datasets(names: list[str]) -> None:
             client.delete_dataset(name)
         except Exception as e:
             print(f"Failed to delete dataset: {name}, ignoring. Reason: {e}")
-
-    client.end()
