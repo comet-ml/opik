@@ -99,7 +99,13 @@ export class EvaluationResultProcessor {
     const metricNames = [...averageScores.keys()].sort();
     const timeFormatted = this.formatTime(totalTime);
 
+    const experimentUrl = await experiment.getUrl();
+
     const content = [
+      chalk.bold.cyan(
+        createLink(experimentUrl, "View results in Opik dashboard")
+      ),
+      "",
       chalk.bold(`Total time:        ${timeFormatted}`),
       chalk.bold(`Number of samples: ${testResults.length}`),
       "",
@@ -122,7 +128,6 @@ export class EvaluationResultProcessor {
     });
 
     logger.info("\n" + boxDisplay + "\n");
-    logger.info(chalk.blue("Uploading results to Opik ... "));
   }
 
   /**
@@ -153,8 +158,6 @@ export class EvaluationResultProcessor {
       averageScores,
       totalTime
     );
-
-    await this.displayExperimentLink(experiment);
 
     // Ensure name is loaded from backend if needed
     const experimentName = await experiment.ensureNameLoaded();

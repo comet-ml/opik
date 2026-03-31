@@ -5,8 +5,10 @@ import { resolveModel } from "@/evaluation/models/modelsFactory";
 import type { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
 import type { LLMJudgeConfig } from "./llmJudgeConfig";
 import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from "./llmJudgeTemplate";
-import { buildResponseSchema, parseResponse } from "./llmJudgeParsers";
+import { ResponseSchema } from "./llmJudgeParsers";
 import { logger } from "@/utils/logger";
+
+const DEFAULT_REASONING_EFFORT = "low";
 
 export interface LLMJudgeOptions {
   assertions: string[];
@@ -16,10 +18,7 @@ export interface LLMJudgeOptions {
   projectName?: string;
   seed?: number;
   temperature?: number;
-}
-
-function formatAssertionsList(assertions: string[]): string {
-  return assertions.map((a, i) => `${i + 1}. ${a}`).join("\n");
+  reasoningEffort?: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -34,6 +33,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
   public readonly modelName: string;
   public readonly seed?: number;
   public readonly temperature?: number;
+  public readonly reasoningEffort: string;
   public readonly projectName?: string;
 
   private readonly model: OpikBaseModel;
@@ -56,6 +56,8 @@ export class LLMJudge extends BaseSuiteEvaluator {
     this.modelName = options.model ?? "gpt-5-nano";
     this.seed = options.seed;
     this.temperature = options.temperature;
+    this.reasoningEffort =
+      options.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
     this.projectName = options.projectName;
 
     this.model = resolveModel(this.modelName, {
@@ -64,11 +66,11 @@ export class LLMJudge extends BaseSuiteEvaluator {
   }
 
   toConfig(): LLMJudgeConfig {
-    const assertionsList = formatAssertionsList(this.assertions);
+    const schema = new ResponseSchema(this.assertions);
 
     const userContent = USER_PROMPT_TEMPLATE.replace(
       "{assertions}",
-      assertionsList
+      schema.formatAssertions()
     );
 
     return {
@@ -80,6 +82,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
           temperature: this.temperature,
         }),
         ...(this.seed !== undefined && { seed: this.seed }),
+        customParameters: { reasoning_effort: this.reasoningEffort },
       },
       messages: [
         { role: "SYSTEM", content: SYSTEM_PROMPT },
@@ -103,6 +106,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
       this.modelName === other.modelName &&
       this.temperature === other.temperature &&
       this.seed === other.seed &&
+      this.reasoningEffort === other.reasoningEffort &&
       this.trackMetric === other.trackMetric
     );
   }
@@ -132,6 +136,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
       model: first.modelName,
       seed: first.seed,
       temperature: first.temperature,
+      reasoningEffort: first.reasoningEffort,
       track: first.trackMetric,
     });
   }
@@ -140,16 +145,26 @@ export class LLMJudge extends BaseSuiteEvaluator {
     config: LLMJudgeConfig | Record<string, unknown>,
     options?: { model?: string; track?: boolean }
   ): LLMJudge {
-    const schema = (config.schema ?? []) as Array<{ name: string }>;
+    const configSchema = (config.schema ?? []) as Array<{ name: string }>;
     const model = asRecord(config.model);
-    const assertions = schema.map((item) => item.name);
+    const assertions = configSchema.map((item) => item.name);
+
+    const customParameters = asRecord(model.customParameters);
+    const reasoningEffort =
+      typeof customParameters.reasoning_effort === "string"
+        ? customParameters.reasoning_effort
+        : undefined;
 
     return new LLMJudge({
       assertions,
       name: typeof config.name === "string" ? config.name : "llm_judge",
-      model: options?.model ?? (typeof model.name === "string" ? model.name : "gpt-5-nano"),
-      temperature: typeof model.temperature === "number" ? model.temperature : undefined,
+      model:
+        options?.model ??
+        (typeof model.name === "string" ? model.name : "gpt-5-nano"),
+      temperature:
+        typeof model.temperature === "number" ? model.temperature : undefined,
       seed: typeof model.seed === "number" ? model.seed : undefined,
+      reasoningEffort,
       track: options?.track ?? true,
     });
   }
@@ -165,13 +180,11 @@ export class LLMJudge extends BaseSuiteEvaluator {
         ? input.output
         : JSON.stringify(input.output ?? "");
 
-    const assertionsList = formatAssertionsList(this.assertions);
+    const schema = new ResponseSchema(this.assertions);
 
     const userContent = USER_PROMPT_TEMPLATE.replace("{input}", inputStr)
       .replace("{output}", outputStr)
-      .replace("{assertions}", assertionsList);
-
-    const responseSchema = buildResponseSchema(this.assertions);
+      .replace("{assertions}", schema.formatAssertions());
 
     try {
       const providerResponse = await this.model.generateProviderResponse(
@@ -184,12 +197,12 @@ export class LLMJudge extends BaseSuiteEvaluator {
             temperature: this.temperature,
           }),
           ...(this.seed !== undefined && { seed: this.seed }),
-          output: Output.object({ schema: responseSchema }),
+          output: Output.object({ schema: schema.responseSchema }),
         }
       );
 
       const parsedOutput = asRecord(asRecord(providerResponse).output);
-      return parseResponse(parsedOutput, this.assertions);
+      return schema.parse(parsedOutput);
     } catch (error) {
       logger.debug(
         `LLMJudge scoring failed: ${error instanceof Error ? error.message : String(error)}`
