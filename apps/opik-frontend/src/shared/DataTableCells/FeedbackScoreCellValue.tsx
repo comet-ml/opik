@@ -15,12 +15,14 @@ const FeedbackScoreCellValue = ({
   color: customColor,
   onValueChange,
   tooltipSuffix,
+  size = "md",
 }: {
   isUserFeedbackColumn?: boolean;
   feedbackScore?: TraceFeedbackScore;
   color?: string;
   onValueChange?: (name: string, value: number) => void;
   tooltipSuffix?: string;
+  size?: "sm" | "md";
 }) => {
   const { getColor } = useWorkspaceColorMap();
   const [openHoverCard, setOpenHoverCard] = useState(false);
@@ -33,11 +35,12 @@ const FeedbackScoreCellValue = ({
   // If no feedback score, show only dash with optional edit button
   if (!feedbackScore) {
     return (
-      <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+      <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-hidden">
         {shouldShowEditDropdown && (
           <FeedbackScoreEditDropdown
             feedbackScore={feedbackScore}
             onValueChange={onValueChange}
+            size={size}
           />
         )}
         <span>-</span>
@@ -63,11 +66,12 @@ const FeedbackScoreCellValue = ({
   const showTooltip = !getIsMultiValueFeedbackScore(valueByAuthor);
 
   return (
-    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+    <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-hidden">
       {shouldShowEditDropdown && (
         <FeedbackScoreEditDropdown
           feedbackScore={feedbackScore}
           onValueChange={onValueChange}
+          size={size}
         />
       )}
       <MultiValueFeedbackScoreHoverCard
@@ -79,12 +83,14 @@ const FeedbackScoreCellValue = ({
         open={openHoverCard}
         onOpenChange={setOpenHoverCard}
       >
-        {showTooltip ? (
+        {showTooltip && size === "sm" ? (
           <TooltipWrapper content={tooltipContent}>
             <div className="truncate">{displayText}</div>
           </TooltipWrapper>
         ) : (
-          <div className="truncate">{displayText}</div>
+          <div className={size === "sm" ? "truncate" : "break-words"}>
+            {displayText}
+          </div>
         )}
       </MultiValueFeedbackScoreHoverCard>
     </div>

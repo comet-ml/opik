@@ -8,8 +8,11 @@ from opik.rest_api.types.local_runner_connect_response import LocalRunnerConnect
 
 
 class TestConnect:
+    @patch("opik.cli.connect.os.execvpe")
     @patch("opik.cli.connect.Opik")
-    def test_connect__with_pair_code__calls_connect_runner(self, mock_opik_cls):
+    def test_connect__with_pair_code__calls_connect_runner(
+        self, mock_opik_cls, mock_execvpe
+    ):
         client = MagicMock()
         api = MagicMock()
         api.runners.connect_runner.return_value = LocalRunnerConnectResponse(
@@ -22,7 +25,7 @@ class TestConnect:
         mock_opik_cls.return_value = client
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["connect", "--pair", "ABCD"])
+        result = runner.invoke(cli, ["connect", "--pair", "ABCD", "echo", "hello"])
         assert result.exit_code == 0
         assert "r-abc" in result.output
 
@@ -56,8 +59,11 @@ class TestConnect:
         assert env["OPIK_RUNNER_ID"] == "r-xyz"
         assert env["OPIK_PROJECT_NAME"] == "proj"
 
+    @patch("opik.cli.connect.os.execvpe")
     @patch("opik.cli.connect.Opik")
-    def test_connect__network_failure__shows_clean_error(self, mock_opik_cls):
+    def test_connect__network_failure__shows_clean_error(
+        self, mock_opik_cls, mock_execvpe
+    ):
         client = MagicMock()
         config = MagicMock()
         config.url_override = "https://api.test"
@@ -70,6 +76,6 @@ class TestConnect:
         mock_opik_cls.return_value = client
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["connect"])
+        result = runner.invoke(cli, ["connect", "echo", "hello"])
         assert result.exit_code != 0
         assert "Could not connect to Opik at https://api.test" in result.output

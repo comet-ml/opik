@@ -94,6 +94,7 @@ export interface Trace extends BaseTraceData {
   visibility_mode?: TRACE_VISIBILITY_MODE;
   span_feedback_scores?: TraceFeedbackScore[];
   experiment?: ExperimentItemReference;
+  source?: LOGS_SOURCE;
 }
 
 export enum SPAN_TYPE {

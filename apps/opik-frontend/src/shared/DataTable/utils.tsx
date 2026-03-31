@@ -11,7 +11,6 @@ import {
 import { ChevronDown, ChevronUp } from "lucide-react";
 import isString from "lodash/isString";
 import get from "lodash/get";
-import last from "lodash/last";
 
 import { Checkbox } from "@/ui/checkbox";
 import { Button } from "@/ui/button";
@@ -21,6 +20,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import Loader from "@/shared/Loader/Loader";
 import {
+  CELL_TEXT_CLASS_MAP,
   ROW_HEIGHT_MAP,
   TABLE_HEADER_Z_INDEX,
   TABLE_ROW_Z_INDEX,
@@ -46,13 +46,30 @@ export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
 };
 
+export const computePinnedColumnIds = <TData,>(
+  table: Table<TData>,
+): { lastLeftPinnedColumnId?: string; lastRightPinnedColumnId?: string } => {
+  let lastLeftPinnedColumnId: string | undefined;
+  let lastRightPinnedColumnId: string | undefined;
+
+  for (const col of table.getVisibleLeafColumns()) {
+    if (col.getIsGrouped?.()) continue;
+    const pin = col.getIsPinned();
+    if (pin === "left") lastLeftPinnedColumnId = col.id;
+    else if (pin === "right" && !lastRightPinnedColumnId)
+      lastRightPinnedColumnId = col.id;
+  }
+
+  return { lastLeftPinnedColumnId, lastRightPinnedColumnId };
+};
+
 export type GetCommonPinningStylesProps<TData> = {
   column: Column<TData>;
   isHeader?: boolean;
   isLastHeaderRow?: boolean;
   applyStickyWorkaround?: boolean;
   forceGroup?: boolean;
-  table: Table<TData>;
+  lastRightPinnedColumnId?: string;
 };
 
 export const getCommonPinningStyles = <TData,>({
@@ -61,7 +78,7 @@ export const getCommonPinningStyles = <TData,>({
   isLastHeaderRow = false,
   applyStickyWorkaround = false,
   forceGroup = false,
-  table,
+  lastRightPinnedColumnId,
 }: GetCommonPinningStylesProps<TData>): CSSProperties => {
   const isPinned = column.getIsPinned();
 
@@ -69,28 +86,16 @@ export const getCommonPinningStyles = <TData,>({
     return {};
   }
 
-  const allColumns = table.getVisibleLeafColumns();
-  const leftPinnedNonGroupedColumns = allColumns.filter(
-    (col) => col.getIsPinned() === "left" && !col.getIsGrouped?.(),
-  );
-  const rightPinnedNonGroupedColumns = allColumns.filter(
-    (col) => col.getIsPinned() === "right" && !col.getIsGrouped?.(),
-  );
-
-  const isLastLeftPinnedNonGroupedColumn =
-    isPinned === "left" && last(leftPinnedNonGroupedColumns)?.id === column.id;
-
   const isFirstRightPinnedNonGroupedColumn =
-    isPinned === "right" &&
-    last(rightPinnedNonGroupedColumns)?.id === column.id;
+    isPinned === "right" && lastRightPinnedColumnId === column.id;
 
   return {
-    boxShadow:
-      isLastLeftPinnedNonGroupedColumn || forceGroup
-        ? "inset -1px 0px 0px 0px hsl(var(--border))"
-        : isFirstRightPinnedNonGroupedColumn
-          ? "inset 1px 0px 0px 0px hsl(var(--border))"
-          : undefined,
+    // Last left-pinned column border is handled via CSS class (comet-pinned-last-left)
+    boxShadow: forceGroup
+      ? "inset -1px 0px 0px 0px hsl(var(--border))"
+      : isFirstRightPinnedNonGroupedColumn
+        ? "inset 1px 0px 0px 0px hsl(var(--border))"
+        : undefined,
     left: forceGroup
       ? 0
       : isPinned === "left"
@@ -110,20 +115,28 @@ export type GetCommonPinningClassesProps<TData> = {
   column: Column<TData>;
   isHeader?: boolean;
   forceGroup?: boolean;
+  lastLeftPinnedColumnId?: string;
 };
 
 export const getCommonPinningClasses = <TData,>({
   column,
   isHeader = false,
   forceGroup = false,
+  lastLeftPinnedColumnId,
 }: GetCommonPinningClassesProps<TData>): string => {
   const isPinned = column.getIsPinned();
 
-  return isPinned || forceGroup
-    ? isHeader
-      ? "bg-soft-background"
-      : "bg-background"
-    : "";
+  if (!isPinned && !forceGroup) return "";
+
+  const isLastLeftPinned =
+    isPinned === "left" && lastLeftPinnedColumnId === column.id;
+
+  return cn(
+    "comet-pinned-cell",
+    isHeader ? "bg-soft-background" : "bg-background",
+    isLastLeftPinned && "comet-pinned-last-left",
+    forceGroup && "comet-grouped-cell",
+  );
 };
 
 const getRowRange = <TData,>(
@@ -195,9 +208,10 @@ export const generateSelectColumDef = <TData,>(meta?: {
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
         supportStatistic={false}
-        className="justify-center !px-0"
+        className="!pl-3 !pr-0"
       >
         <Checkbox
+          variant="muted"
           onClick={(event) => event.stopPropagation()}
           checked={
             context.table.getIsAllPageRowsSelected() ||
@@ -220,10 +234,11 @@ export const generateSelectColumDef = <TData,>(meta?: {
         <CellWrapper
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
-          className={cn("justify-center py-3.5 !px-0", additionalClassName)}
+          className={cn("py-3.5 !pl-3 !pr-0", additionalClassName)}
           stopClickPropagation
         >
           <Checkbox
+            variant="muted"
             checked={context.row.getIsSelected()}
             disabled={!context.row.getCanSelect()}
             onCheckedChange={(value) => context.row.toggleSelected(!!value)}
@@ -364,6 +379,7 @@ export const generateDataRowCellDef = <
           stopClickPropagation
         >
           <Checkbox
+            variant="muted"
             style={{
               marginLeft: `${context.row.depth * 28}px`,
             }}
@@ -401,11 +417,14 @@ export const generateGroupedRowCellDef = <TData, TValue>(
     header: () => "",
     cell: (context: CellContext<TData, TValue>) => {
       const { row, cell } = context;
+      const rowHeight =
+        context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
+      const textClass = CELL_TEXT_CLASS_MAP[rowHeight];
       return (
         <CellWrapper
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
-          className="h-11 items-center p-0 pr-2"
+          className="items-center p-0 pr-2"
           stopClickPropagation
         >
           <div
@@ -413,6 +432,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
             style={{ paddingLeft: `${context.row.depth * 20}px` }}
           >
             <Checkbox
+              variant="muted"
               checked={
                 row.getIsAllSubRowsSelected() ||
                 (row.getIsSomeSelected() && "indeterminate")
@@ -425,7 +445,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
             <Button
               variant="minimal"
               size="sm"
-              className="ml-1.5 pr-1"
+              className={cn("ml-1.5 pr-1", textClass)}
               onClick={(event) => {
                 row.toggleExpanded();
                 event.stopPropagation();

@@ -18,6 +18,8 @@ import {
 } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
+type FeedbackScoreTagSize = "sm" | "md";
+
 type FeedbackScoreTagProps = {
   label: string;
   colorKey?: string;
@@ -31,6 +33,7 @@ type FeedbackScoreTagProps = {
   valueByAuthor?: FeedbackScoreValueByAuthorMap;
   category?: string;
   color?: string;
+  size?: FeedbackScoreTagSize;
 };
 
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
@@ -45,6 +48,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   valueByAuthor,
   category,
   color: customColor,
+  size = "md",
 }) => {
   const [openHoverCard, setOpenHoverCard] = useState(false);
   const { getColor } = useWorkspaceColorMap();
@@ -94,6 +98,9 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   const showFullPrecisionTooltip =
     !isMultiValue && fullPrecisionDisplayValue !== undefined;
 
+  const textClass =
+    size === "sm" ? "comet-body-xs-accented" : "comet-body-s-accented";
+
   // Content that will be wrapped in hover card for multi-value or rendered directly for single value
   const tagContent = (
     <div className="flex max-w-full items-center gap-1.5">
@@ -108,7 +115,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       {/* Label */}
       <div
         data-testid="feedback-score-tag-label"
-        className="comet-body-s-accented min-w-0 truncate text-muted-slate"
+        className={cn(textClass, "min-w-0 truncate text-muted-slate")}
       >
         {label}
       </div>
@@ -121,7 +128,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       >
         <span
           data-testid="feedback-score-tag-value"
-          className="comet-body-s-accented shrink-0"
+          className={cn(textClass, "shrink-0")}
         >
           {displayValue}
         </span>
@@ -133,7 +140,8 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     <div
       data-testid="feedback-score-tag"
       className={cn(
-        "group flex h-6 items-center gap-1.5 rounded-md border border-border pl-2 pr-2 max-w-full",
+        "group flex items-center gap-1.5 rounded-md border border-border pl-2 pr-2 max-w-full",
+        size === "sm" ? "h-4" : "h-6",
         className,
       )}
     >

@@ -3,6 +3,7 @@ import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
+import usePluginsStore from "@/store/PluginsStore";
 import useProjectByName from "@/api/projects/useProjectByName";
 import useTracesList from "@/api/traces/useTracesList";
 import {
@@ -24,6 +25,7 @@ const TRACE_POLL_INTERVAL = 5000;
 
 const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
+  const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const [activeTab, setActiveTab] = useState("install-with-ai");
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<
     string | null
@@ -100,6 +102,7 @@ const ConnectAgentStep: React.FC = () => {
               </span>
             </div>
             <div className="flex gap-2.5">
+              {InviteDevButton && <InviteDevButton size="2xs" />}
               <Button
                 variant="outline"
                 size="2xs"

@@ -8,12 +8,16 @@ type EvaluateButtonProps = {
   isNoRules: boolean;
   disabled: boolean;
   onClick: () => void;
+  buttonVariant?: "outline" | "ghost" | "ghostInverted";
+  label?: string;
 };
 
 const EvaluateButton: React.FunctionComponent<EvaluateButtonProps> = ({
   disabled,
   isNoRules,
   onClick,
+  buttonVariant = "outline",
+  label,
 }) => {
   const {
     permissions: { canUpdateOnlineEvaluationRules },
@@ -35,12 +39,13 @@ const EvaluateButton: React.FunctionComponent<EvaluateButtonProps> = ({
     <TooltipWrapper content={getTooltip()}>
       <div>
         <Button
-          variant="outline"
-          size="icon-sm"
+          variant={buttonVariant}
+          size={label ? "sm" : "icon-sm"}
           onClick={onClick}
           disabled={disabled || noEvaluateOptions}
         >
-          <Brain />
+          <Brain className="size-3.5" />
+          {label && <span className="ml-2">{label}</span>}
         </Button>
       </div>
     </TooltipWrapper>

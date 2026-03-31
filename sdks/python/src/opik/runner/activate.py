@@ -2,6 +2,7 @@
 
 import logging
 import os
+import signal
 import threading
 
 from rich.console import Console
@@ -19,6 +20,18 @@ _started = False
 _lock = threading.Lock()
 
 
+def install_signal_handlers(shutdown_event: threading.Event) -> None:
+    def handler(signum: int, frame: object) -> None:
+        LOGGER.info("Received signal %s, shutting down", signum)
+        shutdown_event.set()
+
+    try:
+        signal.signal(signal.SIGTERM, handler)
+        signal.signal(signal.SIGINT, handler)
+    except ValueError:
+        LOGGER.warning("Cannot install signal handlers outside main thread")
+
+
 def activate_runner() -> None:
     """Start the runner loop in a background thread (non-blocking)."""
     if os.environ.get("OPIK_RUNNER_MODE") != "true":
@@ -30,16 +43,23 @@ def activate_runner() -> None:
             return
         _started = True
 
-    t = threading.Thread(target=_run, daemon=True)
+    shutdown_event = threading.Event()
+    install_signal_handlers(shutdown_event)
+
+    t = threading.Thread(target=_run, args=(shutdown_event,), daemon=True)
     t.start()
 
 
-def _run() -> None:
+def _run(shutdown_event: threading.Event) -> None:
     runner_id = os.environ.get("OPIK_RUNNER_ID", "")
     project_name = os.environ.get("OPIK_PROJECT_NAME", "")
 
     if not runner_id:
-        LOGGER.error("OPIK_RUNNER_ID not set, cannot activate runner")
+        LOGGER.error(
+            "OPIK_RUNNER_ID is not set. "
+            "Do not set OPIK_RUNNER_MODE manually — use 'opik connect' to launch your command: "
+            "opik connect --pair <code> python3 main.py"
+        )
         return
 
     _print_banner(runner_id, project_name)
@@ -64,7 +84,7 @@ def _run() -> None:
         try:
             api.runners.register_agents(runner_id, request={name: _to_payload(entry)})
         except Exception:
-            LOGGER.debug("Failed to register agent '%s'", name, exc_info=True)
+            LOGGER.warn("Failed to register agent '%s'", name, exc_info=True)
 
     registry.on_register(_sync_agent)
 
@@ -77,7 +97,6 @@ def _run() -> None:
 
     LOGGER.info("Runner activated")
 
-    shutdown_event = threading.Event()
     loop = InProcessRunnerLoop(api, runner_id, shutdown_event)
 
     try:

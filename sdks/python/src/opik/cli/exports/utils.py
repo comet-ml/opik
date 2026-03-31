@@ -15,6 +15,21 @@ from opik.api_objects.experiment.experiment_item import ExperimentItemContent
 
 console = Console()
 
+_TRACE_FILE_PREFIX = "trace_"
+
+
+def extract_trace_id_from_filename(trace_file: Path) -> Optional[str]:
+    """Return the trace ID embedded in a ``trace_<uuid>.<ext>`` filename stem.
+
+    Returns ``None`` when the filename does not match the expected pattern or
+    the extracted ID is empty.
+    """
+    stem = trace_file.stem  # e.g. "trace_<uuid>"
+    if not stem.startswith(_TRACE_FILE_PREFIX):
+        return None
+    trace_id = stem[len(_TRACE_FILE_PREFIX) :]
+    return trace_id if trace_id else None
+
 
 def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
     """Check if a name matches the given pattern using simple string matching."""

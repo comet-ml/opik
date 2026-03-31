@@ -17,6 +17,9 @@ from .utils import (
     clean_usage_for_import,
     sort_spans_topologically,
     debug_print,
+    build_import_metadata,
+    _TRACE_IMPORT_FIELDS,
+    _SPAN_IMPORT_FIELDS,
 )
 
 console = Console()
@@ -134,7 +137,11 @@ def import_projects_from_directory(
                             ),
                             input=trace_info.get("input", {}),
                             output=trace_info.get("output", {}),
-                            metadata=trace_info.get("metadata"),
+                            metadata=build_import_metadata(
+                                trace_info,
+                                _TRACE_IMPORT_FIELDS,
+                                trace_info.get("metadata"),
+                            ),
                             tags=trace_info.get("tags"),
                             feedback_scores=feedback_scores,
                             error_info=trace_info.get("error_info"),
@@ -196,7 +203,11 @@ def import_projects_from_directory(
                                 ),
                                 input=span_info.get("input", {}),
                                 output=span_info.get("output", {}),
-                                metadata=span_info.get("metadata"),
+                                metadata=build_import_metadata(
+                                    span_info,
+                                    _SPAN_IMPORT_FIELDS,
+                                    span_info.get("metadata"),
+                                ),
                                 tags=span_info.get("tags"),
                                 usage=usage_data,
                                 feedback_scores=span_feedback_scores,

@@ -6,18 +6,25 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 type ConfigurationVersionTagProps = {
   version: number | string;
   maskId?: string;
+  variant?: "default" | "white";
 };
 
 const ConfigurationVersionTag: React.FC<ConfigurationVersionTagProps> = ({
   version,
   maskId,
+  variant = "default",
 }) => {
   const hasMask = Boolean(maskId);
+
+  const getTagVariant = () => {
+    if (variant === "white") return "white";
+    return hasMask ? "purple" : "gray";
+  };
 
   const tag = (
     <Tag
       className="inline-flex items-center gap-1"
-      variant={hasMask ? "purple" : "gray"}
+      variant={getTagVariant()}
       size="md"
     >
       {hasMask ? (

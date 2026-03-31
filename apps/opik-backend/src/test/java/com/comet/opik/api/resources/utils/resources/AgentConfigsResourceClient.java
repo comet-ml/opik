@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigRemoveValues;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.domain.AgentBlueprint;
 import jakarta.ws.rs.client.Entity;
@@ -20,6 +21,7 @@ public class AgentConfigsResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/agent-configs";
     private static final String BLUEPRINTS_PATH = RESOURCE_PATH + "/blueprints";
+    private static final String REMOVE_KEYS_PATH = BLUEPRINTS_PATH + "/remove-keys";
     private static final String LATEST_BLUEPRINT_PATH = RESOURCE_PATH + "/blueprints/latest/projects/%s";
     private static final String BLUEPRINT_BY_ID_PATH = RESOURCE_PATH + "/blueprints/%s";
     private static final String BLUEPRINT_BY_ENV_PATH = RESOURCE_PATH + "/blueprints/environments/%s/projects/%s";
@@ -69,7 +71,7 @@ public class AgentConfigsResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
-            if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
+            if (expectedStatus == HttpStatus.SC_CREATED) {
                 assertThat(actualResponse.getLocation()).isNotNull();
                 return TestUtils.getIdFromLocation(actualResponse.getLocation());
             }
@@ -262,6 +264,26 @@ public class AgentConfigsResourceClient {
                 .delete()) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public UUID removeConfigKeys(AgentConfigRemoveValues request, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(REMOVE_KEYS_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_CREATED) {
+                assertThat(actualResponse.getLocation()).isNotNull();
+                return TestUtils.getIdFromLocation(actualResponse.getLocation());
+            }
+
+            return null;
         }
     }
 

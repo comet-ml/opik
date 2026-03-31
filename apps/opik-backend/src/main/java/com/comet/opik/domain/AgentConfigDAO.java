@@ -146,7 +146,7 @@ interface AgentConfigDAO {
                 AND valid_to_blueprint_id IS NULL
                 AND `key` IN (<keys>)
             """)
-    void closeValuesForKeys(
+    int closeValuesForKeys(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("valid_to_blueprint_id") UUID validToBlueprintId,

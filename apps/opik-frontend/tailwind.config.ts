@@ -104,6 +104,8 @@ module.exports = {
         "breadcrumb-last": "hsl(var(--breadcrumb-last))",
         "special-button": "var(--special-button)",
         "thread-active": "var(--thread-active)",
+        "selection-bar": "hsl(var(--selection-bar))",
+        "row-selected": "hsl(var(--row-selected))",
 
         /* Info box colors */
         "info-box-bg": "hsl(var(--info-box-bg))",

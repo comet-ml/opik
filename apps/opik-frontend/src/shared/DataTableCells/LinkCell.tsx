@@ -66,7 +66,7 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
               variant="tableLink"
               size="sm"
               className={cn(
-                "block truncate px-0 leading-8",
+                "block h-auto truncate px-0 text-[length:inherit] leading-normal",
                 isDisabled && "cursor-not-allowed opacity-50",
               )}
               onClick={handleClick}
