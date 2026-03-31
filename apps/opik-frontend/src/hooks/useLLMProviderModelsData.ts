@@ -617,6 +617,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemma-3n-e4b-it:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_LYRIA_3_CLIP_PREVIEW,
+      label: "google/lyria-3-clip-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_LYRIA_3_PRO_PREVIEW,
+      label: "google/lyria-3-pro-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GRYPHE_MYTHOMAX_L2_13B,
       label: "gryphe/mythomax-l2-13b",
     },
@@ -1665,6 +1673,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.5-plus-02-15",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS_PREVIEW_FREE,
+      label: "qwen/qwen3.6-plus-preview:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
       label: "qwen/qwq-32b",
     },
@@ -1675,6 +1687,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.REKA_REKA_EDGE,
       label: "reka/reka-edge",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REKAAI_REKA_FLASH_3,
+      label: "rekaai/reka-flash-3",
     },
     {
       value: PROVIDER_MODEL_TYPE.RELACE_RELACE_APPLY_3,
