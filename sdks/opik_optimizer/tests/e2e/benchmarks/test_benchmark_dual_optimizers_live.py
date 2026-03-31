@@ -100,7 +100,6 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
         dataset_name: str | None = None,
         **kwargs: Any,
     ) -> Any:
-        kwargs.pop("test_mode", None)
         return real_tiny_test(
             split=split,
             count=1 if count is None else count,

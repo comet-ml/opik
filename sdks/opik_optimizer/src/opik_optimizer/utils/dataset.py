@@ -186,6 +186,7 @@ def create_dataset_from_records(
     client = opik.Opik()
     dataset = client.get_or_create_dataset(full_name, project_name=project_name)
     existing = dataset.get_items()
+    logger.info("Dataset %s has: %s items in project: %s", full_name, len(existing), project_name)
 
     if existing:
         if len(existing) != expected_size:

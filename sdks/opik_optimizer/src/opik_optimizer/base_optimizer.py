@@ -470,7 +470,7 @@ class BaseOptimizer(ABC):
         # Validate n_samples against evaluation dataset size
         total_items = len(evaluation_dataset.get_items())
         if total_items == 0:
-            raise ValueError("dataset is empty")
+            raise ValueError(f"dataset {evaluation_dataset.name} is empty in project {evaluation_dataset.project_name}")
         if isinstance(n_samples, int) and n_samples > total_items:
             logger.warning(
                 "Requested n_samples (%s) is larger than evaluation dataset size (%s). "
