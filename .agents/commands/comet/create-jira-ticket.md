@@ -135,7 +135,7 @@ mcp_Jira_home_jira_create_issue(
 
 After creating the ticket:
 1. Wait briefly, then use `mcp_Jira_home_jira_get_issue` to check the ticket's status. A Jira automation will move it to **BACKLOG** status automatically.
-2. Once the status is confirmed as **BACKLOG**, use `AskUserQuestion` to ask: "The ticket is now in Backlog. Would you like me to move it to **TO DO**?"
+2. Once the status is confirmed as **BACKLOG**, **you MUST use the `AskUserQuestion` tool** (not inline text) to prompt: "The ticket is now in Backlog. Would you like me to move it to **TO DO**?"
 3. If the user confirms, use `mcp_Jira_home_jira_transition_issue` to move it to "TO DO".
 
 ## Title Prefixes
