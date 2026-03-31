@@ -476,17 +476,21 @@ class TestExportAllExperimentsSemaphore:
                     return_value=(0, 0),
                 ),
             ):
-                exp_exported, exp_skipped, traces_exported, traces_skipped = (
-                    _export_all_experiments(
-                        client=MagicMock(),
-                        workspace_root=workspace_root,
-                        experiments_dir=experiments_dir,
-                        max_results=None,
-                        force=False,
-                        debug=False,
-                        format="json",
-                        max_workers=max_workers,
-                    )
+                (
+                    exp_exported,
+                    exp_skipped,
+                    traces_exported,
+                    traces_skipped,
+                    _had_errors,
+                ) = _export_all_experiments(
+                    client=MagicMock(),
+                    workspace_root=workspace_root,
+                    experiments_dir=experiments_dir,
+                    max_results=None,
+                    force=False,
+                    debug=False,
+                    format="json",
+                    max_workers=max_workers,
                 )
 
         # If the semaphore callback was missing the test would hang before this line.

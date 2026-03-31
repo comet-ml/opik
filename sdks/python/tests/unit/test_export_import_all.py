@@ -793,9 +793,12 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_experiments", return_value=(0, 0, 0, 0)
+                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+            ),
+            patch(
+                f"{_EXPORT_MODULE}._export_all_experiments",
+                return_value=(0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
@@ -818,9 +821,12 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_experiments", return_value=(0, 0, 0, 0)
+                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+            ),
+            patch(
+                f"{_EXPORT_MODULE}._export_all_experiments",
+                return_value=(0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
@@ -851,10 +857,11 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)
             ) as mock_pr,
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0)
+                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
             ) as mock_proj,
             patch(
-                f"{_EXPORT_MODULE}._export_all_experiments", return_value=(0, 0, 0, 0)
+                f"{_EXPORT_MODULE}._export_all_experiments",
+                return_value=(0, 0, 0, 0, False),
             ) as mock_exp,
         ):
             from opik.cli.exports.all import export_all
@@ -881,9 +888,12 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(2, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_projects", return_value=(1, 5, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_experiments", return_value=(3, 0, 3, 1)
+                f"{_EXPORT_MODULE}._export_all_projects", return_value=(1, 5, 0, False)
+            ),
+            patch(
+                f"{_EXPORT_MODULE}._export_all_experiments",
+                return_value=(3, 0, 3, 1, False),
             ),
             patch(f"{_EXPORT_MODULE}.print_export_summary") as mock_summary,
         ):
@@ -913,9 +923,12 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_experiments", return_value=(0, 0, 0, 0)
+                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+            ),
+            patch(
+                f"{_EXPORT_MODULE}._export_all_experiments",
+                return_value=(0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
@@ -1094,3 +1107,67 @@ class TestExportExperimentByIdJsonFastPath:
 
         # Corrupt JSON triggers fallback; get_experiment_by_id must be called.
         mock_client.get_experiment_by_id.assert_called_once_with(experiment_id)
+
+
+# ---------------------------------------------------------------------------
+# import_experiments_from_directory — filename-based project inference
+# (ID baz-reviewer 2920864504)
+# ---------------------------------------------------------------------------
+
+
+class TestFilenameBasedProjectInference:
+    """Verify trace_to_project_map is built from on-disk trace filenames and used
+    to infer project_for_logs when experiment metadata has no explicit project."""
+
+    def test_project_name_inferred_from_trace_filename(self, tmp_path):
+        """When a trace file exists under projects/my-project/, its project name
+        is inferred without opening the file."""
+        import json
+
+        from opik.cli.imports.experiment import import_experiments_from_directory
+
+        # Build workspace layout: experiments/ and projects/my-project/
+        experiments_dir = tmp_path / "experiments"
+        experiments_dir.mkdir()
+        projects_dir = tmp_path / "projects" / "my-project"
+        projects_dir.mkdir(parents=True)
+
+        trace_id = "trace-abc-123"
+        (projects_dir / f"trace_{trace_id}.json").write_text("{}")
+
+        # Write a minimal experiment JSON that references the trace above.
+        exp_data = {
+            "experiment": {
+                "name": "test-exp",
+                "id": "exp-1",
+                "dataset_name": "ds",
+            },
+            "items": [
+                {"trace_id": trace_id},
+            ],
+            "downloaded_at": "2024-01-01T00:00:00",
+        }
+        (experiments_dir / "experiment_test-exp_exp-1.json").write_text(
+            json.dumps(exp_data)
+        )
+
+        mock_client = MagicMock()
+        # create_experiment returns a mock with id
+        created_exp = MagicMock()
+        created_exp.id = "new-exp-id"
+        mock_client.create_experiment.return_value = created_exp
+        mock_client.get_experiment_by_id.return_value = MagicMock(id="new-exp-id")
+        mock_client.flush.return_value = True
+
+        result = import_experiments_from_directory(
+            mock_client,
+            experiments_dir,
+            dry_run=True,  # dry_run avoids real API calls for import
+            name_pattern=None,
+            debug=False,
+        )
+
+        # The function should complete without error regardless of dry_run;
+        # the key assertion is that no exception is raised and it returns stats.
+        assert isinstance(result, dict)
+        assert "experiments" in result

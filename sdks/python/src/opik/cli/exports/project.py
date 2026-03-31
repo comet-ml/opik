@@ -223,7 +223,16 @@ def export_traces(
             # against how many we already have.  If the API reports no more traces
             # than we've already downloaded, every trace is present locally and we
             # can skip scanning the remaining pages entirely.
-            if current_page == 1 and not force and already_downloaded:
+            # Skip this optimisation when a filter is active: api_total then
+            # reflects only filtered traces, while already_downloaded may contain
+            # traces from a prior unfiltered export, making the comparison
+            # unreliable and causing new filtered traces to be silently missed.
+            if (
+                current_page == 1
+                and not force
+                and already_downloaded
+                and not filter_string
+            ):
                 api_total = getattr(trace_page, "total", None)
                 if api_total is not None and api_total <= len(already_downloaded):
                     skipped_count = api_total

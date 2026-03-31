@@ -322,6 +322,7 @@ def export_traces_by_ids(
                         fetch_futures[fetch_future] = trace_id
 
                     batch_filter_skipped = 0
+                    batch_none_count = 0
                     for fetch_future in as_completed(fetch_futures):
                         trace_id = fetch_futures[fetch_future]
                         try:
@@ -338,15 +339,25 @@ def export_traces_by_ids(
                                     trace_data,
                                     project_name,
                                 )
+                            else:
+                                # _fetch_trace_data returns None for unresolvable
+                                # traces (e.g. missing project_id).  Treat as skipped
+                                # rather than failed so manifest.complete() isn't
+                                # permanently blocked by permanently-unresolvable IDs.
+                                skipped_count += 1
+                                batch_none_count += 1
                         except Exception as e:
-                            if debug:
-                                console.print(
-                                    f"[red]Error fetching trace {trace_id}: {e}[/red]"
-                                )
+                            console.print(
+                                f"[red]Error fetching trace {trace_id}: {e}[/red]"
+                            )
 
-                # Count only true fetch failures (not filter-skipped traces)
+                # Count true fetch failures: exclude filter-skipped and unresolvable
+                # (None-result) traces — only actual exceptions are real failures.
                 batch_fetch_failures = (
-                    len(batch_trace_ids) - len(fetched_traces) - batch_filter_skipped
+                    len(batch_trace_ids)
+                    - len(fetched_traces)
+                    - batch_filter_skipped
+                    - batch_none_count
                 )
                 failed_count += batch_fetch_failures
 

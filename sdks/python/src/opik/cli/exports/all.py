@@ -258,21 +258,25 @@ def _export_all_projects(
     format: str,
     max_workers: int = 5,
     filter_string: Optional[str] = None,
-) -> tuple[int, int, int]:
-    """Export all projects in the workspace. Returns (projects_exported, traces_exported, traces_skipped)."""
+) -> tuple[int, int, int, bool]:
+    """Export all projects in the workspace.
+
+    Returns (projects_exported, traces_exported, traces_skipped, had_errors).
+    """
     projects_exported = 0
     traces_exported = 0
     traces_skipped = 0
+    had_errors = False
 
     try:
         all_projects = list(_paginate(client.rest_client.projects.find_projects))
     except Exception as e:
         console.print(f"[red]Error listing projects: {e}[/red]")
-        return 0, 0, 0
+        return 0, 0, 0, True
 
     if not all_projects:
         console.print("[yellow]No projects found.[/yellow]")
-        return 0, 0, 0
+        return 0, 0, 0, False
 
     console.print(f"[blue]Found {len(all_projects)} project(s)[/blue]")
 
@@ -312,12 +316,13 @@ def _export_all_projects(
                     console.print(
                         f"[red]Error exporting project '{project.name}': {e}[/red]"
                     )
+                    had_errors = True
                 finally:
                     progress.update(
                         task, advance=1, description=f"Project: {project.name}"
                     )
 
-    return projects_exported, traces_exported, traces_skipped
+    return projects_exported, traces_exported, traces_skipped, had_errors
 
 
 def _export_all_experiments(
@@ -330,21 +335,25 @@ def _export_all_experiments(
     format: str,
     filter_string: Optional[str] = None,
     max_workers: int = 10,
-) -> tuple[int, int, int, int]:
-    """Export all experiments. Returns (exported, skipped, traces_exported, traces_skipped)."""
+) -> tuple[int, int, int, int, bool]:
+    """Export all experiments.
+
+    Returns (exported, skipped, traces_exported, traces_skipped, had_errors).
+    """
     exported = 0
     skipped = 0
+    had_errors = False
     all_trace_ids: set[str] = set()
 
     try:
         all_experiments = list(_paginate_experiments(client))
     except Exception as e:
         console.print(f"[red]Error listing experiments: {e}[/red]")
-        return 0, 0, 0, 0
+        return 0, 0, 0, 0, True
 
     if not all_experiments:
         console.print("[yellow]No experiments found.[/yellow]")
-        return 0, 0, 0, 0
+        return 0, 0, 0, 0, False
 
     console.print(f"[blue]Found {len(all_experiments)} experiment(s)[/blue]")
 
@@ -400,6 +409,7 @@ def _export_all_experiments(
                     console.print(
                         f"[red]Error exporting experiment '{exp.name}': {e}[/red]"
                     )
+                    had_errors = True
                 finally:
                     progress.update(
                         task, advance=1, description=f"Experiment: {exp.name}"
@@ -417,7 +427,7 @@ def _export_all_experiments(
         filter_string=filter_string,
     )
 
-    return exported, skipped, traces_exported, traces_skipped
+    return exported, skipped, traces_exported, traces_skipped, had_errors
 
 
 def export_all(
@@ -442,6 +452,7 @@ def export_all(
         workspace_root.mkdir(parents=True, exist_ok=True)
 
         total_stats: dict = {}
+        any_errors = False
 
         # Phase 1: Datasets
         if "datasets" in include:
@@ -470,7 +481,7 @@ def export_all(
             console.print("\n[bold blue]--- Exporting Projects ---[/bold blue]")
             projects_dir = workspace_root / "projects"
             projects_dir.mkdir(parents=True, exist_ok=True)
-            proj_exp, tr_exp, tr_skip = _export_all_projects(
+            proj_exp, tr_exp, tr_skip, proj_errors = _export_all_projects(
                 client,
                 projects_dir,
                 max_results,
@@ -483,21 +494,25 @@ def export_all(
             # Accumulate traces (experiments may also add traces below)
             total_stats["traces"] = tr_exp
             total_stats["traces_skipped"] = tr_skip
+            if proj_errors:
+                any_errors = True
 
         # Phase 4: Experiments (related datasets/prompts skipped via file-existence check)
         if "experiments" in include:
             console.print("\n[bold blue]--- Exporting Experiments ---[/bold blue]")
             experiments_dir = workspace_root / "experiments"
             experiments_dir.mkdir(parents=True, exist_ok=True)
-            exp_exp, exp_skip, exp_tr_exp, exp_tr_skip = _export_all_experiments(
-                client,
-                workspace_root,
-                experiments_dir,
-                max_results,
-                force,
-                debug,
-                format,
-                filter_string=filter_string,
+            exp_exp, exp_skip, exp_tr_exp, exp_tr_skip, exp_errors = (
+                _export_all_experiments(
+                    client,
+                    workspace_root,
+                    experiments_dir,
+                    max_results,
+                    force,
+                    debug,
+                    format,
+                    filter_string=filter_string,
+                )
             )
             total_stats["experiments"] = exp_exp
             total_stats["experiments_skipped"] = exp_skip
@@ -506,10 +521,20 @@ def export_all(
             total_stats["traces_skipped"] = (
                 total_stats.get("traces_skipped", 0) + exp_tr_skip
             )
+            if exp_errors:
+                any_errors = True
 
-        console.print("\n[bold green]Export complete.[/bold green]")
+        if any_errors:
+            console.print(
+                "\n[bold yellow]Export completed with errors — "
+                "some projects or experiments could not be exported.[/bold yellow]"
+            )
+        else:
+            console.print("\n[bold green]Export complete.[/bold green]")
         print_export_summary(total_stats, format)
         console.print(f"[green]All data saved to: {workspace_root}[/green]")
+        if any_errors:
+            sys.exit(1)
 
     except Exception as e:
         console.print(f"[red]Error during export all: {e}[/red]")
