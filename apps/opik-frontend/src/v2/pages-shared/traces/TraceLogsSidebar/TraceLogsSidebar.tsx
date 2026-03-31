@@ -11,7 +11,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw, Undo2 } from "lucide-react";
+import { RotateCw, Undo2, X } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -381,29 +381,14 @@ const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
 const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
 const ROW_HEIGHT_KEY_SUFFIX = "row-height";
 
-const SOURCE_LABELS: Record<LOGS_SOURCE, { title: string; backLabel: string }> =
-  {
-    [LOGS_SOURCE.sdk]: { title: "Traces", backLabel: "Back" },
-    [LOGS_SOURCE.experiment]: {
-      title: "Experiment logs",
-      backLabel: "Back to experiment",
-    },
-    [LOGS_SOURCE.playground]: {
-      title: "Playground logs",
-      backLabel: "Back to playground",
-    },
-    [LOGS_SOURCE.optimization]: {
-      title: "Optimization logs",
-      backLabel: "Back to optimization",
-    },
-  };
-
 type TraceLogsSidebarProps = {
   open: boolean;
   onClose: () => void;
   projectId: string;
   projectName?: string;
   logsSource?: LOGS_SOURCE;
+  title?: string;
+  backLabel?: string;
 };
 
 const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
@@ -412,13 +397,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   projectId,
   projectName = "",
   logsSource,
+  title = "Logs",
+  backLabel = "Back",
 }) => {
   const type = TRACE_DATA_TYPE.traces;
   const truncationEnabled = useTruncationEnabled();
-
-  const { title, backLabel } = logsSource
-    ? SOURCE_LABELS[logsSource]
-    : { title: "Traces", backLabel: "Back" };
 
   const {
     dateRange,
@@ -940,10 +923,13 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const sheetHeader = (
     <>
       <SheetTitle className="sr-only">{title}</SheetTitle>
-      <div className="flex items-center border-b px-5 py-3">
+      <div className="flex items-center justify-between border-b px-5 py-3">
         <Button variant="outline" size="2xs" onClick={onClose}>
           <Undo2 className="mr-1 size-3" />
           {backLabel}
+        </Button>
+        <Button variant="ghost" size="icon-sm" onClick={onClose}>
+          <X />
         </Button>
       </div>
     </>
@@ -953,7 +939,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         ref={setSheetContentRef}
-        className="flex w-[calc(100vw-32px)] flex-col sm:max-w-full md:w-[calc(100vw-60px)] xl:w-[calc(100vw-240px)]"
+        className="flex w-screen flex-col shadow-none sm:max-w-full"
         header={sheetHeader}
         onEscapeKeyDown={(e) => {
           if (traceId) {
@@ -963,7 +949,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       >
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="px-6 pb-1 pt-4">
-            <h2 className="comet-title-l">{title}</h2>
+            <h2 className="comet-title-xxs">{title}</h2>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">

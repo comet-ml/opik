@@ -1,6 +1,11 @@
 import React, { useCallback } from "react";
 import { ListTree } from "lucide-react";
-import { BooleanParam, JsonParam, useQueryParam } from "use-query-params";
+import {
+  BooleanParam,
+  JsonParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 
 import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
@@ -13,12 +18,21 @@ type TraceLogsSidebarButtonProps = {
   projectId: string;
   logsSource?: LOGS_SOURCE;
   sourceFilters?: Filter[];
-  variant?: "tag" | "button";
+  variant?: "tag" | "icon";
+  title?: string;
+  backLabel?: string;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
   TraceLogsSidebarButtonProps
-> = ({ projectId, logsSource, sourceFilters, variant = "tag" }) => {
+> = ({
+  projectId,
+  logsSource,
+  sourceFilters,
+  variant = "tag",
+  title,
+  backLabel,
+}) => {
   const [open = false, setOpen] = useQueryParam(
     `${TLS_QUERY_PREFIX}open`,
     BooleanParam,
@@ -29,6 +43,14 @@ const TraceLogsSidebarButton: React.FunctionComponent<
     JsonParam,
     { updateType: "replaceIn" },
   );
+  const [, setTlsTrace] = useQueryParam(
+    `${TLS_QUERY_PREFIX}trace`,
+    StringParam,
+    { updateType: "replaceIn" },
+  );
+  const [, setTlsSpan] = useQueryParam(`${TLS_QUERY_PREFIX}span`, StringParam, {
+    updateType: "replaceIn",
+  });
 
   const handleOpen = useCallback(() => {
     if (sourceFilters?.length) {
@@ -40,16 +62,19 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   const handleClose = useCallback(() => {
     setOpen(undefined);
     setTlsFilters(undefined);
-  }, [setOpen, setTlsFilters]);
+    setTlsTrace(undefined);
+    setTlsSpan(undefined);
+  }, [setOpen, setTlsFilters, setTlsTrace, setTlsSpan]);
 
   const trigger =
-    variant === "button" ? (
-      <Button variant="outline" size="2xs" onClick={handleOpen}>
-        <ListTree className="mr-1.5 size-3" />
-        Go to traces
-      </Button>
+    variant === "icon" ? (
+      <TooltipWrapper content="Go to logs">
+        <Button variant="outline" size="icon-2xs" onClick={handleOpen}>
+          <ListTree />
+        </Button>
+      </TooltipWrapper>
     ) : (
-      <TooltipWrapper content="View traces">
+      <TooltipWrapper content="Go to logs">
         <Tag
           size="md"
           variant="transparent"
@@ -61,7 +86,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
             style={{ color: "var(--color-green)" }}
           />
           <div className="comet-body-s-accented truncate text-muted-slate">
-            Go to traces
+            Go to logs
           </div>
         </Tag>
       </TooltipWrapper>
@@ -75,6 +100,8 @@ const TraceLogsSidebarButton: React.FunctionComponent<
         onClose={handleClose}
         projectId={projectId}
         logsSource={logsSource}
+        title={title}
+        backLabel={backLabel}
       />
     </>
   );

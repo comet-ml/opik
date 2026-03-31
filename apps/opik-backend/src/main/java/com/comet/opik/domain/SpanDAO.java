@@ -1603,7 +1603,7 @@ public class SpanDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
-            var template = getSTWithLogComment(BULK_INSERT, "batch_insert_spans", workspaceId, spans.size())
+            var template = getSTWithLogComment(BULK_INSERT, "batch_insert_spans", workspaceId, userName, spans.size())
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -1693,7 +1693,7 @@ public class SpanDAO {
 
     private Publisher<? extends Result> insert(Span span, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = newInsertTemplate(span, workspaceId);
+            var template = newInsertTemplate(span, workspaceId, userName);
             String inputValue = TruncationUtils.toJsonString(span.input());
             String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
@@ -1774,8 +1774,8 @@ public class SpanDAO {
         });
     }
 
-    private ST newInsertTemplate(Span span, String workspaceId) {
-        var template = getSTWithLogComment(INSERT, "insert_span", workspaceId, "");
+    private ST newInsertTemplate(Span span, String workspaceId, String userName) {
+        var template = getSTWithLogComment(INSERT, "insert_span", workspaceId, userName, "");
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
         Optional.ofNullable(span.ttft())
@@ -1797,7 +1797,7 @@ public class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false, "partial_insert_span",
-                            workspaceId);
+                            workspaceId, userName);
 
                     var statement = connection.createStatement(template.render());
 
@@ -1842,7 +1842,7 @@ public class SpanDAO {
 
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newUpdateTemplate(finalUpdate, UPDATE, isManualCost(existingSpan), "update_span",
-                    workspaceId);
+                    workspaceId, userName);
             var statement = connection.createStatement(template.render());
             statement.bind("id", id);
 
@@ -1925,8 +1925,8 @@ public class SpanDAO {
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
-            String workspaceId) {
-        var template = getSTWithLogComment(sql, queryName, workspaceId, "");
+            String workspaceId, String userName) {
+        var template = getSTWithLogComment(sql, queryName, workspaceId, userName, "");
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
@@ -1978,7 +1978,8 @@ public class SpanDAO {
         log.info("Getting span by id '{}'", id);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(SELECT_ONLY_SPAN_BY_ID, "get_only_span_by_id", workspaceId, "");
+                    var template = getSTWithLogComment(SELECT_ONLY_SPAN_BY_ID, "get_only_span_by_id", workspaceId,
+                            userName, "");
                     var statement = connection.createStatement(template.render())
                             .bind("id", id)
                             .bind("project_id", projectId)
@@ -2004,7 +2005,8 @@ public class SpanDAO {
 
     private Publisher<? extends Result> getPartialById(UUID id, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_span_by_id", workspaceId, "");
+            var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_span_by_id", workspaceId, userName,
+                    "");
             var statement = connection.createStatement(template.render())
                     .bind("id", id)
                     .bind("workspace_id", workspaceId);
@@ -2025,6 +2027,7 @@ public class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_BY_TRACE_IDS, "get_spans_by_trace_ids", workspaceId,
+                            userName,
                             traceIds.size());
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
@@ -2045,11 +2048,12 @@ public class SpanDAO {
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.from(connectionFactory.create())
                     .flatMap(connection -> {
                         var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_SPANS,
-                                "get_target_project_ids_for_spans", workspaceId, ids.size());
+                                "get_target_project_ids_for_spans", workspaceId, userName, ids.size());
 
                         var statement = connection.createStatement(template.render())
                                 .bind("ids", ids.toArray(UUID[]::new));
@@ -2072,10 +2076,12 @@ public class SpanDAO {
         return getTargetProjectIdsForSpans(ids)
                 .flatMapMany(targetProjectIds -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
 
                     return Mono.from(connectionFactory.create())
                             .flatMap(connection -> {
                                 var template = getSTWithLogComment(SELECT_BY_IDS, "get_spans_by_ids", workspaceId,
+                                        userName,
                                         ids.size());
 
                                 if (CollectionUtils.isNotEmpty(targetProjectIds)) {
@@ -2106,7 +2112,7 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId,
+                    var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId, userName,
                             spanIds.size());
 
                     Optional.ofNullable(projectId)
@@ -2268,7 +2274,7 @@ public class SpanDAO {
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
         log.info("Searching spans by '{}'", criteria);
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId);
+            var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId, userName);
 
             if (shouldUseSpanIdPrefilter(criteria, template)) {
                 template.add("span_id_prefilter", true);
@@ -2300,7 +2306,7 @@ public class SpanDAO {
 
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria, "find_spans_by_project_id",
-                    workspaceId);
+                    workspaceId, userName);
             template.add("offset", (page - 1) * size);
 
             template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
@@ -2396,7 +2402,7 @@ public class SpanDAO {
     private Publisher<? extends Result> countTotal(SpanSearchCriteria spanSearchCriteria, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria, "count_spans_by_project_id",
-                    workspaceId);
+                    workspaceId, userName);
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", spanSearchCriteria.projectId())
@@ -2412,8 +2418,8 @@ public class SpanDAO {
     }
 
     private ST newFindTemplate(String query, SpanSearchCriteria spanSearchCriteria, String queryName,
-            String workspaceId) {
-        var template = getSTWithLogComment(query, queryName, workspaceId, "");
+            String workspaceId, String userName) {
+        var template = getSTWithLogComment(query, queryName, workspaceId, userName, "");
         Optional.ofNullable(spanSearchCriteria.traceId())
                 .ifPresent(traceId -> template.add("trace_id", traceId));
         Optional.ofNullable(spanSearchCriteria.type())
@@ -2492,7 +2498,7 @@ public class SpanDAO {
             return Mono.just(List.of());
         }
 
-        var template = getSTWithLogComment(SELECT_SPAN_ID_AND_WORKSPACE, "get_span_workspace", "", spanIds.size());
+        var template = getSTWithLogComment(SELECT_SPAN_ID_AND_WORKSPACE, "get_span_workspace", "", "", spanIds.size());
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
@@ -2515,7 +2521,7 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
 
                     var template = getSTWithLogComment(SELECT_PROJECT_ID_FROM_SPAN, "get_project_id_from_span",
-                            workspaceId, "");
+                            workspaceId, userName, "");
 
                     var statement = connection.createStatement(template.render())
                             .bind("id", spanId)
@@ -2532,7 +2538,8 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = newFindTemplate(SELECT_SPANS_STATS, searchCriteria, "get_span_stats", workspaceId);
+                    var template = newFindTemplate(SELECT_SPANS_STATS, searchCriteria, "get_span_stats", workspaceId,
+                            userName);
 
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", searchCriteria.projectId())
@@ -2558,7 +2565,7 @@ public class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_SPAN_IDS_BY_TRACE_ID, "get_span_ids_by_trace_ids",
-                            workspaceId, traceIds.size());
+                            workspaceId, userName, traceIds.size());
 
                     Optional.ofNullable(projectId)
                             .ifPresent(id -> template.add("project_id", id));
@@ -2582,7 +2589,7 @@ public class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        var template = getSTWithLogComment(SPAN_COUNT_BY_WORKSPACE_ID, "count_spans_per_workspace", "", "");
+        var template = getSTWithLogComment(SPAN_COUNT_BY_WORKSPACE_ID, "count_spans_per_workspace", "", "", "");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2618,7 +2625,7 @@ public class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        var template = getSTWithLogComment(SPAN_DAILY_BI_INFORMATION, "get_span_bi_information", "", "");
+        var template = getSTWithLogComment(SPAN_DAILY_BI_INFORMATION, "get_span_bi_information", "", "", "");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2679,7 +2686,7 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, workspaceId);
+                    var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, workspaceId, userName);
                     var query = template.render();
 
                     var statement = connection.createStatement(query)
@@ -2698,8 +2705,9 @@ public class SpanDAO {
                 .doOnSuccess(__ -> log.info("Completed bulk update for '{}' spans", ids.size()));
     }
 
-    private ST newBulkUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean mergeTags, String workspaceId) {
-        var template = getSTWithLogComment(sql, "bulk_update_spans", workspaceId, "");
+    private ST newBulkUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean mergeTags, String workspaceId,
+            String userName) {
+        var template = getSTWithLogComment(sql, "bulk_update_spans", workspaceId, userName, "");
 
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
@@ -2815,7 +2823,7 @@ public class SpanDAO {
         log.info("Retention delete spans: workspaces='{}', cutoffId='{}', lowerBound='{}'",
                 workspaceIds.size(), cutoffId, lowerBound);
 
-        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null,
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null, "",
                 workspaceIds.size());
 
         return Mono.from(connectionFactory.create())
@@ -2842,7 +2850,7 @@ public class SpanDAO {
             return Mono.just(0L);
         }
 
-        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_spans", null,
+        var template = getSTWithLogComment(COUNT_FOR_RETENTION, "retention_count_spans", null, "",
                 workspaceIds.size());
 
         return Mono.from(connectionFactory.create())
@@ -2867,7 +2875,7 @@ public class SpanDAO {
 
         log.info("Retention delete spans (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
-        var logComment = getLogComment("retention_delete_spans_bounded", null, workspaceMinIds.size());
+        var logComment = getLogComment("retention_delete_spans_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
         var sb = new StringBuilder("DELETE FROM spans WHERE (");
@@ -2921,7 +2929,7 @@ public class SpanDAO {
         log.debug("Estimating retention velocity for workspace '{}'", workspaceId);
 
         var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
-                "retention_estimate_velocity", workspaceId, "");
+                "retention_estimate_velocity", workspaceId, "", "");
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
