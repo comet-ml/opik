@@ -102,7 +102,7 @@ const ConnectAgentStep: React.FC = () => {
               </span>
             </div>
             <div className="flex gap-2.5">
-              {InviteDevButton && <InviteDevButton />}
+              {InviteDevButton && <InviteDevButton size="2xs" />}
               <Button
                 variant="outline"
                 size="2xs"
