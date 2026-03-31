@@ -35,7 +35,6 @@ vi.mock("@/store/AppStore", () => ({
       activeWorkspaceName: "test-workspace",
       activeProjectId: "test-project-id",
     }),
-  useActiveProjectId: () => "test-project-id",
 }));
 
 interface MockLinkProps {
@@ -59,7 +58,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 describe("ReturnToAnnotationQueueButton", () => {
   const defaultContextValue = {
-    annotationQueue: { id: "queue-123" },
+    annotationQueue: { id: "queue-123", project_id: "test-project-id" },
     hasAnyUnsavedChanges: false,
   };
 
