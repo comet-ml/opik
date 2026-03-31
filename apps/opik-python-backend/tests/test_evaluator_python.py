@@ -228,6 +228,7 @@ DATA = {
             USER_DEFINED_METRIC,
             [
                 {
+                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_equals_metric',
                     "reason": None,
@@ -241,6 +242,7 @@ DATA = {
             USER_DEFINED_METRIC,
             [
                 {
+                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_equals_metric',
                     "reason": None,
@@ -254,6 +256,7 @@ DATA = {
             LIST_RESPONSE_METRIC,
             [
                 {
+                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_list_equals_metric',
                     "reason": None,
@@ -261,6 +264,7 @@ DATA = {
                     "value": 1.0
                 },
                 {
+                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_list_equals_metric',
                     "reason": None,
