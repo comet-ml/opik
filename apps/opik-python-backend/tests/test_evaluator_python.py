@@ -228,7 +228,6 @@ DATA = {
             USER_DEFINED_METRIC,
             [
                 {
-                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_equals_metric',
                     "reason": None,
@@ -242,7 +241,6 @@ DATA = {
             USER_DEFINED_METRIC,
             [
                 {
-                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_equals_metric',
                     "reason": None,
@@ -256,7 +254,6 @@ DATA = {
             LIST_RESPONSE_METRIC,
             [
                 {
-                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_list_equals_metric',
                     "reason": None,
@@ -264,7 +261,6 @@ DATA = {
                     "value": 1.0
                 },
                 {
-                    "category_name": None,
                     "metadata": None,
                     "name": 'user_defined_list_equals_metric',
                     "reason": None,
@@ -281,7 +277,9 @@ def test_success(client, data, code, expected):
     })
 
     assert response.status_code == 200
-    assert response.json['scores'] == expected
+    scores = response.json['scores']
+    assert all(s.get('category_name') is None for s in scores)
+    assert [{k: v for k, v in s.items() if k != 'category_name'} for s in scores] == expected
 
 
 def test_options_method_returns_ok(client):
