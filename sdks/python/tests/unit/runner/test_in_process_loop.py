@@ -173,7 +173,6 @@ class TestJobExecution:
         loop.run_until_complete(lp._execute_job(job))
         loop.close()
 
-        mock_api.runners.report_job_result.assert_called_once()
         call_kwargs = mock_api.runners.report_job_result.call_args[1]
         assert call_kwargs["status"] == "completed"
 
@@ -316,6 +315,56 @@ class TestJobExecution:
         assert captured_kwargs["opik_args"]["trace"]["tags"] == ["existing"]
         assert captured_kwargs["opik_args"]["span"]["metadata"] == {"k": "v"}
 
+    def test_execute_job__reports_running_before_function__running_precedes_func_and_completed(
+        self, mock_api, shutdown_event
+    ):
+        call_order = []
+
+        def my_agent(**kwargs):
+            call_order.append("func")
+            return "ok"
+
+        def track_report(job_id, *, status, **kwargs):
+            call_order.append(status)
+
+        mock_api.runners.report_job_result.side_effect = track_report
+
+        registry.register("my_agent", my_agent, "proj", [], "")
+
+        lp = in_process_loop.InProcessRunnerLoop(mock_api, "r-1", shutdown_event)
+        job = LocalRunnerJob(id="j-1", agent_name="my_agent", inputs={})
+
+        aio_loop = asyncio.new_event_loop()
+        aio_loop.run_until_complete(lp._execute_job(job))
+        aio_loop.close()
+
+        assert call_order == ["running", "func", "completed"]
+
+    def test_execute_job__running_report__uses_same_generated_trace_id_as_completed(
+        self, mock_api, shutdown_event
+    ):
+        def my_agent(**kwargs):
+            return "ok"
+
+        registry.register("my_agent", my_agent, "proj", [], "")
+
+        lp = in_process_loop.InProcessRunnerLoop(mock_api, "r-1", shutdown_event)
+        job = LocalRunnerJob(id="j-1", agent_name="my_agent", inputs={})
+
+        aio_loop = asyncio.new_event_loop()
+        aio_loop.run_until_complete(lp._execute_job(job))
+        aio_loop.close()
+
+        calls = mock_api.runners.report_job_result.call_args_list
+        assert len(calls) == 2
+        running_kwargs = calls[0][1]
+        completed_kwargs = calls[1][1]
+        assert running_kwargs["status"] == "running"
+        assert completed_kwargs["status"] == "completed"
+        # Both calls share the same generated trace_id
+        assert running_kwargs["trace_id"] == completed_kwargs["trace_id"]
+        assert len(running_kwargs["trace_id"]) > 0
+
     def test_execute_job__report_failure__does_not_raise(
         self, mock_api, shutdown_event
     ):
@@ -338,7 +387,8 @@ class TestJobExecution:
         loop.run_until_complete(lp._execute_job(job))
         loop.close()
 
-        mock_api.runners.report_job_result.assert_called_once()
+        # All report calls go through _safe_report_job_result — failures are swallowed.
+        assert mock_api.runners.report_job_result.call_count == 2
 
 
 class TestInjectTraceId:
