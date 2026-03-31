@@ -24,6 +24,7 @@ import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
 import com.comet.opik.api.runner.LocalRunnerPairResponse;
+import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -418,6 +419,35 @@ class LocalRunnersResourceTest {
             LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId1, 0, 25, ctx.apiKey, ctx.workspace);
             assertThat(page.content()).hasSize(1);
             assertThat(page.content().get(0).id()).isEqualTo(runner1);
+        }
+
+        @Test
+        void filtersByStatus() throws InterruptedException {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId1 = createProject(ctx.apiKey, ctx.workspace);
+            UUID projectId2 = createProject(ctx.apiKey, ctx.workspace);
+            UUID connectedRunner = connectRunnerWithPairing("connected-runner", projectId1, ctx.apiKey, ctx.workspace);
+            UUID disconnectedRunner = connectRunnerWithPairing("disconnected-runner", projectId2, ctx.apiKey,
+                    ctx.workspace);
+            waitForHeartbeatExpiry();
+            runnersClient.heartbeat(connectedRunner, ctx.apiKey, ctx.workspace);
+
+            LocalRunner.LocalRunnerPage connectedPage = runnersClient.listRunners(projectId1,
+                    LocalRunnerStatus.CONNECTED, 0, 25, ctx.apiKey, ctx.workspace);
+            assertThat(connectedPage.content()).hasSize(1);
+            assertThat(connectedPage.content().getFirst().id()).isEqualTo(connectedRunner);
+            assertThat(connectedPage.total()).isEqualTo(1);
+
+            LocalRunner.LocalRunnerPage disconnectedPage = runnersClient.listRunners(projectId2,
+                    LocalRunnerStatus.DISCONNECTED, 0, 25, ctx.apiKey, ctx.workspace);
+            assertThat(disconnectedPage.content()).hasSize(1);
+            assertThat(disconnectedPage.content().getFirst().id()).isEqualTo(disconnectedRunner);
+            assertThat(disconnectedPage.total()).isEqualTo(1);
+
+            LocalRunner.LocalRunnerPage noMatch = runnersClient.listRunners(projectId1,
+                    LocalRunnerStatus.DISCONNECTED, 0, 25, ctx.apiKey, ctx.workspace);
+            assertThat(noMatch.content()).isEmpty();
+            assertThat(noMatch.total()).isEqualTo(0);
         }
 
         @Test

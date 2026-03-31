@@ -59,7 +59,8 @@ public interface LocalRunnerService {
 
     LocalRunnerConnectResponse connect(String workspaceId, String userName, LocalRunnerConnectRequest request);
 
-    LocalRunner.LocalRunnerPage listRunners(String workspaceId, String userName, UUID projectId, int page, int size);
+    LocalRunner.LocalRunnerPage listRunners(String workspaceId, String userName, UUID projectId,
+            LocalRunnerStatus status, int page, int size);
 
     LocalRunner getRunner(String workspaceId, String userName, UUID runnerId);
 
@@ -247,7 +248,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
     @Override
     public LocalRunner.LocalRunnerPage listRunners(@NonNull String workspaceId, @NonNull String userName,
-            @NonNull UUID projectId, int page, int size) {
+            @NonNull UUID projectId, LocalRunnerStatus status, int page, int size) {
         RSet<String> projectRunnerIds = redisClient.getSet(
                 projectRunnersKey(workspaceId, projectId));
         var projectIds = projectRunnerIds.readAll();
@@ -258,9 +259,17 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
         List<String> matchedIds = new ArrayList<>();
         for (String runnerIdStr : allUserIds) {
-            if (projectIds.contains(runnerIdStr)) {
-                matchedIds.add(runnerIdStr);
+            if (!projectIds.contains(runnerIdStr)) {
+                continue;
             }
+            if (status != null) {
+                UUID runnerId = UUID.fromString(runnerIdStr);
+                LocalRunnerStatus resolvedStatus = resolveStatus(runnerId);
+                if (resolvedStatus != status) {
+                    continue;
+                }
+            }
+            matchedIds.add(runnerIdStr);
         }
 
         int total = matchedIds.size();
@@ -270,7 +279,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         List<LocalRunner> runners = new ArrayList<>();
         for (String runnerIdStr : matchedIds.subList(fromIndex, toIndex)) {
             UUID runnerId = UUID.fromString(runnerIdStr);
-            LocalRunner runner = loadRunner(runnerId, workspaceId);
+            LocalRunner runner = loadRunner(runnerId, workspaceId, status);
             if (runner != null) {
                 runners.add(runner);
             }
@@ -970,7 +979,20 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         }
     }
 
+    private LocalRunnerStatus resolveStatus(UUID runnerId) {
+        RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId));
+        String storedStatus = runnerMap.get(FIELD_STATUS);
+        if (LocalRunnerStatus.PAIRING.getValue().equals(storedStatus)) {
+            return LocalRunnerStatus.PAIRING;
+        }
+        return isRunnerAlive(runnerId) ? LocalRunnerStatus.CONNECTED : LocalRunnerStatus.DISCONNECTED;
+    }
+
     private LocalRunner loadRunner(UUID runnerId, String workspaceId) {
+        return loadRunner(runnerId, workspaceId, null);
+    }
+
+    private LocalRunner loadRunner(UUID runnerId, String workspaceId, LocalRunnerStatus preResolvedStatus) {
         RMap<String, String> runnerMap = redisClient.getMap(
                 runnerKey(runnerId));
         Map<String, String> fields = runnerMap.readAllMap();
@@ -984,12 +1006,16 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             return null;
         }
 
-        String storedStatus = fields.get(FIELD_STATUS);
         LocalRunnerStatus status;
-        if (LocalRunnerStatus.PAIRING.getValue().equals(storedStatus)) {
-            status = LocalRunnerStatus.PAIRING;
+        if (preResolvedStatus != null) {
+            status = preResolvedStatus;
         } else {
-            status = isRunnerAlive(runnerId) ? LocalRunnerStatus.CONNECTED : LocalRunnerStatus.DISCONNECTED;
+            String storedStatus = fields.get(FIELD_STATUS);
+            if (LocalRunnerStatus.PAIRING.getValue().equals(storedStatus)) {
+                status = LocalRunnerStatus.PAIRING;
+            } else {
+                status = isRunnerAlive(runnerId) ? LocalRunnerStatus.CONNECTED : LocalRunnerStatus.DISCONNECTED;
+            }
         }
 
         List<LocalRunner.Agent> agents = List.of();
