@@ -4,6 +4,7 @@ from typing import Optional
 
 import click
 
+from .all import export_all_command
 from .dataset import export_dataset_command
 from .experiment import export_experiment_command
 from .prompt import export_prompt_command
@@ -34,6 +35,7 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Data Types (ITEM):
+        all          Export everything: datasets, prompts, projects, and experiments
         dataset      Export a dataset by exact name (exports dataset definition and items)
         project      Export a project by name or ID (exports project traces and metadata)
         experiment   Export an experiment by name or ID (exports experiment configuration and results)
@@ -49,6 +51,12 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Examples:
+        # Export everything in the workspace
+        opik export my-workspace all
+
+        # Export only datasets and prompts
+        opik export my-workspace all --include datasets,prompts
+
         # Export a specific dataset
         opik export my-workspace dataset "my-dataset"
 
@@ -72,13 +80,14 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
     # If no subcommand was invoked, show helpful error
     if ctx.invoked_subcommand is None:
         available_items = ", ".join(
-            sorted(["dataset", "experiment", "prompt", "project"])
+            sorted(["all", "dataset", "experiment", "prompt", "project"])
         )
         click.echo(
             f"Error: Missing ITEM.\n\n"
             f"Available items: {available_items}\n\n"
             f"Usage: opik export {workspace} ITEM NAME [OPTIONS]\n\n"
             f"Examples:\n"
+            f"  opik export {workspace} all\n"
             f'  opik export {workspace} dataset "my-dataset"\n'
             f'  opik export {workspace} project "my-project"\n'
             f'  opik export {workspace} experiment "my-experiment"\n'
@@ -125,6 +134,7 @@ setattr(
 
 
 # Add the subcommands
+export_group.add_command(export_all_command)
 export_group.add_command(export_dataset_command)
 export_group.add_command(export_experiment_command)
 export_group.add_command(export_prompt_command)

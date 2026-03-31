@@ -10,6 +10,7 @@ from rich.console import Console
 import opik
 
 from ..migration_manifest import MigrationManifest
+from .all import import_all_command
 from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
@@ -222,6 +223,7 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Data Types:
+        all         Import everything: datasets, prompts, projects, and experiments
         project     Import projects from path/projects/ (default: opik_exports)
         dataset     Import datasets from path/datasets/ (default: opik_exports)
         experiment  Import experiments from path/experiments/ (default: opik_exports)
@@ -236,6 +238,12 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Examples:
+        # Import everything in the workspace
+        opik import my-workspace all
+
+        # Preview what would be imported
+        opik import my-workspace all --dry-run
+
         # Preview an experiment that would be imported
         opik import my-workspace experiment "my-experiment" --dry-run
 
@@ -295,6 +303,9 @@ setattr(
     "format_commands",
     format_commands.__get__(import_group, type(import_group)),
 )
+
+# Add the "all" subcommand (defined in all.py, registered here to avoid circular imports)
+import_group.add_command(import_all_command)
 
 
 @import_group.command(name="dataset")
