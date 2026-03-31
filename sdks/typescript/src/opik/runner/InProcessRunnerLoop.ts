@@ -98,6 +98,8 @@ export class InProcessRunnerLoop {
     this.pollTick(1_000);
   }
 
+  private pollFailures = 0;
+
   private pollTick(backoff: number): void {
     if (this.shutdownRequested) return;
 
@@ -107,15 +109,23 @@ export class InProcessRunnerLoop {
       let nextBackoff = backoff;
       try {
         const job = await this.api.runners.nextJob(this.runnerId);
+        this.pollFailures = 0;
         nextBackoff = 1_000;
         this.spawnJob(job);
       } catch (err) {
         if (err instanceof OpikApiError && err.statusCode === 204) {
+          this.pollFailures = 0;
           nextBackoff = 1_000;
           this.scheduleNextPoll(POLL_IDLE_INTERVAL_MS, nextBackoff);
           return;
         }
-        logger.debug("Poll error", { error: err });
+        this.pollFailures++;
+        if (this.pollFailures === 1) {
+          const statusCode = err instanceof OpikApiError ? err.statusCode : undefined;
+          logger.warn("Unable to reach Opik server" + (statusCode ? ` (API ${statusCode})` : "") + ". Retrying...", { error: err });
+        } else {
+          logger.debug("Poll error", { error: err });
+        }
         const wait = this.jitteredBackoff(nextBackoff);
         nextBackoff = Math.min(nextBackoff * 2, this.backoffCapMs);
         this.scheduleNextPoll(wait, nextBackoff);
@@ -126,7 +136,12 @@ export class InProcessRunnerLoop {
     };
 
     execute().catch((err) => {
-      logger.debug("Poll tick error", { error: err });
+      this.pollFailures++;
+      if (this.pollFailures === 1) {
+        logger.warn("Unable to reach Opik server. Retrying...", { error: err });
+      } else {
+        logger.debug("Poll tick error", { error: err });
+      }
       this.scheduleNextPoll(
         this.jitteredBackoff(backoff),
         Math.min(backoff * 2, this.backoffCapMs)
@@ -155,6 +170,7 @@ export class InProcessRunnerLoop {
     const agentName = job.agentName ?? "";
 
     if (this.cancelledJobs.has(jobId)) {
+      logger.debug(`Skipping cancelled job ${jobId}`);
       this.cancelledJobs.delete(jobId);
       return;
     }
@@ -185,15 +201,16 @@ export class InProcessRunnerLoop {
       await flushAll().catch(() => {});
       await this.sendJobLogs(jobId);
 
+      const timeout = job.timeout;
       const errorMessage =
         err instanceof TimeoutError
-          ? "Job timed out"
+          ? `Job timed out after ${timeout}s`
           : err instanceof Error
             ? `${err.name}: ${err.message}`
             : String(err);
 
       if (err instanceof TimeoutError) {
-        logger.warn(`Job ${jobId} timed out`);
+        logger.warn(`Job ${jobId} timed out after ${timeout}s`);
       } else {
         logger.error(`Job ${jobId} failed: ${errorMessage}`);
       }
@@ -258,7 +275,7 @@ export class InProcessRunnerLoop {
     try {
       await this.api.runners.reportJobResult(jobId, payload);
     } catch (err) {
-      logger.debug(`Failed to report result for job ${jobId}`, { error: err });
+      logger.warn(`Failed to report result for job ${jobId}`, { error: err });
     }
   }
 
