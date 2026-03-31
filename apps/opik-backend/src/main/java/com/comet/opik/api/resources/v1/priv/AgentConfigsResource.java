@@ -2,9 +2,9 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AgentConfigCreate;
-import com.comet.opik.api.AgentConfigDeleteValues;
 import com.comet.opik.api.AgentConfigEnvSetByName;
 import com.comet.opik.api.AgentConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigRemoveValues;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentConfig;
@@ -87,32 +87,38 @@ public class AgentConfigsResource {
     }
 
     @POST
-    @Path("/blueprints/delete-keys")
-    @JsonView(AgentConfig.View.Write.class)
-    @Operation(operationId = "deleteConfigValues", summary = "Delete configuration parameters", description = "Deletes configuration parameters by creating a new blueprint that closes the specified keys. Fails if the project has no config.", responses = {
-            @ApiResponse(responseCode = "204", description = "Configuration parameters deleted", headers = {
+    @Path("/blueprints/remove-keys")
+    @Operation(operationId = "removeConfigKeys", summary = "Remove configuration parameters", description = "Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
-            @ApiResponse(responseCode = "404", description = "Not Found (no config for project)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "204", description = "No changes needed (no config or keys already removed)"),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    public Response deleteConfigValues(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigDeleteValues.class))) @NotNull @Valid AgentConfigDeleteValues request,
+    public Response removeConfigKeys(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigRemoveValues.class))) @NotNull @Valid AgentConfigRemoveValues request,
             @Context UriInfo uriInfo) {
 
-        log.info("Deleting config values for project '{}'", request.projectName());
+        String projectIdentifier = request.projectId() != null
+                ? request.projectId().toString()
+                : request.projectName();
+        log.info("Removing config keys for project '{}'", projectIdentifier);
 
-        AgentBlueprint blueprint = agentConfigService.deleteConfigValues(request).block();
+        AgentBlueprint blueprint = agentConfigService.removeConfigKeys(request).block();
 
-        log.info("Deleted config values, created blueprint '{}' for project '{}'", blueprint.id(),
-                request.projectName());
+        if (blueprint == null) {
+            log.info("No config keys to remove for project '{}'", projectIdentifier);
+            return Response.noContent().build();
+        }
+
+        log.info("Removed config keys, created blueprint '{}' for project '{}'", blueprint.id(),
+                projectIdentifier);
 
         URI location = uriInfo.getBaseUriBuilder()
                 .path("v1/private/agent-configs/blueprints")
                 .path(blueprint.id().toString())
                 .build();
 
-        return Response.noContent()
-                .location(location)
+        return Response.created(location)
                 .build();
     }
 
@@ -120,7 +126,7 @@ public class AgentConfigsResource {
     @Path("/blueprints")
     @JsonView(AgentConfig.View.Write.class)
     @Operation(operationId = "updateAgentConfig", summary = "Add blueprint to existing config", description = "Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.", responses = {
-            @ApiResponse(responseCode = "204", description = "Blueprint added", headers = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "404", description = "Not Found (no config for project)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
@@ -139,8 +145,7 @@ public class AgentConfigsResource {
                 .path(blueprint.id().toString())
                 .build();
 
-        return Response.noContent()
-                .location(location)
+        return Response.created(location)
                 .build();
     }
 

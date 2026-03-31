@@ -1,8 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentConfigCreate;
-import com.comet.opik.api.AgentConfigDeleteValues;
 import com.comet.opik.api.AgentConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigRemoveValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.validation.HasProjectIdentifier;
@@ -41,7 +41,7 @@ public interface AgentConfigService {
 
     Mono<AgentBlueprint> updateConfig(AgentConfigCreate request);
 
-    Mono<AgentBlueprint> deleteConfigValues(AgentConfigDeleteValues request);
+    Mono<AgentBlueprint> removeConfigKeys(AgentConfigRemoveValues request);
 
     AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId);
 
@@ -136,7 +136,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         log.info("Updating optimizer config for workspace '{}'", workspaceId);
 
-        return resolveProjectId(request, workspaceId, userName)
+        return resolveExistingProjectId(request, workspaceId)
                 .flatMap(projectId -> lockService.executeWithLock(
                         new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
                         Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
@@ -157,13 +157,13 @@ class AgentConfigServiceImpl implements AgentConfigService {
     }
 
     @Override
-    public Mono<AgentBlueprint> deleteConfigValues(@NonNull AgentConfigDeleteValues request) {
+    public Mono<AgentBlueprint> removeConfigKeys(@NonNull AgentConfigRemoveValues request) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
         log.info("Deleting config values for workspace '{}'", workspaceId);
 
-        return resolveProjectId(request, workspaceId, userName)
+        return resolveExistingProjectId(request, workspaceId)
                 .flatMap(projectId -> lockService.executeWithLock(
                         new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
                         Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
@@ -171,19 +171,21 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             AgentConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
                             if (existingConfig == null) {
-                                throw new ClientErrorException(Response.status(Response.Status.NOT_FOUND)
-                                        .entity(new ErrorMessage(List.of(
-                                                "No config found for project '%s'. Use POST to create one first."
-                                                        .formatted(projectId))))
-                                        .build());
+                                return null;
+                            }
+
+                            UUID blueprintId = idGenerator.generateId();
+
+                            int closed = dao.closeValuesForKeys(workspaceId, projectId, blueprintId,
+                                    List.copyOf(request.keys()));
+
+                            if (closed == 0) {
+                                return null;
                             }
 
                             String name = generateNextBlueprintName(dao, workspaceId, projectId);
-                            UUID blueprintId = idGenerator.generateId();
-                            String description = "Deleted configuration parameters: %s".formatted(request.keys());
-
-                            dao.closeValuesForKeys(workspaceId, projectId, blueprintId,
-                                    List.copyOf(request.keys()));
+                            String description = "Deleted configuration parameters: %s"
+                                    .formatted(request.keys().stream().sorted().toList());
 
                             dao.insertBlueprint(
                                     blueprintId,
@@ -220,6 +222,21 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return projectService.getOrCreate(projectName)
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .map(Project::id);
+    }
+
+    private Mono<UUID> resolveExistingProjectId(HasProjectIdentifier request, String workspaceId) {
+        if (request.projectId() != null) {
+            return Mono.fromCallable(() -> {
+                projectService.get(request.projectId(), workspaceId);
+                return request.projectId();
+            }).subscribeOn(Schedulers.boundedElastic());
+        }
+
+        String projectName = WorkspaceUtils.getProjectName(request.projectName());
+
+        return Mono.fromCallable(() -> projectService.findProjectIdByName(workspaceId, projectName)
+                .orElseThrow(() -> new NotFoundException("Project '%s' not found".formatted(projectName))))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private AgentBlueprint createBlueprint(
