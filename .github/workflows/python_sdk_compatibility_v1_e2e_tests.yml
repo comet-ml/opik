@@ -33,7 +33,7 @@ env:
 jobs:
     run-compatibility-v1-e2e:
         name: Python SDK Compatibility V1.x E2E Tests ${{matrix.python_version}}
-        runs-on: ubuntu-latest-m
+        runs-on: ubuntu-latest
         timeout-minutes: 30
         strategy:
             fail-fast: false
