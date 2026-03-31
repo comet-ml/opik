@@ -8,7 +8,10 @@ import useSandboxPairCode from "@/api/agent-sandbox/useSandboxPairCode";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
 import useSandboxCreateJobMutation from "@/api/agent-sandbox/useSandboxCreateJobMutation";
 import useSandboxJobStatus from "@/api/agent-sandbox/useSandboxJobStatus";
-import { SandboxConnectionStatus } from "@/types/agent-sandbox";
+import {
+  SandboxConnectionStatus,
+  SandboxJobStatus,
+} from "@/types/agent-sandbox";
 import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
 import AgentRunnerResult from "./AgentRunnerResult";
@@ -158,8 +161,16 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           </div>
 
           {/* Right panel - Trajectory */}
-          <div className="w-2/5 shrink-0 overflow-y-auto border-l p-6">
-            <AgentRunnerExecutionPanel jobId={activeJobId} />
+          <div className="w-2/5 shrink-0 overflow-y-auto border-l">
+            <AgentRunnerExecutionPanel
+              traceId={jobData?.trace_id ?? null}
+              projectId={projectId}
+              isJobRunning={
+                jobData?.status === SandboxJobStatus.RUNNING ||
+                jobData?.status === SandboxJobStatus.PENDING
+              }
+              hasJob={!!activeJobId}
+            />
           </div>
         </div>
       ) : (

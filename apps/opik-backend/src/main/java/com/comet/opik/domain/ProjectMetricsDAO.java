@@ -1527,7 +1527,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             EntityType entityType, String feedbackScoreName) {
         return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var stTemplate = getSTWithLogComment(GET_AVERAGE_FEEDBACK_SCORE, "get_average_feedback_score", workspaceId,
-                    feedbackScoreName);
+                    userName, feedbackScoreName);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -1683,7 +1683,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             Instant endTime, @NonNull String segmentName, @NonNull String rowName) {
         return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var stTemplate = getSTWithLogComment(query, ALERT_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
-                    projectIds != null ? projectIds.size() : 0);
+                    userName, projectIds != null ? projectIds.size() : 0);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -1733,7 +1733,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             var isTotal = request.interval() == TimeInterval.TOTAL;
             var template = getSTWithLogComment(query, PROJECT_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
-                    projectId.toString());
+                    userName, projectId.toString());
 
             if (isTotal) {
                 template.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");
@@ -1900,7 +1900,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId) {
         return template.nonTransaction(connection -> {
             var stTemplate = getSTWithLogComment(GET_PROJECT_TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
-                    workspaceId, projectId.toString());
+                    workspaceId, "", projectId.toString());
 
             var statement = connection.createStatement(stTemplate.render())
                     .bind("project_id", projectId)
