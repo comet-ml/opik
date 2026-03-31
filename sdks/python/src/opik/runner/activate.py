@@ -55,7 +55,11 @@ def _run(shutdown_event: threading.Event) -> None:
     project_name = os.environ.get("OPIK_PROJECT_NAME", "")
 
     if not runner_id:
-        LOGGER.error("OPIK_RUNNER_ID not set, cannot activate runner")
+        LOGGER.error(
+            "OPIK_RUNNER_ID is not set. "
+            "Do not set OPIK_RUNNER_MODE manually — use 'opik connect' to launch your command: "
+            "opik connect --pair <code> python3 main.py"
+        )
         return
 
     _print_banner(runner_id, project_name)
@@ -80,7 +84,7 @@ def _run(shutdown_event: threading.Event) -> None:
         try:
             api.runners.register_agents(runner_id, request={name: _to_payload(entry)})
         except Exception:
-            LOGGER.debug("Failed to register agent '%s'", name, exc_info=True)
+            LOGGER.warn("Failed to register agent '%s'", name, exc_info=True)
 
     registry.on_register(_sync_agent)
 
