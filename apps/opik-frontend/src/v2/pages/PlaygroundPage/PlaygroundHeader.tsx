@@ -337,28 +337,32 @@ const PlaygroundHeader = ({
       >
         <div className="flex items-center gap-2">
           <h1 className="comet-title-xs">Playground</h1>
-          {activeProjectId && (
-            <TraceLogsSidebarButton
-              projectId={activeProjectId}
-              logsSource={LOGS_SOURCE.playground}
-              variant="button"
-            />
-          )}
         </div>
         <div className="flex items-center gap-2">
           {renderExperimentChipOrButton()}
           {renderRunButton()}
-          <Button
-            variant="ghost"
-            size="2xs"
-            onClick={() => {
-              resetKeyRef.current += 1;
-              setResetDialogOpen(true);
-            }}
-          >
-            <RotateCcw className="mr-2 size-3.5" />
-            Reset
-          </Button>
+          <Separator orientation="vertical" className="h-5" />
+          <TooltipWrapper content="Reset playground">
+            <Button
+              variant="outline"
+              size="icon-2xs"
+              onClick={() => {
+                resetKeyRef.current += 1;
+                setResetDialogOpen(true);
+              }}
+            >
+              <RotateCcw />
+            </Button>
+          </TooltipWrapper>
+          {activeProjectId && (
+            <TraceLogsSidebarButton
+              projectId={activeProjectId}
+              logsSource={LOGS_SOURCE.playground}
+              variant="icon"
+              title="Playground logs"
+              backLabel="Back to playground"
+            />
+          )}
         </div>
       </div>
 
