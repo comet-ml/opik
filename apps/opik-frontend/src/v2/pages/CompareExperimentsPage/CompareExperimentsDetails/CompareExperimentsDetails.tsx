@@ -119,11 +119,13 @@ const CompareExperimentsDetails: React.FunctionComponent<
               resource={RESOURCE_TYPE.prompt}
             />
           )}
-        {!isCompare && experiment?.project_id && (
+        {experiment?.project_id && (
           <TraceLogsSidebarButton
             projectId={experiment.project_id}
             logsSource={LOGS_SOURCE.experiment}
             sourceFilters={experimentSourceFilters}
+            title="Experiment logs"
+            backLabel={isCompare ? "Back to compare" : "Back to experiment"}
           />
         )}
         {!isCompare &&

@@ -114,3 +114,6 @@ response.txt
 
 # Generated diagrams (local artifacts from /share-diagram command)
 /diagrams/
+
+# Figma screenshots (local reference images)
+/figma_screenshots/

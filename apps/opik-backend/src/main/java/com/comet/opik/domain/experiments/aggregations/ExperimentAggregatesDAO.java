@@ -1567,7 +1567,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private Mono<ExperimentData> getExperimentData(UUID experimentId) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(GET_EXPERIMENT_DATA,
-                    "getExperimentData", workspaceId, experimentId.toString());
+                    "getExperimentData", workspaceId, userName, experimentId.toString());
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1581,7 +1581,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private Mono<UUID> getProjectId(UUID experimentId) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(GET_PROJECT_ID,
-                    "getProjectId", workspaceId, experimentId.toString());
+                    "getProjectId", workspaceId, userName, experimentId.toString());
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1629,7 +1629,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             UUID projectId,
             Function<Row, T> rowMapper) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(query, logName, workspaceId, experimentId.toString());
+            var template = getSTWithLogComment(query, logName, workspaceId, userName, experimentId.toString());
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1644,7 +1644,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private Mono<Long> getExperimentItemsCount(UUID experimentId) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(GET_EXPERIMENT_ITEMS_COUNT,
-                    "getExperimentItemsCount", workspaceId, experimentId.toString());
+                    "getExperimentItemsCount", workspaceId, userName, experimentId.toString());
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1668,7 +1668,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
             var template = getSTWithLogComment(INSERT_EXPERIMENT_AGGREGATE,
-                    "insertExperimentAggregate", experimentData.workspaceId(), experimentData.id().toString());
+                    "insertExperimentAggregate", experimentData.workspaceId(), "", experimentData.id().toString());
 
             // Convert Maps to key/value arrays for ClickHouse mapFromArrays
             var experimentScoresArrays = mapToArrays(
@@ -1758,7 +1758,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             UUID cursor, int limit) {
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(GET_EXPERIMENT_ITEMS,
-                    "getExperimentItems", workspaceId, experimentId.toString())
+                    "getExperimentItems", workspaceId, userName, experimentId.toString())
                     .add("cursor", cursor != null);
 
             var statement = connection.createStatement(template.render())
@@ -1801,7 +1801,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Function<Row, T> rowMapper) {
 
         return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(sqlTemplate, methodName, workspaceId, experimentId.toString())
+            var template = getSTWithLogComment(sqlTemplate, methodName, workspaceId, "", experimentId.toString())
                     .add("cursor", cursor != null);
 
             var statement = connection.createStatement(template.render())
@@ -1999,7 +1999,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
                 var template = getSTWithLogComment(INSERT_EXPERIMENT_ITEM_AGGREGATE,
-                        "insertExperimentItemAggregate", workspaceId, items.size())
+                        "insertExperimentItemAggregate", workspaceId, userName, items.size())
                         .add("items", queryItems);
 
                 var statement = connection.createStatement(template.render())
@@ -2140,7 +2140,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             return asyncTemplate.nonTransaction(connection -> {
 
                 var template = getSTWithLogComment(SELECT_EXPERIMENT_BY_ID,
-                        "getExperimentFromAggregates", workspaceId, experimentId.toString());
+                        "getExperimentFromAggregates", workspaceId, "", experimentId.toString());
 
                 var statement = connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
@@ -2415,7 +2415,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     private ST buildCountTemplate(ExperimentSearchCriteria criteria, String workspaceId) {
         var template = getSTWithLogComment(FIND_COUNT_FROM_AGGREGATES, "count_experiments_from_aggregates",
-                workspaceId, "");
+                workspaceId, "", "");
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -2560,6 +2560,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT,
                     "count_dataset_items_from_aggregates",
                     workspaceId,
+                    userName,
                     criteria.datasetId().toString());
 
             applyDatasetItemFiltersToTemplate(template, criteria);
@@ -2591,6 +2592,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS,
                     "get_dataset_items_from_aggregates",
                     workspaceId,
+                    userName,
                     criteria.datasetId().toString());
 
             applyDatasetItemFiltersToTemplate(template, criteria);
@@ -2640,7 +2642,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String workspaceId) {
-        var template = getSTWithLogComment(query, "find_groups_from_aggregates", workspaceId, "");
+        var template = getSTWithLogComment(query, "find_groups_from_aggregates", workspaceId, "", "");
         ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
         return template;
@@ -2654,7 +2656,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             List<ExperimentsComparisonFilter> filters) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_EXPERIMENT_ITEMS_STATS_FROM_AGGREGATES,
-                    "getExperimentItemsStatsFromAggregates", workspaceId, datasetId);
+                    "getExperimentItemsStatsFromAggregates", workspaceId, userName, datasetId);
 
             // Apply filters to template
             FilterQueryBuilder.applyFiltersToTemplate(template, filters,
@@ -2685,7 +2687,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             var template = getSTWithLogComment(SELECT_EXPERIMENT_AGGREGATION_COUNTS,
-                    "get_aggregation_branch_counts", workspaceId, criteria.datasetId());
+                    "get_aggregation_branch_counts", workspaceId, "", criteria.datasetId());
 
             Optional.ofNullable(criteria.experimentIds())
                     .filter(CollectionUtils::isNotEmpty)

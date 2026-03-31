@@ -894,7 +894,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     @Override
     public Mono<Boolean> hasVersion1Optimizations(@NonNull String workspaceId) {
         var template = DatabaseUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
-                "has_version1_optimizations", workspaceId, "");
+                "has_version1_optimizations", workspaceId, "", "");
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
