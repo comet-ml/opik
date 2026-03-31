@@ -963,13 +963,17 @@ div.cm-theme div.cm-search.cm-panel {
   opacity: 0.2;
 }
 
-/* Dashboard widget resize handle styles */
-.react-grid-item > .react-resizable-handle::after {
-  border-color: hsl(var(--light-slate)) !important;
-  transition: border-color 0.2s ease-in-out;
+/* Dashboard widget resize handle styles — visible on hover only */
+.react-grid-item > .react-resizable-handle {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
 }
 
-.react-grid-item:hover > .react-resizable-handle::after {
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
   border-color: hsl(var(--muted-slate)) !important;
 }
 
