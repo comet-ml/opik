@@ -1,9 +1,11 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigDeleteValues;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.validation.HasProjectIdentifier;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
@@ -38,6 +40,8 @@ public interface AgentConfigService {
     Mono<AgentBlueprint> createConfig(AgentConfigCreate request);
 
     Mono<AgentBlueprint> updateConfig(AgentConfigCreate request);
+
+    Mono<AgentBlueprint> deleteConfigValues(AgentConfigDeleteValues request);
 
     AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId);
 
@@ -152,7 +156,58 @@ class AgentConfigServiceImpl implements AgentConfigService {
                         })).subscribeOn(Schedulers.boundedElastic())));
     }
 
-    private Mono<UUID> resolveProjectId(AgentConfigCreate request, String workspaceId, String userName) {
+    @Override
+    public Mono<AgentBlueprint> deleteConfigValues(@NonNull AgentConfigDeleteValues request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Deleting config values for workspace '{}'", workspaceId);
+
+        return resolveProjectId(request, workspaceId, userName)
+                .flatMap(projectId -> lockService.executeWithLock(
+                        new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
+                        Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
+                            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
+
+                            AgentConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
+                            if (existingConfig == null) {
+                                throw new ClientErrorException(Response.status(Response.Status.NOT_FOUND)
+                                        .entity(new ErrorMessage(List.of(
+                                                "No config found for project '%s'. Use POST to create one first."
+                                                        .formatted(projectId))))
+                                        .build());
+                            }
+
+                            String name = generateNextBlueprintName(dao, workspaceId, projectId);
+                            UUID blueprintId = idGenerator.generateId();
+                            String description = "Deleted configuration parameters: %s".formatted(request.keys());
+
+                            dao.closeValuesForKeys(workspaceId, projectId, blueprintId,
+                                    List.copyOf(request.keys()));
+
+                            dao.insertBlueprint(
+                                    blueprintId,
+                                    workspaceId,
+                                    projectId,
+                                    existingConfig.id(),
+                                    AgentBlueprint.BlueprintType.BLUEPRINT,
+                                    name,
+                                    description,
+                                    userName,
+                                    userName);
+
+                            return AgentBlueprint.builder()
+                                    .id(blueprintId)
+                                    .name(name)
+                                    .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                                    .description(description)
+                                    .createdBy(userName)
+                                    .lastUpdatedBy(userName)
+                                    .build();
+                        })).subscribeOn(Schedulers.boundedElastic())));
+    }
+
+    private Mono<UUID> resolveProjectId(HasProjectIdentifier request, String workspaceId, String userName) {
         if (request.projectId() != null) {
             return Mono.fromCallable(() -> {
                 projectService.get(request.projectId(), workspaceId);

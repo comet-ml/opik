@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigDeleteValues;
 import com.comet.opik.api.AgentConfigEnvSetByName;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
@@ -82,6 +83,36 @@ public class AgentConfigsResource {
 
         return Response.created(location)
                 .entity(createdBlueprint)
+                .build();
+    }
+
+    @POST
+    @Path("/blueprints/delete-keys")
+    @JsonView(AgentConfig.View.Write.class)
+    @Operation(operationId = "deleteConfigValues", summary = "Delete configuration parameters", description = "Deletes configuration parameters by creating a new blueprint that closes the specified keys. Fails if the project has no config.", responses = {
+            @ApiResponse(responseCode = "204", description = "Configuration parameters deleted", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "404", description = "Not Found (no config for project)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response deleteConfigValues(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigDeleteValues.class))) @NotNull @Valid AgentConfigDeleteValues request,
+            @Context UriInfo uriInfo) {
+
+        log.info("Deleting config values for project '{}'", request.projectName());
+
+        AgentBlueprint blueprint = agentConfigService.deleteConfigValues(request).block();
+
+        log.info("Deleted config values, created blueprint '{}' for project '{}'", blueprint.id(),
+                request.projectName());
+
+        URI location = uriInfo.getBaseUriBuilder()
+                .path("v1/private/agent-configs/blueprints")
+                .path(blueprint.id().toString())
+                .build();
+
+        return Response.noContent()
+                .location(location)
                 .build();
     }
 

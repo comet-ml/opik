@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigDeleteValues;
 import com.comet.opik.api.AgentConfigEnvSetByName;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
@@ -1850,6 +1851,102 @@ class AgentConfigsResourceTest {
 
             agentConfigsResourceClient.deleteEnv("staging", projectId, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Config Values:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteConfigValues {
+
+        @Test
+        @DisplayName("Success: should delete config values and create new blueprint")
+        void deleteConfigValues() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var values = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("stream").value("true").type(ValueType.BOOLEAN).build());
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(values)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var deleteBlueprintId = agentConfigsResourceClient.deleteConfigValues(
+                    AgentConfigDeleteValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model", "temperature"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(deleteBlueprintId).isNotNull();
+
+            var latest = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(latest.values()).hasSize(1);
+            assertThat(latest.values().getFirst().key()).isEqualTo("stream");
+            assertThat(latest.values().getFirst().value()).isEqualTo("true");
+            assertThat(latest.values().getFirst().type()).isEqualTo(ValueType.BOOLEAN);
+
+            assertThat(latest.name()).isEqualTo("v2");
+        }
+
+        @Test
+        @DisplayName("Success: should delete all config values")
+        void deleteConfigValues__whenAllKeysDeleted() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var values = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build());
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(values)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.deleteConfigValues(
+                    AgentConfigDeleteValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model", "temperature"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var latest = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(latest.values()).isEmpty();
+            assertThat(latest.name()).isEqualTo("v2");
+            assertThat(latest.description()).contains("Deleted configuration parameters");
+        }
+
+        @Test
+        @DisplayName("when no config exists, then return 404")
+        void deleteConfigValues__whenNoConfig__thenReturn404() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            agentConfigsResourceClient.deleteConfigValues(
+                    AgentConfigDeleteValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
         }
     }
 }
