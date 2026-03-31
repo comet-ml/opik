@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer.api_objects.types import MetricFunction
-from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
-from tests.unit.fixtures.builders import make_mock_dataset
+from ..fixtures.base_optimizer_test_helpers import ConcreteOptimizer
+from ..fixtures.builders import make_mock_dataset
 
 
 def _make_sequential_dataset(
@@ -184,7 +184,7 @@ class TestSetupOptimizationDatasetsAndSamples:
         mock_opik_client()
         empty_ds = make_mock_dataset([], name="empty", dataset_id="ds-empty")
 
-        with pytest.raises(ValueError, match="dataset is empty"):
+        with pytest.raises(ValueError, match=r"dataset: .+ is empty in project: .+"):
             optimizer._setup_optimization(
                 prompt=simple_chat_prompt,
                 dataset=empty_ds,
