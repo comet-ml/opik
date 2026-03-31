@@ -33,7 +33,7 @@ jobs:
       contents: read
       checks: write
       pull-requests: write
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
