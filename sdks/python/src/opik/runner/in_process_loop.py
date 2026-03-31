@@ -81,20 +81,38 @@ class InProcessRunnerLoop:
 
     def _poll_loop(self) -> None:
         backoff = 1.0
+        _poll_failures = 0
 
         while not self._shutdown_event.is_set():
             try:
                 job = self._api.runners.next_job(self._runner_id)
+                _poll_failures = 0
             except ApiError as e:
                 if e.status_code == 204:
                     job = None
+                    _poll_failures = 0
                 else:
-                    LOGGER.debug("Poll error (API %s)", e.status_code, exc_info=True)
+                    _poll_failures += 1
+                    if _poll_failures == 1:
+                        LOGGER.warning(
+                            "Unable to reach Opik server (API %s). Retrying...",
+                            e.status_code,
+                        )
+                    else:
+                        LOGGER.debug(
+                            "Poll error (API %s)", e.status_code, exc_info=True
+                        )
                     self._backoff_wait(backoff)
                     backoff = min(backoff * 2, self._backoff_cap_seconds)
                     continue
             except Exception:
-                LOGGER.debug("Error polling for jobs", exc_info=True)
+                _poll_failures += 1
+                if _poll_failures == 1:
+                    LOGGER.warning(
+                        "Unable to reach Opik server. Retrying...", exc_info=True
+                    )
+                else:
+                    LOGGER.debug("Error polling for jobs", exc_info=True)
                 self._backoff_wait(backoff)
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
@@ -168,6 +186,7 @@ class InProcessRunnerLoop:
 
         with self._lock:
             if job_id in self._cancelled_jobs:
+                LOGGER.debug("Skipping cancelled job %s", job_id)
                 del self._cancelled_jobs[job_id]
                 return
 
@@ -233,11 +252,11 @@ class InProcessRunnerLoop:
                 trace_id=trace_id,
             )
         except asyncio.TimeoutError:
-            LOGGER.warning("Job %s timed out", job_id)
+            LOGGER.warning("Job %s timed out after %ss", job_id, timeout)
             self._safe_report_job_result(
                 job_id=job_id,
                 status="failed",
-                error="Job timed out",
+                error=f"Job timed out after {timeout}s",
                 trace_id=trace_id,
             )
         except Exception as e:
@@ -256,7 +275,7 @@ class InProcessRunnerLoop:
         try:
             self._api.runners.report_job_result(job_id=job_id, **kwargs)
         except Exception:
-            LOGGER.debug("Failed to report status for job %s", job_id, exc_info=True)
+            LOGGER.warning("Failed to report status for job %s", job_id, exc_info=True)
 
     def _prune_cancelled_jobs(self, now: float) -> None:
         """Remove expired entries and enforce max size. Caller must hold self._lock."""
