@@ -790,6 +790,67 @@ class RawAgentConfigsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def remove_config_keys(
+        self,
+        *,
+        keys: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+
+        Parameters
+        ----------
+        keys : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/agent-configs/blueprints/remove-keys",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "project_name": project_name,
+                "keys": keys,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawAgentConfigsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -1544,6 +1605,67 @@ class AsyncRawAgentConfigsClient:
                 )
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def remove_config_keys(
+        self,
+        *,
+        keys: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+
+        Parameters
+        ----------
+        keys : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/agent-configs/blueprints/remove-keys",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "project_name": project_name,
+                "keys": keys,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

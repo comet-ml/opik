@@ -1004,4 +1004,83 @@ export class AgentConfigsClient {
             "/v1/private/agent-configs/blueprints/latest/projects/{project_id}",
         );
     }
+
+    /**
+     * Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+     *
+     * @param {OpikApi.AgentConfigRemoveValues} request
+     * @param {AgentConfigsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     *
+     * @example
+     *     await client.agentConfigs.removeConfigKeys({
+     *         keys: ["keys"]
+     *     })
+     */
+    public removeConfigKeys(
+        request: OpikApi.AgentConfigRemoveValues,
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__removeConfigKeys(request, requestOptions));
+    }
+
+    private async __removeConfigKeys(
+        request: OpikApi.AgentConfigRemoveValues,
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/agent-configs/blueprints/remove-keys",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.AgentConfigRemoveValues.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/agent-configs/blueprints/remove-keys",
+        );
+    }
 }
