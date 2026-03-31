@@ -2615,7 +2615,8 @@ class TraceDAOImpl implements TraceDAO {
                 truncation_threshold,
                 input_slim,
                 output_slim,
-                ttft
+                ttft,
+                source
             )
             SELECT
                 t.id,
@@ -2638,7 +2639,8 @@ class TraceDAOImpl implements TraceDAO {
                 :truncation_threshold as truncation_threshold,
                 <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> t.ttft <endif> as ttft
+                <if(ttft)> :ttft <else> t.ttft <endif> as ttft,
+                t.source
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
