@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvSetByName;
 import com.comet.opik.api.AgentConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigRemoveValues;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -399,7 +400,7 @@ class AgentConfigsResourceTest {
                                             .key("temperature").value("0.5").type(ValueType.FLOAT).build()))
                                     .build())
                             .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             var blueprint3Id = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
@@ -411,7 +412,7 @@ class AgentConfigsResourceTest {
                                             .key("max_tokens").value("2048").type(ValueType.INTEGER).build()))
                                     .build())
                             .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             var bp1 = agentConfigsResourceClient.getBlueprintById(blueprint1Id, null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
@@ -553,7 +554,7 @@ class AgentConfigsResourceTest {
                     .build();
 
             var blueprintId = agentConfigsResourceClient.updateAgentConfig(updateRequest, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+                    HttpStatus.SC_CREATED);
 
             var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
@@ -611,7 +612,7 @@ class AgentConfigsResourceTest {
                     .build();
 
             var blueprint2Id = agentConfigsResourceClient.updateAgentConfig(request2, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+                    HttpStatus.SC_CREATED);
 
             var blueprint3 = AgentBlueprint.builder()
                     .type(BlueprintType.BLUEPRINT)
@@ -627,7 +628,7 @@ class AgentConfigsResourceTest {
                     .build();
 
             var blueprint3Id = agentConfigsResourceClient.updateAgentConfig(request3, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+                    HttpStatus.SC_CREATED);
 
             var mask = AgentBlueprint.builder()
                     .type(BlueprintType.MASK)
@@ -644,7 +645,7 @@ class AgentConfigsResourceTest {
                     .build();
 
             var maskId = agentConfigsResourceClient.updateAgentConfig(maskRequest, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+                    HttpStatus.SC_CREATED);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
                     .projectId(projectId)
@@ -978,7 +979,7 @@ class AgentConfigsResourceTest {
 
             var maskId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             agentConfigsResourceClient.getBlueprintById(maskId, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
@@ -1010,7 +1011,7 @@ class AgentConfigsResourceTest {
 
             var maskId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
                     .projectId(projectId)
@@ -1054,7 +1055,7 @@ class AgentConfigsResourceTest {
 
             var blueprint2Id = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             agentConfigsResourceClient.createOrUpdateEnvs(
                     AgentConfigEnvUpdate.builder()
@@ -1274,7 +1275,7 @@ class AgentConfigsResourceTest {
 
             var blueprint2Id = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             var mask = AgentBlueprint.builder()
                     .type(BlueprintType.MASK)
@@ -1285,7 +1286,7 @@ class AgentConfigsResourceTest {
 
             agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
                     .projectId(projectId)
@@ -1532,7 +1533,7 @@ class AgentConfigsResourceTest {
 
             var maskId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
@@ -1697,7 +1698,7 @@ class AgentConfigsResourceTest {
                                                     .type(ValueType.FLOAT).build()))
                                     .build())
                             .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             // create new prompt version -> triggers auto blueprint creation
             var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
@@ -1850,6 +1851,170 @@ class AgentConfigsResourceTest {
 
             agentConfigsResourceClient.deleteEnv("staging", projectId, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    @Nested
+    @DisplayName("Remove Config Keys:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RemoveConfigKeys {
+
+        @Test
+        @DisplayName("Success: should remove config values and create new blueprint")
+        void removeConfigKeys() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var values = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("stream").value("true").type(ValueType.BOOLEAN).build());
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(values)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var deleteBlueprintId = agentConfigsResourceClient.removeConfigKeys(
+                    AgentConfigRemoveValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model", "temperature"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            assertThat(deleteBlueprintId).isNotNull();
+
+            var latest = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(latest.values()).hasSize(1);
+            assertThat(latest.values().getFirst().key()).isEqualTo("stream");
+            assertThat(latest.values().getFirst().value()).isEqualTo("true");
+            assertThat(latest.values().getFirst().type()).isEqualTo(ValueType.BOOLEAN);
+
+            assertThat(latest.name()).isEqualTo("v2");
+        }
+
+        @Test
+        @DisplayName("Success: should remove all config values")
+        void removeConfigKeys__whenAllKeysRemoved() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var values = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build());
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(values)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.removeConfigKeys(
+                    AgentConfigRemoveValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model", "temperature"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var latest = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(latest.values()).isEmpty();
+            assertThat(latest.name()).isEqualTo("v2");
+            assertThat(latest.description()).contains("Deleted configuration parameters");
+        }
+
+        @Test
+        @DisplayName("when removing same keys twice, second remove returns 204 and no new blueprint is created")
+        void removeConfigKeys__whenSameKeysTwice__thenSecondReturns204() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var values = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build());
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(values)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.removeConfigKeys(
+                    AgentConfigRemoveValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.removeConfigKeys(
+                    AgentConfigRemoveValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var latest = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(latest.name()).isEqualTo("v2");
+        }
+
+        @Test
+        @DisplayName("when no config exists, then return 204 (idempotent)")
+        void removeConfigKeys__whenNoConfig__thenReturn204() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            agentConfigsResourceClient.removeConfigKeys(
+                    AgentConfigRemoveValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of("model"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("when keys is empty, then return 422")
+        void removeConfigKeys__whenKeysEmpty__thenReturn422() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            agentConfigsResourceClient.removeConfigKeys(
+                    AgentConfigRemoveValues.builder()
+                            .projectId(projectId)
+                            .keys(Set.of(""))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("when keys is null, then return 422")
+        void removeConfigKeys__whenKeysNull__thenReturn422() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            agentConfigsResourceClient.removeConfigKeys(
+                    AgentConfigRemoveValues.builder()
+                            .projectId(projectId)
+                            .keys(null)
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
 }
