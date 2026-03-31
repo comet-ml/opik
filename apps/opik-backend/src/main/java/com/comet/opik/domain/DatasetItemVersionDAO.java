@@ -2562,7 +2562,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      */
     private Mono<List<UUID>> getTargetProjectIds(String workspaceId, UUID datasetId, Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = getSTWithLogComment(SELECT_TARGET_PROJECTS, "get_target_project_ids", workspaceId, datasetId);
+            ST template = getSTWithLogComment(SELECT_TARGET_PROJECTS, "get_target_project_ids", workspaceId, "",
+                    datasetId);
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", true);

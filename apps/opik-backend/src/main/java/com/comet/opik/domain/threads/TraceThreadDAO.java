@@ -359,7 +359,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     public Mono<List<TraceThreadModel>> findThreadsByProject(int page, int size,
             @NonNull TraceThreadCriteria criteria) {
 
-        var template = getSTWithLogComment(FIND_THREADS_BY_PROJECT_SQL, "find_threads_by_project", "", "");
+        var template = getSTWithLogComment(FIND_THREADS_BY_PROJECT_SQL, "find_threads_by_project", "", "", "");
         bindTemplateParam(criteria, template);
 
         int offset = (page - 1) * size;
@@ -438,7 +438,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     @Override
     public Mono<TraceThreadModel> findByThreadModelId(@NonNull UUID threadModelId, @NonNull UUID projectId) {
         return asyncTemplate.nonTransaction(connection -> {
-            var template = getSTWithLogComment(FIND_THREADS_BY_PROJECT_SQL, "find_thread_by_model_id", "", "");
+            var template = getSTWithLogComment(FIND_THREADS_BY_PROJECT_SQL, "find_thread_by_model_id", "", "", "");
 
             List<UUID> threadModelIds = List.of(threadModelId);
             List<UUID> projectIds = List.of(projectId);

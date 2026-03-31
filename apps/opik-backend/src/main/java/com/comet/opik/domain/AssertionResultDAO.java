@@ -83,7 +83,8 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            var logComment = getLogComment("bulk_insert_assertion_result", workspaceId, assertionScores.size());
+            var logComment = getLogComment("bulk_insert_assertion_result", workspaceId, userName,
+                    assertionScores.size());
             var template = TemplateUtils.getBatchSql(BULK_INSERT_ASSERTION_RESULT, assertionScores.size());
             template.add("log_comment", logComment);
 
