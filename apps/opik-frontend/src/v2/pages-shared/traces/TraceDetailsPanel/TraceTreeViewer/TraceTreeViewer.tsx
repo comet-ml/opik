@@ -246,9 +246,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
                 </Link>
               </TooltipWrapper>
             ) : (
-              <span className="comet-body-s">
-                {filteredSpanCount} spans
-              </span>
+              <span className="comet-body-s">{filteredSpanCount} spans</span>
             )}
             <ExplainerIcon
               {...EXPLAINERS_MAP[
