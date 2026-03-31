@@ -4,7 +4,9 @@ Pytest fixtures for multimodal e2e tests.
 This module ensures the driving_hazard dataset is created once before
 any tests run, allowing parallel test execution.
 """
-from typing import Any, Generator
+
+from typing import Any
+from collections.abc import Generator
 
 import pytest
 
@@ -15,7 +17,7 @@ from ..utils import dataset_helpers
 
 
 @pytest.fixture(scope="session")
-def setup_driving_hazard_dataset(setup_environment) -> Generator[Dataset, Any, None]:
+def setup_driving_hazard_dataset(setup_environment) -> Generator[Dataset, Any, None]:  # type: ignore
     """
     Create the driving_hazard dataset before any tests run.
 

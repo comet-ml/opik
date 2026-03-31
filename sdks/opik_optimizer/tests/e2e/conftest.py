@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Generator
+from typing import Any
+from collections.abc import Generator
 
 import pytest
 
 
-_E2E_PROJECT_NAME = f"e2e-optimizer-tests"
+_E2E_PROJECT_NAME = "e2e-optimizer-tests"
 
 
 @pytest.fixture(scope="session")

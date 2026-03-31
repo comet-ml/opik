@@ -9,7 +9,7 @@ from .utils import dataset_helpers, MultiPromptTestAgent
 
 
 @pytest.fixture(scope="session")
-def tiny_dataset(setup_environment) -> Dataset | None:
+def tiny_dataset(setup_environment) -> Dataset | None:  # type: ignore
     """Shared tiny dataset for e2e optimizer tests."""
     dataset_helpers.remove_old_datasets(["tiny_test_train"])
     try:

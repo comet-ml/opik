@@ -111,7 +111,9 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_dual_optimizer_run_live(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, setup_environment
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    setup_environment: Any,
 ) -> None:
     """Run two benchmark tasks (few_shot + evolutionary) against tiny_test with a live model."""
     _skip_without_openai()

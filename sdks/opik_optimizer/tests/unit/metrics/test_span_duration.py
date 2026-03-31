@@ -21,7 +21,7 @@ class TestSpanDuration:
             start_time=start_time,
             end_time=end_time,
             spans=[],
-            source="optimization"
+            source="optimization",
         )
 
         # Act
@@ -43,7 +43,7 @@ class TestSpanDuration:
             start_time=datetime.now(),
             end_time=None,
             spans=[],
-            source="optimization"
+            source="optimization",
         )
 
         # Act & Assert
@@ -65,7 +65,7 @@ class TestSpanDuration:
             start_time=None,
             end_time=datetime.now(),
             spans=[],
-            source="optimization"
+            source="optimization",
         )
 
         # Act & Assert
