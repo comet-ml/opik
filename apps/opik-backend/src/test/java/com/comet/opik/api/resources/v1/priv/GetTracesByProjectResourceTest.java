@@ -4850,6 +4850,56 @@ class GetTracesByProjectResourceTest {
         }
 
         @Test
+        void getTracesByProject__whenExcludeFeedbackScoresWithFilter__thenReturnTracesExcludingAndFilteringScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            // We're creating feedback scores for these traces (by sending them in batch below)
+                            // but they should be excluded from the expected response by the "exclude" param,
+                            .feedbackScores(null)
+                            // Not logging any spans, so no expected usage
+                            .usage(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Creating multiple feedback scores for each trace
+            List<FeedbackScoreBatchItem> feedbackScores = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                                    .projectName(trace.projectName())
+                                    .id(trace.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            // Filter by the first trace's first feedback score
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .key(feedbackScores.getFirst().name())
+                            .value(feedbackScores.getFirst().value().toString())
+                            .build());
+
+            // The query still uses runs CTEs, joins etc. by enabling exclude_feedback_scores template
+            // because feedback_scores_filters is active.
+            // However, returned feedback scores are excluded (nulled) from the response
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = traces.subList(1, traces.size());
+            getAndAssertPage(workspaceName, projectName, null, filters, traces, expectedTraces,
+                    unexpectedTraces, apiKey, List.of(), Set.of(Trace.TraceField.FEEDBACK_SCORES));
+        }
+
+        @Test
         @DisplayName("should handle filter with percent characters in value correctly")
         void shouldHandleTracesWithPercentCharactersInName() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
