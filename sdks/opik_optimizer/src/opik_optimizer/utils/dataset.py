@@ -183,7 +183,7 @@ def create_dataset_from_records(
 ) -> opik.Dataset:
     """Create or reuse an Opik dataset with the provided records and size checks."""
     full_name = dataset_name_for_mode(dataset_name, test_mode)
-    client = opik.Opik()
+    client = opik.api_objects.opik_client.get_client_cached()
     dataset = client.get_or_create_dataset(full_name, project_name=project_name)
     existing = dataset.get_items()
     logger.info("Dataset %s has: %s items in project: %s", full_name, len(existing), project_name)

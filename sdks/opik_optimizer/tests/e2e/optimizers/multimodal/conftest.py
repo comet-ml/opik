@@ -8,9 +8,10 @@ from typing import Any, Generator
 
 import pytest
 
-import opik
 import opik_optimizer
 from opik import Dataset
+
+from ..utils import dataset_helpers
 
 
 @pytest.fixture(scope="session")
@@ -21,6 +22,7 @@ def setup_driving_hazard_dataset(setup_environment) -> Generator[Dataset, Any, N
     This fixture runs once per session and ensures the dataset exists
     before parallel tests try to access it, avoiding race conditions.
     """
+    dataset_helpers.remove_old_datasets(["driving_hazard_train_1_sample"])
     # Create the dataset (will be reused by all tests)
     dataset = opik_optimizer.datasets.driving_hazard(test_mode=True, count=1)
     yield dataset

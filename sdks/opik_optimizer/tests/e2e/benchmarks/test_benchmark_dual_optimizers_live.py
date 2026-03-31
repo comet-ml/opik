@@ -3,17 +3,15 @@ import os
 from pathlib import Path
 from typing import Any
 
-import opik
-import opik_optimizer
 import pytest
-from opik.evaluation.metrics.heuristics.equals import Equals
 
-from benchmarks.packages import registry as benchmark_config
+import opik_optimizer
 from benchmarks.core.types import TaskSpec
 from benchmarks.engines.local import engine as local_engine
-
+from benchmarks.packages import registry as benchmark_config
+from opik.evaluation.metrics.heuristics.equals import Equals
 from ._benchmark_test_helpers import InlineExecutor
-from ..optimizers.utils import system_message, user_message
+from ..optimizers.utils import system_message, user_message, dataset_helpers
 
 pytestmark = pytest.mark.integration
 
@@ -112,16 +110,6 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _remove_old_datasets() -> None:
-    client = opik.Opik()
-    names = ["tiny_test_live", "tiny_test_live_sample"]
-    for name in names:
-        try:
-            client.delete_dataset(name)
-        except Exception as e:
-            print("failed to delete dataset", name, "ignoring", e)
-
-
 def test_dual_optimizer_run_live(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, setup_environment
 ) -> None:
@@ -131,7 +119,7 @@ def test_dual_optimizer_run_live(
     _patch_dataset_loader(monkeypatch)
     monkeypatch.setattr(local_engine, "ProcessPoolExecutor", InlineExecutor)
 
-    _remove_old_datasets()
+    dataset_helpers.remove_old_datasets(["tiny_test_live", "tiny_test_live_sample"])
 
     runner = local_engine.BenchmarkRunner(
         max_workers=1,
