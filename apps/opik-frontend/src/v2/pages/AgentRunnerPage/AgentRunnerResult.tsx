@@ -10,9 +10,11 @@ type AgentRunnerResultProps = {
 };
 
 const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({ job }) => {
-  const resultData = useMemo((): object | null => {
-    if (job?.result == null) return null;
-    if (typeof job.result === "object") return job.result as object;
+  const resultData = useMemo((): object | undefined => {
+    if (job?.result === undefined) return undefined;
+    if (typeof job.result === "object" && job.result !== null) {
+      return job.result as object;
+    }
     return { output: job.result };
   }, [job?.result]);
 
@@ -49,14 +51,15 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({ job }) => {
         </div>
       )}
 
-      {job?.status === SandboxJobStatus.COMPLETED && resultData && (
-        <div className="py-2">
-          <SyntaxHighlighter
-            data={resultData}
-            prettifyConfig={{ fieldType: "output" }}
-          />
-        </div>
-      )}
+      {job?.status === SandboxJobStatus.COMPLETED &&
+        resultData !== undefined && (
+          <div className="py-2">
+            <SyntaxHighlighter
+              data={resultData}
+              prettifyConfig={{ fieldType: "output" }}
+            />
+          </div>
+        )}
 
       {job &&
         [SandboxJobStatus.FAILED, SandboxJobStatus.CANCELLED].includes(
