@@ -196,7 +196,7 @@ describe("LLMJudge", () => {
       });
     });
 
-    it("should include variables with input, output, and assertions", () => {
+    it("should include variables with input and output paths", () => {
       const judge = new LLMJudge({
         assertions: ["Is correct"],
         track: false,
@@ -205,9 +205,7 @@ describe("LLMJudge", () => {
       const config = judge.toConfig();
       const variables = config.variables as Record<string, string>;
 
-      expect(variables).toHaveProperty("input");
-      expect(variables).toHaveProperty("output");
-      expect(variables).toHaveProperty("assertions");
+      expect(variables).toEqual({ input: "input", output: "output" });
     });
 
     it("should omit undefined temperature and seed from model config but include customParameters", () => {
@@ -270,7 +268,7 @@ describe("LLMJudge", () => {
           { role: "SYSTEM", content: "system prompt" },
           { role: "USER", content: "user prompt" },
         ],
-        variables: { input: "string", output: "string", assertions: "string" },
+        variables: { input: "input", output: "output" },
         schema: [
           {
             name: "Output is relevant",
@@ -336,6 +334,55 @@ describe("LLMJudge", () => {
       const judge = LLMJudge.fromConfig(config, { model: "gpt-4o" });
 
       expect(judge.modelName).toBe("gpt-4o");
+    });
+
+    it("should prefer description over name for assertions (UI-created configs)", () => {
+      const config: LLMJudgeConfig = {
+        version: "1.0.0",
+        name: "ui_judge",
+        model: { name: "gpt-5-nano" },
+        messages: [
+          { role: "SYSTEM", content: "sys" },
+          { role: "USER", content: "usr" },
+        ],
+        variables: {},
+        schema: [
+          {
+            name: "Correctness",
+            type: "BOOLEAN",
+            description: "Whether the output is factually correct",
+          },
+          {
+            name: "Helpfulness",
+            type: "BOOLEAN",
+            description: "Whether the output is helpful to the user",
+          },
+        ],
+      };
+
+      const judge = LLMJudge.fromConfig(config);
+
+      expect(judge.assertions).toEqual([
+        "Whether the output is factually correct",
+        "Whether the output is helpful to the user",
+      ]);
+    });
+
+    it("should fall back to name when description is missing", () => {
+      const config = {
+        version: "1.0.0",
+        name: "legacy_judge",
+        model: { name: "gpt-5-nano" },
+        messages: [],
+        variables: {},
+        schema: [
+          { name: "Is correct", type: "BOOLEAN" },
+        ],
+      } as unknown as LLMJudgeConfig;
+
+      const judge = LLMJudge.fromConfig(config);
+
+      expect(judge.assertions).toEqual(["Is correct"]);
     });
   });
 

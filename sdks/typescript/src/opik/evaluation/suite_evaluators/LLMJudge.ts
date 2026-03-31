@@ -89,9 +89,8 @@ export class LLMJudge extends BaseSuiteEvaluator {
         { role: "USER", content: userContent },
       ],
       variables: {
-        input: "string",
-        output: "string",
-        assertions: "string",
+        input: "input",
+        output: "output",
       },
       schema: this.assertions.map((assertion) => ({
         name: assertion,
@@ -145,9 +144,14 @@ export class LLMJudge extends BaseSuiteEvaluator {
     config: LLMJudgeConfig | Record<string, unknown>,
     options?: { model?: string; track?: boolean }
   ): LLMJudge {
-    const configSchema = (config.schema ?? []) as Array<{ name: string }>;
+    const configSchema = (config.schema ?? []) as Array<{
+      name: string;
+      description?: string;
+    }>;
     const model = asRecord(config.model);
-    const assertions = configSchema.map((item) => item.name);
+    const assertions = configSchema.map(
+      (item) => item.description ?? item.name
+    );
 
     const customParameters = asRecord(model.customParameters);
     const reasoningEffort =
