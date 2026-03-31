@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiaghora:000076_add_thread_id_skip_index_to_traces
+--changeset thiaghora:000077_add_thread_id_skip_index_to_traces
 --comment: Add bloom filter skip index on thread_id in traces to speed up thread view queries (OPIK-4828)
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
