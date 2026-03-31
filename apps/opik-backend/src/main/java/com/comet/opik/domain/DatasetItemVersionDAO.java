@@ -1116,7 +1116,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         ei.metadata,
                         di.description,
                         ei.execution_policy,
-                        arp.assertions_array
+                        ei.assertions_array
                     )) AS experiment_items_array
                 FROM (
                     SELECT
@@ -1141,7 +1141,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         eia.metadata,
                         eia.feedback_scores,
                         eia.comments_array_agg,
-                        eia.execution_policy
+                        eia.execution_policy,
+                        eia.assertions_array
                     FROM experiment_item_aggregates AS eia FINAL
                     WHERE eia.workspace_id = :workspace_id
                     AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
@@ -1156,7 +1157,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 INNER JOIN experiment_aggregated_scope_ids eas ON eas.id = ei.experiment_id
                 LEFT JOIN dataset_items_aggr_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
                     AND di.dataset_version_id = eas.resolved_dataset_version_id
-                LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
                 GROUP BY
                     ei.dataset_item_id,
                     :datasetId,
