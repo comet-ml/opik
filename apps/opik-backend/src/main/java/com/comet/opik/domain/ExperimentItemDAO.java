@@ -408,7 +408,7 @@ class ExperimentItemDAO {
                       ei.last_updated_by AS last_updated_by,
                       ei.visibility_mode AS trace_visibility_mode,
                       ei.execution_policy,
-                      '' AS assertions_array
+                      ei.assertions_array AS assertions_array
                   FROM experiment_item_aggregates_final AS ei
                   <endif>
 
