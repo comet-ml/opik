@@ -103,7 +103,7 @@ jobs:
             pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
         - name: Run E2E tests
-          run: pytest -n auto --dist loadfile tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+          run: pytest -n auto --dist loadfile tests/e2e -vv  -r s --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Upload test artifacts on failure
           if: failure()
