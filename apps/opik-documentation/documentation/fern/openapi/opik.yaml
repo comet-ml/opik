@@ -238,8 +238,8 @@ paths:
             schema:
               $ref: "#/components/schemas/AgentConfigCreate_Write"
       responses:
-        "204":
-          description: Blueprint added
+        "201":
+          description: Created
           headers:
             Location:
               required: true
@@ -593,6 +593,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/blueprints/remove-keys:
+    post:
+      tags:
+      - Agent Configs
+      summary: Remove configuration parameters
+      description: Removes configuration parameters by creating a new blueprint that
+        closes the specified keys. Returns 204 if no changes were needed (idempotent).
+      operationId: removeConfigKeys
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigRemoveValues"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
+        "204":
+          description: No changes needed (no config or keys already removed)
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/alerts:
     get:
       tags:
@@ -8163,6 +8194,27 @@ components:
         errors:
           type: array
           items:
+            type: string
+    AgentConfigRemoveValues:
+      required:
+      - keys
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID. Either project_id or project_name must be provided
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Project name. Either project_id or project_name must be provided
+        keys:
+          maxItems: 250
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
             type: string
     AgentConfigEnvSetByName:
       required:
