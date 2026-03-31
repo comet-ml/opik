@@ -8,6 +8,7 @@ import { GoneError } from "@/rest_api/api/errors/GoneError";
 import { agentConfigContext } from "@/agent-config/configContext";
 import { flushAll } from "@/utils/flushAll";
 import { logger } from "@/utils/logger";
+import { generateId } from "@/utils/generateId";
 import { getAll } from "./registry";
 import { runWithJobContext } from "./context";
 import { getAndClearJobLogs } from "./prefixedOutput";
@@ -165,8 +166,12 @@ export class InProcessRunnerLoop {
       return;
     }
 
+    const traceId = generateId();
+
+    await this.reportJobResult(jobId, { status: "running", traceId });
+
     try {
-      const result = await this.invokeAgent(job, jobId);
+      const result = await this.invokeAgent(job, jobId, traceId);
       await flushAll().catch((err) => {
         logger.debug("Flush error after job execution", { error: err });
       });
@@ -174,7 +179,7 @@ export class InProcessRunnerLoop {
       await this.reportJobResult(jobId, {
         status: "completed",
         result: this.normalizeResult(result),
-        traceId: job.traceId,
+        traceId,
       });
     } catch (err) {
       await flushAll().catch(() => {});
@@ -193,14 +198,13 @@ export class InProcessRunnerLoop {
         logger.error(`Job ${jobId} failed: ${errorMessage}`);
       }
 
-      await this.reportJobResult(jobId, { status: "failed", error: errorMessage, traceId: job.traceId });
+      await this.reportJobResult(jobId, { status: "failed", error: errorMessage, traceId });
     }
   }
 
-  private async invokeAgent(job: LocalRunnerJob, jobId: string): Promise<any> {
+  private async invokeAgent(job: LocalRunnerJob, jobId: string, traceId: string): Promise<any> {
     const agentName = job.agentName ?? "";
     const inputs = (job.inputs as Record<string, any>) ?? {};
-    const traceId = job.traceId;
     const maskId = job.maskId;
 
     const entry = getAll().get(agentName)!;

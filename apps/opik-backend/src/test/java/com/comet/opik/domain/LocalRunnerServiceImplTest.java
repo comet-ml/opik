@@ -535,6 +535,70 @@ class LocalRunnerServiceImplTest {
                     "opik:runners:job:" + jobId + ":logs");
             assertThat(logsList.remainTimeToLive()).isPositive();
         }
+
+        @Test
+        void inFlightRunningSetsTraceIdWithoutCompletingJob() {
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+
+            UUID traceId = UUID.randomUUID();
+            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+                    LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.RUNNING).traceId(traceId)
+                            .build());
+
+            RMap<String, String> jobMap = stringRedis.getMap(
+                    "opik:runners:job:" + jobId);
+            assertThat(jobMap.get("status")).isEqualTo("running");
+            assertThat(jobMap.get("trace_id")).isEqualTo(traceId.toString());
+            assertThat(jobMap.get("completed_at")).isNull();
+
+            RList<String> active = stringRedis.getList(
+                    "opik:runners:jobs:" + runnerId + ":active");
+            assertThat(active.readAll()).contains(jobId.toString());
+
+            assertThat(jobMap.remainTimeToLive()).isEqualTo(-1L);
+        }
+
+        @Test
+        void inFlightRunningThenTerminalCompletes() {
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+
+            UUID traceId = UUID.randomUUID();
+            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+                    LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.RUNNING).traceId(traceId)
+                            .build());
+
+            ObjectNode resultNode = MAPPER.createObjectNode();
+            resultNode.put("output", "done");
+            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+                    LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).result(resultNode)
+                            .build());
+
+            RMap<String, String> jobMap = stringRedis.getMap(
+                    "opik:runners:job:" + jobId);
+            assertThat(jobMap.get("status")).isEqualTo("completed");
+            assertThat(jobMap.get("trace_id")).isEqualTo(traceId.toString());
+            assertThat(jobMap.get("completed_at")).isNotBlank();
+            assertThat(jobMap.get("result")).contains("done");
+
+            RList<String> active = stringRedis.getList(
+                    "opik:runners:jobs:" + runnerId + ":active");
+            assertThat(active.readAll()).doesNotContain(jobId.toString());
+        }
+
+        @Test
+        void rejectsPendingStatus() {
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+
+            assertThatThrownBy(() -> runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+                    LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.PENDING).build()))
+                    .isInstanceOf(ClientErrorException.class);
+        }
     }
 
     @Nested

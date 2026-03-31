@@ -155,6 +155,8 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
     private static final Set<LocalRunnerJobStatus> TERMINAL_JOB_STATUSES = Set.of(LocalRunnerJobStatus.COMPLETED,
             LocalRunnerJobStatus.FAILED);
+    private static final Set<LocalRunnerJobStatus> REPORTABLE_JOB_STATUSES = Set.of(LocalRunnerJobStatus.RUNNING,
+            LocalRunnerJobStatus.COMPLETED, LocalRunnerJobStatus.FAILED);
 
     private static final String FIELD_ID = "id";
     private static final String FIELD_NAME = "name";
@@ -573,10 +575,10 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     public void reportResult(@NonNull UUID jobId, @NonNull String workspaceId, @NonNull String userName,
             @NonNull LocalRunnerJobResultRequest result) {
         LocalRunnerJobStatus resultStatus = result.status();
-        if (!TERMINAL_JOB_STATUSES.contains(resultStatus)) {
+        if (!REPORTABLE_JOB_STATUSES.contains(resultStatus)) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of(
-                            "Invalid result status. Must be one of: " + TERMINAL_JOB_STATUSES)))
+                            "Invalid result status. Must be one of: " + REPORTABLE_JOB_STATUSES)))
                     .build());
         }
 
@@ -590,9 +592,6 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             return;
         }
 
-        String now = Instant.now().toString();
-        jobMap.put(FIELD_STATUS, resultStatus.getValue());
-        jobMap.put(FIELD_COMPLETED_AT, now);
         if (result.result() != null) {
             jobMap.put(FIELD_RESULT, JsonUtils.writeValueAsString(result.result()));
         }
@@ -603,15 +602,20 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             jobMap.put(FIELD_TRACE_ID, result.traceId().toString());
         }
 
-        String runnerIdStr = fields.get(FIELD_RUNNER_ID);
-        if (runnerIdStr != null) {
-            UUID runnerId = UUID.fromString(runnerIdStr);
-            RList<String> activeList = redisClient.getList(
-                    activeJobsKey(runnerId));
-            activeList.remove(jobId.toString());
-        }
+        if (TERMINAL_JOB_STATUSES.contains(resultStatus)) {
+            jobMap.put(FIELD_STATUS, resultStatus.getValue());
+            jobMap.put(FIELD_COMPLETED_AT, Instant.now().toString());
 
-        expireJobAndLogs(jobId, jobMap);
+            String runnerIdStr = fields.get(FIELD_RUNNER_ID);
+            if (runnerIdStr != null) {
+                UUID runnerId = UUID.fromString(runnerIdStr);
+                RList<String> activeList = redisClient.getList(
+                        activeJobsKey(runnerId));
+                activeList.remove(jobId.toString());
+            }
+
+            expireJobAndLogs(jobId, jobMap);
+        }
     }
 
     @Override

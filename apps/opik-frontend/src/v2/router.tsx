@@ -36,6 +36,7 @@ import OnlineEvaluationPage from "@/v2/pages/OnlineEvaluationPage/OnlineEvaluati
 import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueuesPage";
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
 import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
+import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -364,6 +365,16 @@ const agentConfigurationRoute = createRoute({
   component: AgentConfigurationPage,
 });
 
+// ----------- agent runner (project-scoped)
+const agentRunnerRoute = createRoute({
+  path: "/agent-runner",
+  getParentRoute: () => projectScopedRoute,
+  staticData: {
+    title: "Agent sandbox",
+  },
+  component: AgentRunnerPage,
+});
+
 // ----------- online evaluation (project-scoped)
 const onlineEvaluationRoute = createRoute({
   path: "/online-evaluation",
@@ -552,6 +563,7 @@ const routeTree = rootRoute.addChildren([
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),
           agentConfigurationRoute,
+          agentRunnerRoute,
           onlineEvaluationRoute,
           annotationQueuesRoute.addChildren([
             annotationQueuesListRoute,

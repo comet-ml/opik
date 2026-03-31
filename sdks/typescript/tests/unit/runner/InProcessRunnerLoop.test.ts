@@ -131,14 +131,61 @@ describe("InProcessRunnerLoop", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     loop.shutdown();
 
-    expect(api.runners.reportJobResult).toHaveBeenCalledWith(
-      "job-1",
-      expect.objectContaining({
-        status: "completed",
-        result: { result: "echo: hello" },
-        traceId: "trace-1",
-      })
+    const calls = (api.runners.reportJobResult as ReturnType<typeof vi.fn>).mock.calls;
+    const runningCall = calls.find((c: unknown[]) => (c[1] as { status: string }).status === "running");
+    const completedCall = calls.find((c: unknown[]) => (c[1] as { status: string }).status === "completed");
+    expect(runningCall).toBeDefined();
+    expect(completedCall).toBeDefined();
+    // traceId is generated client-side and shared between running and completed
+    expect(runningCall![1].traceId).toEqual(completedCall![1].traceId);
+    expect(typeof runningCall![1].traceId).toBe("string");
+    expect(completedCall![1].result).toEqual({ result: "echo: hello" });
+  });
+
+  it("reports running before invoking the agent function", async () => {
+    const api = createMockApi();
+    const job = createJob({ agentName: "ordered-agent" });
+
+    const callOrder: string[] = [];
+
+    (api.runners.reportJobResult as ReturnType<typeof vi.fn>).mockImplementation(
+      (_jobId: string, payload: { status: string }) => {
+        callOrder.push(payload.status);
+        return createMockHttpResponsePromise(undefined);
+      }
     );
+
+    register({
+      func: () => {
+        callOrder.push("func");
+        return "done";
+      },
+      name: "ordered-agent",
+      project: "default",
+      params: [],
+      docstring: "",
+    });
+
+    let callCount = 0;
+    (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(
+      () => {
+        callCount++;
+        if (callCount === 1) {
+          return createMockHttpResponsePromise(job);
+        }
+        throw new OpikApiError({ statusCode: 204 });
+      }
+    );
+
+    const loop = new InProcessRunnerLoop(api, "runner-1");
+    loop.start();
+
+    // Drain microtasks — the first poll fires immediately (no timer delay),
+    // picks up the job, and runs executeJob entirely via resolved promises.
+    await vi.advanceTimersByTimeAsync(0);
+    loop.shutdown();
+
+    expect(callOrder).toEqual(["running", "func", "completed"]);
   });
 
   it("reports failure for unknown agent", async () => {
@@ -169,7 +216,7 @@ describe("InProcessRunnerLoop", () => {
       expect.objectContaining({
         status: "failed",
         error: "Unknown agent: nonexistent-agent",
-        traceId: "trace-1",
+        traceId: expect.any(String),
       })
     );
   });
@@ -212,7 +259,7 @@ describe("InProcessRunnerLoop", () => {
       expect.objectContaining({
         status: "failed",
         error: "Error: something broke",
-        traceId: "trace-1",
+        traceId: expect.any(String),
       })
     );
   });

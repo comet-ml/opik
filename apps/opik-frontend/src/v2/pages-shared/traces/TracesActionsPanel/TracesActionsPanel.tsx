@@ -25,6 +25,7 @@ type TracesActionsPanelProps = {
   columnsToExport: string[];
   projectName: string;
   projectId: string;
+  hideEvaluate?: boolean;
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
@@ -34,6 +35,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   columnsToExport,
   projectName,
   projectId,
+  hideEvaluate = false,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
@@ -51,10 +53,12 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const entityType =
     type === TRACE_DATA_TYPE.traces ? "trace" : ("span" as const);
 
+  const enableEvaluate = showEvaluate && !hideEvaluate;
+
   const { rules, isLoading: isRulesLoading } = useFilteredRulesList({
     projectId,
     entityType,
-    enabled: showEvaluate,
+    enabled: enableEvaluate,
   });
 
   const deleteTracesHandler = useCallback(() => {
@@ -100,7 +104,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         projectId={projectId}
         type={type}
       />
-      {showEvaluate && (
+      {enableEvaluate && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
           open={open === 4}
@@ -131,7 +135,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           <Tag />
         </Button>
       </TooltipWrapper>
-      {showEvaluate && (
+      {enableEvaluate && (
         <EvaluateButton
           isNoRules={!rules?.length}
           disabled={disabled}

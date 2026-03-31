@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import useLocalStorageState from "use-local-storage-state";
 import { Database, Pause, Pencil, Play, RotateCcw, X } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
@@ -10,15 +9,14 @@ import RunOnDatasetDialog from "@/v2/pages/PlaygroundPage/RunOnDatasetDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Link } from "@tanstack/react-router";
 import { generateDefaultPrompt } from "@/lib/playground";
+import { LOGS_SOURCE } from "@/types/traces";
+import { useActiveProjectId } from "@/store/AppStore";
+import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Filters } from "@/types/filters";
-import {
-  PLAYGROUND_LAST_PICKED_MODEL,
-  PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
-} from "@/constants/llm";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import {
   usePromptMap,
-  useClearRunningMap,
   useSetPromptMap,
   useClearCreatedExperiments,
   useIsRunning,
@@ -26,7 +24,6 @@ import {
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
-  useSetDatasetVariables,
   useSetDatasetFilters,
   useSetExperimentNamePrefix,
   useDatasetFilters,
@@ -47,6 +44,7 @@ interface PlaygroundHeaderProps {
   datasetName: string | null;
   versionName?: string;
   onChangeDatasetId: (id: string | null) => void;
+  onReset: () => void;
   onRunAll: () => void;
 
   onStopAll: () => void;
@@ -60,6 +58,7 @@ const PlaygroundHeader = ({
   datasetName,
   versionName,
   onChangeDatasetId,
+  onReset,
   onRunAll,
   onStopAll,
   maxWidth,
@@ -69,10 +68,8 @@ const PlaygroundHeader = ({
   const clearCreatedExperiments = useClearCreatedExperiments();
   const selectedRuleIds = useSelectedRuleIds();
   const setSelectedRuleIds = useSetSelectedRuleIds();
-  const clearRunningMap = useClearRunningMap();
   const resetDatasetFilters = useResetDatasetFilters();
   const resetOutputMap = useResetOutputMap();
-  const setDatasetVariables = useSetDatasetVariables();
   const setDatasetFilters = useSetDatasetFilters();
   const setExperimentNamePrefix = useSetExperimentNamePrefix();
   const isRunning = useIsRunning();
@@ -94,16 +91,8 @@ const PlaygroundHeader = ({
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 
-  const [, setLocalStorageDatasetId] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
-    { defaultValue: null },
-  );
-  const [, setDatasetVersionKey] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
-    { defaultValue: null },
-  );
-
   const isExperimentMode = !!datasetId;
+  const activeProjectId = useActiveProjectId();
 
   const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
@@ -179,6 +168,7 @@ const PlaygroundHeader = ({
   }, [onRunAll, isRunDisabled, isRunning]);
 
   const resetPlayground = useCallback(() => {
+    onReset();
     const newPrompt = generateDefaultPrompt({
       setupProviders: providerKeys,
       lastPickedModel,
@@ -186,38 +176,19 @@ const PlaygroundHeader = ({
       modelResolver: calculateDefaultModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-    setLocalStorageDatasetId(null);
-    setDatasetVersionKey(null);
-    onChangeDatasetId(null);
-    setSelectedRuleIds(null);
-    clearCreatedExperiments();
-    clearRunningMap();
-    resetDatasetFilters();
-    setDatasetVariables([]);
-    setExperimentNamePrefix(null);
   }, [
+    onReset,
     providerKeys,
     lastPickedModel,
     calculateModelProvider,
     calculateDefaultModel,
     setPromptMap,
-    setLocalStorageDatasetId,
-    setDatasetVersionKey,
-    onChangeDatasetId,
-    setSelectedRuleIds,
-    clearCreatedExperiments,
-    clearRunningMap,
-    resetDatasetFilters,
-    setDatasetVariables,
-    setExperimentNamePrefix,
   ]);
 
   const handleLeaveExperimentMode = useCallback(() => {
     clearCreatedExperiments();
     resetOutputMap();
     onChangeDatasetId(null);
-    setLocalStorageDatasetId(null);
-    setDatasetVersionKey(null);
     resetDatasetFilters();
     setSelectedRuleIds(null);
     setExperimentNamePrefix(null);
@@ -225,8 +196,6 @@ const PlaygroundHeader = ({
     clearCreatedExperiments,
     resetOutputMap,
     onChangeDatasetId,
-    setLocalStorageDatasetId,
-    setDatasetVersionKey,
     resetDatasetFilters,
     setSelectedRuleIds,
     setExperimentNamePrefix,
@@ -242,13 +211,10 @@ const PlaygroundHeader = ({
       filters: Filters;
     }) => {
       resetOutputMap();
-      if (params.versionId) {
-        setDatasetVersionKey(`${params.datasetId}::${params.versionId}`);
-        onChangeDatasetId(`${params.datasetId}::${params.versionId}`);
-      } else {
-        setLocalStorageDatasetId(params.datasetId);
-        onChangeDatasetId(params.datasetId);
-      }
+      const datasetValue = params.versionId
+        ? `${params.datasetId}::${params.versionId}`
+        : params.datasetId;
+      onChangeDatasetId(datasetValue);
 
       setSelectedRuleIds(params.selectedRuleIds);
       setDatasetFilters(params.filters);
@@ -256,8 +222,6 @@ const PlaygroundHeader = ({
     },
     [
       resetOutputMap,
-      setDatasetVersionKey,
-      setLocalStorageDatasetId,
       onChangeDatasetId,
       setSelectedRuleIds,
       setDatasetFilters,
@@ -371,7 +335,16 @@ const PlaygroundHeader = ({
         className="flex items-center justify-between px-4 py-3"
         style={maxWidth ? { maxWidth } : undefined}
       >
-        <h1 className="comet-title-xs">Playground</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="comet-title-xs">Playground</h1>
+          {activeProjectId && (
+            <TraceLogsSidebarButton
+              projectId={activeProjectId}
+              logsSource={LOGS_SOURCE.playground}
+              variant="button"
+            />
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {renderExperimentChipOrButton()}
           {renderRunButton()}
