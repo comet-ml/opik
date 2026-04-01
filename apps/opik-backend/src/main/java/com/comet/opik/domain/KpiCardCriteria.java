@@ -15,5 +15,5 @@ public record KpiCardCriteria(
         @NonNull EntityType entityType,
         List<? extends Filter> filters,
         @NonNull Instant intervalStart,
-        @NonNull Instant intervalEnd) {
+        Instant intervalEnd) {
 }
