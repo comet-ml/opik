@@ -227,6 +227,39 @@ class KpiCardsResourceTest {
 
     @ParameterizedTest
     @EnumSource(EntityType.class)
+    @DisplayName("returns metrics when intervalEnd is null, defaulting to current time")
+    void nullIntervalEndDefaultsToNow(EntityType entityType) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+
+        createEntities(entityType, projectName,
+                List.of(DURATION_1, DURATION_2), List.of(true, false), List.of(COST_1, COST_2));
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(entityType)
+                .intervalStart(intervalStart)
+                .intervalEnd(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        double expectedAvgDuration = (DURATION_1 + DURATION_2) / 2.0;
+        double expectedTotalCost = COST_1 + COST_2;
+
+        assertMetric(response, KpiMetricType.COUNT, 2.0, 0.0);
+        assertMetric(response, KpiMetricType.AVG_DURATION, expectedAvgDuration, null);
+        assertMetric(response, KpiMetricType.TOTAL_COST, expectedTotalCost, 0.0);
+
+        if (entityType != EntityType.THREADS) {
+            assertMetric(response, KpiMetricType.ERRORS, 1.0, 0.0);
+        } else {
+            assertNoMetric(response, KpiMetricType.ERRORS);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(EntityType.class)
     @DisplayName("returns metrics only for previous period when no current data exists")
     void previousPeriodOnly(EntityType entityType) {
         mockTargetWorkspace();
@@ -313,7 +346,7 @@ class KpiCardsResourceTest {
                                 .intervalStart(now.plus(1, ChronoUnit.HOURS))
                                 .intervalEnd(now)
                                 .build(),
-                        "intervalStart must be before intervalEnd"),
+                        "intervalStart must be before intervalEnd or current time"),
                 Arguments.of(
                         KpiCardRequest.builder()
                                 .entityType(null)
@@ -331,10 +364,10 @@ class KpiCardsResourceTest {
                 Arguments.of(
                         KpiCardRequest.builder()
                                 .entityType(EntityType.SPANS)
-                                .intervalStart(now)
+                                .intervalStart(now.plus(1, ChronoUnit.HOURS))
                                 .intervalEnd(null)
                                 .build(),
-                        "intervalEnd must not be null"));
+                        "intervalStart must be before intervalEnd or current time"));
     }
 
     // === Span Filter Tests ===

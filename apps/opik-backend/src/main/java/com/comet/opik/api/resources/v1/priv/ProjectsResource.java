@@ -63,6 +63,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -288,7 +289,7 @@ public class ProjectsResource {
                 .entityType(request.entityType())
                 .filters(filters)
                 .intervalStart(request.intervalStart())
-                .intervalEnd(request.intervalEnd())
+                .intervalEnd(request.intervalEnd() != null ? request.intervalEnd() : Instant.now())
                 .build();
 
         KpiCardResponse response = kpiCardService.getKpiCards(criteria)
