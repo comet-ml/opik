@@ -201,6 +201,8 @@
     --tag-turquoise-text: #15545b;
     --tag-blue-bg: #e2effd;
     --tag-blue-text: #19426b;
+    --tag-lavender-bg: #e5e5fe;
+    --tag-lavender-text: #3b3b8e;
 
     /* Separator light color */
     --separator-light: #f1f5f9;
@@ -221,6 +223,9 @@
     --warning-box-text: 32 85% 32%;
     --warning-box-icon-bg: 45 93% 58%;
     --warning-box-icon-text: 32 85% 32%;
+
+    --selection-bar: 237 68% 29%;
+    --row-selected: 235 85% 97%;
 
     --radius: 0.5rem;
 
@@ -400,6 +405,8 @@
     --tag-turquoise-text: #0fbfd2;
     --tag-blue-bg: #292e32;
     --tag-blue-text: #6eabe7;
+    --tag-lavender-bg: #2a2a3d;
+    --tag-lavender-text: #a8a8e0;
 
     /* Separator light color - Dark Mode */
     --separator-light: #2a2a2a;
@@ -420,6 +427,9 @@
     --warning-box-text: 48 96% 64%;
     --warning-box-icon-bg: 32 95% 44%;
     --warning-box-icon-text: 45 93% 58%;
+
+    --selection-bar: 237 58% 39%;
+    --row-selected: 0 0% 15%;
   }
 
   /* CodeMirror cursor and selection fix for dark mode */
@@ -707,6 +717,20 @@
 }
 
 // rewrite padding for first cell for tables that takes full width with sticky behaviour
+.comet-compare-optimizations-table {
+  thead[data-sticky-vertical] {
+    top: 0 !important;
+  }
+
+  thead:before {
+    height: 0 !important;
+  }
+
+  table {
+    border-bottom: 1px solid hsl(var(--border)) !important;
+  }
+}
+
 .comet-sticky-table {
   thead:before {
     content: "";
@@ -730,15 +754,48 @@
     z-index: 10;
   }
 
+  [data-header-stuck] & thead[data-sticky-vertical] {
+    box-shadow: 0 4px 8px -2px hsl(var(--border) / 0.6);
+  }
+
   td:first-child [data-cell-wrapper="true"],
   th:first-child [data-header-wrapper="true"] {
-    padding-left: 24px;
+    padding-left: 24px !important;
   }
 
   td:last-child [data-cell-wrapper="true"],
   th:last-child [data-header-wrapper="true"] {
-    padding-right: 24px;
+    padding-right: 24px !important;
   }
+}
+
+.comet-cell-borders {
+  td,
+  th {
+    border-right: 1px solid hsl(var(--border));
+  }
+
+  td:last-child,
+  th:last-child,
+  // Pinned/grouped cells use box-shadow for their border (see getCommonPinningStyles)
+  .comet-pinned-cell,
+  .comet-grouped-cell ~ td {
+    border-right: none;
+  }
+
+  // Hide the last left-pinned column border (e.g. checkbox) until
+  // the user scrolls right and content slides under the pinned column
+  .comet-pinned-last-left {
+    box-shadow: none;
+  }
+
+  [data-scrolled-right] & .comet-pinned-last-left {
+    box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
+  }
+}
+
+.mask-fade-to-bottom {
+  mask-image: linear-gradient(to bottom, rgb(0, 0, 0) 0%, transparent 100%);
 }
 
 .comet-table-body-loading-overlay {
@@ -761,20 +818,6 @@
   }
   50% {
     opacity: 0.5;
-  }
-}
-
-.comet-compare-optimizations-table {
-  thead[data-sticky-vertical] {
-    top: 0 !important;
-  }
-
-  thead:before {
-    height: 0 !important;
-  }
-
-  table {
-    border-bottom: 1px solid hsl(var(--border)) !important;
   }
 }
 

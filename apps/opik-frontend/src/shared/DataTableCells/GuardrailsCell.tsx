@@ -69,7 +69,7 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
         <HoverCardTrigger asChild>
           <div className="flex items-center gap-1 px-2">
             <GuardrailStatus status={generalStatus} />
-            <span className="comet-body-s truncate text-foreground first-letter:uppercase">
+            <span className="truncate text-foreground first-letter:uppercase">
               {generalStatus}
             </span>
           </div>

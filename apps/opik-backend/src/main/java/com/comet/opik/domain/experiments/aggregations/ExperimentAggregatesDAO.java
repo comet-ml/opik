@@ -77,6 +77,7 @@ import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregate
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.TraceAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.BatchResult;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentEntityData.ExperimentData;
+import static com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.AssertionData;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.CommentsData;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.FeedbackScoreData;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
@@ -87,7 +88,7 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 @ImplementedBy(ExperimentAggregatesDAOImpl.class)
 public interface ExperimentAggregatesDAO {
 
-    Mono<Void> populateExperimentAggregate(@NonNull UUID experimentId);
+    Mono<Void> populateExperimentAggregate(UUID experimentId);
 
     Mono<BatchResult> populateExperimentItemAggregates(UUID experimentId, UUID cursor, int limit);
 
@@ -99,19 +100,15 @@ public interface ExperimentAggregatesDAO {
 
     Flux<ExperimentGroupAggregationItem> findGroupsAggregations(ExperimentGroupCriteria criteria);
 
-    Mono<Long> countDatasetItemsWithExperimentItemsFromAggregates(@NonNull DatasetItemSearchCriteria criteria,
-            @NonNull UUID versionId);
+    Mono<Long> countDatasetItemsWithExperimentItemsFromAggregates(DatasetItemSearchCriteria criteria, UUID versionId);
 
-    Mono<DatasetItemPage> getDatasetItemsWithExperimentItemsFromAggregates(
-            @NonNull DatasetItemSearchCriteria criteria,
-            @NonNull UUID versionId, int page, int size);
+    Mono<DatasetItemPage> getDatasetItemsWithExperimentItemsFromAggregates(DatasetItemSearchCriteria criteria,
+            UUID versionId, int page, int size);
 
-    Mono<ProjectStats> getExperimentItemsStatsFromAggregates(@NonNull UUID datasetId,
-            @NonNull UUID versionId, @NonNull Set<UUID> experimentIds,
+    Mono<ProjectStats> getExperimentItemsStatsFromAggregates(UUID datasetId, UUID versionId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
 
-    Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
-            @NonNull AggregationBranchCountsCriteria criteria);
+    Mono<AggregatedExperimentCounts> getAggregationBranchCounts(AggregationBranchCountsCriteria criteria);
 }
 
 @Singleton
@@ -902,6 +899,39 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             """;
 
     /**
+     * Get assertions data per trace for experiment items (paginated)
+     */
+    private static final String GET_ASSERTIONS_DATA = """
+            WITH experiment_items AS (
+                SELECT DISTINCT trace_id
+                FROM experiment_items FINAL
+                WHERE workspace_id = :workspace_id
+                AND experiment_id = :experiment_id
+                <if(cursor)>AND id > :cursor<endif>
+                ORDER BY id ASC
+                LIMIT :limit
+            )
+            SELECT
+                entity_id AS trace_id,
+                toJSONString(
+                    groupArray(
+                        CAST(
+                            (name, toString(passed), reason),
+                            'Tuple(value String, passed String, reason String)'
+                        )
+                    )
+                ) AS assertions_array
+            FROM assertion_results FINAL
+            WHERE entity_type = 'trace'
+              AND workspace_id = :workspace_id
+              AND project_id = :project_id
+              AND entity_id IN (SELECT trace_id FROM experiment_items)
+            GROUP BY entity_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
      * Get comments aggregated at experiment level
      */
     private static final String GET_COMMENTS_AGGREGATION = """
@@ -984,7 +1014,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 last_updated_at,
                 created_by,
                 last_updated_by,
-                execution_policy
+                execution_policy,
+                assertions_array
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -1012,7 +1043,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     parseDateTime64BestEffort(:last_updated_at<item.index>, 9),
                     :created_by<item.index>,
                     :last_updated_by<item.index>,
-                    :execution_policy<item.index>
+                    :execution_policy<item.index>,
+                    :assertions_array<item.index>
                 )
                 <if(item.hasNext)>,<endif>
             }>
@@ -1545,12 +1577,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                         getFeedbackScoresData(workspaceId, experimentId, projectId, cursorId, limit)
                                                 .collectList(),
                                         getCommentsData(workspaceId, experimentId, projectId, cursorId, limit)
+                                                .collectList(),
+                                        getAssertionsData(workspaceId, experimentId, projectId, cursorId, limit)
                                                 .collectList())
                                         .flatMap(tuple -> {
                                             var tracesData = tuple.getT1();
                                             var spansData = tuple.getT2();
                                             var feedbackData = tuple.getT3();
                                             var commentsData = tuple.getT4();
+                                            var assertionsData = tuple.getT5();
 
                                             return insertExperimentItemAggregates(
                                                     projectId,
@@ -1558,7 +1593,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                                     tracesData,
                                                     spansData,
                                                     feedbackData,
-                                                    commentsData).map(count -> new BatchResult(count, lastCursor));
+                                                    commentsData,
+                                                    assertionsData).map(count -> new BatchResult(count, lastCursor));
                                         }));
                     });
         });
@@ -1871,6 +1907,19 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 this::mapCommentsData);
     }
 
+    private Flux<AssertionData> getAssertionsData(String workspaceId, UUID experimentId, UUID projectId,
+            UUID cursor, int limit) {
+        return streamWithExperimentPagination(
+                GET_ASSERTIONS_DATA,
+                "getAssertionsData",
+                workspaceId,
+                experimentId,
+                projectId,
+                cursor,
+                limit,
+                this::mapAssertionData);
+    }
+
     private Mono<String> getCommentsAggregation(UUID experimentId, UUID projectId) {
         return queryExperimentAggregation(
                 GET_COMMENTS_AGGREGATION, "getCommentsAggregation", experimentId, projectId,
@@ -1910,7 +1959,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Map<UUID, TraceData> tracesMap,
             Map<UUID, SpanData> spansMap,
             Map<UUID, FeedbackScoreData> feedbackMap,
-            Map<UUID, CommentsData> commentsMap) {
+            Map<UUID, CommentsData> commentsMap,
+            Map<UUID, AssertionData> assertionsMap) {
 
         for (int i = 0; i < items.size(); i++) {
             var item = items.get(i);
@@ -1960,7 +2010,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("execution_policy" + i,
                             Optional.ofNullable(item.executionPolicy())
                                     .filter(StringUtils::isNotBlank)
-                                    .orElse(""));
+                                    .orElse(""))
+                    .bind("assertions_array" + i,
+                            Optional.ofNullable(assertionsMap.get(item.traceId()))
+                                    .map(AssertionData::assertionsArray)
+                                    .orElse(EMPTY_ARRAY_STR));
 
             // Bind array parameters only if maps are not empty
             var usageArrays = mapToArrays(usageMap, String[]::new, Long[]::new, Long::longValue);
@@ -1981,17 +2035,20 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             List<TraceData> tracesData,
             List<SpanData> spansData,
             List<FeedbackScoreData> feedbackData,
-            List<CommentsData> commentsData) {
+            List<CommentsData> commentsData,
+            List<AssertionData> assertionsData) {
 
         // Create lookup maps
         Map<UUID, TraceData> tracesMap = tracesData.stream()
-                .collect(Collectors.toMap(TraceData::traceId, t -> t));
+                .collect(Collectors.toMap(TraceData::traceId, Function.identity()));
         Map<UUID, SpanData> spansMap = spansData.stream()
-                .collect(Collectors.toMap(SpanData::traceId, s -> s));
+                .collect(Collectors.toMap(SpanData::traceId, Function.identity()));
         Map<UUID, FeedbackScoreData> feedbackMap = feedbackData.stream()
-                .collect(Collectors.toMap(FeedbackScoreData::traceId, f -> f));
+                .collect(Collectors.toMap(FeedbackScoreData::traceId, Function.identity()));
         Map<UUID, CommentsData> commentsMap = commentsData.stream()
-                .collect(Collectors.toMap(CommentsData::traceId, c -> c));
+                .collect(Collectors.toMap(CommentsData::traceId, Function.identity()));
+        Map<UUID, AssertionData> assertionsMap = assertionsData.stream()
+                .collect(Collectors.toMap(AssertionData::traceId, Function.identity()));
 
         return asyncTemplate.nonTransaction(connection -> {
             return makeMonoContextAware((userName, workspaceId) -> {
@@ -2007,7 +2064,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         .bind("project_id", projectId);
 
                 // Bind item parameters in batch
-                bindItemsParameters(statement, items, tracesMap, spansMap, feedbackMap, commentsMap);
+                bindItemsParameters(statement, items, tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap);
 
                 return Mono.from(statement.execute())
                         .flatMapMany(Result::getRowsUpdated)
@@ -2389,6 +2446,14 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         return CommentsData.builder()
                 .traceId(getUUID(row, "trace_id"))
                 .commentsArrayAgg(StringUtils.isNotBlank(commentsArrayAgg) ? commentsArrayAgg : EMPTY_ARRAY_STR)
+                .build();
+    }
+
+    private AssertionData mapAssertionData(Row row) {
+        var assertionsArray = row.get("assertions_array", String.class);
+        return AssertionData.builder()
+                .traceId(getUUID(row, "trace_id"))
+                .assertionsArray(StringUtils.isNotBlank(assertionsArray) ? assertionsArray : EMPTY_ARRAY_STR)
                 .build();
     }
 

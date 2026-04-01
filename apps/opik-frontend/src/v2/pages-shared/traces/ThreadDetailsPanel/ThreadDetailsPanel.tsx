@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar,
@@ -161,7 +160,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       projectId,
     },
     {
-      placeholderData: keepPreviousData,
       enabled: Boolean(threadId),
     },
   );
@@ -195,7 +193,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       truncate: false,
     },
     {
-      placeholderData: keepPreviousData,
       enabled: Boolean(threadId),
     },
   );
@@ -487,7 +484,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const renderContent = () => {
-    if (isThreadPending && isTracesPending) {
+    if (isThreadPending || isTracesPending) {
       return <Loader />;
     }
 

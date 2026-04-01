@@ -6,7 +6,7 @@ const SectionHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
   const { header } = column.columnDef.meta ?? {};
 
   return (
-    <div className="comet-body-xs-accented relative h-4 px-3 pt-3 text-[hsl(var(--light-slate)/0.60)]">
+    <div className="comet-body-xs-accented relative h-6 px-3 pt-3 text-[hsl(var(--light-slate)/0.60)]">
       <div className="truncate">{header}</div>
     </div>
   );

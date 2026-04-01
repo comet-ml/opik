@@ -3,12 +3,14 @@ import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { DatasetVersion } from "@/types/datasets";
+import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import { Tag } from "@/ui/tag";
 
 const VersionChangeSummaryCell: React.FC<
   CellContext<DatasetVersion, unknown>
 > = (context) => {
   const version = context.row.original;
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
   const itemsAdded = version.items_added || 0;
   const itemsModified = version.items_modified || 0;
   const itemsDeleted = version.items_deleted || 0;
@@ -27,21 +29,21 @@ const VersionChangeSummaryCell: React.FC<
         <div className="flex items-center gap-2">
           {itemsAdded > 0 && (
             <TooltipWrapper content="Items added">
-              <Tag variant="green" size="md">
+              <Tag variant="green" size={tagSize}>
                 + {itemsAdded}
               </Tag>
             </TooltipWrapper>
           )}
           {itemsModified > 0 && (
             <TooltipWrapper content="Items modified">
-              <Tag variant="blue" size="md">
+              <Tag variant="blue" size={tagSize}>
                 ~ {itemsModified}
               </Tag>
             </TooltipWrapper>
           )}
           {itemsDeleted > 0 && (
             <TooltipWrapper content="Items deleted">
-              <Tag variant="red" size="md">
+              <Tag variant="red" size={tagSize}>
                 − {itemsDeleted}
               </Tag>
             </TooltipWrapper>

@@ -78,4 +78,16 @@ public class ExperimentSourceData {
             UUID traceId,
             String commentsArrayAgg) {
     }
+
+    /**
+     * Raw assertion data for aggregation.
+     *
+     * @param traceId          The trace ID
+     * @param assertionsArray  JSON string of assertions array for this trace
+     */
+    @Builder
+    public record AssertionData(
+            UUID traceId,
+            String assertionsArray) {
+    }
 }

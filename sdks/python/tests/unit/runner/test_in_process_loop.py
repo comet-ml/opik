@@ -426,3 +426,77 @@ class TestInjectTraceId:
         in_process_loop._inject_trace_id(inputs, "tid-6")
         assert original_opik.get("trace", {}).get("id") is None
         assert original_trace.get("id") is None
+
+
+class TestJobLogs:
+    @staticmethod
+    def _run_with_streamer(lp, coro):
+        loop = asyncio.new_event_loop()
+        lp._loop = loop
+        from opik.runner.log_streamer import LogStreamer
+
+        lp._log_streamer = LogStreamer(lp._api, loop)
+
+        async def _wrapper():
+            lp._log_streamer.start()
+            await coro
+            await asyncio.sleep(0.1)
+            await lp._log_streamer.stop()
+
+        loop.run_until_complete(_wrapper())
+        loop.close()
+
+    @staticmethod
+    def _enqueue(lp, job_id, text):
+        from opik.rest_api.types.local_runner_log_entry import LocalRunnerLogEntry
+
+        lp._log_streamer._queue.put_nowait(
+            (job_id, LocalRunnerLogEntry(stream="stdout", text=text))
+        )
+
+    def test_execute_job__logs_sent_when_present(self, mock_api, shutdown_event):
+        lp = in_process_loop.InProcessRunnerLoop(mock_api, "r-1", shutdown_event)
+
+        async def my_agent(**kwargs):
+            self._enqueue(lp, "j-log-1", "hello\n")
+            return "ok"
+
+        registry.register("my_agent", my_agent, "proj", [], "")
+
+        job = LocalRunnerJob(id="j-log-1", agent_name="my_agent", inputs={})
+        self._run_with_streamer(lp, lp._execute_job(job))
+
+        mock_api.runners.append_job_logs.assert_called_once()
+        call_kwargs = mock_api.runners.append_job_logs.call_args[1]
+        assert call_kwargs["job_id"] == "j-log-1"
+        assert any("hello" in e.text for e in call_kwargs["request"])
+
+    def test_execute_job__no_logs__append_not_called(self, mock_api, shutdown_event):
+        async def silent_agent(**kwargs):
+            return "ok"
+
+        registry.register("silent_agent", silent_agent, "proj", [], "")
+
+        lp = in_process_loop.InProcessRunnerLoop(mock_api, "r-1", shutdown_event)
+        job = LocalRunnerJob(id="j-log-2", agent_name="silent_agent", inputs={})
+        self._run_with_streamer(lp, lp._execute_job(job))
+
+        mock_api.runners.append_job_logs.assert_not_called()
+
+    def test_execute_job__exception__logs_sent_then_result_failed(
+        self, mock_api, shutdown_event
+    ):
+        lp = in_process_loop.InProcessRunnerLoop(mock_api, "r-1", shutdown_event)
+
+        async def failing_agent(**kwargs):
+            self._enqueue(lp, "j-log-3", "about to fail\n")
+            raise ValueError("boom")
+
+        registry.register("failing_agent", failing_agent, "proj", [], "")
+
+        job = LocalRunnerJob(id="j-log-3", agent_name="failing_agent", inputs={})
+        self._run_with_streamer(lp, lp._execute_job(job))
+
+        mock_api.runners.append_job_logs.assert_called_once()
+        call_kwargs = mock_api.runners.report_job_result.call_args[1]
+        assert call_kwargs["status"] == "failed"

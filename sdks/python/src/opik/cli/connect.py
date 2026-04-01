@@ -1,5 +1,6 @@
 import os
 import platform
+import shutil
 import uuid
 from typing import Optional, Tuple
 
@@ -13,7 +14,7 @@ from opik.rest_api.core.api_error import ApiError
 @click.command(context_settings={"ignore_unknown_options": True})
 @click.option("--pair", "pair_code", default=None, help="Pairing code for the runner.")
 @click.option("--name", default=None, help="Runner name.")
-@click.argument("command", nargs=-1, type=click.UNPROCESSED, required=False)
+@click.argument("command", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def connect(
     ctx: click.Context,
@@ -22,6 +23,24 @@ def connect(
     command: Tuple[str, ...],
 ) -> None:
     """Connect a local runner to Opik and exec the user command."""
+    if not command:
+        click.echo(
+            "Error: Missing command.\n\n"
+            "Usage: opik connect [OPTIONS] COMMAND [ARGS]...\n\n"
+            "Example: opik connect --pair <code> python3 main.py",
+            err=True,
+        )
+        raise SystemExit(2)
+
+    executable = command[0]
+    resolved = executable if os.path.isfile(executable) else shutil.which(executable)
+    if resolved is None:
+        click.echo(f"Error: Command not found: '{executable}'", err=True)
+        raise SystemExit(2)
+    if not os.access(resolved, os.X_OK):
+        click.echo(f"Error: Command is not executable: '{executable}'", err=True)
+        raise SystemExit(2)
+
     api_key = ctx.obj.get("api_key") if ctx.obj else None
 
     client = Opik(api_key=api_key, _show_misconfiguration_message=False)
@@ -45,11 +64,6 @@ def connect(
             raise SystemExit(1)
 
         click.echo(f"Runner connected (ID: {runner_id}).")
-
-        if not command:
-            click.echo("No command specified. Set env vars and exiting.")
-            return
-
         env = {
             **os.environ,
             "OPIK_RUNNER_MODE": "true",
@@ -58,7 +72,7 @@ def connect(
         }
 
         client.end()
-        os.execvpe(command[0], list(command), env)
+        os.execvpe(executable, list(command), env)
     except ApiError as e:
         click.echo(f"Error: {e.body}" if e.body else f"Error: {e.status_code}")
         raise SystemExit(1)

@@ -1825,8 +1825,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.1-fast:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_20,
+      label: "x-ai/grok-4.20",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_20_BETA,
       label: "x-ai/grok-4.20-beta",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_20_MULTI_AGENT,
+      label: "x-ai/grok-4.20-multi-agent",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_20_MULTI_AGENT_BETA,

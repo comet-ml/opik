@@ -17,11 +17,11 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
     context.table.options.meta?.rowHeight ??
     ROW_HEIGHT.small;
 
-  const isSmall = rowHeight === ROW_HEIGHT.small;
+  const isTruncated = rowHeight !== ROW_HEIGHT.large;
 
   let content;
 
-  if (isSmall) {
+  if (isTruncated) {
     content = (
       <CellTooltipWrapper content={value}>
         <code className="comet-code w-full truncate">{value}</code>

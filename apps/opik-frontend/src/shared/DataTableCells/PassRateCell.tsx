@@ -5,6 +5,7 @@ import isNumber from "lodash/isNumber";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Tag } from "@/ui/tag";
+import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 
 export const formatPassRate = (
   passRate: number,
@@ -19,6 +20,7 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
   const passRate = get(row, "pass_rate") as number | undefined;
   const passedCount = get(row, "passed_count") as number | undefined;
   const totalCount = get(row, "total_count") as number | undefined;
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   const hasData =
     isNumber(passRate) && isNumber(passedCount) && isNumber(totalCount);
@@ -34,7 +36,7 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
     >
       {hasData ? (
         <TooltipWrapper content={tooltip}>
-          <Tag variant={passRate === 1 ? "green" : "red"} size="md">
+          <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
             {badgeLabel}
           </Tag>
         </TooltipWrapper>
@@ -57,6 +59,7 @@ const PassRateAggregationCell = <TData,>(
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   const data = aggregationMap?.[rowId] ?? {};
   const passRate = get(data, aggregationKey ?? "", undefined) as
@@ -81,7 +84,7 @@ const PassRateAggregationCell = <TData,>(
     >
       {hasData ? (
         <TooltipWrapper content={tooltip}>
-          <Tag variant={passRate === 1 ? "green" : "red"} size="md">
+          <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
             {badgeLabel}
           </Tag>
         </TooltipWrapper>
