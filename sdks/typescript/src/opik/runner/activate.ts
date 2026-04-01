@@ -5,6 +5,7 @@ import { InProcessRunnerLoop } from "./InProcessRunnerLoop";
 import { installPrefixedOutput } from "./prefixedOutput";
 
 let _started = false;
+let _shutdownBySignal = false;
 
 export function activateRunner(): void {
   if (process.env.OPIK_RUNNER_MODE !== "true") return;
@@ -80,6 +81,7 @@ async function _run(): Promise<void> {
   loop.start();
 
   const shutdownHandler = () => {
+    _shutdownBySignal = true;
     logger.info("Received shutdown signal, stopping runner...");
     loop.shutdown();
     client.flush().catch(() => {}).finally(() => process.exit(0));
@@ -87,6 +89,16 @@ async function _run(): Promise<void> {
 
   process.once("SIGTERM", shutdownHandler);
   process.once("SIGINT", shutdownHandler);
+
+  process.on("exit", () => {
+    if (!_shutdownBySignal) {
+      console.error(
+        "\nWarning: The process exited without blocking. " +
+        "The runner needs the process to stay alive to process jobs.\n" +
+        "Use a server framework like express or fastify to keep the process running.\n"
+      );
+    }
+  });
 }
 
 function printBanner(runnerId: string, projectName: string): void {
