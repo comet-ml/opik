@@ -147,7 +147,7 @@ class TestUpdateConfig:
         url = "http://example.com"
         workspace = "workspace1"
 
-        OpikConfigurator(api_key, workspace, url)._update_config()
+        OpikConfigurator(api_key, workspace, url)._update_config(save_to_file=True)
 
         # Ensure config object is created and saved
         mock_opik_config.assert_called_with(
@@ -179,7 +179,7 @@ class TestUpdateConfig:
         workspace = "workspace1"
 
         with pytest.raises(ConfigurationError, match="Failed to update configuration."):
-            OpikConfigurator(api_key, workspace, url)._update_config()
+            OpikConfigurator(api_key, workspace, url)._update_config(save_to_file=True)
 
         # Ensure save_to_file is not called due to the exception
         mock_update_session_config.assert_not_called()
@@ -201,7 +201,7 @@ class TestUpdateConfig:
         workspace = "workspace1"
 
         with pytest.raises(ConfigurationError, match="Failed to update configuration."):
-            OpikConfigurator(api_key, workspace, url)._update_config()
+            OpikConfigurator(api_key, workspace, url)._update_config(save_to_file=True)
 
         # Ensure config object is created and saved
         mock_opik_config.assert_any_call(
@@ -592,7 +592,7 @@ class TestGetApiKey:
         mock_logger_warning.assert_called_once_with(
             "You already have an API key set in the configuration file. "
             "If you want to change it, please use the --force flag or force=True when calling the configure() method. "
-            "Otherwise, the existing API key will be used instead of the new one."
+            "Otherwise, the configuration file will not be updated but the session will use the new API key."
         )
         assert configurator.api_key == "new_api_key"
         assert needs_update is False
@@ -1251,7 +1251,7 @@ class TestConfigureLocal:
         mock_ask_user_for_approval.assert_called_once_with(
             f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
         )
-        mock_update_config.assert_called_once_with()
+        mock_update_config.assert_called_once_with(save_to_file=True)
 
         assert configurator.api_key is None
         assert configurator.base_url == OPIK_BASE_URL_LOCAL
@@ -1278,7 +1278,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_not_called()
-        mock_update_config.assert_called_once_with()
+        mock_update_config.assert_called_once_with(save_to_file=True)
 
         assert configurator.api_key is None
         assert configurator.base_url == OPIK_BASE_URL_LOCAL
@@ -1329,7 +1329,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_not_called()
-        mock_update_config.assert_called_once_with()
+        mock_update_config.assert_called_once_with(save_to_file=True)
 
         assert configurator.api_key is None
         assert configurator.base_url == OPIK_BASE_URL_LOCAL
