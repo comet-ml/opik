@@ -56,7 +56,8 @@ describe("OpikClient searchTraces", () => {
         "test-project",
         null,
         1000,
-        true
+        true,
+        undefined
       );
     });
 

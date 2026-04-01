@@ -1578,6 +1578,7 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[trace_public.TracePublic]:
@@ -1627,6 +1628,7 @@ class Opik:
                 If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: Fields to exclude from the response. For example, ["feedback_scores"]
             wait_for_at_least: The minimum number of traces to wait for before returning.
             wait_for_timeout: The timeout for waiting for traces.
 
@@ -1648,6 +1650,7 @@ class Opik:
             filters=filters_,
             max_results=max_results,
             truncate=truncate,
+            exclude=exclude,
         )
 
         if wait_for_at_least is None:

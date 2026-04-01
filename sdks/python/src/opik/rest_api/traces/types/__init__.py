@@ -2,6 +2,6 @@
 
 # isort: skip_file
 
-from .types import TraceSearchStreamRequestPublicExcludeItem
+from .trace_search_stream_request_public_exclude_item import TraceSearchStreamRequestPublicExcludeItem
 
 __all__ = ["TraceSearchStreamRequestPublicExcludeItem"]

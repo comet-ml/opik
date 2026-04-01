@@ -3871,6 +3871,8 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE);
             template.add("log_comment", logComment);
 
+            bindTemplateExcludeFieldVariables(criteria, template);
+
             if (shouldUseTraceIdPrefilter(criteria, template)) {
                 template.add("trace_id_prefilter", true);
             }
