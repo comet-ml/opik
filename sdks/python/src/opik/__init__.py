@@ -26,7 +26,6 @@ from .evaluation import (
     evaluate_experiment,
     evaluate_on_dict_items,
     evaluate_prompt,
-    LocalRunnerTask,
 )
 from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
@@ -80,7 +79,6 @@ __all__ = [
     "SimulatedUser",
     "run_simulation",
     "record_traces_locally",
-    "LocalRunnerTask",
     "AgentConfig",
     "AgentConfigNotFound",
     "Blueprint",
