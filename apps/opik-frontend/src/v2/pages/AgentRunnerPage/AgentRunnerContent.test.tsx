@@ -47,11 +47,13 @@ vi.mock("@/api/agent-sandbox/useSandboxJobStatus", () => ({
 }));
 
 // Mock child components to keep tests focused
-vi.mock("./AgentRunnerEmptyState", () => ({
-  default: ({ pairCode }: { pairCode: string }) => (
+vi.mock("./AgentRunnerEmptyState", () => {
+  const MockEmptyState = ({ pairCode }: { pairCode: string }) => (
     <div data-testid="empty-state">Pair code: {pairCode}</div>
-  ),
-}));
+  );
+  MockEmptyState.displayName = "MockEmptyState";
+  return { default: MockEmptyState };
+});
 
 vi.mock("./AgentRunnerConnectedState", () => ({
   default: () => <div data-testid="connected-state">Connected</div>,
@@ -69,11 +71,13 @@ describe("AgentRunnerContent", () => {
   let queryClient: QueryClient;
 
   const createWrapper = (qc: QueryClient) => {
-    return ({ children }: { children: ReactNode }) => (
+    const Wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={qc}>
         <TooltipProvider>{children}</TooltipProvider>
       </QueryClientProvider>
     );
+    Wrapper.displayName = "TestWrapper";
+    return Wrapper;
   };
 
   beforeEach(() => {
