@@ -17,17 +17,22 @@ env:
   OPIK_SENTRY_ENABLE: False
   HF_HUB_ENABLE_PROGRESS_BARS: "0"
   HF_HUB_DISABLE_TELEMETRY: "1"
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_GUARDRAILS_URL_OVERRIDE: http://localhost:5000
+  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
 
 jobs:
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
         runs-on: ubuntu-latest
-        timeout-minutes: 30
-        
+        timeout-minutes: 40
+
         defaults:
           run:
             working-directory: sdks/opik_optimizer/
-        
+
         strategy:
             fail-fast: false
             matrix:
@@ -38,11 +43,11 @@ jobs:
                   "3.13",
                   "3.14"
                 ]
-                
+
         steps:
         - name: Check out code
           uses: actions/checkout@v6
-            
+
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
           with:
@@ -52,6 +57,26 @@ jobs:
               sdks/opik_optimizer/pyproject.toml
               sdks/opik_optimizer/setup.py
               sdks/opik_optimizer/tests/test_requirements.txt
+
+        - name: Run latest Opik server
+          env:
+            OPIK_USAGE_REPORT_ENABLED: false
+            # Avoid Buildx Bake concurrent image export collisions in CI.
+            COMPOSE_BAKE: false
+            TOGGLE_RUNNERS_ENABLED: "true"
+          run: |
+            cd ${{ github.workspace }}
+            ./opik.sh --backend --port-mapping --guardrails --build
+
+        - name: Check Opik server availability
+          shell: bash
+          run: |
+            chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+            cd ${{ github.workspace }}/deployment/docker-compose
+            echo "Check Docker pods are up"
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+            echo "Check backend health"
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v4
@@ -78,17 +103,7 @@ jobs:
             pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
         - name: Run E2E tests
-          env:
-            # Opik Configuration
-            OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
-            OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
-            
-            # OpenAI Configuration
-            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-            # Test Configuration
-            OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
-          run: pytest -n auto --dist loadfile tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+          run: pytest tests/e2e -vv  --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Upload test artifacts on failure
           if: failure()
@@ -98,7 +113,7 @@ jobs:
               path: |
                 *.log
                 tests/**/*.log
-              retention-days: 7 
+              retention-days: 7
 
     dataset-source-check:
         name: Opik Optimizer Integration Smoke Tests

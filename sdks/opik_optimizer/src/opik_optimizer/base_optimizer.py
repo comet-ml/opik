@@ -356,6 +356,7 @@ class BaseOptimizer(ABC):
                 metadata=build_optimization_metadata(self),
                 name=self.name,
                 optimization_id=optimization_id,
+                project_name=self.project_name,
             )
             self.current_optimization_id = (
                 opik_optimization.id if opik_optimization is not None else None
@@ -469,7 +470,9 @@ class BaseOptimizer(ABC):
         # Validate n_samples against evaluation dataset size
         total_items = len(evaluation_dataset.get_items())
         if total_items == 0:
-            raise ValueError("dataset is empty")
+            raise ValueError(
+                f"dataset: {evaluation_dataset.name} is empty in project: {getattr(evaluation_dataset, 'project_name', None)}"
+            )
         if isinstance(n_samples, int) and n_samples > total_items:
             logger.warning(
                 "Requested n_samples (%s) is larger than evaluation dataset size (%s). "
