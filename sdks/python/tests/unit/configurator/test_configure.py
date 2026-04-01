@@ -790,6 +790,34 @@ class TestGetWorkspace:
         "opik.configurator.configure.OpikConfigurator._get_default_workspace",
         return_value="default_workspace",
     )
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
+    def test_get_workspace_accept_default__force_enabled__no_approval_questions_asked(
+        self, mock_ask_user_for_approval, mock_get_default_workspace, mock_opik_config
+    ):
+        """
+        Test that when force=True, the default workspace is used without asking for user approval.
+        """
+        current_config = OpikConfig(workspace=OPIK_WORKSPACE_DEFAULT_NAME)
+        mock_opik_config.return_value = current_config
+
+        configurator = OpikConfigurator(
+            workspace=None,
+            force=True,
+            api_key="valid_api_key",
+            automatic_approvals=False,
+        )
+        needs_update = configurator._set_workspace()
+
+        assert configurator.workspace == "default_workspace"
+        assert needs_update is True
+        mock_get_default_workspace.assert_called_once_with()
+        mock_ask_user_for_approval.assert_not_called()
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._get_default_workspace",
+        return_value="default_workspace",
+    )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_workspace")
     def test_get_workspace_choose_different(

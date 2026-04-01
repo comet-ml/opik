@@ -294,7 +294,7 @@ class OpikConfigurator:
         default_workspace = self._get_default_workspace()
         use_default_workspace = (
             True
-            if self.automatic_approvals
+            if self.automatic_approvals or self.force
             else ask_user_for_approval(
                 f'Do you want to use "{default_workspace}" workspace? (Y/n)'
             )
