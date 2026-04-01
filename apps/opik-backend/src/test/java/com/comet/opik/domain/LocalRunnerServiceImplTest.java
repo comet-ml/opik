@@ -86,7 +86,7 @@ class LocalRunnerServiceImplTest {
         runnerConfig.setHeartbeatTtl(Duration.seconds(2));
         runnerConfig.setNextJobPollTimeout(Duration.seconds(1));
         runnerConfig.setMaxPendingJobsPerRunner(3);
-        runnerConfig.setDeadRunnerPurgeTime(Duration.seconds(0));
+        runnerConfig.setDeadRunnerPurgeTime(Duration.hours(24));
         runnerConfig.setCompletedJobTtl(Duration.days(7));
         runnerConfig.setJobTimeout(Duration.seconds(1800));
         runnerConfig.setReaperLockDuration(Duration.seconds(55));

@@ -216,7 +216,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 FIELD_WORKSPACE_ID, workspaceId,
                 FIELD_USER_NAME, userName,
                 FIELD_PROJECT_ID, projectId.toString()));
-        runnerMap.expire(runnerConfig.getPairingRunnerTtl().toJavaDuration());
+        runnerMap.expire(runnerConfig.getDeadRunnerPurgeTime().toJavaDuration().multipliedBy(2));
 
         registerRunnerInSets(workspaceId, userName, projectId, runnerId);
 
@@ -718,24 +718,23 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         RMap<String, String> runnerMap = redisClient.getMap(
                 runnerKey(runnerId));
 
-        boolean shouldPurge;
         if (!runnerMap.isExists()) {
-            shouldPurge = true;
-        } else {
-            String disconnectedAt = runnerMap.get(FIELD_DISCONNECTED_AT);
-            if (disconnectedAt == null) {
-                disconnectedAt = Instant.now().toString();
-                runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
-            }
-
-            Instant disconnected = Instant.parse(disconnectedAt);
-            shouldPurge = Duration.between(disconnected, Instant.now()).toSeconds() >= runnerConfig
-                    .getDeadRunnerPurgeTime().toSeconds();
+            log.error("Runner map not found for dead runner '{}' in workspace '{}', skipping", runnerId, workspaceId);
+            return;
         }
 
-        failOrphanedJobs(runnerId);
+        String disconnectedAt = runnerMap.get(FIELD_DISCONNECTED_AT);
+        if (disconnectedAt == null) {
+            disconnectedAt = Instant.now().toString();
+            runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
+        }
+
+        Instant disconnected = Instant.parse(disconnectedAt);
+        boolean shouldPurge = Duration.between(disconnected, Instant.now()).toSeconds() >= runnerConfig
+                .getDeadRunnerPurgeTime().toSeconds();
 
         if (shouldPurge) {
+            failOrphanedJobs(runnerId);
             purgeRunner(runnerId, workspaceId, runnerMap.get(FIELD_USER_NAME));
         }
     }
@@ -837,27 +836,23 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 pendingJobsKey(runnerId),
                 activeJobsKey(runnerId));
 
-        if (userName != null) {
-            removeRunnerFromWorkspace(workspaceId, userName, runnerId);
+        removeRunnerFromWorkspace(workspaceId, userName, runnerId);
 
-            if (projectIdStr != null) {
-                UUID projectId = UUID.fromString(projectIdStr);
-                RSet<String> projectRunners = redisClient.getSet(
-                        projectRunnersKey(workspaceId, projectId));
-                projectRunners.remove(runnerId.toString());
-                if (projectRunners.isEmpty()) {
-                    projectRunners.delete();
-                }
-
-                RBucket<String> userRunnerBucket = redisClient.getBucket(
-                        projectUserRunnerKey(workspaceId, projectId, userName));
-                String currentId = userRunnerBucket.get();
-                if (runnerId.toString().equals(currentId)) {
-                    userRunnerBucket.delete();
-                }
+        if (projectIdStr != null) {
+            UUID projectId = UUID.fromString(projectIdStr);
+            RSet<String> projectRunners = redisClient.getSet(
+                    projectRunnersKey(workspaceId, projectId));
+            projectRunners.remove(runnerId.toString());
+            if (projectRunners.isEmpty()) {
+                projectRunners.delete();
             }
-        } else {
-            removeRunnerFromWorkspaceOnly(workspaceId, runnerId);
+
+            RBucket<String> userRunnerBucket = redisClient.getBucket(
+                    projectUserRunnerKey(workspaceId, projectId, userName));
+            String currentId = userRunnerBucket.get();
+            if (runnerId.toString().equals(currentId)) {
+                userRunnerBucket.delete();
+            }
         }
     }
 
