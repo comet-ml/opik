@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback } from "react";
+import dayjs from "dayjs";
 import { Braces, AlertTriangle, Clock, Coins, LucideIcon } from "lucide-react";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 
@@ -197,7 +198,11 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     const interval = calculateIntervalType(dateRange);
     const { intervalStart: chartStart, intervalEnd: chartEnd } =
       calculateIntervalStartAndEnd(dateRange);
-    return { interval, intervalStart: chartStart, intervalEnd: chartEnd };
+    return {
+      interval,
+      intervalStart: chartStart,
+      intervalEnd: chartEnd ?? dayjs().utc().format(),
+    };
   }, [dateRange]);
 
   const { data, isPending } = useProjectKpiCards(
