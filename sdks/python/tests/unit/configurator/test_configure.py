@@ -567,6 +567,36 @@ class TestGetApiKey:
         assert configurator.api_key == "config_api_key"
         assert needs_update is True
 
+    @patch("opik.configurator.configure.LOGGER.warning")
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
+        return_value=True,
+    )
+    def test_set_api_key__provided_api_key__another_key_already_set_in_config__not_forced__warning_is_shown(
+        self, mock_is_api_key_correct, mock_opik_config, mock_logger_warning
+    ):
+        """
+        Test that a warning is logged when an API key is provided, but one is already
+        set in the configuration file and force=False.
+        """
+        mock_config_instance = MagicMock()
+        mock_config_instance.api_key = "existing_api_key"
+        mock_opik_config.return_value = mock_config_instance
+
+        configurator = OpikConfigurator(
+            api_key="new_api_key", url=OPIK_BASE_URL_LOCAL, force=False
+        )
+        needs_update = configurator._set_api_key()
+
+        mock_logger_warning.assert_called_once_with(
+            "You already have an API key set in the configuration file. "
+            "If you want to change it, please use the --force flag or force=True when calling the configure() method. "
+            "Otherwise, the existing API key will be used instead of the new one."
+        )
+        assert configurator.api_key == "new_api_key"
+        assert needs_update is False
+
     @patch(
         "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
         return_value=True,

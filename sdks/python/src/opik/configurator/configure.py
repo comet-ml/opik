@@ -186,6 +186,16 @@ class OpikConfigurator:
             self._try_set_url_from_api_key()
             config_file_needs_updating = True if self.force else False
 
+            if (
+                not config_file_needs_updating
+                and self.current_config.api_key is not None
+            ):
+                LOGGER.warning(
+                    "You already have an API key set in the configuration file. "
+                    "If you want to change it, please use the --force flag or force=True when calling the configure() method. "
+                    "Otherwise, the existing API key will be used instead of the new one."
+                )
+
         elif self.force and self.api_key is None:
             self._ask_for_api_key()
             self._try_set_url_from_api_key()
