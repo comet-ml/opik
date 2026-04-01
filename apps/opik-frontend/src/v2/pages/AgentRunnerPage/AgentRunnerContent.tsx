@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Play, RotateCcw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/ui/button";
 import Loader from "@/shared/Loader/Loader";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useSandboxPairCode from "@/api/agent-sandbox/useSandboxPairCode";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
+import { AGENT_SANDBOX_KEY } from "@/api/api";
 import useSandboxCreateJobMutation from "@/api/agent-sandbox/useSandboxCreateJobMutation";
 import useSandboxJobStatus from "@/api/agent-sandbox/useSandboxJobStatus";
 import {
@@ -25,6 +27,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   projectId,
 }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const {
     data: pairCodeData,
@@ -43,6 +46,18 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   const { data: jobData } = useSandboxJobStatus({
     jobId: activeJobId ?? "",
   });
+
+  // Clear the cached pair code as soon as the runner connects,
+  // since the backend has already consumed it. This way, if the runner
+  // later disconnects the empty state will fetch a fresh code on mount
+  // instead of displaying the stale one.
+  useEffect(() => {
+    if (isConnected) {
+      queryClient.removeQueries({
+        queryKey: [AGENT_SANDBOX_KEY, "pair-code", { projectId }],
+      });
+    }
+  }, [isConnected, queryClient, projectId]);
 
   const agentName = runnerData?.agents?.[0]?.name ?? "";
 
