@@ -12,6 +12,7 @@ import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
 import com.comet.opik.api.runner.LocalRunnerPairRequest;
 import com.comet.opik.api.runner.LocalRunnerPairResponse;
+import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -113,13 +114,14 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response listRunners(
             @QueryParam("project_id") @NotNull UUID projectId,
+            @QueryParam("status") LocalRunnerStatus status,
             @QueryParam("page") @DefaultValue("0") @Min(0) int page,
             @QueryParam("size") @DefaultValue("25") @Min(1) int size) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(workspaceId, userName, projectId, page,
-                size);
+        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(workspaceId, userName, projectId, status,
+                page, size);
         return Response.ok(runnerPage).build();
     }
 

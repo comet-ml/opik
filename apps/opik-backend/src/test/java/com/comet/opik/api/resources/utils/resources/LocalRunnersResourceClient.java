@@ -10,6 +10,7 @@ import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
 import com.comet.opik.api.runner.LocalRunnerPairRequest;
 import com.comet.opik.api.runner.LocalRunnerPairResponse;
+import com.comet.opik.api.runner.LocalRunnerStatus;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -60,15 +61,23 @@ public class LocalRunnersResourceClient {
     }
 
     public LocalRunner.LocalRunnerPage listRunners(UUID projectId, String apiKey, String workspaceName) {
-        return listRunners(projectId, 0, 25, apiKey, workspaceName);
+        return listRunners(projectId, null, 0, 25, apiKey, workspaceName);
     }
 
     public LocalRunner.LocalRunnerPage listRunners(UUID projectId, int page, int size, String apiKey,
             String workspaceName) {
+        return listRunners(projectId, null, page, size, apiKey, workspaceName);
+    }
+
+    public LocalRunner.LocalRunnerPage listRunners(UUID projectId, LocalRunnerStatus status, int page, int size,
+            String apiKey, String workspaceName) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size)
                 .queryParam("project_id", projectId);
+        if (status != null) {
+            target = target.queryParam("status", status.getValue());
+        }
         try (var response = target.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
