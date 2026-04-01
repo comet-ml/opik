@@ -77,6 +77,7 @@ import ListCell from "@/shared/DataTableCells/ListCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
+import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -662,7 +663,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     <>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4 pb-0"
-        direction="bidirectional"
+        direction="horizontal"
         limitWidth
       >
         <div className="flex items-center gap-2">
@@ -675,36 +676,22 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             minDate={minDate}
             maxDate={maxDate}
           />
-          <Separator orientation="vertical" className="mx-1 h-6" />
-          <DataTableRowHeightSelector
-            type={height as ROW_HEIGHT}
-            setType={setHeight}
-            layout="labeled"
-          />
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-            sections={columnSections}
-            layout="labeled"
-          />
-          <Separator orientation="vertical" className="mx-1 h-6" />
-          <TooltipWrapper content="Refresh threads list">
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={() => {
-                refetch();
-              }}
-            >
-              <RotateCw className="mr-1.5 size-3.5" />
-              Refresh
-            </Button>
-          </TooltipWrapper>
         </div>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pt-3"
+        direction="horizontal"
+        limitWidth
+      >
+        <MetricsSummary
+          projectId={projectId}
+          entityType="threads"
+          countLabel="Threads"
+          filters={filters}
+          intervalStart={intervalStart}
+          intervalEnd={intervalEnd}
+          dateRange={dateRange}
+        />
       </PageBodyStickyContainer>
       {selectedRows.length > 0 ? (
         <SelectionActionBar
@@ -726,21 +713,53 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           direction="bidirectional"
           limitWidth
         >
-          <div className="flex h-10 items-center gap-2">
-            <SearchInput
-              searchText={search as string}
-              setSearchText={setSearch}
-              placeholder="Search threads..."
-              className="w-[320px]"
-              dimension="sm"
-            />
-            <FiltersButton
-              columns={FILTER_COLUMNS}
-              filters={filters}
-              onChange={setFilters}
-              config={filtersConfig as never}
-              layout="icon"
-            />
+          <div className="flex h-10 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search as string}
+                setSearchText={setSearch}
+                placeholder="Search threads..."
+                className="w-[320px]"
+                dimension="sm"
+              />
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                filters={filters}
+                onChange={setFilters}
+                config={filtersConfig as never}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <DataTableRowHeightSelector
+                type={height as ROW_HEIGHT}
+                setType={setHeight}
+                layout="labeled"
+              />
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+                sections={columnSections}
+                layout="labeled"
+              />
+              <Separator orientation="vertical" className="mx-1 h-6" />
+              <TooltipWrapper content="Refresh threads list">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    refetch();
+                  }}
+                >
+                  <RotateCw className="mr-1.5 size-3.5" />
+                  Refresh
+                </Button>
+              </TooltipWrapper>
+            </div>
           </div>
         </PageBodyStickyContainer>
       )}

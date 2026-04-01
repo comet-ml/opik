@@ -112,6 +112,7 @@ import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
+import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -1239,7 +1240,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     <>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4 pb-0"
-        direction="bidirectional"
+        direction="horizontal"
         limitWidth
       >
         <div className="flex items-center gap-2">
@@ -1252,46 +1253,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             minDate={minDate}
             maxDate={maxDate}
           />
-          <Separator orientation="vertical" className="mx-1 h-6" />
-          <DataTableRowHeightSelector
-            type={height as ROW_HEIGHT}
-            setType={setHeight}
-            layout="labeled"
-          />
-          <ColumnsButton
-            columns={columnData}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-            sections={columnSections}
-            layout="labeled"
-            excludeFromSelectAll={
-              metadataColumnsData.length > 0
-                ? metadataColumnsData.map((col) => col.id)
-                : []
-            }
-          />
-          <Separator orientation="vertical" className="mx-1 h-6" />
-          <TooltipWrapper
-            content={`Refresh ${
-              type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
-            } list`}
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={() => {
-                refetch();
-                refetchStatistic();
-              }}
-            >
-              <RotateCw className="mr-1.5 size-3.5" />
-              Refresh
-            </Button>
-          </TooltipWrapper>
         </div>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pt-3"
+        direction="horizontal"
+        limitWidth
+      >
+        <MetricsSummary
+          projectId={projectId}
+          entityType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+          countLabel={type === TRACE_DATA_TYPE.traces ? "Traces" : "Spans"}
+          filters={filters}
+          intervalStart={intervalStart}
+          intervalEnd={intervalEnd}
+          dateRange={dateRange}
+        />
       </PageBodyStickyContainer>
       {selectedRows.length > 0 ? (
         <SelectionActionBar
@@ -1314,21 +1291,63 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           direction="bidirectional"
           limitWidth
         >
-          <div className="flex h-10 items-center gap-2">
-            <SearchInput
-              searchText={search as string}
-              setSearchText={setSearch}
-              placeholder={`Search ${type}...`}
-              className="w-[320px]"
-              dimension="sm"
-            />
-            <FiltersButton
-              columns={filtersColumnData}
-              config={filtersConfig as never}
-              filters={filters}
-              onChange={setFilters}
-              layout="icon"
-            />
+          <div className="flex h-10 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search as string}
+                setSearchText={setSearch}
+                placeholder={`Search ${type}...`}
+                className="w-[320px]"
+                dimension="sm"
+              />
+              <FiltersButton
+                columns={filtersColumnData}
+                config={filtersConfig as never}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <DataTableRowHeightSelector
+                type={height as ROW_HEIGHT}
+                setType={setHeight}
+                layout="labeled"
+              />
+              <ColumnsButton
+                columns={columnData}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+                sections={columnSections}
+                layout="labeled"
+                excludeFromSelectAll={
+                  metadataColumnsData.length > 0
+                    ? metadataColumnsData.map((col) => col.id)
+                    : []
+                }
+              />
+              <Separator orientation="vertical" className="mx-1 h-6" />
+              <TooltipWrapper
+                content={`Refresh ${
+                  type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
+                } list`}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    refetch();
+                    refetchStatistic();
+                  }}
+                >
+                  <RotateCw className="mr-1.5 size-3.5" />
+                  Refresh
+                </Button>
+              </TooltipWrapper>
+            </div>
           </div>
         </PageBodyStickyContainer>
       )}

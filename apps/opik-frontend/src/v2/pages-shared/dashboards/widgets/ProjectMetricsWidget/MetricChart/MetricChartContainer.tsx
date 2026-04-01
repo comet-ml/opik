@@ -58,7 +58,10 @@ interface MetricContainerChartProps {
   getLabelAction?: (label: string) => LegendLabelAction | undefined;
   isAggregateTotal?: boolean;
   customEmptyState?: React.ReactNode;
+  customLoadingState?: React.ReactNode;
   logsSource?: LOGS_SOURCE;
+  showLegend?: boolean;
+  colorMap?: Record<string, string>;
 }
 
 const customColorMap = {
@@ -100,7 +103,10 @@ const MetricContainerChart = ({
   getLabelAction,
   isAggregateTotal = false,
   customEmptyState,
+  customLoadingState,
   logsSource,
+  showLegend = true,
+  colorMap,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -175,7 +181,7 @@ const MetricContainerChart = ({
     return data.every((record) => lines.every((line) => isNil(record[line])));
   }, [data, lines, isPending]);
 
-  const config = useChartConfig(lines, labelsMap, customColorMap);
+  const config = useChartConfig(lines, labelsMap, colorMap ?? customColorMap);
 
   const labelActions = useMemo(() => {
     if (!getLabelAction) return undefined;
@@ -194,26 +200,37 @@ const MetricContainerChart = ({
 
   const CHART = METRIC_CHART_TYPE[chartType];
 
-  const chartContent = noData ? (
-    customEmptyState || (
-      <NoData
-        className="h-[var(--chart-height)] min-h-32 text-light-slate"
-        message="No data to show"
+  const getChartContent = () => {
+    if (isPending && customLoadingState) return customLoadingState;
+
+    if (noData) {
+      return (
+        customEmptyState || (
+          <NoData
+            className="h-[var(--chart-height)] min-h-32 text-light-slate"
+            message="No data to show"
+          />
+        )
+      );
+    }
+
+    return (
+      <CHART
+        config={config}
+        interval={interval}
+        renderValue={renderValue}
+        customYTickFormatter={customYTickFormatter}
+        chartId={chartId}
+        isPending={isPending}
+        data={data}
+        labelActions={labelActions}
+        isAggregateTotal={isAggregateTotal}
+        showLegend={showLegend}
       />
-    )
-  ) : (
-    <CHART
-      config={config}
-      interval={interval}
-      renderValue={renderValue}
-      customYTickFormatter={customYTickFormatter}
-      chartId={chartId}
-      isPending={isPending}
-      data={data}
-      labelActions={labelActions}
-      isAggregateTotal={isAggregateTotal}
-    />
-  );
+    );
+  };
+
+  const chartContent = getChartContent();
 
   if (chartOnly) return chartContent;
 
