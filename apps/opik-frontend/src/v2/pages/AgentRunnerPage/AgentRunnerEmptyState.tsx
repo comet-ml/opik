@@ -4,7 +4,7 @@ import { Check, ExternalLink, LoaderCircle } from "lucide-react";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import { buildDocsUrl } from "@/lib/utils";
 import AgentSandboxFlowDiagram from "./AgentSandboxFlowDiagram";
-import Owl1 from "@/icons/projects/owl-1.svg?react";
+import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
 
 type AgentRunnerEmptyStateProps = {
   pairCode: string;
@@ -110,7 +110,7 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
     <div className="flex flex-1 justify-center gap-16 px-10 pt-[15.69rem]">
       <div className="w-full max-w-lg">
         <div className="mb-1 flex items-center gap-2">
-          <Owl1 className="h-8 w-8" />
+          <ProjectIcon index={0} variant="owl" />
           <h2 className="comet-title-m">Connect your agent</h2>
         </div>
         <p className="comet-body-s mb-8 text-muted-slate">

@@ -1,4 +1,3 @@
-import React from "react";
 import { PROJECT_ICON_COUNT } from "@/constants/projectIcons";
 
 import Owl1 from "@/icons/projects/owl-1.svg?react";
@@ -25,8 +24,16 @@ import Robot10 from "@/icons/projects/robot-10.svg?react";
 
 const OWLS = [Owl1, Owl2, Owl3, Owl4, Owl5, Owl6, Owl7, Owl8, Owl9, Owl10];
 const ROBOTS = [
-  Robot1, Robot2, Robot3, Robot4, Robot5,
-  Robot6, Robot7, Robot8, Robot9, Robot10,
+  Robot1,
+  Robot2,
+  Robot3,
+  Robot4,
+  Robot5,
+  Robot6,
+  Robot7,
+  Robot8,
+  Robot9,
+  Robot10,
 ];
 
 interface ProjectIconProps {
@@ -34,14 +41,11 @@ interface ProjectIconProps {
   variant?: "owl" | "robot";
 }
 
-const ProjectIcon: React.FC<ProjectIconProps> = ({
-  index,
-  variant = "robot",
-}) => {
+const ProjectIcon = ({ index, variant = "robot" }: ProjectIconProps) => {
   const safeIndex = index % PROJECT_ICON_COUNT;
   const Icon = variant === "owl" ? OWLS[safeIndex] : ROBOTS[safeIndex];
 
-  return <Icon className={variant === "owl" ? "h-8 w-8" : "h-4 w-4"} />;
+  return <Icon className={variant === "owl" ? "size-8" : "size-4"} />;
 };
 
 export default ProjectIcon;

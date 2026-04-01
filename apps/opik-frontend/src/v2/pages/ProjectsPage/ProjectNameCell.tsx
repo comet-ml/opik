@@ -11,23 +11,22 @@ const ProjectNameCell = (
 ) => {
   const value = context.getValue();
   const projectId = context.row.original.id;
-  const allRows = context.table.options.data;
+  const data = context.table.options.data;
 
-  const iconIndex = useMemo(() => {
-    const sorted = [...allRows].sort(
+  const iconIndices = useMemo(() => {
+    const sorted = [...data].sort(
       (a, b) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
-    const idx = sorted.findIndex((p) => p.id === projectId);
-    return (idx === -1 ? 0 : idx) % PROJECT_ICON_COUNT;
-  }, [allRows, projectId]);
+    return new Map(sorted.map((p, i) => [p.id, i % PROJECT_ICON_COUNT]));
+  }, [data]);
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <ProjectIcon index={iconIndex} />
+      <ProjectIcon index={iconIndices.get(projectId) ?? 0} />
       <span className="ml-2 truncate">
         <LinkifyText>{value}</LinkifyText>
       </span>

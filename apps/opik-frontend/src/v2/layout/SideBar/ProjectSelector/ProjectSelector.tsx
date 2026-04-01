@@ -134,7 +134,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                     </div>
                     {activeProject ? (
                       <TooltipWrapper content={activeProject.name}>
-                        <span className="comet-body-s-accented w-full truncate text-left hover:underline hover:underline-offset-4 text-foreground">
+                        <span className="comet-body-s-accented w-full truncate text-left text-foreground hover:underline hover:underline-offset-4">
                           {activeProject.name}
                         </span>
                       </TooltipWrapper>

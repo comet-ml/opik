@@ -11,8 +11,6 @@ export default function useProjectIconIndices(projects: Project[] | undefined) {
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
 
-    return new Map(
-      sorted.map((p, i) => [p.id, i % PROJECT_ICON_COUNT]),
-    );
+    return new Map(sorted.map((p, i) => [p.id, i % PROJECT_ICON_COUNT]));
   }, [projects]);
 }
