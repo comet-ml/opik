@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link } from "@tanstack/react-router";
 import { Bolt, ChevronLeft, ChevronRight } from "lucide-react";
 import useAppStore from "@/store/AppStore";
@@ -8,10 +8,8 @@ import { Separator } from "@/ui/separator";
 import { cn } from "@/lib/utils";
 import Logo from "@/shared/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
-import ProvideFeedbackDialog from "@/v1/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
-import { useOpenQuickStartDialog } from "@/v1/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/v1/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
-import SupportHubDropdown from "@/v1/layout/SideBar/SupportHubDropdown/SupportHubDropdown";
+import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
 import SidebarMenuItem, {
   MENU_ITEM_TYPE,
   MenuItem,
@@ -37,9 +35,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   expanded,
   setExpanded,
 }) => {
-  const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
-  const { open: openQuickstart } = useOpenQuickStartDialog();
-
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -55,11 +50,10 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         expanded={expanded}
         compact
       />,
-      <SupportHubDropdown
+      <SupportHubSubMenu
         key="support-hub"
+        variant="dropdown"
         expanded={expanded}
-        openQuickstart={openQuickstart}
-        openProvideFeedback={() => setOpenProvideFeedback(true)}
       />,
     ];
 
@@ -88,39 +82,32 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   };
 
   return (
-    <>
-      <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
-        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
-          <Link
-            to={HOME_PATH}
-            className="absolute left-[18px] z-10 block"
-            params={{ workspaceName }}
-          >
-            {logo}
-          </Link>
-        </div>
-        <div className="relative flex h-[calc(100%-var(--header-height))]">
-          {renderExpandCollapseButton()}
-          <div className="flex min-h-0 grow flex-col justify-between overflow-auto px-3 py-4">
-            <ul className="flex flex-col gap-1 pb-2">
-              <SideBarMenuItems expanded={expanded} />
+    <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
+      <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
+        <Link
+          to={HOME_PATH}
+          className="absolute left-[18px] z-10 block"
+          params={{ workspaceName }}
+        >
+          {logo}
+        </Link>
+      </div>
+      <div className="relative flex h-[calc(100%-var(--header-height))]">
+        {renderExpandCollapseButton()}
+        <div className="flex min-h-0 grow flex-col justify-between overflow-auto px-3 py-4">
+          <ul className="flex flex-col gap-1 pb-2">
+            <SideBarMenuItems expanded={expanded} />
+          </ul>
+          <div className="flex flex-col gap-3">
+            <Separator />
+            <ul className="flex flex-col">
+              <GitHubStarListItem expanded={expanded} />
+              {renderBottomItems()}
             </ul>
-            <div className="flex flex-col gap-3">
-              <Separator />
-              <ul className="flex flex-col">
-                <GitHubStarListItem expanded={expanded} />
-                {renderBottomItems()}
-              </ul>
-            </div>
           </div>
         </div>
-      </aside>
-
-      <ProvideFeedbackDialog
-        open={openProvideFeedback}
-        setOpen={setOpenProvideFeedback}
-      />
-    </>
+      </div>
+    </aside>
   );
 };
 

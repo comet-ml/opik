@@ -24,7 +24,7 @@ type PluginStore = {
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
-  SidebarWorkspaceSelector: React.ComponentType | null;
+  SidebarWorkspaceSelector: React.ComponentType<{ expanded?: boolean }> | null;
   AssistantSidebar: React.ComponentType<{
     onWidthChange: (width: number) => void;
   }> | null;

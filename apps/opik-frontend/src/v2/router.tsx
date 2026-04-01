@@ -55,9 +55,8 @@ import InsightsPage from "@/v2/pages/InsightsPage/InsightsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
-    ? () => null // Render nothing in production
+    ? () => null
     : React.lazy(() =>
-        // Lazy load in development
         import("@tanstack/router-devtools").then((res) => ({
           default: res.TanStackRouterDevtools,
         })),
@@ -159,7 +158,7 @@ const projectsListRoute = createRoute({
   getParentRoute: () => projectsRoute,
   component: ProjectsPage,
   staticData: {
-    title: "Manage projects",
+    title: "Projects",
   },
 });
 
