@@ -168,7 +168,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -182,7 +182,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        author
-                 FROM authored_feedback_scores FINAL
+                 FROM authored_feedback_scores
                  WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
@@ -270,10 +270,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration,
+                        duration,
                         error_info
                         <if(group_expression)>,
                         project_id,
@@ -323,7 +320,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -337,7 +334,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        author
-                 FROM authored_feedback_scores FINAL
+                 FROM authored_feedback_scores
                  WHERE entity_type = 'span'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
@@ -411,22 +408,19 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration,
-                         usage,
-                         error_info,
-                         total_estimated_cost
-                         <if(group_expression)>,
-                         project_id,
-                         name,
-                         tags,
-                         metadata,
-                         model,
-                         provider,
-                         type
-                         <endif>
+                        duration,
+                        usage,
+                        error_info,
+                        total_estimated_cost
+                        <if(group_expression)>,
+                        project_id,
+                        name,
+                        tags,
+                        metadata,
+                        model,
+                        provider,
+                        type
+                        <endif>
                     FROM spans FINAL
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
@@ -458,14 +452,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     private static final String THREAD_FILTERED_PREFIX = """
-            WITH traces_final AS (
-                SELECT
-                    *
-                FROM traces FINAL
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND thread_id \\<> ''
-            ), trace_threads_final AS (
+            WITH trace_threads_final AS (
                 SELECT
                     workspace_id,
                     project_id,
@@ -482,6 +469,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+            ), traces_final AS (
+                SELECT
+                    *
+                FROM traces FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id IN (SELECT thread_id FROM trace_threads_final)
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -491,7 +485,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     value,
                     last_updated_at,
                     last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
@@ -504,7 +498,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'thread'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
@@ -709,6 +703,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
@@ -738,6 +733,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
@@ -764,6 +760,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
@@ -797,6 +794,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    AND trace_id IN (SELECT id FROM traces_filtered)
                     <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
@@ -1102,12 +1100,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_AVERAGE_DURATION = """
             SELECT
-                avg(
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL)
-                ) AS avg_duration
+                avg(duration) AS avg_duration
             FROM traces final
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
