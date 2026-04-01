@@ -164,7 +164,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             AND tt.min_last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
             ORDER BY tt.min_last_updated_at
             LIMIT :limit
-            SETTINGS use_skip_indexes_if_final=1
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
