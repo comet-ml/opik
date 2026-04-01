@@ -955,10 +955,10 @@ localRunner:
   nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
   # Default: 300s
   # Description: Time-to-live for pairing codes used during runner registration
-  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-300s}
-  # Default: 600s
+  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-1h}
+  # Default: 1h
   # Description: Time-to-live for runner entries during the pairing process
-  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-600s}
+  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-1h}
   # Default: 100
   # Description: Maximum number of runners the reaper processes per cycle across all workspaces
   reaperMaxRunnersPerCycle: ${OPIK_RUNNER_REAPER_MAX_RUNNERS_PER_CYCLE:-100}
