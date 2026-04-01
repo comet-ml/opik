@@ -37,6 +37,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
   public readonly projectName?: string;
 
   private readonly model: OpikBaseModel;
+  private readonly responseSchema: ResponseSchema;
 
   constructor(options: LLMJudgeOptions) {
     super(options.name ?? "llm_judge", options.track ?? true);
@@ -63,14 +64,13 @@ export class LLMJudge extends BaseSuiteEvaluator {
     this.model = resolveModel(this.modelName, {
       trackGenerations: options.track ?? true,
     });
+    this.responseSchema = new ResponseSchema(this.assertions);
   }
 
   toConfig(): LLMJudgeConfig {
-    const schema = new ResponseSchema(this.assertions);
-
     const userContent = USER_PROMPT_TEMPLATE.replace(
       "{assertions}",
-      schema.formatAssertions()
+      this.responseSchema.formatAssertions()
     );
 
     return {
@@ -184,11 +184,9 @@ export class LLMJudge extends BaseSuiteEvaluator {
         ? input.output
         : JSON.stringify(input.output ?? "");
 
-    const schema = new ResponseSchema(this.assertions);
-
     const userContent = USER_PROMPT_TEMPLATE.replace("{input}", inputStr)
       .replace("{output}", outputStr)
-      .replace("{assertions}", schema.formatAssertions());
+      .replace("{assertions}", this.responseSchema.formatAssertions());
 
     try {
       const providerResponse = await this.model.generateProviderResponse(
@@ -201,12 +199,13 @@ export class LLMJudge extends BaseSuiteEvaluator {
             temperature: this.temperature,
           }),
           ...(this.seed !== undefined && { seed: this.seed }),
-          output: Output.object({ schema: schema.responseSchema }),
+          reasoning_effort: this.reasoningEffort,
+          output: Output.object({ schema: this.responseSchema.responseSchema }),
         }
       );
 
       const parsedOutput = asRecord(asRecord(providerResponse).output);
-      return schema.parse(parsedOutput);
+      return this.responseSchema.parse(parsedOutput);
     } catch (error) {
       logger.debug(
         `LLMJudge scoring failed: ${error instanceof Error ? error.message : String(error)}`

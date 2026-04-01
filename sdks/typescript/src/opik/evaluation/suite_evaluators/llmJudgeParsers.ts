@@ -15,12 +15,10 @@ const assertionFieldSchema = z.object({
  * text as the Zod field description in the JSON schema.
  */
 export class ResponseSchema {
-  private readonly assertions: string[];
   private readonly fieldMapping: Map<string, string>;
   private readonly schema: z.ZodObject<z.ZodRawShape>;
 
   constructor(assertions: string[]) {
-    this.assertions = [...assertions];
     this.fieldMapping = new Map(
       assertions.map((assertion, index) => [
         `assertion_${index + 1}`,
