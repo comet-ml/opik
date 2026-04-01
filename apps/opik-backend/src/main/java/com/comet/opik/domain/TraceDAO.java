@@ -866,7 +866,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-            ), <endif>feedback_scores_combined_raw AS (
+            ), <endif><if(!exclude_feedback_scores)>feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1000,7 +1000,7 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS feedback_scores_list
                 FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
-            ), guardrails_agg AS (
+            ),<endif> guardrails_agg AS (
                 SELECT
                     entity_id,
                     groupArray(tuple(
@@ -1027,7 +1027,7 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
-            ), target_spans AS (
+            ), <if(!exclude_feedback_scores)>target_spans AS (
                 SELECT DISTINCT id, trace_id
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -1193,7 +1193,7 @@ class TraceDAOImpl implements TraceDAO {
                     )) AS span_feedback_scores_list
                 FROM span_feedback_scores_final
                 GROUP BY workspace_id, project_id, trace_id
-            ), spans_agg AS (
+            ),<endif> spans_agg AS (
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
@@ -1429,8 +1429,10 @@ class TraceDAOImpl implements TraceDAO {
                   , s.providers AS providers
                   <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
              FROM traces_final t
+             <if(!exclude_feedback_scores)>
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
+             <endif>
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
@@ -3239,10 +3241,7 @@ class TraceDAOImpl implements TraceDAO {
      * CTE only queries the traces table, these references would fail. Guard against them.
      */
     private boolean shouldUseTraceIdPrefilter(TraceSearchCriteria criteria, ST template) {
-        boolean hasCteDependentFilters = template.getAttribute("feedback_scores_filters") != null
-                || template.getAttribute("feedback_scores_empty_filters") != null
-                || template.getAttribute("span_feedback_scores_filters") != null
-                || template.getAttribute("span_feedback_scores_empty_filters") != null
+        boolean hasCteDependentFilters = hasFeedbackScoreFilters(template)
                 || template.getAttribute("guardrails_filters") != null;
 
         boolean hasNarrowingFilters = criteria.searchText() != null
@@ -3334,9 +3333,12 @@ class TraceDAOImpl implements TraceDAO {
                             .filter(field -> !sortingFields.contains(field))
                             .collect(toSet());
 
-                    // check feedback_scores as well because it's a special case
+                    // check feedback_scores as well because it's a special case:
+                    // skip exclusion when sorting or filtering by feedback scores,
+                    // since the feedback score CTEs are needed for those operations
                     if (fields.contains(Trace.TraceField.FEEDBACK_SCORES.getValue())
-                            && sortingFields.stream().noneMatch(this::isFeedBackScoresField)) {
+                            && sortingFields.stream().noneMatch(this::isFeedBackScoresField)
+                            && !hasFeedbackScoreFilters(template)) {
 
                         template.add("exclude_feedback_scores", true);
                     }
@@ -3367,6 +3369,13 @@ class TraceDAOImpl implements TraceDAO {
     private boolean isFeedBackScoresField(String field) {
         return field
                 .startsWith(SortableFields.FEEDBACK_SCORES.substring(0, SortableFields.FEEDBACK_SCORES.length() - 1));
+    }
+
+    private boolean hasFeedbackScoreFilters(ST template) {
+        return template.getAttribute("feedback_scores_filters") != null
+                || template.getAttribute("feedback_scores_empty_filters") != null
+                || template.getAttribute("span_feedback_scores_filters") != null
+                || template.getAttribute("span_feedback_scores_empty_filters") != null;
     }
 
     private Mono<? extends Result> countTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {

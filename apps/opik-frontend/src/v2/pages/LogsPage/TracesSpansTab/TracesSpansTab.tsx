@@ -535,12 +535,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const excludeFields = useMemo(() => {
     const exclude: string[] = [];
 
-    // Only exclude experiment field for traces (not spans) when column is not visible
     if (
       type === TRACE_DATA_TYPE.traces &&
       !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
     ) {
       exclude.push("experiment");
+    }
+
+    const hasFeedbackScoreColumn = selectedColumns.some(
+      (col) =>
+        col.startsWith(COLUMN_FEEDBACK_SCORES_ID) ||
+        col.startsWith(COLUMN_SPAN_FEEDBACK_SCORES_ID),
+    );
+    if (!hasFeedbackScoreColumn) {
+      exclude.push("feedback_scores");
     }
 
     return exclude;
