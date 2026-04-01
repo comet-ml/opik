@@ -26,7 +26,8 @@ const ProjectSidebarContent: React.FC<ProjectSidebarContentProps> = ({
     <>
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
         <ProjectSelector expanded={expanded} />
-        <ul className="mt-1 flex flex-col">
+        <Separator className="my-2" />
+        <ul className="flex flex-col">
           <SideBarMenuItems expanded={expanded} />
         </ul>
       </div>
