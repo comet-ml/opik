@@ -59,7 +59,7 @@ export class EvaluationResultProcessor {
     experiment: Experiment,
     averageScores: Map<string, number>,
     totalTime: number,
-    experimentUrl: string
+    experimentUrl?: string
   ) {
     if (testResults.length === 0) {
       logger.info("\nNo test results available to display.");
@@ -69,14 +69,21 @@ export class EvaluationResultProcessor {
     const metricNames = [...averageScores.keys()].sort();
     const timeFormatted = this.formatTime(totalTime);
 
-    const contentLines = [
-      chalk.bold.cyan(
-        createLink(experimentUrl, "View results in Opik dashboard")
-      ),
-      "",
+    const contentLines: string[] = [];
+
+    if (experimentUrl) {
+      contentLines.push(
+        chalk.bold.cyan(
+          createLink(experimentUrl, "View results in Opik dashboard")
+        ),
+        ""
+      );
+    }
+
+    contentLines.push(
       chalk.bold(`Total time:        ${timeFormatted}`),
-      chalk.bold(`Number of samples: ${testResults.length}`),
-    ];
+      chalk.bold(`Number of samples: ${testResults.length}`)
+    );
 
     if (metricNames.length > 0) {
       contentLines.push("");
@@ -108,7 +115,13 @@ export class EvaluationResultProcessor {
     errors: EvaluationError[] = []
   ): Promise<EvaluationResult> {
     const averageScores = this.calculateAverageScores(testResults);
-    const experimentUrl = await experiment.getUrl();
+
+    let experimentUrl: string | undefined;
+    try {
+      experimentUrl = await experiment.getUrl();
+    } catch {
+      logger.debug("Could not resolve experiment URL, skipping dashboard link");
+    }
 
     await this.generateResultTable(
       testResults,
