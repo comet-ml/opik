@@ -4,11 +4,14 @@ import asyncio
 import collections
 import contextvars
 import inspect
+import json
 import logging
 import random
 import threading
 import time
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
+
+from ..api_objects import type_helpers
 
 from ..api_objects.agent_config.context import agent_config_context
 from .. import id_helpers
@@ -24,6 +27,37 @@ LOGGER = logging.getLogger(__name__)
 POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
+
+
+def cast_input_value(value: object, type_name: str) -> object:
+    """Cast *value* to the native Python type indicated by *type_name*.
+
+    *type_name* is a backend type name (``"integer"``, ``"boolean"``,
+    ``"float"``, ``"string"``).  Unknown names are treated as ``"string"``.
+
+    Raises :exc:`TypeError` for values that cannot be safely cast (e.g.
+    ``"3.9"`` for ``"integer"``, or a ``bool`` for ``"integer"``).
+    ``None`` is always returned unchanged.  ``dict``/``list`` values are
+    JSON-serialised when the target type is ``"string"``.
+    """
+    if value is None:
+        return value
+
+    py_type: Any = type_helpers.backend_type_to_python_type(type_name)
+    if py_type is None:
+        # Unknown type: pass strings through, JSON-serialize complex types, str() otherwise
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (dict, list)):
+            return json.dumps(value)
+        return str(value)
+
+    # backend_value_to_python_value uses str(value) for the str case, which gives
+    # Python repr for dicts/lists instead of JSON — handle that separately first.
+    if py_type is str and isinstance(value, (dict, list)):
+        return json.dumps(value)
+
+    return type_helpers.backend_value_to_python_value(value, py_type)
 
 
 def _inject_trace_id(inputs: dict, trace_id: str) -> None:
@@ -205,7 +239,6 @@ class InProcessRunnerLoop:
         mask_id = job.mask_id
 
         trace_id = id_helpers.generate_id()
-        _inject_trace_id(inputs, trace_id)
 
         self._safe_report_job_result(
             job_id=job_id,
@@ -216,6 +249,14 @@ class InProcessRunnerLoop:
         token = set_job_id(job_id)
         ctx = contextvars.copy_context()
         try:
+            params_by_name = {p.name: p for p in entry["params"]}
+            for key in list(inputs.keys()):
+                if key in params_by_name:
+                    inputs[key] = cast_input_value(
+                        inputs[key], params_by_name[key].type
+                    )
+
+            _inject_trace_id(inputs, trace_id)
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
                 with agent_config_context(mask_id):

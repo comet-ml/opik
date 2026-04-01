@@ -58,7 +58,7 @@ import {
   serializeFields,
   deserializeToShape,
   matchesBlueprint,
-} from "@/agent-config/typeHelpers";
+} from "@/typeHelpers";
 import { createTypedAgentConfig, type AgentConfig } from "@/agent-config/AgentConfig";
 import { getActiveConfigMask } from "@/agent-config/configContext";
 import {
@@ -1827,7 +1827,7 @@ export class OpikClient {
     const maskId = getActiveConfigMask() ?? undefined;
     const agentConfig = new AgentConfigManager(projectName, this);
 
-    const { extractFieldMetadata } = await import("@/agent-config/typeHelpers");
+    const { extractFieldMetadata } = await import("@/typeHelpers");
     const fieldMeta = extractFieldMetadata(schema, prefix);
 
     // effectiveEnv is null for `latest` and `version` lookups (no env tag involved)

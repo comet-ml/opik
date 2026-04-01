@@ -3,7 +3,7 @@ import {
   serializeValue,
   deserializeValue,
   getSchemaPrefix,
-} from "@/agent-config/typeHelpers";
+} from "@/typeHelpers";
 import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 

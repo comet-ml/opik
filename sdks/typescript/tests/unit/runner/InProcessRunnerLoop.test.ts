@@ -315,6 +315,61 @@ describe("InProcessRunnerLoop", () => {
     expect(calledForCancelled).toBe(false);
   });
 
+  it("casts string-encoded inputs to declared param types before calling the function", async () => {
+    const api = createMockApi();
+    const captured: Record<string, unknown> = {};
+
+    register({
+      func: (query: string, count: number, score: number, active: boolean) => {
+        captured.query = query;
+        captured.count = count;
+        captured.score = score;
+        captured.active = active;
+        return "ok";
+      },
+      name: "typed-agent",
+      project: "default",
+      params: [
+        { name: "query", type: "string" },
+        { name: "count", type: "number" },
+        { name: "score", type: "number" },
+        { name: "active", type: "boolean" },
+      ],
+      docstring: "",
+    });
+
+    const job = createJob({
+      agentName: "typed-agent",
+      inputs: { query: "hello", count: "5", score: "3.14", active: "true" },
+    });
+
+    let callCount = 0;
+    (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return createMockHttpResponsePromise(job);
+      throw new OpikApiError({ statusCode: 204 });
+    });
+
+    const loop = new InProcessRunnerLoop(api, "runner-1");
+    loop.start();
+    await vi.advanceTimersByTimeAsync(0);
+    loop.shutdown();
+
+    expect(api.runners.reportJobResult).toHaveBeenCalledWith(
+      "job-1",
+      expect.objectContaining({ status: "completed" })
+    );
+    expect(captured).toMatchObject({
+      query: "hello",
+      count: 5,
+      score: 3.14,
+      active: true,
+    });
+    expect(typeof captured.count).toBe("number");
+    expect(typeof captured.score).toBe("number");
+    expect(typeof captured.active).toBe("boolean");
+  });
+
   it("handles dict result without wrapping", async () => {
     vi.useRealTimers();
 

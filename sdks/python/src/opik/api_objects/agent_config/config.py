@@ -9,7 +9,7 @@ from opik.rest_api.types.agent_config_env import AgentConfigEnv
 from opik.api_objects import rest_helpers
 from opik import id_helpers
 from .blueprint import Blueprint
-from . import type_helpers
+from .. import type_helpers
 
 
 class AgentConfigManager:

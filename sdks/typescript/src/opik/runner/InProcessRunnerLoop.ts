@@ -6,6 +6,7 @@ import type { LocalRunnerJobResultRequest } from "@/rest_api/api/resources/runne
 import { OpikApiError } from "@/rest_api/errors/OpikApiError";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
 import { agentConfigContext } from "@/agent-config/configContext";
+import { deserializeValue } from "@/typeHelpers";
 import { flushAll } from "@/utils/flushAll";
 import { logger } from "@/utils/logger";
 import { generateId } from "@/utils/generateId";
@@ -225,7 +226,7 @@ export class InProcessRunnerLoop {
     const maskId = job.maskId;
 
     const entry = getAll().get(agentName)!;
-    const args = entry.params.map((p) => inputs[p.name]);
+    const args = entry.params.map((p) => castInputValue(inputs[p.name], p.type));
 
     const run = () =>
       runWithJobContext({ traceId, jobId }, () => {
@@ -311,6 +312,29 @@ export class InProcessRunnerLoop {
 
   private jitteredBackoff(backoff: number): number {
     return Math.min(backoff, this.backoffCapMs) * (0.5 + Math.random() * 0.5);
+  }
+}
+
+export function castInputValue(value: unknown, type: string): unknown {
+  if (value === null || value === undefined) return value;
+  switch (type) {
+    case "boolean":
+      if (typeof value === "boolean") return value;
+      return deserializeValue(String(value), "boolean");
+    case "number": {
+      if (typeof value === "number") return value;
+      const result = deserializeValue(String(value), "float");
+      if (typeof result === "number" && Number.isNaN(result)) {
+        throw new TypeError(`Cannot cast "${value}" to number`);
+      }
+      return result;
+    }
+    case "string":
+    default:
+      if (typeof value === "string") return value;
+      if (Array.isArray(value) || (typeof value === "object" && value !== null))
+        return JSON.stringify(value);
+      return String(value);
   }
 }
 

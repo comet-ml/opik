@@ -4,7 +4,7 @@ import { ChatPrompt } from "@/prompt/ChatPrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 import type * as OpikApi from "@/rest_api/api";
 import { z } from "zod";
-import type { Blueprint } from "./Blueprint";
+import type { Blueprint } from "@/agent-config/Blueprint";
 
 export type SupportedValue =
   | string
