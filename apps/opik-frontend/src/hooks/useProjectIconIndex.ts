@@ -1,16 +1,23 @@
 import { useMemo } from "react";
-import { Project } from "@/types/projects";
 import { PROJECT_ICON_COUNT } from "@/constants/projectIcons";
+import useProjectsList from "@/api/projects/useProjectsList";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 
-export default function useProjectIconIndices(projects: Project[] | undefined) {
+const PROJECTS_ICONS_QUERY_KEY = "projects-icons";
+
+export default function useProjectIconIndices() {
+  const workspaceName = useActiveWorkspaceName();
+
+  const { data } = useProjectsList({
+    workspaceName,
+    sorting: [{ id: "created_at", desc: false }],
+    page: 1,
+    size: 1000,
+    queryKey: PROJECTS_ICONS_QUERY_KEY,
+  });
+
   return useMemo(() => {
-    if (!projects) return new Map<string, number>();
-
-    const sorted = [...projects].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    );
-
-    return new Map(sorted.map((p, i) => [p.id, i % PROJECT_ICON_COUNT]));
-  }, [projects]);
+    if (!data?.content) return new Map<string, number>();
+    return new Map(data.content.map((p, i) => [p.id, i % PROJECT_ICON_COUNT]));
+  }, [data?.content]);
 }

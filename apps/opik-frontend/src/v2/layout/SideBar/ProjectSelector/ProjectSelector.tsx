@@ -60,14 +60,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 
   const isLoading = !!activeProjectId && isProjectPending;
 
-  const { data: allProjectsData } = useProjectsList({
-    workspaceName,
-    page: 1,
-    size: 50,
-    queryKey: "projects-icons",
-  });
-
-  const iconIndices = useProjectIconIndices(allProjectsData?.content);
+  const iconIndices = useProjectIconIndices();
 
   const { data: projectsData } = useProjectsList(
     {
