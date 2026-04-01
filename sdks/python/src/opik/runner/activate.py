@@ -22,7 +22,7 @@ _lock = threading.Lock()
 _shutdown_by_signal = False
 
 
-def install_signal_handlers(shutdown_event: threading.Event) -> None:
+def install_signal_handlers(shutdown_event: threading.Event) -> bool:
     def handler(signum: int, frame: object) -> None:
         global _shutdown_by_signal
         _shutdown_by_signal = True
@@ -32,8 +32,10 @@ def install_signal_handlers(shutdown_event: threading.Event) -> None:
     try:
         signal.signal(signal.SIGTERM, handler)
         signal.signal(signal.SIGINT, handler)
+        return True
     except ValueError:
         LOGGER.warning("Cannot install signal handlers outside main thread")
+        return False
 
 
 def activate_runner() -> None:
@@ -48,8 +50,8 @@ def activate_runner() -> None:
         _started = True
 
     shutdown_event = threading.Event()
-    install_signal_handlers(shutdown_event)
-    atexit.register(_warn_if_no_blocking_call)
+    if install_signal_handlers(shutdown_event):
+        atexit.register(_warn_if_no_blocking_call)
 
     t = threading.Thread(target=_run, args=(shutdown_event,), daemon=True)
     t.start()

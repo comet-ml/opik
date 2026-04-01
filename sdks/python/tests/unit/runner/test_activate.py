@@ -4,10 +4,6 @@ import threading
 import pytest
 
 import opik.runner.activate as activate_module
-from opik.runner.activate import (
-    install_signal_handlers,
-    _warn_if_no_blocking_call,
-)
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +19,7 @@ def restore_signal_handlers_and_flag():
 
 def test_install_signal_handlers__sets_shutdown_event_on_sigterm():
     shutdown_event = threading.Event()
-    install_signal_handlers(shutdown_event)
+    activate_module.install_signal_handlers(shutdown_event)
 
     signal.raise_signal(signal.SIGTERM)
 
@@ -32,7 +28,7 @@ def test_install_signal_handlers__sets_shutdown_event_on_sigterm():
 
 def test_install_signal_handlers__sets_shutdown_event_on_sigint():
     shutdown_event = threading.Event()
-    install_signal_handlers(shutdown_event)
+    activate_module.install_signal_handlers(shutdown_event)
 
     signal.raise_signal(signal.SIGINT)
 
@@ -45,7 +41,7 @@ def test_install_signal_handlers__from_background_thread__does_not_raise():
 
     def run():
         try:
-            install_signal_handlers(shutdown_event)
+            activate_module.install_signal_handlers(shutdown_event)
         except Exception as e:
             errors.append(e)
 
@@ -60,7 +56,7 @@ def test_install_signal_handlers__from_background_thread__does_not_raise():
 def test_signal_handler__sets_shutdown_by_signal_flag():
     activate_module._shutdown_by_signal = False
     shutdown_event = threading.Event()
-    install_signal_handlers(shutdown_event)
+    activate_module.install_signal_handlers(shutdown_event)
 
     signal.raise_signal(signal.SIGTERM)
 
@@ -70,12 +66,12 @@ def test_signal_handler__sets_shutdown_by_signal_flag():
 def test_signal_then_warn__full_flow_no_warning(capsys):
     """End-to-end: install handlers, receive signal, atexit callback stays silent."""
     shutdown_event = threading.Event()
-    install_signal_handlers(shutdown_event)
+    activate_module.install_signal_handlers(shutdown_event)
 
     signal.raise_signal(signal.SIGTERM)
 
     assert shutdown_event.is_set()
-    _warn_if_no_blocking_call()
+    activate_module._warn_if_no_blocking_call()
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -84,9 +80,9 @@ def test_signal_then_warn__full_flow_no_warning(capsys):
 def test_no_signal_then_warn__full_flow_prints_warning(capsys):
     """End-to-end: install handlers, no signal received, atexit callback warns."""
     shutdown_event = threading.Event()
-    install_signal_handlers(shutdown_event)
+    activate_module.install_signal_handlers(shutdown_event)
 
-    _warn_if_no_blocking_call()
+    activate_module._warn_if_no_blocking_call()
 
     captured = capsys.readouterr()
     assert "exited without blocking" in captured.err
