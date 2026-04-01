@@ -7,7 +7,7 @@ import { ReactNode } from "react";
 import { TooltipProvider } from "@/ui/tooltip";
 
 // Track removeQueries calls on the real QueryClient
-let removeQueriesSpy: ReturnType<typeof vi.fn>;
+let removeQueriesSpy: ReturnType<typeof vi.spyOn>;
 
 // Mutable state for connection status
 let mockRunnerData: { status: string; agents: { name: string }[] } | null =
