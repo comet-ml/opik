@@ -451,6 +451,30 @@ class LocalRunnersResourceTest {
         }
 
         @Test
+        void filtersByPairingStatus() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+
+            UUID connectedRunner = connectRunnerWithPairing("connected-runner", projectId, ctx.apiKey, ctx.workspace);
+
+            LocalRunnerPairResponse pair = runnersClient.generatePairingCode(projectId, ctx.apiKey, ctx.workspace);
+            UUID pairingRunner = pair.runnerId();
+
+            LocalRunner.LocalRunnerPage pairingPage = runnersClient.listRunners(projectId,
+                    LocalRunnerStatus.PAIRING, 0, 25, ctx.apiKey, ctx.workspace);
+            assertThat(pairingPage.content()).hasSize(1);
+            assertThat(pairingPage.content().getFirst().id()).isEqualTo(pairingRunner);
+            assertThat(pairingPage.total()).isEqualTo(1);
+
+            LocalRunner.LocalRunnerPage connectedPage = runnersClient.listRunners(projectId,
+                    LocalRunnerStatus.CONNECTED, 0, 25, ctx.apiKey, ctx.workspace);
+            assertThat(connectedPage.content()).hasSize(1);
+            assertThat(connectedPage.content().getFirst().id()).isEqualTo(connectedRunner);
+            assertThat(connectedPage.total()).isEqualTo(1);
+
+        }
+
+        @Test
         void paginatesCorrectly() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);

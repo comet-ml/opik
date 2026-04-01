@@ -982,6 +982,10 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     private LocalRunnerStatus resolveStatus(UUID runnerId) {
         RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId));
         String storedStatus = runnerMap.get(FIELD_STATUS);
+        return determineStatus(storedStatus, runnerId);
+    }
+
+    private LocalRunnerStatus determineStatus(String storedStatus, UUID runnerId) {
         if (LocalRunnerStatus.PAIRING.getValue().equals(storedStatus)) {
             return LocalRunnerStatus.PAIRING;
         }
@@ -1010,12 +1014,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         if (preResolvedStatus != null) {
             status = preResolvedStatus;
         } else {
-            String storedStatus = fields.get(FIELD_STATUS);
-            if (LocalRunnerStatus.PAIRING.getValue().equals(storedStatus)) {
-                status = LocalRunnerStatus.PAIRING;
-            } else {
-                status = isRunnerAlive(runnerId) ? LocalRunnerStatus.CONNECTED : LocalRunnerStatus.DISCONNECTED;
-            }
+            status = determineStatus(fields.get(FIELD_STATUS), runnerId);
         }
 
         List<LocalRunner.Agent> agents = List.of();
