@@ -29,7 +29,9 @@ type UseEvaluationSuiteFormParams = {
   hideUpload?: boolean;
   csvRequired?: boolean;
   skipEvaluationCriteria?: boolean;
+  datasetType?: DATASET_TYPE;
   onNameConflict?: () => void;
+  onCreateSuccess?: (dataset: Dataset, navigate: () => void) => void;
 };
 
 const useEvaluationSuiteForm = ({
@@ -40,7 +42,9 @@ const useEvaluationSuiteForm = ({
   hideUpload,
   csvRequired = false,
   skipEvaluationCriteria = false,
+  datasetType,
   onNameConflict,
+  onCreateSuccess,
 }: UseEvaluationSuiteFormParams) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
@@ -98,17 +102,20 @@ const useEvaluationSuiteForm = ({
     setNameError(undefined);
 
     if (!open) {
-      setCsvFile(undefined);
-      setCsvError(undefined);
-      setCsvData(undefined);
-      setType(DATASET_TYPE.EVALUATION_SUITE);
-      setRunsPerItem(1);
-      setPassThreshold(1);
-      setAssertions([]);
-      if (!dataset) {
-        setName("");
-        setDescription("");
-      }
+      const timeout = setTimeout(() => {
+        setCsvFile(undefined);
+        setCsvError(undefined);
+        setCsvData(undefined);
+        setType(DATASET_TYPE.EVALUATION_SUITE);
+        setRunsPerItem(1);
+        setPassThreshold(1);
+        setAssertions([]);
+        if (!dataset) {
+          setName("");
+          setDescription("");
+        }
+      }, 200);
+      return () => clearTimeout(timeout);
     } else if (dataset) {
       setName(dataset.name);
       setDescription(dataset.description || "");
@@ -244,17 +251,21 @@ const useEvaluationSuiteForm = ({
         onDatasetCreated?.(newDataset);
       };
 
+      const finalize = onCreateSuccess
+        ? () => onCreateSuccess(newDataset, navigateToDataset)
+        : navigateToDataset;
+
       if (hasValidCsvFile) {
         setIsOverlayShown(true);
       }
 
       if (hasValidCsvFile && newDataset.id) {
-        const uploadThenNavigate = () => {
-          uploadItems(newDataset.id, navigateToDataset);
+        const uploadThenFinalize = () => {
+          uploadItems(newDataset.id, finalize);
         };
-        applyEvaluationCriteria(newDataset.id, uploadThenNavigate);
+        applyEvaluationCriteria(newDataset.id, uploadThenFinalize);
       } else {
-        applyEvaluationCriteria(newDataset.id, navigateToDataset);
+        applyEvaluationCriteria(newDataset.id, finalize);
       }
     },
     [
@@ -262,6 +273,7 @@ const useEvaluationSuiteForm = ({
       uploadItems,
       hasValidCsvFile,
       onDatasetCreated,
+      onCreateSuccess,
       setOpen,
     ],
   );
@@ -312,7 +324,7 @@ const useEvaluationSuiteForm = ({
           dataset: {
             name,
             ...(description && { description }),
-            type,
+            type: datasetType ?? type,
             ...(activeProjectId && { project_id: activeProjectId }),
           },
         },
@@ -329,6 +341,7 @@ const useEvaluationSuiteForm = ({
     name,
     description,
     type,
+    datasetType,
     activeProjectId,
     createMutate,
     onCreateSuccessHandler,
@@ -394,6 +407,7 @@ const useEvaluationSuiteForm = ({
     isEdit,
     isValid,
     isOverlayShown,
+    setIsOverlayShown,
     confirmOpen,
     setConfirmOpen,
     isCsvUploadEnabled,

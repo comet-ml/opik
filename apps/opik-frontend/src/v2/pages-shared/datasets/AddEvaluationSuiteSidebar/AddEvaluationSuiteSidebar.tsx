@@ -6,6 +6,7 @@ import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
 import { cn, buildDocsUrl, escapeJsString } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import UploadField from "@/shared/UploadField/UploadField";
@@ -13,7 +14,8 @@ import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import CsvUploadDialog from "@/v2/pages-shared/datasets/CsvUploadDialog/CsvUploadDialog";
 import useEvaluationSuiteForm from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/useEvaluationSuiteForm";
-import { Dataset } from "@/types/datasets";
+import SuiteCreatedSuccess from "./SuiteCreatedSuccess";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { MAX_RUNS_PER_ITEM } from "@/types/evaluation-suites";
 import {
   Accordion,
@@ -30,6 +32,7 @@ enum Step {
   NAME_DESCRIPTION,
   EVALUATION_TYPE,
   TEST_DATA,
+  SUCCESS,
 }
 
 type AddEvaluationSuiteSidebarProps = {
@@ -44,8 +47,16 @@ const AddEvaluationSuiteSidebar = ({
   onDatasetCreated,
 }: AddEvaluationSuiteSidebarProps) => {
   const [step, setStep] = useState<Step>(Step.NAME_DESCRIPTION);
-  const [evaluationType, setEvaluationType] =
-    useState<EvaluationType>("regression");
+  const [evaluationType, setEvaluationType] = useState<EvaluationType | null>(
+    null,
+  );
+  const [sdkLanguage, setSdkLanguage] = useState<"python" | "typescript">(
+    "python",
+  );
+  const [createdName, setCreatedName] = useState("");
+  const [navigateToSuite, setNavigateToSuite] = useState<(() => void) | null>(
+    null,
+  );
 
   const {
     name,
@@ -62,6 +73,7 @@ const AddEvaluationSuiteSidebar = ({
     csvFile,
     csvError,
     isOverlayShown,
+    setIsOverlayShown,
     confirmOpen,
     setConfirmOpen,
     isCsvUploadEnabled,
@@ -73,17 +85,46 @@ const AddEvaluationSuiteSidebar = ({
     setOpen,
     onDatasetCreated,
     skipEvaluationCriteria: evaluationType !== "regression",
+    datasetType:
+      evaluationType === "metric"
+        ? DATASET_TYPE.DATASET
+        : DATASET_TYPE.EVALUATION_SUITE,
     onNameConflict: () => setStep(Step.NAME_DESCRIPTION),
+    onCreateSuccess: (dataset, navigate) => {
+      setCreatedName(dataset.name);
+      setNavigateToSuite(() => navigate);
+      setStep(Step.SUCCESS);
+    },
   });
 
   useEffect(() => {
     if (!open) {
-      setStep(Step.NAME_DESCRIPTION);
-      setEvaluationType("regression");
+      const timeout = setTimeout(() => {
+        setStep(Step.NAME_DESCRIPTION);
+        setEvaluationType(null);
+        setSdkLanguage("python");
+        setCreatedName("");
+        setNavigateToSuite(null);
+      }, 200);
+      return () => clearTimeout(timeout);
     }
   }, [open]);
 
-  const sdkSnippet = useMemo(() => {
+  const pythonSnippet = useMemo(() => {
+    const escapedName = (name || "my-suite")
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"');
+    return `from opik import EvalSuite
+
+suite = EvalSuite(
+    name="${escapedName}",
+    type="${evaluationType}",
+)
+
+suite.run(test_cases)`;
+  }, [name, evaluationType]);
+
+  const typescriptSnippet = useMemo(() => {
     const escapedName = escapeJsString(name || "my-suite");
     return `import { EvalSuite } from '@opik/sdk';
 
@@ -94,6 +135,9 @@ const suite = new EvalSuite({
 
 await suite.run(testCases);`;
   }, [name, evaluationType]);
+
+  const activeSnippet =
+    sdkLanguage === "python" ? pythonSnippet : typescriptSnippet;
 
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
@@ -221,14 +265,34 @@ await suite.run(testCases);`;
         <div className="mb-2 flex items-center justify-between">
           <Label>Use SDK</Label>
           <CopyButton
-            text={sdkSnippet}
+            text={activeSnippet}
             message="Successfully copied code"
             tooltipText="Copy"
           />
         </div>
-        <pre className="overflow-x-auto rounded-md border border-border bg-primary-foreground p-3 font-mono text-[13px] leading-relaxed">
-          {sdkSnippet}
-        </pre>
+        <Tabs
+          value={sdkLanguage}
+          onValueChange={(v) => setSdkLanguage(v as "python" | "typescript")}
+        >
+          <TabsList variant="underline" className="mb-0 gap-4">
+            <TabsTrigger variant="underline" size="sm" value="python">
+              Python
+            </TabsTrigger>
+            <TabsTrigger variant="underline" size="sm" value="typescript">
+              TypeScript
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="python" className="mt-0">
+            <pre className="overflow-x-auto rounded-b-md border border-t-0 border-border bg-primary-foreground p-3 font-mono text-[13px] leading-relaxed">
+              {pythonSnippet}
+            </pre>
+          </TabsContent>
+          <TabsContent value="typescript" className="mt-0">
+            <pre className="overflow-x-auto rounded-b-md border border-t-0 border-border bg-primary-foreground p-3 font-mono text-[13px] leading-relaxed">
+              {typescriptSnippet}
+            </pre>
+          </TabsContent>
+        </Tabs>
       </div>
       {evaluationType === "regression" && (
         <Accordion type="single" collapsible>
@@ -238,13 +302,43 @@ await suite.run(testCases);`;
               <span className="comet-body-s">Advanced</span>
             </CustomAccordionTrigger>
             <AccordionContent className="pl-6">
+              <div className="mb-4 flex flex-col gap-1">
+                <div className="mb-1">
+                  <Label className="comet-body-s-accented">
+                    Global assertions
+                  </Label>
+                  <p className="comet-body-xs text-light-slate">
+                    Define the global conditions all items in this evaluation
+                    suite must pass.
+                  </p>
+                </div>
+                <div className="pt-1.5">
+                  <AssertionsField
+                    editableAssertions={assertions}
+                    onChangeEditable={(index, value) => {
+                      setAssertions((prev) => {
+                        const next = [...prev];
+                        next[index] = value;
+                        return next;
+                      });
+                    }}
+                    onRemoveEditable={(index) => {
+                      setAssertions((prev) =>
+                        prev.filter((_, i) => i !== index),
+                      );
+                    }}
+                    onAdd={() => setAssertions((prev) => [...prev, ""])}
+                    placeholder="e.g. Response should be factually accurate and cite sources"
+                  />
+                </div>
+              </div>
               <div className="mb-4">
                 <h4 className="comet-body-s-accented">Evaluation criteria</h4>
                 <p className="comet-body-xs text-light-slate">
                   Define the conditions required for the evaluation to pass
                 </p>
               </div>
-              <div className="mb-4 flex gap-4">
+              <div className="flex gap-4">
                 <div className="flex flex-1 flex-col gap-1">
                   <Label
                     htmlFor="runsPerItem"
@@ -292,39 +386,30 @@ await suite.run(testCases);`;
                   />
                 </div>
               </div>
-              <div className="flex flex-col gap-1">
-                <div className="mb-1">
-                  <Label>Global assertions</Label>
-                  <p className="comet-body-xs text-light-slate">
-                    Define the global conditions all items in this evaluation
-                    suite must pass.
-                  </p>
-                </div>
-                <div className="pt-1.5">
-                  <AssertionsField
-                    editableAssertions={assertions}
-                    onChangeEditable={(index, value) => {
-                      setAssertions((prev) => {
-                        const next = [...prev];
-                        next[index] = value;
-                        return next;
-                      });
-                    }}
-                    onRemoveEditable={(index) => {
-                      setAssertions((prev) =>
-                        prev.filter((_, i) => i !== index),
-                      );
-                    }}
-                    onAdd={() => setAssertions((prev) => [...prev, ""])}
-                    placeholder="e.g. Response should be factually accurate and cite sources"
-                  />
-                </div>
-              </div>
             </AccordionContent>
           </AccordionItem>
         </Accordion>
       )}
     </>
+  );
+
+  const handleCreateAnother = useCallback(() => {
+    setStep(Step.NAME_DESCRIPTION);
+    setEvaluationType(null);
+    setSdkLanguage("python");
+    setCreatedName("");
+    setNavigateToSuite(null);
+    setName("");
+    setDescription("");
+    setAssertions([]);
+  }, [setName, setDescription, setAssertions]);
+
+  const renderStepSuccess = () => (
+    <SuiteCreatedSuccess
+      suiteName={createdName}
+      onGoToSuite={() => navigateToSuite?.()}
+      onCreateAnother={handleCreateAnother}
+    />
   );
 
   const renderFooter = () => {
@@ -357,7 +442,12 @@ await suite.run(testCases);`;
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={() => setStep(Step.TEST_DATA)}>Next</Button>
+            <Button
+              disabled={!evaluationType}
+              onClick={() => setStep(Step.TEST_DATA)}
+            >
+              Next
+            </Button>
           </div>
         </div>
       );
@@ -389,7 +479,8 @@ await suite.run(testCases);`;
         entity="evaluation suite"
         open={open}
         onClose={handleClose}
-        initialWidth={0.45}
+        initialWidth={0.75}
+        minWidth={400}
         closeButtonPosition="right"
         headerContent={
           <span className="comet-title-xxs">Create evaluation suite</span>
@@ -400,8 +491,11 @@ await suite.run(testCases);`;
             {step === Step.NAME_DESCRIPTION && renderStepNameDescription()}
             {step === Step.EVALUATION_TYPE && renderStepEvaluationType()}
             {step === Step.TEST_DATA && renderStepTestData()}
+            {step === Step.SUCCESS && renderStepSuccess()}
           </div>
-          <div className="border-t px-6 py-4">{renderFooter()}</div>
+          {step !== Step.SUCCESS && (
+            <div className="border-t px-6 py-4">{renderFooter()}</div>
+          )}
         </div>
       </ResizableSidePanel>
       <ConfirmDialog
@@ -416,7 +510,7 @@ await suite.run(testCases);`;
       <CsvUploadDialog
         open={isOverlayShown}
         isCsvMode={isCsvUploadEnabled}
-        onClose={handleClose}
+        onClose={() => setIsOverlayShown(false)}
       />
     </>
   );

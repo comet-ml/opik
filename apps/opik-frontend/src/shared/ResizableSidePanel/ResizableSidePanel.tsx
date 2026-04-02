@@ -285,7 +285,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     <div
       className={cn(
         "absolute inset-0 z-10",
-        !open && "pointer-events-none w-0",
+        !open && "pointer-events-none overflow-hidden",
       )}
     >
       {open && closeOnClickOutside && (

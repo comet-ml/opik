@@ -99,7 +99,7 @@ const DataSection: React.FC<{ showDescription?: boolean }> = ({
               <p className="comet-body-xs mt-1 text-destructive">{jsonError}</p>
             )}
             {showDescription && (
-              <Description>
+              <Description className="comet-body-xs">
                 {
                   EXPLAINERS_MAP[
                     EXPLAINER_ID
@@ -156,8 +156,8 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
 
   return (
     <div>
-      <h3 className="comet-body-accented mb-1">Evaluation criteria</h3>
-      <p className="comet-body-s mb-4 text-light-slate">
+      <h3 className="comet-body-s-accented mb-1">Evaluation criteria</h3>
+      <p className="comet-body-xs mb-4 text-light-slate">
         Define the conditions required for the evaluation to pass.
       </p>
 
