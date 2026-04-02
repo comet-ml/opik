@@ -267,7 +267,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         }).then();
     }
 
-    private Map<String, JsonNode> filterDataForDatasetType(
+    Map<String, JsonNode> filterDataForDatasetType(
             Map<String, JsonNode> data, DatasetType datasetType) {
         if (datasetType != DatasetType.EVALUATION_SUITE) {
             return data;
