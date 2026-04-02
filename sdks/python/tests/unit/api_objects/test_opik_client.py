@@ -449,6 +449,7 @@ class TestOpikClientGetDataset:
         self.mock_dataset_public = Mock()
         self.mock_dataset_public.description = "Test description"
         self.mock_dataset_public.dataset_items_count = 10
+        self.mock_dataset_public.project_id = None
 
         with (
             patch.object(
@@ -760,6 +761,7 @@ class TestOpikClientGetEvaluationSuite:
         self.mock_dataset_fern = Mock()
         self.mock_dataset_fern.description = "Suite description"
         self.mock_dataset_fern.dataset_items_count = 0
+        self.mock_dataset_fern.project_id = None
 
         with (
             patch.object(
