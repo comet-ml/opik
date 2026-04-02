@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.Visibility;
@@ -97,6 +99,9 @@ class DatasetsResourceIntegrationTest {
         when(requestContext.getWorkspaceId())
                 .thenReturn(workspaceId);
 
+        when(requestContext.getWorkspaceName())
+                .thenReturn(DEFAULT_WORKSPACE_NAME);
+
         when(requestContext.getVisibility())
                 .thenReturn(Visibility.PRIVATE);
 
@@ -109,6 +114,9 @@ class DatasetsResourceIntegrationTest {
         });
 
         var request = DatasetItemStreamRequest.builder().datasetName(datasetName).steamLimit(500).build();
+
+        when(service.resolveDatasetByName(any(DatasetIdentifier.class)))
+                .thenReturn(factory.manufacturePojo(Dataset.class));
 
         when(itemService.getItems(eq(workspaceId), eq(request), any()))
                 .thenReturn(Flux.defer(() -> itemFlux));
