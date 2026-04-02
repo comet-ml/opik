@@ -19,6 +19,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
+    dataset_public as rest_dataset_public,
     dataset_version_public,
     evaluator_item_write as rest_evaluator_item,
     execution_policy_write as rest_execution_policy,
@@ -336,6 +337,36 @@ class Dataset(DatasetExportOperations):
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
+
+    @classmethod
+    def from_public(
+        cls,
+        dataset_fern: rest_dataset_public.DatasetPublic,
+        project_name: str,
+        rest_client: rest_api_client.OpikApi,
+    ) -> "Dataset":
+        """Build a Dataset from a backend response, resolving the actual project.
+
+        The backend may find the dataset via workspace-wide fallback even when
+        the caller's project_name doesn't match the dataset's actual project.
+        This method uses project_id from the response to resolve the real
+        project name, so downstream calls target the correct project.
+        """
+        actual_project_name: Optional[str] = None
+        if dataset_fern.project_id is not None:
+            actual_project_name = rest_client.projects.get_project_by_id(
+                dataset_fern.project_id
+            ).name
+
+        dataset_ = cls(
+            name=dataset_fern.name,
+            description=dataset_fern.description,
+            project_name=actual_project_name or project_name,
+            rest_client=rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
+        )
+        dataset_.__internal_api__sync_hashes__()
+        return dataset_
 
     @functools.cached_property
     def id(self) -> str:
