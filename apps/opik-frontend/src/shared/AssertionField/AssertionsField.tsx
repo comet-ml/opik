@@ -36,7 +36,7 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
   return (
     <div className="flex flex-col gap-2 pt-1.5">
       {!hasAny && (
-        <div className="flex flex-col items-center justify-center gap-1.5 rounded-md border bg-muted/50 px-4 py-4">
+        <div className="flex flex-col items-center justify-center gap-1.5 rounded-md border bg-muted/50 p-4">
           <div className="flex size-6 items-center justify-center rounded-full border">
             <CheckCheck className="size-3 text-muted-slate" />
           </div>
@@ -77,7 +77,7 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
         </div>
       )}
 
-      {(
+      {
         <Button
           type="button"
           variant="ghost"
@@ -88,7 +88,7 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
           <Plus className="mr-0.5 size-3" />
           Assertion
         </Button>
-      )}
+      }
     </div>
   );
 };
