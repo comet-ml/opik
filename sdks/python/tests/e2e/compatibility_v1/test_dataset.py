@@ -314,3 +314,49 @@ def test_get_version_view__version_not_found__raises_exception(
     # Try to get a non-existent version
     with pytest.raises(opik.exceptions.DatasetVersionNotFound):
         dataset.get_version_view("v999")
+
+
+def test_get_dataset_without_project_name__returns_items_from_correct_project(
+    opik_client: opik.Opik, dataset_name: str, temporary_project_name: str
+):
+    """Test that get_dataset without project_name still returns items
+    when the dataset was created under a non-default project.
+
+    Regression test for OPIK-5614: the SDK used to store the caller's
+    default project_name on the Dataset object instead of the dataset's
+    actual project, causing downstream item streaming to return empty results.
+    """
+    dataset = opik_client.create_dataset(
+        dataset_name,
+        description="OPIK-5614 regression test",
+        project_name=temporary_project_name,
+    )
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "expected_output": {"output": "Paris"},
+            },
+            {
+                "input": {"question": "What is the capital of Germany?"},
+                "expected_output": {"output": "Berlin"},
+            },
+        ]
+    )
+
+    # Retrieve the same dataset WITHOUT specifying project_name.
+    # The backend finds it via workspace-wide fallback, but the SDK must
+    # use the actual project from the response so items are streamed correctly.
+    retrieved_dataset = opik_client.get_dataset(dataset_name)
+
+    assert retrieved_dataset.project_name == temporary_project_name
+
+    items = retrieved_dataset.get_items()
+    assert len(items) == 2
+
+    inputs = {item["input"]["question"] for item in items}
+    assert inputs == {
+        "What is the capital of France?",
+        "What is the capital of Germany?",
+    }

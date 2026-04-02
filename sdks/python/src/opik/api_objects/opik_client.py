@@ -1025,13 +1025,13 @@ class Opik:
         dataset_ = dataset.Dataset(
             name=name,
             description=dataset_fern.description,
-            project_name=project_name,
+            project_name=self._get_project_name_by_id(dataset_fern.project_id)
+            or project_name,
             rest_client=self._rest_client,
             dataset_items_count=dataset_fern.dataset_items_count,
         )
 
         dataset_.__internal_api__sync_hashes__()
-
         return dataset_
 
     def get_datasets(
@@ -1276,7 +1276,8 @@ class Opik:
         suite_dataset = dataset.Dataset(
             name=name,
             description=dataset_fern.description,
-            project_name=project_name,
+            project_name=self._get_project_name_by_id(dataset_fern.project_id)
+            or project_name,
             rest_client=self._rest_client,
             dataset_items_count=dataset_fern.dataset_items_count,
         )
@@ -2700,6 +2701,15 @@ class Opik:
         if project_name is None:
             return self._project_name
         return project_name
+
+    def _get_project_name_by_id(
+        self, project_id: Optional[str]
+    ) -> Optional[str]:
+        if project_id is None:
+            return None
+        project = self._rest_client.projects.get_project_by_id(project_id)
+        return project.name
+
 
 
 @functools.lru_cache()
