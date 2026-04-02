@@ -363,6 +363,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
               datasetVersionId={latestVersion?.id}
               isEvalSuite={isEvaluationSuite}
               projectId={activeProjectId}
+              isSuiteEmpty={suite?.dataset_items_count === 0}
             />
             {isEvaluationSuite && (
               <Button
