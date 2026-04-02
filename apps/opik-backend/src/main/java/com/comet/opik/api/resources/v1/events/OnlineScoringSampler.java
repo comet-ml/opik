@@ -75,14 +75,27 @@ public class OnlineScoringSampler {
      */
     @Subscribe
     public void onTracesCreated(TracesCreated tracesBatch) {
-        var tracesByProject = tracesBatch.traces().stream().collect(Collectors.groupingBy(Trace::projectId));
+        // Filter out partial traces (no end_time) to avoid scoring incomplete data.
+        // The SDK may send a "start" event (with input but no output/end_time) followed by
+        // a "complete" event (with output and end_time). Only score complete traces.
+        var completeTraces = tracesBatch.traces().stream()
+                .filter(trace -> trace.endTime() != null)
+                .toList();
+
+        if (completeTraces.isEmpty()) {
+            log.info("Skipping '{}' partial traces (no end_time) for workspace '{}'",
+                    tracesBatch.traces().size(), tracesBatch.workspaceId());
+            return;
+        }
+
+        var tracesByProject = completeTraces.stream().collect(Collectors.groupingBy(Trace::projectId));
 
         var countMap = tracesByProject.entrySet().stream()
                 .collect(Collectors.toMap(entry -> "projectId: " + entry.getKey(),
                         entry -> entry.getValue().size()));
 
-        log.info("Received '{}' traces for workspace '{}': '{}'",
-                tracesBatch.traces().size(), tracesBatch.workspaceId(), countMap);
+        log.info("Received '{}' complete traces (out of '{}' total) for workspace '{}': '{}'",
+                completeTraces.size(), tracesBatch.traces().size(), tracesBatch.workspaceId(), countMap);
 
         // fetch automation rules per project
         tracesByProject.forEach((projectId, traces) -> {
