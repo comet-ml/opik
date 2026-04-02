@@ -86,7 +86,7 @@ public interface DatasetService {
 
     Dataset findByName(String workspaceId, DatasetIdentifier identifier, Visibility visibility);
 
-    Mono<Dataset> resolveDatasetByName(DatasetIdentifier identifier, Visibility visibility);
+    Mono<Dataset> resolveDatasetByNameAsync(DatasetIdentifier identifier);
 
     void delete(DatasetIdentifier identifier);
 
@@ -109,6 +109,8 @@ public interface DatasetService {
     long getDailyCreatedCount();
 
     void updateStatus(UUID id, String workspaceId, DatasetStatus status);
+
+    Dataset resolveDatasetByName(DatasetIdentifier identifier);
 }
 
 @Singleton
@@ -377,15 +379,37 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Mono<Dataset> resolveDatasetByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
+    public Dataset resolveDatasetByName(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        return Mono.fromCallable(() -> {
-            UUID projectId = null;
-            if (StringUtils.isNotBlank(identifier.projectName())) {
-                projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
-            }
-            return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
-        }).subscribeOn(Schedulers.boundedElastic());
+        UUID projectId = null;
+        boolean projectNameProvided = StringUtils.isNotBlank(identifier.projectName());
+
+        if (projectNameProvided) {
+            projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
+        }
+
+        Dataset dataset = findByName(workspaceId, identifier.datasetName(), projectId,
+                requestContext.get().getVisibility());
+        // Project name was given but couldn't be resolved to a known project — dataset found workspace-wide
+        if (projectNameProvided && projectId == null) {
+            requestContext.get().setWorkspaceFallbackFor("Dataset", identifier.datasetName());
+        }
+        return dataset;
+    }
+
+    @Override
+    public Mono<Dataset> resolveDatasetByNameAsync(@NonNull DatasetIdentifier identifier) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+            return Mono.fromCallable(() -> {
+                UUID projectId = null;
+                if (StringUtils.isNotBlank(identifier.projectName())) {
+                    projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
+                }
+                return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
+            }).subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     /**
