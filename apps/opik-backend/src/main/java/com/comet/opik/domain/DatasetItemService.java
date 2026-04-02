@@ -80,8 +80,7 @@ public interface DatasetItemService {
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
-    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request,
-            List<DatasetItemFilter> filters, Visibility visibility);
+    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, List<DatasetItemFilter> filters);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -730,17 +729,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
-            @NonNull List<DatasetItemFilter> filters, Visibility visibility) {
+            @NonNull List<DatasetItemFilter> filters) {
         log.info("Getting dataset items for dataset '{}' (hasFilters={}), version='{}', workspaceId='{}'",
                 request.datasetName(), !filters.isEmpty(),
                 request.datasetVersion(), workspaceId);
 
-        return datasetService.resolveDatasetByName(
+        return datasetService.resolveDatasetByNameAsync(
                 DatasetIdentifier.builder()
                         .datasetName(request.datasetName())
                         .projectName(request.projectName())
-                        .build(),
-                visibility)
+                        .build())
                 .flatMap(dataset -> Mono.deferContextual(ctx -> {
                     // Ensure dataset is migrated if lazy migration is enabled
                     return ensureLazyMigration(dataset.id(), workspaceId)

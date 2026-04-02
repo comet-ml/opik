@@ -429,10 +429,10 @@ public class DatasetsResource {
             }), maxItems = 2000)))
     })
     public ChunkedOutput<JsonNode> streamDatasetItems(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
-        var workspaceId = requestContext.get().getWorkspaceId();
-        var userName = requestContext.get().getUserName();
-        var visibility = requestContext.get().getVisibility();
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request,
+            @Context jakarta.servlet.http.HttpServletResponse httpResponse) {
+        var ctxSnapshot = requestContext.get();
+        var workspaceId = ctxSnapshot.getWorkspaceId();
 
         // Suppress unchecked cast warning since we already pass DatasetItemFilter reference to newFilters
         @SuppressWarnings("unchecked")
@@ -441,12 +441,24 @@ public class DatasetsResource {
 
         log.info("Streaming dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
                 request.datasetName(), request.projectName(), workspaceId);
-        var items = itemService.getItems(workspaceId, request, queryFilters, visibility)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+
+        service.resolveDatasetByName(DatasetIdentifier.builder()
+                .datasetName(request.datasetName())
+                .projectName(request.projectName())
+                .build());
+
+        var items = itemService.getItems(workspaceId, request, queryFilters)
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
         var outputStream = streamer.getOutputStream(items);
+
         log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
                 request.datasetName(), request.projectName(), workspaceId);
+
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            httpResponse.addHeader(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+
         return outputStream;
     }
 

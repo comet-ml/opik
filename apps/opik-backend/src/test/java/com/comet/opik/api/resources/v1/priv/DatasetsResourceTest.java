@@ -4577,6 +4577,29 @@ class DatasetsResourceTest {
 
             assertThat(actualItems).hasSize(items.size());
         }
+
+        @Test
+        @DisplayName("when streaming dataset items with non-existing project_name, then return X-Opik-Deprecation header")
+        void streamDataItems__whenNonExistingProjectName__thenReturnDeprecationHeader() {
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build()))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
+                    .build();
+
+            try (var response = datasetResourceClient.callStreamDatasetItems(streamRequest, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                                batch.datasetName()));
+            }
+        }
     }
 
     private DatasetItem getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
