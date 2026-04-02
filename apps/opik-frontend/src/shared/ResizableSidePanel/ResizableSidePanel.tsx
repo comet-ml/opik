@@ -307,7 +307,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
               onMouseDown={startResizing as never}
             ></div>
             <div className="relative flex size-full">
-              <div className="absolute inset-x-0 top-0 flex h-[60px] items-center pl-6 pr-5">
+              <div className="absolute inset-x-0 top-0 flex h-[47px] items-center pl-6 pr-5">
                 <div
                   className={cn(
                     "flex items-center gap-2",
@@ -334,7 +334,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                 </div>
                 {headerContent && headerContent}
               </div>
-              <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
+              <div className="absolute inset-x-0 bottom-0 top-[47px] border-t">
                 {children}
               </div>
             </div>

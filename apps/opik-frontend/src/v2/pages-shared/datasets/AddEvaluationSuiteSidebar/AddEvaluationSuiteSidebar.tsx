@@ -114,27 +114,19 @@ const AddEvaluationSuiteSidebar = ({
     const escapedName = (name || "my-suite")
       .replace(/\\/g, "\\\\")
       .replace(/"/g, '\\"');
-    return `from opik import EvalSuite
+    return `import opik
 
-suite = EvalSuite(
-    name="${escapedName}",
-    type="${evaluationType}",
-)
-
-suite.run(test_cases)`;
-  }, [name, evaluationType]);
+client = opik.Opik()
+suite = client.get_dataset(name="${escapedName}")`;
+  }, [name]);
 
   const typescriptSnippet = useMemo(() => {
     const escapedName = escapeJsString(name || "my-suite");
-    return `import { EvalSuite } from '@opik/sdk';
+    return `import { Opik } from 'opik';
 
-const suite = new EvalSuite({
-  name: "${escapedName}",
-  type: "${evaluationType}"
-});
-
-await suite.run(testCases);`;
-  }, [name, evaluationType]);
+const client = new Opik();
+const suite = await client.getDataset("${escapedName}");`;
+  }, [name]);
 
   const activeSnippet =
     sdkLanguage === "python" ? pythonSnippet : typescriptSnippet;
