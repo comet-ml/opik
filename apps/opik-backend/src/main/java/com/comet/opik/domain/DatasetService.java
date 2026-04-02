@@ -294,7 +294,10 @@ class DatasetServiceImpl implements DatasetService {
     public void verifyVisibilityIfExists(@NonNull UUID id, @NonNull String workspaceId, Visibility visibility) {
         template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            dao.findById(id, workspaceId).ifPresent(dataset -> verifyVisibility(dataset, visibility));
+            dao.findById(id, workspaceId).ifPresentOrElse(
+                    dataset -> verifyVisibility(dataset, visibility),
+                    () -> log.debug("Dataset '{}' not found in workspace '{}'; skipping visibility check", id,
+                            workspaceId));
             return null;
         });
     }

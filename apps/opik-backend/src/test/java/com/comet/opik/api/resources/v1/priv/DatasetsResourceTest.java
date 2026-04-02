@@ -7645,10 +7645,6 @@ class DatasetsResourceTest {
             // Delete the evaluation suite
             datasetResourceClient.deleteDataset(datasetId, apiKey, workspaceName);
 
-            // Experiment items should still be retrievable even after the suite is deleted
-            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
-                    datasetId, List.of(experimentId), apiKey, workspaceName);
-
             // Since the evaluation suite (and its versions) was deleted, the dataset_items data is gone.
             // The legacy fallback query returns synthetic items from experiment_items with null dataset item fields.
             var expectedItem = datasetItem.toBuilder()
@@ -7660,7 +7656,23 @@ class DatasetsResourceTest {
                     .executionPolicy(null)
                     .data(Map.of())
                     .build();
-            assertDatasetItemPage(result, List.of(expectedItem), result.columns(), 1);
+
+            // The experiment item should still reference the original trace
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .feedbackScores(null)
+                    .comments(null)
+                    .totalEstimatedCost(null)
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), trace.endTime()))
+                    .usage(null)
+                    .traceVisibilityMode(trace.visibilityMode())
+                    .description(null)
+                    .build();
+
+            assertPageAndContent(datasetId, List.of(experimentId), apiKey, workspaceName,
+                    List.of(expectedExperimentItem), Set.of(), List.of(expectedItem));
         }
     }
 
