@@ -894,8 +894,8 @@ class RawProjectsClient:
         *,
         entity_type: KpiCardRequestEntityType,
         interval_start: dt.datetime,
-        interval_end: dt.datetime,
         filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[KpiCardResponse]:
         """
@@ -909,9 +909,9 @@ class RawProjectsClient:
 
         interval_start : dt.datetime
 
-        interval_end : dt.datetime
-
         filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2061,8 +2061,8 @@ class AsyncRawProjectsClient:
         *,
         entity_type: KpiCardRequestEntityType,
         interval_start: dt.datetime,
-        interval_end: dt.datetime,
         filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[KpiCardResponse]:
         """
@@ -2076,9 +2076,9 @@ class AsyncRawProjectsClient:
 
         interval_start : dt.datetime
 
-        interval_end : dt.datetime
-
         filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

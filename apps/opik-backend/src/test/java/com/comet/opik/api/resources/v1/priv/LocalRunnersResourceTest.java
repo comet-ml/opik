@@ -910,10 +910,8 @@ class LocalRunnersResourceTest {
             UUID runnerId = connectRunnerWithPairing("nj-empty", projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callNextJob(runnerId, ctx.apiKey, ctx.workspace)) {
-                assertThat(response.getStatus()).isIn(200, 204);
-                if (response.getStatus() == 200) {
-                    assertThat(response.hasEntity()).isFalse();
-                }
+                assertThat(response.getStatus()).isEqualTo(200);
+                assertThat(response.readEntity(String.class)).isEqualTo("null");
             }
         }
 

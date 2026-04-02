@@ -81,7 +81,7 @@ class TestPollLoop:
             call_count += 1
             if call_count >= 3:
                 shutdown_event.set()
-            raise ApiError(status_code=204)
+            return None
 
         mock_api.runners.next_job.side_effect = side_effect
         loop._loop = asyncio.new_event_loop()
@@ -129,7 +129,7 @@ class TestPollLoop:
             if call_count == 1:
                 return job
             shutdown_event.set()
-            raise ApiError(status_code=204)
+            return None
 
         mock_api.runners.next_job.side_effect = side_effect
 

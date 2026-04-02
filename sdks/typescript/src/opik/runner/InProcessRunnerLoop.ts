@@ -112,14 +112,12 @@ export class InProcessRunnerLoop {
         const job = await this.api.runners.nextJob(this.runnerId);
         this.pollFailures = 0;
         nextBackoff = 1_000;
-        this.spawnJob(job);
-      } catch (err) {
-        if (err instanceof OpikApiError && err.statusCode === 204) {
-          this.pollFailures = 0;
-          nextBackoff = 1_000;
+        if (job === null) {
           this.scheduleNextPoll(POLL_IDLE_INTERVAL_MS, nextBackoff);
           return;
         }
+        this.spawnJob(job);
+      } catch (err) {
         this.pollFailures++;
         if (this.pollFailures === 1) {
           const statusCode = err instanceof OpikApiError ? err.statusCode : undefined;

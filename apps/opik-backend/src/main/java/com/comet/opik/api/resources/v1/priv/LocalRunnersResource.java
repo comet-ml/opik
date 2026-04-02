@@ -17,6 +17,7 @@ import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.fasterxml.jackson.databind.node.NullNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -207,8 +208,7 @@ public class LocalRunnersResource {
     @POST
     @Path("/{runnerId}/jobs/next")
     @Operation(operationId = "nextJob", summary = "Next local runner job", description = "Long-poll for the next pending local runner job", responses = {
-            @ApiResponse(responseCode = "200", description = "Job available", content = @Content(schema = @Schema(implementation = LocalRunnerJob.class))),
-            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "200", description = "Job available, or null if no pending jobs", content = @Content(schema = @Schema(nullable = true, allOf = LocalRunnerJob.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public void nextJob(@PathParam("runnerId") UUID runnerId,
             @Suspended AsyncResponse asyncResponse) {
@@ -216,12 +216,13 @@ public class LocalRunnersResource {
         long pollTimeoutSeconds = runnerConfig.getNextJobPollTimeout().toSeconds();
         long bufferSeconds = runnerConfig.getNextJobAsyncTimeoutBuffer().toSeconds();
         asyncResponse.setTimeout(pollTimeoutSeconds + bufferSeconds, TimeUnit.SECONDS);
-        asyncResponse.setTimeoutHandler(ar -> ar.resume(Response.noContent().build()));
+        asyncResponse.setTimeoutHandler(
+                ar -> ar.resume(Response.ok(NullNode.getInstance()).build()));
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         runnerService.nextJob(runnerId, workspaceId, userName)
                 .map(job -> Response.ok(job).build())
-                .defaultIfEmpty(Response.noContent().build())
+                .defaultIfEmpty(Response.ok(NullNode.getInstance()).build())
                 .subscribe(
                         asyncResponse::resume,
                         error -> {
