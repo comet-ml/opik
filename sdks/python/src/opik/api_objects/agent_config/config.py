@@ -137,15 +137,12 @@ class AgentConfigManager:
             field_types: Mapping of prefixed field key to Python type used
                 when fetching back the created blueprint.
         """
-        fields_with_values = self._resolve_fields_with_values(
+        resolved_fields_with_values = self._resolve_fields_with_values(
             parameters, fields_with_values
         )
-        if fields_with_values is None:
-            raise ValueError("Either parameters or fields_with_values must be given")
-
         blueprint_id = id_helpers.generate_id()
         payload = _build_blueprint_payload(
-            fields_with_values, description, id=blueprint_id
+            resolved_fields_with_values, description, id=blueprint_id
         )
         self._rest_client.agent_configs.create_agent_config(
             blueprint=payload,
@@ -160,7 +157,7 @@ class AgentConfigManager:
 
     def update_blueprint(
         self,
-        fields_with_values: typing.Dict[str, FieldValueSpec],
+        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]] = None,
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
@@ -173,10 +170,12 @@ class AgentConfigManager:
             field_types: Mapping of a prefixed field key to a Python type used
                 when fetching back the created blueprint.
         """
-        fields_with_values = self._resolve_fields_with_values(None, fields_with_values)
+        resolved_fields_with_values = self._resolve_fields_with_values(
+            None, fields_with_values
+        )
         blueprint_id = id_helpers.generate_id()
         payload = _build_blueprint_payload(
-            fields_with_values, description, id=blueprint_id
+            resolved_fields_with_values, description, id=blueprint_id
         )
         self._rest_client.agent_configs.update_agent_config(
             blueprint=payload,
@@ -222,15 +221,12 @@ class AgentConfigManager:
                 mapping, bypassing type inference.
             description: Human-readable description stored with the mask.
         """
-        fields_with_values = self._resolve_fields_with_values(
+        resolved_fields_with_values = self._resolve_fields_with_values(
             parameters, fields_with_values
         )
-        if fields_with_values is None:
-            raise ValueError("Either parameters or fields_with_values must be given")
-
         mask_id = id_helpers.generate_id()
         payload = _build_blueprint_payload(
-            fields_with_values, description, id=mask_id, config_type="mask"
+            resolved_fields_with_values, description, id=mask_id, config_type="mask"
         )
         self._rest_client.agent_configs.update_agent_config(
             blueprint=payload,
