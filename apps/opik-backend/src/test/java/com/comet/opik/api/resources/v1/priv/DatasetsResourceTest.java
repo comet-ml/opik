@@ -6514,8 +6514,16 @@ class DatasetsResourceTest {
                         }
                     }
 
-                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    if (expectedDatasetItem.createdAt() == null) {
+                        assertThat(actualDatasetItem.createdAt()).isNull();
+                    } else {
+                        assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                    }
+                    if (expectedDatasetItem.lastUpdatedAt() == null) {
+                        assertThat(actualDatasetItem.lastUpdatedAt()).isNull();
+                    } else {
+                        assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    }
                 }
             }
         }
@@ -6670,8 +6678,16 @@ class DatasetsResourceTest {
                             .isEqualTo(USER);
                 }
 
-                assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                if (expectedDatasetItem.createdAt() == null) {
+                    assertThat(actualDatasetItem.createdAt()).isNull();
+                } else {
+                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                }
+                if (expectedDatasetItem.lastUpdatedAt() == null) {
+                    assertThat(actualDatasetItem.lastUpdatedAt()).isNull();
+                } else {
+                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                }
             }
         }
 
@@ -7655,6 +7671,8 @@ class DatasetsResourceTest {
                     .evaluators(null)
                     .executionPolicy(null)
                     .data(Map.of())
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
                     .build();
 
             // The experiment item should still reference the original trace
