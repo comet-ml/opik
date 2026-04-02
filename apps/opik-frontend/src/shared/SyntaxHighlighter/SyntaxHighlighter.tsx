@@ -23,6 +23,8 @@ export type SyntaxHighlighterProps = {
   scrollPosition?: number;
   onScrollPositionChange?: OnChangeFn<number>;
   maxHeight?: string;
+  transparent?: boolean;
+  fullHeight?: boolean;
 };
 
 const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
@@ -34,6 +36,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   scrollPosition,
   onScrollPositionChange,
   maxHeight,
+  transparent,
+  fullHeight,
 }) => {
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
@@ -88,6 +92,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
         scrollRef={scrollRef}
         onScroll={handleScroll}
         maxHeight={maxHeight}
+        transparent={transparent}
+        fullHeight={fullHeight}
       />
     );
   }
@@ -104,6 +110,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
       scrollRef={scrollRef}
       onScroll={handleScroll}
       maxHeight={maxHeight}
+      transparent={transparent}
+      fullHeight={fullHeight}
     />
   );
 };

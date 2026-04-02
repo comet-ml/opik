@@ -41,6 +41,7 @@ interface LLMPromptMessagesProps {
   improvePromptConfig?: ImprovePromptConfig;
   hideAddButton?: boolean;
   jsonTreeData?: JsonObject | null;
+  compact?: boolean;
 }
 
 const LLMPromptMessages = ({
@@ -55,6 +56,7 @@ const LLMPromptMessages = ({
   improvePromptConfig,
   hideAddButton = false,
   jsonTreeData,
+  compact = false,
 }: LLMPromptMessagesProps) => {
   const lastFocusedMessageIdRef = useRef<string | null>(null);
   const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
@@ -187,6 +189,7 @@ const LLMPromptMessages = ({
               promptVariables={promptVariables}
               improvePromptConfig={improvePromptConfig}
               jsonTreeData={jsonTreeData}
+              compact={compact}
             />
           ))}
         </div>

@@ -69,11 +69,10 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
 
   if (editItem) {
     return (
-      <div className="w-[70vw]">
+      <div className="w-full p-4">
         <AgentConfigurationEditView
           item={editItem}
           projectId={projectId}
-          onCancel={() => setEditItem(null)}
           onSaved={() => {
             setSelectedId(undefined);
             setEditItem(null);
