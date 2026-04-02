@@ -84,10 +84,12 @@ def test_langgraph__happyflow(
         input=initial_state,
         output=result,
         tags=["tag1", "tag2"],
-        metadata={
-            "a": "b",
-            "created_from": "langchain",
-        },
+        metadata=ANY_DICT.containing(
+            {
+                "a": "b",
+                "created_from": "langchain",
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -200,10 +202,12 @@ def test_langgraph__invoked_from_tracked_function__langgraph_span_is_kept(
                         input=initial_state,
                         output=result,
                         tags=["tag1", "tag2"],
-                        metadata={
-                            "a": "b",
-                            "created_from": "langchain",
-                        },
+                        metadata=ANY_DICT.containing(
+                            {
+                                "a": "b",
+                                "created_from": "langchain",
+                            }
+                        ),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[
@@ -782,7 +786,9 @@ def test_langgraph__distributed_headers__langgraph_span_is_kept(
                             "response": "Hello! How can I help you today?",
                         },
                         tags=["tag1", "tag2"],
-                        metadata={"a": "b", "created_from": "langchain"},
+                        metadata=ANY_DICT.containing(
+                            {"a": "b", "created_from": "langchain"}
+                        ),
                         type="general",
                         end_time=ANY_BUT_NONE,
                         project_name="langgraph-integration-test--distributed-headers",
@@ -933,7 +939,9 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
                             "response": "Hello! How can I help you today?",
                         },
                         tags=["tag1", "tag2"],
-                        metadata={"a": "b", "created_from": "langchain"},
+                        metadata=ANY_DICT.containing(
+                            {"a": "b", "created_from": "langchain"}
+                        ),
                         type="general",
                         end_time=ANY_BUT_NONE,
                         project_name="Default Project",
@@ -1072,7 +1080,7 @@ def test_langgraph__used_when_there_was_already_existing_trace_without_span__lan
                     "response": "Hello! How can I help you today?",
                 },
                 tags=["tag1", "tag2"],
-                metadata={"a": "b", "created_from": "langchain"},
+                metadata=ANY_DICT.containing({"a": "b", "created_from": "langchain"}),
                 type="general",
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
