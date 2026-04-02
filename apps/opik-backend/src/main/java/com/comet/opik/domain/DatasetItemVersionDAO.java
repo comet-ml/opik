@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
@@ -73,7 +74,7 @@ public interface DatasetItemVersionDAO {
      * @return a Mono containing the page of dataset items with experiment items
      */
     Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria searchCriteria, int page, int size,
-            UUID versionId);
+            String versionId);
 
     Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -2378,7 +2379,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             @NonNull UUID versionId) {
         return Mono.zip(
                 getCount(criteria, versionId),
-                getColumns(criteria.datasetId(), versionId)).flatMap(tuple -> {
+                getColumns(criteria.datasetId(), versionId.toString())).flatMap(tuple -> {
                     Long total = tuple.getT1();
                     Set<Column> columns = tuple.getT2();
 
@@ -2405,6 +2406,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(DatasetItemResultMapper::mapItem)
                                 .collectList()
+                                .onErrorResume(e -> handleSqlError(e, List.of()))
                                 .map(items -> new DatasetItemPage(items, page, items.size(), total, columns,
                                         sortingFactory.getSortableFields()));
                     });
@@ -2413,7 +2415,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     public Mono<DatasetItemPage> getItemsWithExperimentItems(@NonNull DatasetItemSearchCriteria criteria, int page,
-            int size, @NonNull UUID versionId) {
+            int size, @NonNull String versionId) {
         log.info(
                 "Getting versioned dataset items with experiment items for dataset '{}', version '{}', experiments '{}'",
                 criteria.datasetId(), versionId, criteria.experimentIds());
@@ -2539,9 +2541,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                     .doFinally(signalType -> endSegment(segment))
                                     .flatMap(DatasetItemResultMapper::mapItem)
                                     .collectList()
+                                    .onErrorResume(e -> handleSqlError(e, List.of()))
                                     .zipWith(getCountWithExperimentFilters(criteria, versionId,
                                             targetProjectIds, hasAggregated, hasRaw))
                                     .zipWith(getColumns(criteria.datasetId(), versionId))
+
                                     .map(tuple -> {
                                         var itemsAndCount = tuple.getT1();
                                         List<DatasetItem> items = itemsAndCount.getT1();
@@ -2554,6 +2558,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         });
                     });
         });
+    }
+
+    private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
+        if (e instanceof ClickHouseException && e.getMessage().contains("Unable to parse JSONPath. (BAD_ARGUMENTS)")) {
+            return Mono.just(defaultValue);
+        }
+        return Mono.error(e);
     }
 
     /**
@@ -2626,7 +2637,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     private Mono<Long> getCountWithExperimentFilters(@NonNull DatasetItemSearchCriteria criteria,
-            @NonNull UUID versionId, List<UUID> targetProjectIds,
+            @NonNull String versionId, List<UUID> targetProjectIds,
             boolean hasAggregated, boolean hasRaw) {
         log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
                 versionId);
@@ -2656,7 +2667,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", criteria.datasetId())
-                    .bind("versionId", versionId.toString());
+                    .bind("versionId", versionId);
 
             // Bind target project IDs (from separate query to reduce traces table scans)
             if (CollectionUtils.isNotEmpty(targetProjectIds)) {
@@ -2676,7 +2687,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
-                    .reduce(0L, Long::sum);
+                    .reduce(0L, Long::sum)
+                    .onErrorResume(e -> handleSqlError(e, 0L));
         });
     }
 
@@ -2698,7 +2710,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
-                    .reduce(0L, Long::sum);
+                    .reduce(0L, Long::sum)
+                    .onErrorResume(e -> handleSqlError(e, 0L));
         });
     }
 
@@ -3452,13 +3465,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .build();
     }
 
-    private Mono<Set<Column>> getColumns(UUID datasetId, UUID versionId) {
+    private Mono<Set<Column>> getColumns(UUID datasetId, String versionId) {
         log.debug("Getting columns for dataset '{}', version '{}'", datasetId, versionId);
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(SELECT_COLUMNS_BY_VERSION)
                     .bind("datasetId", datasetId.toString())
-                    .bind("versionId", versionId.toString());
+                    .bind("versionId", versionId);
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_columns_by_version");
 
