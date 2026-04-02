@@ -220,12 +220,7 @@ const AddEditEvaluationSuiteDialog = ({
                       evaluation suites use the SDK instead.
                     </>
                   )}
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="h-5 px-1"
-                    asChild
-                  >
+                  <Button variant="link" size="sm" className="h-5 px-1" asChild>
                     <a
                       href={buildDocsUrl("/evaluation/manage_datasets")}
                       target="_blank"
