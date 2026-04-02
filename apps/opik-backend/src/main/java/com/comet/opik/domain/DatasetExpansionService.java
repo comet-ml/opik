@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,8 +54,7 @@ public class DatasetExpansionService {
                 .build();
 
         var existingItems = datasetItemService.getItems(1, 10, searchCriteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
                 .block();
         if (CollectionUtils.isEmpty(existingItems.content())) {
             throw new BadRequestException("Cannot expand empty dataset. Add at least one sample first");

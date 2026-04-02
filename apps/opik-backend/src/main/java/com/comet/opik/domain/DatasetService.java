@@ -76,6 +76,8 @@ public interface DatasetService {
 
     Dataset findById(UUID id, String workspaceId, Visibility visibility);
 
+    void verifyVisibilityIfExists(UUID id, String workspaceId, Visibility visibility);
+
     List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
 
     Dataset findByName(String workspaceId, String name, Visibility visibility);
@@ -287,6 +289,20 @@ class DatasetServiceImpl implements DatasetService {
             var workspaceId = dao.findWorkspaceIdByDatasetId(id).orElseThrow(this::newNotFoundException);
             log.info("Found workspaceId by dataset id '{}'", id);
             return workspaceId;
+        });
+    }
+
+    @Override
+    public void verifyVisibilityIfExists(@NonNull UUID id, @NonNull String workspaceId, Visibility visibility) {
+        template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            dao.findById(id, workspaceId).ifPresentOrElse(
+                    dataset -> verifyVisibility(dataset, visibility),
+                    // Dataset not found (e.g. deleted evaluation suite) — intentionally do not fail,
+                    // so callers can still retrieve experiment items after the dataset is gone.
+                    () -> log.debug("Dataset '{}' not found in workspace '{}'; skipping visibility check", id,
+                            workspaceId));
+            return null;
         });
     }
 

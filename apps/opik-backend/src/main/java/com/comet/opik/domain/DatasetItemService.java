@@ -1159,15 +1159,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
 
-        // Verify dataset visibility
-        datasetService.findById(datasetItemSearchCriteria.datasetId());
-
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
 
-            // Ensure dataset is migrated if lazy migration is enabled
-            return ensureLazyMigration(datasetItemSearchCriteria.datasetId(), workspaceId)
-                    .then(Mono.defer(() -> getItemsInternal(page, size, datasetItemSearchCriteria)));
+            return Mono.fromCallable(
+                    () -> {
+                        datasetService.verifyVisibilityIfExists(datasetItemSearchCriteria.datasetId(), workspaceId,
+                                visibility);
+                        return datasetItemSearchCriteria.datasetId();
+                    })
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(__ -> ensureLazyMigration(datasetItemSearchCriteria.datasetId(), workspaceId)
+                            .then(Mono.defer(() -> getItemsInternal(page, size, datasetItemSearchCriteria))));
         });
     }
 
@@ -1283,7 +1287,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
         Optional<UUID> fallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId);
 
         if (fallbackVersionId.isEmpty()) {
-            return Mono.just(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+            log.info("No versions found for dataset '{}', falling back to legacy items for experiment items",
+                    criteria.datasetId());
+            return dao.getItems(criteria, page, size)
+                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         }
 
         log.info(
