@@ -5,7 +5,7 @@ import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
-import { cn, buildDocsUrl } from "@/lib/utils";
+import { cn, buildDocsUrl, escapeJsString } from "@/lib/utils";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import UploadField from "@/shared/UploadField/UploadField";
@@ -84,7 +84,7 @@ const AddEvaluationSuiteSidebar = ({
   }, [open]);
 
   const sdkSnippet = useMemo(() => {
-    const escapedName = (name || "my-suite").replace(/"/g, '\\"');
+    const escapedName = escapeJsString(name || "my-suite");
     return `import { EvalSuite } from '@opik/sdk';
 
 const suite = new EvalSuite({
