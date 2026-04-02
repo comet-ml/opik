@@ -1532,7 +1532,7 @@ class TestConfigure:
 
     @patch("opik.configurator.configure.LOGGER")
     @patch("opik.configurator.configure.OpikConfigurator")
-    def test_url_override_takes_precedence_over_url(
+    def test_configure__url_and_url_override_both_provided__url_override_wins(
         self, mock_configurator_cls, mock_logger
     ):
         """When both url and url_override are supplied, url_override is forwarded to OpikConfigurator."""
@@ -1548,7 +1548,7 @@ class TestConfigure:
 
     @patch("opik.configurator.configure.LOGGER")
     @patch("opik.configurator.configure.OpikConfigurator")
-    def test_deprecation_warning_logged_when_url_used(
+    def test_configure__url_parameter_used__deprecation_warning_logged(
         self, mock_configurator_cls, mock_logger
     ):
         """Passing url emits a deprecation warning."""
@@ -1562,7 +1562,7 @@ class TestConfigure:
 
     @patch("opik.configurator.configure.LOGGER")
     @patch("opik.configurator.configure.OpikConfigurator")
-    def test_no_deprecation_warning_when_only_url_override_used(
+    def test_configure__only_url_override_provided__no_deprecation_warning(
         self, mock_configurator_cls, mock_logger
     ):
         """Passing only url_override must not emit a deprecation warning."""
@@ -1574,7 +1574,7 @@ class TestConfigure:
 
     @patch("opik.configurator.configure.LOGGER")
     @patch("opik.configurator.configure.OpikConfigurator")
-    def test_url_used_as_fallback_when_url_override_not_given(
+    def test_configure__only_url_provided__url_forwarded_as_effective_url(
         self, mock_configurator_cls, mock_logger
     ):
         """When only url is provided (no url_override), it is forwarded as the effective URL."""
