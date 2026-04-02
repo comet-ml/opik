@@ -15,7 +15,6 @@ from ..api_objects import type_helpers
 
 from ..api_objects.agent_config.context import agent_config_context
 from .. import id_helpers
-import pydantic
 
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
@@ -131,9 +130,7 @@ class InProcessRunnerLoop:
                         e.status_code,
                     )
                 else:
-                    LOGGER.debug(
-                        "Poll error (API %s)", e.status_code, exc_info=True
-                    )
+                    LOGGER.debug("Poll error (API %s)", e.status_code, exc_info=True)
                 self._backoff_wait(backoff)
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
