@@ -16,6 +16,7 @@ import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/shared/Loader/Loader";
 import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
+import AddEvaluationSuiteSidebar from "@/v2/pages-shared/datasets/AddEvaluationSuiteSidebar/AddEvaluationSuiteSidebar";
 import DatasetActionsPanel from "@/v2/pages-shared/datasets/DatasetActionsPanel/DatasetActionsPanel";
 import { createDatasetRowActionsCell } from "@/v2/pages-shared/datasets/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/ui/button";
@@ -411,7 +412,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           ></ColumnsButton>
           {canCreateDatasets && (
             <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
-              Create new
+              Create evaluation suite
             </Button>
           )}
         </div>
@@ -448,7 +449,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddEditEvaluationSuiteDialog
+      <AddEvaluationSuiteSidebar
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}

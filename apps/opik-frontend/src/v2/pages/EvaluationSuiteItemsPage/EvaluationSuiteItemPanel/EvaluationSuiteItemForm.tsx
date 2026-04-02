@@ -168,15 +168,15 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
 
   return (
     <div>
-      <h3 className="comet-body-accented mb-1">Evaluation criteria</h3>
-      <p className="comet-body-s mb-4 text-light-slate">
+      <h3 className="comet-body-s-accented mb-1">Evaluation criteria</h3>
+      <p className="comet-body-xs mb-4 text-light-slate">
         Define the conditions required for the evaluation to pass.
       </p>
 
       <div className="mb-4 flex items-start overflow-hidden rounded-md border">
         <div className="flex flex-1 gap-4 p-3">
           <div className="flex flex-1 flex-col gap-1">
-            <Label>Runs for this item</Label>
+            <Label className="comet-body-xs-accented">Runs for this item</Label>
             <Input
               dimension="sm"
               className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
@@ -196,7 +196,7 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
             </span>
           </div>
           <div className="flex flex-1 flex-col gap-1">
-            <Label>Pass threshold</Label>
+            <Label className="comet-body-xs-accented">Pass threshold</Label>
             <Input
               dimension="sm"
               className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
@@ -240,12 +240,12 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
       <div className="flex flex-col gap-1">
         <span className="comet-body-s-accented">Assertions</span>
         <div className="flex items-center justify-between">
-          <span className="comet-body-s text-light-slate">
+          <span className="comet-body-xs text-light-slate">
             Define the conditions for this evaluation to pass
           </span>
           <button
             type="button"
-            className="comet-body-s inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
+            className="comet-body-xs inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
             onClick={onOpenSettings}
           >
             <Settings2 className="size-3.5 shrink-0" />
