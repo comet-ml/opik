@@ -41,6 +41,7 @@ from .decorator.context_manager.span_context_manager import start_as_current_spa
 from .decorator.context_manager.trace_context_manager import start_as_current_trace
 from .simulation import SimulatedUser, run_simulation
 from .api_objects.local_recording import record_traces_locally
+from .opik_context import update_current_trace, update_current_span
 
 
 _logging.setup()
@@ -85,6 +86,8 @@ __all__ = [
     "AgentConfigNotFound",
     "Blueprint",
     "agent_config_context",
+    "update_current_trace",
+    "update_current_span",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()
