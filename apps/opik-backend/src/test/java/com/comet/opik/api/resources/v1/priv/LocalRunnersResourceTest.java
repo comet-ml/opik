@@ -310,7 +310,7 @@ class LocalRunnersResourceTest {
             assertThat(resp.pairingCode()).hasSize(6);
             assertThat(resp.pairingCode()).matches("[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}");
             assertThat(resp.runnerId()).isNotNull();
-            assertThat(resp.expiresInSeconds()).isEqualTo(300);
+            assertThat(resp.expiresInSeconds()).isEqualTo(3600);
         }
     }
 
