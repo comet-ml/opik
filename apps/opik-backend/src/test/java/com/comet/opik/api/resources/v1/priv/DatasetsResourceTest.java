@@ -7658,6 +7658,7 @@ class DatasetsResourceTest {
                     .description(null)
                     .evaluators(null)
                     .executionPolicy(null)
+                    .data(Map.of())
                     .build();
             assertDatasetItemPage(result, List.of(expectedItem), result.columns(), 1);
         }
