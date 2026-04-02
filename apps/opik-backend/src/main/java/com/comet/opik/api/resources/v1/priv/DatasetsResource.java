@@ -74,6 +74,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -430,7 +431,7 @@ public class DatasetsResource {
     })
     public ChunkedOutput<JsonNode> streamDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request,
-            @Context jakarta.servlet.http.HttpServletResponse httpResponse) {
+            @Context HttpServletResponse httpResponse) {
         var ctxSnapshot = requestContext.get();
         var workspaceId = ctxSnapshot.getWorkspaceId();
 
