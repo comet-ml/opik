@@ -36,16 +36,21 @@ const ROBOTS = [
   Robot10,
 ];
 
+const VARIANT_CONFIG = {
+  owl: { icons: OWLS, className: "shrink-0 size-8" },
+  robot: { icons: ROBOTS, className: "shrink-0 size-4" },
+} as const;
+
 interface ProjectIconProps {
   index: number;
-  variant?: "owl" | "robot";
+  variant?: keyof typeof VARIANT_CONFIG;
 }
 
 const ProjectIcon = ({ index, variant = "robot" }: ProjectIconProps) => {
-  const safeIndex = index % PROJECT_ICON_COUNT;
-  const Icon = variant === "owl" ? OWLS[safeIndex] : ROBOTS[safeIndex];
+  const { icons, className } = VARIANT_CONFIG[variant];
+  const Icon = icons[index % PROJECT_ICON_COUNT];
 
-  return <Icon className={variant === "owl" ? "size-8" : "size-4"} />;
+  return <Icon className={className} />;
 };
 
 export default ProjectIcon;
