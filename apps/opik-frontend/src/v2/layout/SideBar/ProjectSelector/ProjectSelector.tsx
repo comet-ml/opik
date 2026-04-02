@@ -37,6 +37,8 @@ import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
+import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
+import useProjectIconIndices from "@/hooks/useProjectIconIndex";
 
 interface ProjectSelectorProps {
   expanded?: boolean;
@@ -57,6 +59,8 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   );
 
   const isLoading = !!activeProjectId && isProjectPending;
+
+  const iconIndices = useProjectIconIndices();
 
   const { data: projectsData } = useProjectsList(
     {
@@ -87,8 +91,8 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           {expanded ? (
             <button
               className={cn(
-                "flex w-full items-center gap-1 rounded-md px-2 py-1",
-                open ? "bg-primary-foreground" : "hover:bg-primary-foreground",
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5",
+                open && "bg-primary-foreground",
               )}
             >
               {isLoading ? (
@@ -98,24 +102,43 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                     Loading…
                   </span>
                 </>
-              ) : activeProject ? (
-                <TooltipWrapper content={activeProject.name}>
-                  <span className="comet-body-s-accented flex-1 truncate text-left text-foreground">
-                    {activeProject.name}
-                  </span>
-                </TooltipWrapper>
               ) : (
-                <span className="comet-body-s-accented flex-1 truncate text-left text-muted-slate">
-                  Select project
-                </span>
+                <>
+                  <ProjectIcon
+                    index={
+                      activeProjectId
+                        ? iconIndices.get(activeProjectId) ?? 0
+                        : 0
+                    }
+                    variant="owl"
+                  />
+                  <div className="flex min-w-0 flex-1 flex-col items-start">
+                    <div className="flex w-full items-center gap-0.5">
+                      <span className="comet-body-s text-light-slate">
+                        Project
+                      </span>
+                      <span className="shrink-0 text-light-slate">
+                        {open ? (
+                          <ChevronUp className="size-3.5" />
+                        ) : (
+                          <ChevronDown className="size-3.5" />
+                        )}
+                      </span>
+                    </div>
+                    {activeProject ? (
+                      <TooltipWrapper content={activeProject.name}>
+                        <span className="comet-body-s-accented w-full truncate text-left text-foreground hover:underline hover:underline-offset-4">
+                          {activeProject.name}
+                        </span>
+                      </TooltipWrapper>
+                    ) : (
+                      <span className="comet-body-s-accented truncate text-left text-muted-slate">
+                        Select project
+                      </span>
+                    )}
+                  </div>
+                </>
               )}
-              <span className="shrink-0 text-muted-slate">
-                {open ? (
-                  <ChevronUp className="size-3.5" />
-                ) : (
-                  <ChevronDown className="size-3.5" />
-                )}
-              </span>
             </button>
           ) : (
             <button
@@ -161,6 +184,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             <ProjectItem
               key={project.id}
               project={project}
+              iconIndex={iconIndices.get(project.id) ?? 0}
               isSelected={project.id === activeProjectId}
               workspaceName={workspaceName}
               onSelect={handleSelect}
@@ -185,6 +209,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 
 interface ProjectItemProps {
   project: Project;
+  iconIndex: number;
   isSelected: boolean;
   workspaceName: string;
   onSelect: (projectId: string) => void;
@@ -193,6 +218,7 @@ interface ProjectItemProps {
 
 const ProjectItem: React.FC<ProjectItemProps> = ({
   project,
+  iconIndex,
   isSelected,
   workspaceName,
   onSelect,
@@ -238,7 +264,7 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
         params={{ workspaceName, projectId: project.id }}
         className={cn(
           "group relative flex h-8 items-center gap-2 rounded-md px-3 hover:bg-primary-foreground hover:pr-9",
-          isSelected && "bg-muted",
+          isSelected && "bg-primary-100 text-primary",
         )}
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -246,17 +272,13 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
           onSelect(project.id);
         }}
       >
-        <Check
-          className={cn(
-            "size-3.5 shrink-0",
-            isSelected ? "text-foreground" : "invisible",
-          )}
-        />
+        <ProjectIcon index={iconIndex} />
         <TooltipWrapper content={project.name}>
           <span className="comet-body-s flex-1 truncate text-foreground">
             {project.name}
           </span>
         </TooltipWrapper>
+        {isSelected && <Check className="size-3.5 shrink-0 text-primary" />}
         {hasActions && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>

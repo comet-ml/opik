@@ -17,7 +17,6 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
-import TextCell from "@/shared/DataTableCells/TextCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
@@ -57,6 +56,7 @@ import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import ProjectNameCell from "@/v2/pages/ProjectsPage/ProjectNameCell";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -129,7 +129,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        cell: TextCell as never,
+        cell: ProjectNameCell as never,
         sortable: true,
       },
       {
