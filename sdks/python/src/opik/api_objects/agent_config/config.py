@@ -8,8 +8,23 @@ from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
 from opik.rest_api.types.agent_config_env import AgentConfigEnv
 from opik.api_objects import rest_helpers
 from opik import id_helpers
+
 from .blueprint import Blueprint
 from .. import type_helpers
+
+
+class FieldValueSpec(typing.NamedTuple):
+    """Describes a single blueprint field's value for write operations.
+
+    Attributes:
+        python_type: The Python type of the field (e.g. ``str``, ``int``).
+        value: The field value to write.
+        description: Optional human-readable description of the field.
+    """
+
+    python_type: type[typing.Any]
+    value: typing.Any
+    description: typing.Optional[str] = None
 
 
 class AgentConfigManager:
@@ -30,47 +45,14 @@ class AgentConfigManager:
     @staticmethod
     def _resolve_fields_with_values(
         parameters: typing.Optional[typing.Dict[str, typing.Any]],
-        fields_with_values: typing.Optional[
-            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
-        ],
-    ) -> typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]:
+        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]],
+    ) -> typing.Dict[str, FieldValueSpec]:
         if fields_with_values is not None:
             return fields_with_values
         return {
-            k: (type(v) if v is not None else str, v, None)
+            k: FieldValueSpec(python_type=type(v) if v is not None else str, value=v)
             for k, v in (parameters or {}).items()
         }
-
-    def _build_blueprint_payload(
-        self,
-        fields_with_values: typing.Dict[
-            str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]
-        ],
-        description: typing.Optional[str],
-        id: typing.Optional[str] = None,
-        config_type: str = "blueprint",
-    ) -> AgentBlueprintWrite:
-        backend_values = []
-        for field_name, (py_type, value, field_desc) in fields_with_values.items():
-            backend_type = (
-                type_helpers.python_type_to_backend_type(py_type)
-                if value is not None
-                else "string"
-            )
-            backend_values.append(
-                AgentConfigValueWrite(
-                    key=field_name,
-                    type=backend_type,
-                    value=type_helpers.python_value_to_backend_value(value, py_type),
-                    description=field_desc,
-                )
-            )
-        return AgentBlueprintWrite(
-            id=id,
-            type=config_type,
-            values=backend_values,
-            description=description,
-        )
 
     def get_blueprint(
         self,
@@ -136,22 +118,20 @@ class AgentConfigManager:
     def create_blueprint(
         self,
         parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
-        fields_with_values: typing.Optional[
-            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
-        ] = None,
+        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]] = None,
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
         """Create a new blueprint and return it.
 
         Pass either ``parameters`` (plain key-value pairs whose types are
-        inferred) or ``fields_with_values`` (explicit ``{key: (type, value)}``
+        inferred) or ``fields_with_values`` (explicit ``{key: FieldValueSpec(type, value)}``
         mapping). If both are given ``fields_with_values`` takes precedence.
 
         Args:
             parameters: Plain ``{field_name: value}`` dict; types are inferred
                 via ``type(value)``.
-            fields_with_values: Explicit ``{field_name: (python_type, value)}``
+            fields_with_values: Explicit ``{field_name: FieldValueSpec(python_type, value)}``
                 mapping, bypassing type inference.
             description: Human-readable description stored with the blueprint.
             field_types: Mapping of prefixed field key to Python type used
@@ -160,8 +140,11 @@ class AgentConfigManager:
         fields_with_values = self._resolve_fields_with_values(
             parameters, fields_with_values
         )
+        if fields_with_values is None:
+            raise ValueError("Either parameters or fields_with_values must be given")
+
         blueprint_id = id_helpers.generate_id()
-        payload = self._build_blueprint_payload(
+        payload = _build_blueprint_payload(
             fields_with_values, description, id=blueprint_id
         )
         self._rest_client.agent_configs.create_agent_config(
@@ -177,24 +160,22 @@ class AgentConfigManager:
 
     def update_blueprint(
         self,
-        fields_with_values: typing.Optional[
-            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
-        ] = None,
+        fields_with_values: typing.Dict[str, FieldValueSpec],
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
         """Add a new blueprint to an existing config and return it.
 
         Args:
-            fields_with_values: Explicit ``{field_name: (python_type, value)}``
+            fields_with_values: Explicit ``{field_name: FieldValueSpec(python_type, value)}``
                 mapping.
             description: Human-readable description stored with the blueprint.
-            field_types: Mapping of prefixed field key to Python type used
+            field_types: Mapping of a prefixed field key to a Python type used
                 when fetching back the created blueprint.
         """
         fields_with_values = self._resolve_fields_with_values(None, fields_with_values)
         blueprint_id = id_helpers.generate_id()
-        payload = self._build_blueprint_payload(
+        payload = _build_blueprint_payload(
             fields_with_values, description, id=blueprint_id
         )
         self._rest_client.agent_configs.update_agent_config(
@@ -226,9 +207,7 @@ class AgentConfigManager:
     def create_mask(
         self,
         parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
-        fields_with_values: typing.Optional[
-            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
-        ] = None,
+        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]] = None,
         description: typing.Optional[str] = None,
     ) -> str:
         """Create a mask blueprint and return its ID.
@@ -239,15 +218,18 @@ class AgentConfigManager:
         Args:
             parameters: Plain ``{field_name: value}`` dict; types are inferred
                 via ``type(value)``.
-            fields_with_values: Explicit ``{field_name: (python_type, value)}``
+            fields_with_values: Explicit ``{field_name: FieldValueSpec(python_type, value)}``
                 mapping, bypassing type inference.
             description: Human-readable description stored with the mask.
         """
         fields_with_values = self._resolve_fields_with_values(
             parameters, fields_with_values
         )
+        if fields_with_values is None:
+            raise ValueError("Either parameters or fields_with_values must be given")
+
         mask_id = id_helpers.generate_id()
-        payload = self._build_blueprint_payload(
+        payload = _build_blueprint_payload(
             fields_with_values, description, id=mask_id, config_type="mask"
         )
         self._rest_client.agent_configs.update_agent_config(
@@ -255,3 +237,34 @@ class AgentConfigManager:
             project_name=self._project_name,
         )
         return mask_id
+
+
+def _build_blueprint_payload(
+    fields_with_values: typing.Dict[str, FieldValueSpec],
+    description: typing.Optional[str],
+    id: typing.Optional[str] = None,
+    config_type: str = "blueprint",
+) -> AgentBlueprintWrite:
+    backend_values = []
+    for field_name, field_spec in fields_with_values.items():
+        backend_type = (
+            type_helpers.python_type_to_backend_type(field_spec.python_type)
+            if field_spec.value is not None
+            else "string"
+        )
+        backend_values.append(
+            AgentConfigValueWrite(
+                key=field_name,
+                type=backend_type,
+                value=type_helpers.python_value_to_backend_value(
+                    field_spec.value, field_spec.python_type
+                ),
+                description=field_spec.description,
+            )
+        )
+    return AgentBlueprintWrite(
+        id=id,
+        type=config_type,
+        values=backend_values,
+        description=description,
+    )

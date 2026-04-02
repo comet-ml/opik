@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from opik.api_objects.agent_config.config import AgentConfigManager
+from opik.api_objects.agent_config.config import AgentConfigManager, FieldValueSpec
 from opik.api_objects.agent_config.blueprint import Blueprint
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
@@ -208,8 +208,8 @@ class TestAgentConfigManagerCreateBlueprint:
 
         result = agent_config.create_blueprint(
             fields_with_values={
-                "temperature": (float, 0.6, None),
-                "name": (str, "agent", None),
+                "temperature": FieldValueSpec(float, 0.6, None),
+                "name": FieldValueSpec(str, "agent", None),
             }
         )
 
@@ -228,7 +228,9 @@ class TestAgentConfigManagerCreateBlueprint:
             _make_raw_blueprint()
         )
 
-        agent_config.create_blueprint(fields_with_values={"flag": (bool, False, None)})
+        agent_config.create_blueprint(
+            fields_with_values={"flag": FieldValueSpec(bool, False, None)}
+        )
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
@@ -243,7 +245,9 @@ class TestAgentConfigManagerCreateBlueprint:
             _make_raw_blueprint()
         )
 
-        agent_config.create_blueprint(fields_with_values={"temp": (float, 0.5, None)})
+        agent_config.create_blueprint(
+            fields_with_values={"temp": FieldValueSpec(float, 0.5, None)}
+        )
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
@@ -275,7 +279,7 @@ class TestAgentConfigManagerCreateBlueprint:
         )
 
         result = agent_config.create_blueprint(
-            fields_with_values={"temp": (float, 0.6, None)}
+            fields_with_values={"temp": FieldValueSpec(float, 0.6, None)}
         )
 
         assert isinstance(result, Blueprint)
@@ -300,7 +304,9 @@ class TestAgentConfigManagerCreateMask:
     def test_create_mask__happy_path__calls_backend_with_mask_type(
         self, agent_config, mock_rest_client
     ):
-        agent_config.create_mask(fields_with_values={"temperature": (float, 0.3, None)})
+        agent_config.create_mask(
+            fields_with_values={"temperature": FieldValueSpec(float, 0.3, None)}
+        )
 
         call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
@@ -309,7 +315,7 @@ class TestAgentConfigManagerCreateMask:
 
     def test_create_mask__returns_mask_id(self, agent_config, mock_rest_client):
         result = agent_config.create_mask(
-            fields_with_values={"temperature": (float, 0.3, None)}
+            fields_with_values={"temperature": FieldValueSpec(float, 0.3, None)}
         )
 
         assert isinstance(result, str)
@@ -318,7 +324,9 @@ class TestAgentConfigManagerCreateMask:
     def test_create_mask__sends_under_blueprint_key(
         self, agent_config, mock_rest_client
     ):
-        agent_config.create_mask(fields_with_values={"temperature": (float, 0.3, None)})
+        agent_config.create_mask(
+            fields_with_values={"temperature": FieldValueSpec(float, 0.3, None)}
+        )
 
         call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
         assert "blueprint" in call_kwargs
@@ -335,7 +343,7 @@ class TestAgentConfigManagerCreateMask:
         self, agent_config, mock_rest_client
     ):
         agent_config.create_mask(
-            fields_with_values={"temperature": (float, 0.3, None)},
+            fields_with_values={"temperature": FieldValueSpec(float, 0.3, None)},
             description="variant-A",
         )
 
@@ -345,7 +353,9 @@ class TestAgentConfigManagerCreateMask:
     def test_create_mask__with_project_name__passes_project_to_backend(
         self, agent_config, mock_rest_client
     ):
-        agent_config.create_mask(fields_with_values={"temp": (float, 0.5, None)})
+        agent_config.create_mask(
+            fields_with_values={"temp": FieldValueSpec(float, 0.5, None)}
+        )
 
         call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
@@ -368,7 +378,7 @@ class TestResolveFieldsWithValues:
         assert result == {"a": (str, None, None), "b": (str, None, None)}
 
     def test_fields_with_values_takes_precedence_over_parameters(self):
-        explicit = {"x": (int, 1, None)}
+        explicit = {"x": FieldValueSpec(int, 1, None)}
         result = AgentConfigManager._resolve_fields_with_values(
             parameters={"x": 99},
             fields_with_values=explicit,
