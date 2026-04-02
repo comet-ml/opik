@@ -3,8 +3,6 @@ import { PROJECT_ICON_COUNT } from "@/constants/projectIcons";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 
-const PROJECTS_ICONS_QUERY_KEY = "projects-icons";
-
 export default function useProjectIconIndices() {
   const workspaceName = useActiveWorkspaceName();
 
@@ -13,7 +11,6 @@ export default function useProjectIconIndices() {
     sorting: [{ id: "created_at", desc: false }],
     page: 1,
     size: 1000,
-    queryKey: PROJECTS_ICONS_QUERY_KEY,
   });
 
   return useMemo(() => {
