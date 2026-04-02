@@ -10,7 +10,7 @@ export const KpiCardRequest: core.serialization.Schema<serializers.KpiCardReques
         entityType: core.serialization.property("entity_type", KpiCardRequestEntityType),
         filters: core.serialization.string().optional(),
         intervalStart: core.serialization.property("interval_start", core.serialization.date()),
-        intervalEnd: core.serialization.property("interval_end", core.serialization.date()),
+        intervalEnd: core.serialization.property("interval_end", core.serialization.date().optional()),
     });
 
 export declare namespace KpiCardRequest {
@@ -18,6 +18,6 @@ export declare namespace KpiCardRequest {
         entity_type: KpiCardRequestEntityType.Raw;
         filters?: string | null;
         interval_start: string;
-        interval_end: string;
+        interval_end?: string | null;
     }
 }

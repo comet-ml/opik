@@ -4068,6 +4068,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - pairing
+          - connected
+          - disconnected
       - name: page
         in: query
         schema:
@@ -16676,7 +16684,6 @@ components:
     KpiCardRequest:
       required:
       - entity_type
-      - interval_end
       - interval_start
       type: object
       properties:
