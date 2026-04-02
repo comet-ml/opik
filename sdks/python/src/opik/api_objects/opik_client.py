@@ -2687,8 +2687,6 @@ class Opik:
         return project_name
 
 
-
-
 @functools.lru_cache()
 def get_client_cached() -> Opik:
     client = Opik(_use_batching=True)
