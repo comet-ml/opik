@@ -750,9 +750,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       <CompareExperimentsPanel
         {...sharedPanelProps}
         experimentsCompareId={
-          !isEvalSuite
-            ? sharedPanelProps.experimentsCompareId
-            : undefined
+          !isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
         }
       />
       <TraceDetailsPanel

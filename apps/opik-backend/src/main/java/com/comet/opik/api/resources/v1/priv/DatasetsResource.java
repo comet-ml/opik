@@ -458,6 +458,11 @@ public class DatasetsResource {
             log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
                     request.datasetName(), request.projectName(), workspaceId);
 
+            String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+            if (fallbackMessage != null) {
+                httpResponse.addHeader(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+            }
+
             return outputStream;
         } catch (NotFoundException ex) {
             // The visibility check failed, return empty stream to avoid exposing existence of the dataset

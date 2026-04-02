@@ -404,8 +404,14 @@ class DatasetServiceImpl implements DatasetService {
             projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
         }
 
-        return findByName(workspaceId, identifier.datasetName(), projectId,
+        Dataset dataset = findByName(workspaceId, identifier.datasetName(), projectId,
                 requestContext.get().getVisibility());
+
+        if (projectNameProvided && projectId == null) {
+            requestContext.get().setWorkspaceFallbackFor("Dataset", identifier.datasetName());
+        }
+
+        return dataset;
     }
 
     @Override
