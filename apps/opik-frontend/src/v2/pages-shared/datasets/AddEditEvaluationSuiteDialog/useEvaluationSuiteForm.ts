@@ -173,7 +173,13 @@ const useEvaluationSuiteForm = ({
         },
       );
     },
-    [skipEvaluationCriteria, assertions, runsPerItem, passThreshold, changesMutate],
+    [
+      skipEvaluationCriteria,
+      assertions,
+      runsPerItem,
+      passThreshold,
+      changesMutate,
+    ],
   );
 
   const uploadItems = useCallback(
