@@ -10,7 +10,7 @@ from opik.api_objects import rest_helpers
 from opik import id_helpers
 
 from .blueprint import Blueprint
-from .types import FieldValueSpec
+from . import types
 from .. import type_helpers
 
 
@@ -32,12 +32,14 @@ class AgentConfigManager:
     @staticmethod
     def _resolve_fields_with_values(
         parameters: typing.Optional[typing.Dict[str, typing.Any]],
-        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]],
-    ) -> typing.Dict[str, FieldValueSpec]:
+        fields_with_values: typing.Optional[typing.Dict[str, types.FieldValueSpec]],
+    ) -> typing.Dict[str, types.FieldValueSpec]:
         if fields_with_values is not None:
             return fields_with_values
         return {
-            k: FieldValueSpec(python_type=type(v) if v is not None else str, value=v)
+            k: types.FieldValueSpec(
+                python_type=type(v) if v is not None else str, value=v
+            )
             for k, v in (parameters or {}).items()
         }
 
@@ -105,20 +107,22 @@ class AgentConfigManager:
     def create_blueprint(
         self,
         parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
-        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]] = None,
+        fields_with_values: typing.Optional[
+            typing.Dict[str, types.FieldValueSpec]
+        ] = None,
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
         """Create a new blueprint and return it.
 
         Pass either ``parameters`` (plain key-value pairs whose types are
-        inferred) or ``fields_with_values`` (explicit ``{key: FieldValueSpec(type, value)}``
+        inferred) or ``fields_with_values`` (explicit ``{key: types.FieldValueSpec(type, value)}``
         mapping). If both are given ``fields_with_values`` takes precedence.
 
         Args:
             parameters: Plain ``{field_name: value}`` dict; types are inferred
                 via ``type(value)``.
-            fields_with_values: Explicit ``{field_name: FieldValueSpec(python_type, value)}``
+            fields_with_values: Explicit ``{field_name: types.FieldValueSpec(python_type, value)}``
                 mapping, bypassing type inference.
             description: Human-readable description stored with the blueprint.
             field_types: Mapping of prefixed field key to Python type used
@@ -144,14 +148,16 @@ class AgentConfigManager:
 
     def update_blueprint(
         self,
-        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]] = None,
+        fields_with_values: typing.Optional[
+            typing.Dict[str, types.FieldValueSpec]
+        ] = None,
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
         """Add a new blueprint to an existing config and return it.
 
         Args:
-            fields_with_values: Explicit ``{field_name: FieldValueSpec(python_type, value)}``
+            fields_with_values: Explicit ``{field_name: types.FieldValueSpec(python_type, value)}``
                 mapping.
             description: Human-readable description stored with the blueprint.
             field_types: Mapping of a prefixed field key to a Python type used
@@ -193,7 +199,9 @@ class AgentConfigManager:
     def create_mask(
         self,
         parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
-        fields_with_values: typing.Optional[typing.Dict[str, FieldValueSpec]] = None,
+        fields_with_values: typing.Optional[
+            typing.Dict[str, types.FieldValueSpec]
+        ] = None,
         description: typing.Optional[str] = None,
     ) -> str:
         """Create a mask blueprint and return its ID.
@@ -204,7 +212,7 @@ class AgentConfigManager:
         Args:
             parameters: Plain ``{field_name: value}`` dict; types are inferred
                 via ``type(value)``.
-            fields_with_values: Explicit ``{field_name: FieldValueSpec(python_type, value)}``
+            fields_with_values: Explicit ``{field_name: types.FieldValueSpec(python_type, value)}``
                 mapping, bypassing type inference.
             description: Human-readable description stored with the mask.
         """
@@ -223,7 +231,7 @@ class AgentConfigManager:
 
 
 def _build_blueprint_payload(
-    fields_with_values: typing.Dict[str, FieldValueSpec],
+    fields_with_values: typing.Dict[str, types.FieldValueSpec],
     description: typing.Optional[str],
     id: typing.Optional[str] = None,
     config_type: str = "blueprint",
