@@ -13,6 +13,7 @@ import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
+import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import { BASE_API_URL } from "@/api/api";
 import { Spinner } from "@/ui/spinner";
 
@@ -210,6 +211,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
   const resolvedProjectId = projectId ?? null;
 
   const organizationId = workspace?.organizationId ?? null;
+  const projectStats = useProjectOnboardingStats(resolvedProjectId);
 
   return useMemo<BridgeContext>(
     () => ({
@@ -221,6 +223,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
       theme: "light",
+      projectStats,
     }),
     [
       workspaceId,
@@ -229,6 +232,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      projectStats,
     ],
   );
 }
