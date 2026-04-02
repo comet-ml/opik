@@ -147,7 +147,7 @@ class TestUpdateConfig:
         url = "http://example.com"
         workspace = "workspace1"
 
-        OpikConfigurator(api_key, workspace, url)._update_config()
+        OpikConfigurator(api_key, workspace, url)._update_config(save_to_file=True)
 
         # Ensure config object is created and saved
         mock_opik_config.assert_called_with(
@@ -179,7 +179,7 @@ class TestUpdateConfig:
         workspace = "workspace1"
 
         with pytest.raises(ConfigurationError, match="Failed to update configuration."):
-            OpikConfigurator(api_key, workspace, url)._update_config()
+            OpikConfigurator(api_key, workspace, url)._update_config(save_to_file=True)
 
         # Ensure save_to_file is not called due to the exception
         mock_update_session_config.assert_not_called()
@@ -201,7 +201,7 @@ class TestUpdateConfig:
         workspace = "workspace1"
 
         with pytest.raises(ConfigurationError, match="Failed to update configuration."):
-            OpikConfigurator(api_key, workspace, url)._update_config()
+            OpikConfigurator(api_key, workspace, url)._update_config(save_to_file=True)
 
         # Ensure config object is created and saved
         mock_opik_config.assert_any_call(
@@ -567,6 +567,36 @@ class TestGetApiKey:
         assert configurator.api_key == "config_api_key"
         assert needs_update is True
 
+    @patch("opik.configurator.configure.LOGGER.warning")
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
+        return_value=True,
+    )
+    def test_set_api_key__provided_api_key__another_key_already_set_in_config__not_forced__warning_is_shown(
+        self, mock_is_api_key_correct, mock_opik_config, mock_logger_warning
+    ):
+        """
+        Test that a warning is logged when an API key is provided, but one is already
+        set in the configuration file and force=False.
+        """
+        mock_config_instance = MagicMock()
+        mock_config_instance.api_key = "existing_api_key"
+        mock_opik_config.return_value = mock_config_instance
+
+        configurator = OpikConfigurator(
+            api_key="new_api_key", url=OPIK_BASE_URL_LOCAL, force=False
+        )
+        needs_update = configurator._set_api_key()
+
+        mock_logger_warning.assert_called_once_with(
+            "You already have an API key set in the configuration file. "
+            "If you want to change it, please use the --force flag or force=True when calling the configure() method. "
+            "Otherwise, the configuration file will not be updated but the session will use the new API key."
+        )
+        assert configurator.api_key == "new_api_key"
+        assert needs_update is False
+
     @patch(
         "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
         return_value=True,
@@ -777,6 +807,34 @@ class TestGetWorkspace:
             force=False,
             api_key="valid_api_key",
             automatic_approvals=True,
+        )
+        needs_update = configurator._set_workspace()
+
+        assert configurator.workspace == "default_workspace"
+        assert needs_update is True
+        mock_get_default_workspace.assert_called_once_with()
+        mock_ask_user_for_approval.assert_not_called()
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._get_default_workspace",
+        return_value="default_workspace",
+    )
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
+    def test_get_workspace_accept_default__force_enabled__no_approval_questions_asked(
+        self, mock_ask_user_for_approval, mock_get_default_workspace, mock_opik_config
+    ):
+        """
+        Test that when force=True, the default workspace is used without asking for user approval.
+        """
+        current_config = OpikConfig(workspace=OPIK_WORKSPACE_DEFAULT_NAME)
+        mock_opik_config.return_value = current_config
+
+        configurator = OpikConfigurator(
+            workspace=None,
+            force=True,
+            api_key="valid_api_key",
+            automatic_approvals=False,
         )
         needs_update = configurator._set_workspace()
 
@@ -1193,7 +1251,7 @@ class TestConfigureLocal:
         mock_ask_user_for_approval.assert_called_once_with(
             f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
         )
-        mock_update_config.assert_called_once_with()
+        mock_update_config.assert_called_once_with(save_to_file=True)
 
         assert configurator.api_key is None
         assert configurator.base_url == OPIK_BASE_URL_LOCAL
@@ -1220,7 +1278,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_not_called()
-        mock_update_config.assert_called_once_with()
+        mock_update_config.assert_called_once_with(save_to_file=True)
 
         assert configurator.api_key is None
         assert configurator.base_url == OPIK_BASE_URL_LOCAL
@@ -1271,7 +1329,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_not_called()
-        mock_update_config.assert_called_once_with()
+        mock_update_config.assert_called_once_with(save_to_file=True)
 
         assert configurator.api_key is None
         assert configurator.base_url == OPIK_BASE_URL_LOCAL
