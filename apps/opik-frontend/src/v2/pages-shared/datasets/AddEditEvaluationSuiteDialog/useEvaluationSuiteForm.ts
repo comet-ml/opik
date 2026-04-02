@@ -28,6 +28,8 @@ type UseEvaluationSuiteFormParams = {
   onDatasetCreated?: (dataset: Dataset) => void;
   hideUpload?: boolean;
   csvRequired?: boolean;
+  skipEvaluationCriteria?: boolean;
+  onNameConflict?: () => void;
 };
 
 const useEvaluationSuiteForm = ({
@@ -37,6 +39,8 @@ const useEvaluationSuiteForm = ({
   onDatasetCreated,
   hideUpload,
   csvRequired = false,
+  skipEvaluationCriteria = false,
+  onNameConflict,
 }: UseEvaluationSuiteFormParams) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
@@ -128,6 +132,11 @@ const useEvaluationSuiteForm = ({
 
   const applyEvaluationCriteria = useCallback(
     (datasetId: string, onDone?: () => void) => {
+      if (skipEvaluationCriteria) {
+        onDone?.();
+        return;
+      }
+
       const filteredAssertions = assertions
         .map((a) => a.trim())
         .filter(Boolean);
@@ -164,7 +173,7 @@ const useEvaluationSuiteForm = ({
         },
       );
     },
-    [assertions, runsPerItem, passThreshold, changesMutate],
+    [skipEvaluationCriteria, assertions, runsPerItem, passThreshold, changesMutate],
   );
 
   const uploadItems = useCallback(
@@ -261,6 +270,7 @@ const useEvaluationSuiteForm = ({
 
       if (statusCode === HttpStatusCode.Conflict) {
         setNameError("This name already exists");
+        onNameConflict?.();
       } else {
         toast({
           title: "Error saving",
@@ -270,7 +280,7 @@ const useEvaluationSuiteForm = ({
         setOpen(false);
       }
     },
-    [toast, setOpen],
+    [toast, setOpen, onNameConflict],
   );
 
   const submitHandler = useCallback(() => {
