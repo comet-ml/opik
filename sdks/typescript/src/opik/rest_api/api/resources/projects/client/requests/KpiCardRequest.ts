@@ -6,13 +6,12 @@ import type * as OpikApi from "../../../../index.js";
  * @example
  *     {
  *         entityType: "traces",
- *         intervalStart: new Date("2024-01-15T09:30:00.000Z"),
- *         intervalEnd: new Date("2024-01-15T09:30:00.000Z")
+ *         intervalStart: new Date("2024-01-15T09:30:00.000Z")
  *     }
  */
 export interface KpiCardRequest {
     entityType: OpikApi.KpiCardRequestEntityType;
     filters?: string;
     intervalStart: Date;
-    intervalEnd: Date;
+    intervalEnd?: Date;
 }

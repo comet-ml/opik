@@ -15,6 +15,7 @@ from ..types.local_runner_log_entry import LocalRunnerLogEntry
 from ..types.local_runner_page import LocalRunnerPage
 from ..types.local_runner_pair_response import LocalRunnerPairResponse
 from .raw_client import AsyncRawRunnersClient, RawRunnersClient
+from .types.list_runners_request_status import ListRunnersRequestStatus
 from .types.local_runner_job_result_request_status import LocalRunnerJobResultRequestStatus
 
 # this is used as the default value for optional parameters
@@ -354,6 +355,7 @@ class RunnersClient:
         self,
         *,
         project_id: str,
+        status: typing.Optional[ListRunnersRequestStatus] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -364,6 +366,8 @@ class RunnersClient:
         Parameters
         ----------
         project_id : str
+
+        status : typing.Optional[ListRunnersRequestStatus]
 
         page : typing.Optional[int]
 
@@ -384,7 +388,7 @@ class RunnersClient:
         client.runners.list_runners(project_id='project_id', )
         """
         _response = self._raw_client.list_runners(
-            project_id=project_id, page=page, size=size, request_options=request_options
+            project_id=project_id, status=status, page=page, size=size, request_options=request_options
         )
         return _response.data
 
@@ -855,6 +859,7 @@ class AsyncRunnersClient:
         self,
         *,
         project_id: str,
+        status: typing.Optional[ListRunnersRequestStatus] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -865,6 +870,8 @@ class AsyncRunnersClient:
         Parameters
         ----------
         project_id : str
+
+        status : typing.Optional[ListRunnersRequestStatus]
 
         page : typing.Optional[int]
 
@@ -888,7 +895,7 @@ class AsyncRunnersClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.list_runners(
-            project_id=project_id, page=page, size=size, request_options=request_options
+            project_id=project_id, status=status, page=page, size=size, request_options=request_options
         )
         return _response.data
 

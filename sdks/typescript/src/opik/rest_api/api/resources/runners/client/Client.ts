@@ -913,9 +913,16 @@ export class RunnersClient {
         request: OpikApi.ListRunnersRequest,
         requestOptions?: RunnersClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.LocalRunnerPage>> {
-        const { projectId, page, size } = request;
+        const { projectId, status, page, size } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
+            status:
+                status != null
+                    ? serializers.ListRunnersRequestStatus.jsonOrThrow(status, {
+                          unrecognizedObjectKeys: "strip",
+                          omitUndefined: true,
+                      })
+                    : undefined,
             page,
             size,
         };
