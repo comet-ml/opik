@@ -85,6 +85,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.media.multipart.ContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
+import reactor.core.publisher.Flux;
 
 import java.io.InputStream;
 import java.net.URI;
@@ -443,24 +444,33 @@ public class DatasetsResource {
         log.info("Streaming dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
                 request.datasetName(), request.projectName(), workspaceId);
 
-        service.resolveDatasetByName(DatasetIdentifier.builder()
-                .datasetName(request.datasetName())
-                .projectName(request.projectName())
-                .build());
+        try {
+            service.resolveDatasetByName(DatasetIdentifier.builder()
+                    .datasetName(request.datasetName())
+                    .projectName(request.projectName())
+                    .build());
 
-        var items = itemService.getItems(workspaceId, request, queryFilters)
-                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
-        var outputStream = streamer.getOutputStream(items);
+            var items = itemService.getItems(workspaceId, request, queryFilters)
+                    .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
 
-        log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
-                request.datasetName(), request.projectName(), workspaceId);
+            ChunkedOutput<JsonNode> outputStream = streamer.getOutputStream(items);
 
-        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
-        if (fallbackMessage != null) {
-            httpResponse.addHeader(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+            log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
+                    request.datasetName(), request.projectName(), workspaceId);
+
+            String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+            if (fallbackMessage != null) {
+                httpResponse.addHeader(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+            }
+
+            return outputStream;
+        } catch (NotFoundException ex) {
+            // The visibility check failed, return empty stream to avoid exposing existence of the dataset
+            log.info("Empty dataset items stream for dataset '{}', projectName '{}' on workspaceId '{}'",
+                    request.datasetName(), request.projectName(), workspaceId);
+
+            return streamer.getOutputStream(Flux.empty());
         }
-
-        return outputStream;
     }
 
     @PUT

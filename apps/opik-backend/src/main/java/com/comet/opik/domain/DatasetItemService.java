@@ -1286,19 +1286,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
             int page, int size, String workspaceId) {
         Optional<UUID> fallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId);
 
-        if (fallbackVersionId.isEmpty()) {
-            log.info("No versions found for dataset '{}', falling back to legacy items for experiment items",
+        // When the dataset no longer exists (e.g. evaluation suite deleted), version records are gone from MySQL.
+        // Use an empty string as a harmless placeholder: evaluation suite experiments always carry their own explicit
+        // dataset_version_id in ClickHouse, so the empty fallback is never used for matching, and assertion_results
+        // are still returned correctly via the versioned query.
+        String resolvedFallbackVersionId = fallbackVersionId.map(UUID::toString).orElseGet(() -> {
+            log.info(
+                    "No versions found for dataset '{}', using empty string as fallback version to query experiment items",
                     criteria.datasetId());
-            return dao.getItems(criteria, page, size)
-                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-        }
+            return "";
+        });
 
         log.info(
                 "Fetching items with experiment items for dataset '{}', using version '{}' as fallback for experiments without explicit version",
-                criteria.datasetId(), fallbackVersionId.get());
+                criteria.datasetId(), resolvedFallbackVersionId);
 
-        // Fetch items using experiment-specific versions, falling back to fallbackVersionId for experiments without a version
-        return versionDao.getItemsWithExperimentItems(criteria, page, size, fallbackVersionId.get())
+        return versionDao.getItemsWithExperimentItems(criteria, page, size, resolvedFallbackVersionId)
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
