@@ -10,21 +10,8 @@ from opik.api_objects import rest_helpers
 from opik import id_helpers
 
 from .blueprint import Blueprint
+from .types import FieldValueSpec
 from .. import type_helpers
-
-
-class FieldValueSpec(typing.NamedTuple):
-    """Describes a single blueprint field's value for write operations.
-
-    Attributes:
-        python_type: The Python type of the field (e.g. ``str``, ``int``).
-        value: The field value to write.
-        description: Optional human-readable description of the field.
-    """
-
-    python_type: type[typing.Any]
-    value: typing.Any
-    description: typing.Optional[str] = None
 
 
 class AgentConfigManager:
