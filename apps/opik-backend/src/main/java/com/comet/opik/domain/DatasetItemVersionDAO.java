@@ -3445,8 +3445,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .orElse(null))
                 .evaluators(DatasetItemResultMapper.getEvaluators(row, rowMetadata))
                 .executionPolicy(DatasetItemResultMapper.getExecutionPolicy(row, rowMetadata))
-                .createdAt(row.get("created_at", Instant.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdAt(DatasetItemResultMapper.nullIfEpoch(row.get("created_at", Instant.class)))
+                .lastUpdatedAt(DatasetItemResultMapper.nullIfEpoch(row.get("last_updated_at", Instant.class)))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .build();

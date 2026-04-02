@@ -202,7 +202,7 @@ public class DatasetItemResultMapper {
                 .build();
     }
 
-    private static Instant nullIfEpoch(Instant instant) {
+    static Instant nullIfEpoch(Instant instant) {
         return instant == null || instant.equals(Instant.EPOCH) ? null : instant;
     }
 
