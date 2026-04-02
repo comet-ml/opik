@@ -995,7 +995,7 @@ export class RunnersClient {
         runnerId: string,
         request: OpikApi.NextJobRequest = {},
         requestOptions?: RunnersClient.RequestOptions,
-    ): core.HttpResponsePromise<OpikApi.LocalRunnerJob> {
+    ): core.HttpResponsePromise<OpikApi.LocalRunnerJob | null> {
         return core.HttpResponsePromise.fromPromise(this.__nextJob(runnerId, request, requestOptions));
     }
 
@@ -1003,7 +1003,7 @@ export class RunnersClient {
         runnerId: string,
         _request: OpikApi.NextJobRequest = {},
         requestOptions?: RunnersClient.RequestOptions,
-    ): Promise<core.WithRawResponse<OpikApi.LocalRunnerJob>> {
+    ): Promise<core.WithRawResponse<OpikApi.LocalRunnerJob | null>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
             mergeOnlyDefinedHeaders({
@@ -1030,7 +1030,7 @@ export class RunnersClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.LocalRunnerJob.parseOrThrow(_response.body, {
+                data: serializers.runners.nextJob.Response.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,

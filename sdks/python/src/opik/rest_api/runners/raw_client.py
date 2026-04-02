@@ -697,7 +697,7 @@ class RawRunnersClient:
 
     def next_job(
         self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[LocalRunnerJob]:
+    ) -> HttpResponse[typing.Optional[LocalRunnerJob]]:
         """
         Long-poll for the next pending local runner job
 
@@ -710,8 +710,8 @@ class RawRunnersClient:
 
         Returns
         -------
-        HttpResponse[LocalRunnerJob]
-            Job available
+        HttpResponse[typing.Optional[LocalRunnerJob]]
+            Job available, or null if no pending jobs
         """
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/local-runners/{jsonable_encoder(runner_id)}/jobs/next",
@@ -721,9 +721,9 @@ class RawRunnersClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    LocalRunnerJob,
+                    typing.Optional[LocalRunnerJob],
                     parse_obj_as(
-                        type_=LocalRunnerJob,  # type: ignore
+                        type_=typing.Optional[LocalRunnerJob],  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1552,7 +1552,7 @@ class AsyncRawRunnersClient:
 
     async def next_job(
         self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[LocalRunnerJob]:
+    ) -> AsyncHttpResponse[typing.Optional[LocalRunnerJob]]:
         """
         Long-poll for the next pending local runner job
 
@@ -1565,8 +1565,8 @@ class AsyncRawRunnersClient:
 
         Returns
         -------
-        AsyncHttpResponse[LocalRunnerJob]
-            Job available
+        AsyncHttpResponse[typing.Optional[LocalRunnerJob]]
+            Job available, or null if no pending jobs
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/local-runners/{jsonable_encoder(runner_id)}/jobs/next",
@@ -1576,9 +1576,9 @@ class AsyncRawRunnersClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    LocalRunnerJob,
+                    typing.Optional[LocalRunnerJob],
                     parse_obj_as(
-                        type_=LocalRunnerJob,  # type: ignore
+                        type_=typing.Optional[LocalRunnerJob],  # type: ignore
                         object_=_response.json(),
                     ),
                 )

@@ -392,7 +392,9 @@ class RunnersClient:
         )
         return _response.data
 
-    def next_job(self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> LocalRunnerJob:
+    def next_job(
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Optional[LocalRunnerJob]:
         """
         Long-poll for the next pending local runner job
 
@@ -405,8 +407,8 @@ class RunnersClient:
 
         Returns
         -------
-        LocalRunnerJob
-            Job available
+        typing.Optional[LocalRunnerJob]
+            Job available, or null if no pending jobs
 
         Examples
         --------
@@ -901,7 +903,7 @@ class AsyncRunnersClient:
 
     async def next_job(
         self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> LocalRunnerJob:
+    ) -> typing.Optional[LocalRunnerJob]:
         """
         Long-poll for the next pending local runner job
 
@@ -914,8 +916,8 @@ class AsyncRunnersClient:
 
         Returns
         -------
-        LocalRunnerJob
-            Job available
+        typing.Optional[LocalRunnerJob]
+            Job available, or null if no pending jobs
 
         Examples
         --------

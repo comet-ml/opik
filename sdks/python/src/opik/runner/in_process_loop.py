@@ -15,6 +15,7 @@ from ..api_objects import type_helpers
 
 from ..api_objects.agent_config.context import agent_config_context
 from .. import id_helpers
+
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
@@ -122,23 +123,17 @@ class InProcessRunnerLoop:
                 job = self._api.runners.next_job(self._runner_id)
                 _poll_failures = 0
             except ApiError as e:
-                if e.status_code == 204:
-                    job = None
-                    _poll_failures = 0
+                _poll_failures += 1
+                if _poll_failures == 1:
+                    LOGGER.warning(
+                        "Unable to reach Opik server (API %s). Retrying...",
+                        e.status_code,
+                    )
                 else:
-                    _poll_failures += 1
-                    if _poll_failures == 1:
-                        LOGGER.warning(
-                            "Unable to reach Opik server (API %s). Retrying...",
-                            e.status_code,
-                        )
-                    else:
-                        LOGGER.debug(
-                            "Poll error (API %s)", e.status_code, exc_info=True
-                        )
-                    self._backoff_wait(backoff)
-                    backoff = min(backoff * 2, self._backoff_cap_seconds)
-                    continue
+                    LOGGER.debug("Poll error (API %s)", e.status_code, exc_info=True)
+                self._backoff_wait(backoff)
+                backoff = min(backoff * 2, self._backoff_cap_seconds)
+                continue
             except Exception:
                 _poll_failures += 1
                 if _poll_failures == 1:

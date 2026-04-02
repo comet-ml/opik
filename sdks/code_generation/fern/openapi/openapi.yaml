@@ -4119,13 +4119,13 @@ paths:
           format: uuid
       responses:
         "200":
-          description: Job available
+          description: "Job available, or null if no pending jobs"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRunnerJob"
-        "204":
-          description: No content
+                nullable: true
+                allOf:
+                - $ref: "#/components/schemas/LocalRunnerJob"
         "404":
           description: Not found
           content:
