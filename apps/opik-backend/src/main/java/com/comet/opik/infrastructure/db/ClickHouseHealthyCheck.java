@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
+import io.dropwizard.util.Duration;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -7,19 +8,17 @@ import lombok.NonNull;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthCheck;
 
-import java.time.Duration;
-
 @Singleton
 public class ClickHouseHealthyCheck extends NamedHealthCheck {
 
     private final TransactionTemplateAsync template;
-    private final Duration healthCheckTimeout;
+    private final java.time.Duration healthCheckTimeout;
 
     @Inject
     public ClickHouseHealthyCheck(@NonNull TransactionTemplateAsync template,
-            @Named("ClickHouse Health Check Timeout Seconds") int healthCheckTimeoutSeconds) {
+            @Named("health_check_timeout") Duration healthCheckTimeout) {
         this.template = template;
-        this.healthCheckTimeout = Duration.ofSeconds(healthCheckTimeoutSeconds);
+        this.healthCheckTimeout = java.time.Duration.ofMillis(healthCheckTimeout.toMilliseconds());
     }
 
     @Override
