@@ -110,7 +110,7 @@ class DatasetsResourceIntegrationTest {
 
         var request = DatasetItemStreamRequest.builder().datasetName(datasetName).steamLimit(500).build();
 
-        when(itemService.getItems(eq(workspaceId), eq(request), any(), eq(Visibility.PRIVATE)))
+        when(itemService.getItems(eq(workspaceId), eq(request), any()))
                 .thenReturn(Flux.defer(() -> itemFlux));
 
         try (var response = EXT.target("/v1/private/datasets/items/stream")
