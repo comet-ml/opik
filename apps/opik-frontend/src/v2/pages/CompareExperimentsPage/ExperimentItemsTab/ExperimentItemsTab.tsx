@@ -221,26 +221,12 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const experimentsCount = experimentsIds.length;
   const noDataText = "There is no data for the selected experiments";
 
-  const hasAssertionResults = useMemo(
-    () =>
-      rows.some((row) =>
-        row.experiment_items.some(
-          (item) => (item.assertion_results ?? []).length > 0,
-        ),
-      ),
-    [rows],
-  );
-
-  // Use resolvedIsEvalSuite to show the Results column even when the evaluation
-  // suite was deleted but assertion_results data still exists for the items.
-  const resolvedIsEvalSuite = isEvalSuite || hasAssertionResults;
-
   const columnPinning = useMemo<ColumnPinningState>(
     () => ({
       left: [COLUMN_SELECT_ID],
-      right: resolvedIsEvalSuite ? [COLUMN_PASSED_ID] : [],
+      right: isEvalSuite ? [COLUMN_PASSED_ID] : [],
     }),
-    [resolvedIsEvalSuite],
+    [isEvalSuite],
   );
 
   const filtersConfig = useMemo(
@@ -504,7 +490,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       );
     }
 
-    if (resolvedIsEvalSuite) {
+    if (isEvalSuite) {
       retVal.push(
         mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
           id: COLUMN_PASSED_ID,
@@ -525,7 +511,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   }, [
     experimentsCount,
     isEvalSuite,
-    resolvedIsEvalSuite,
     datasetColumnsData,
     selectedColumns,
     outputColumnsData,
@@ -758,14 +743,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       <EvaluationSuiteExperimentPanel
         {...sharedPanelProps}
         experimentsCompareId={
-          resolvedIsEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
+          isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
         }
         datasetId={datasetId ?? ""}
       />
       <CompareExperimentsPanel
         {...sharedPanelProps}
         experimentsCompareId={
-          !resolvedIsEvalSuite
+          !isEvalSuite
             ? sharedPanelProps.experimentsCompareId
             : undefined
         }
