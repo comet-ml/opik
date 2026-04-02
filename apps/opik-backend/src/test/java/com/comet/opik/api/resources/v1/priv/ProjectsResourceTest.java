@@ -757,6 +757,39 @@ class ProjectsResourceTest {
                             404));
         }
 
+        @Test
+        @DisplayName("when retrieving project from another workspace, then return 404")
+        void retrieveProject__whenProjectBelongsToAnotherWorkspace__thenReturn404() {
+            // Set up workspace A with a project
+            String workspaceNameA = UUID.randomUUID().toString();
+            String apiKeyA = UUID.randomUUID().toString();
+            String workspaceIdA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, workspaceIdA);
+
+            var project = factory.manufacturePojo(Project.class);
+            createProject(project, apiKeyA, workspaceNameA);
+
+            // Set up workspace B with a different API key
+            String workspaceNameB = UUID.randomUUID().toString();
+            String apiKeyB = UUID.randomUUID().toString();
+            String workspaceIdB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, workspaceIdB);
+
+            // Try to retrieve workspace A's project using workspace B's credentials
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKeyB)
+                    .header(WORKSPACE_HEADER, workspaceNameB)
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains("Project not found");
+            }
+        }
+
     }
 
     @Nested
