@@ -1,7 +1,8 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Filters } from "@/types/filters";
-import { processFilters } from "@/lib/filters";
+import { generateLogsSourceFilter, processFilters } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 
 export type KpiEntityType = "traces" | "spans" | "threads";
 
@@ -23,6 +24,7 @@ type UseProjectKpiCardsParams = {
   filters?: Filters;
   intervalStart?: string;
   intervalEnd?: string;
+  logsSource?: LOGS_SOURCE;
 };
 
 const getProjectKpiCards = async (
@@ -33,9 +35,13 @@ const getProjectKpiCards = async (
     filters,
     intervalStart,
     intervalEnd,
+    logsSource,
   }: UseProjectKpiCardsParams,
 ) => {
-  const processedFilters = processFilters(filters);
+  const processedFilters = processFilters(
+    filters,
+    logsSource ? generateLogsSourceFilter(logsSource) : undefined,
+  );
 
   const { data } = await api.post<KpiCardResponse>(
     `${PROJECTS_REST_ENDPOINT}${projectId}/kpi-cards`,
