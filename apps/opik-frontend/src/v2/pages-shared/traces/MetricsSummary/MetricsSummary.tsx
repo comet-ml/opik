@@ -320,6 +320,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             colorMap={chartConfig.colorMap}
             filterLineCallback={chartConfig.filterLineCallback}
             labelsMap={chartConfig.labelsMap}
+            logsSource={logsSource}
             {...chartFilters}
           />
         ) : (

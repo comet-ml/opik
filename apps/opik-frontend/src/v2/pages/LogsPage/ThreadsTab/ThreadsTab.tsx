@@ -691,6 +691,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
+          logsSource={LOGS_SOURCE.sdk}
         />
       </PageBodyStickyContainer>
       {selectedRows.length > 0 ? (
