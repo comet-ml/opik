@@ -1,16 +1,15 @@
 import os
-import signal
-import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 from opik.rest_api.core.api_error import ApiError
-from opik.rest_api.types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
+from opik.rest_api.types.local_runner_heartbeat_response import (
+    LocalRunnerHeartbeatResponse,
+)
 from opik.runner.supervisor import Supervisor
 
 
@@ -64,7 +63,11 @@ class TestStartChild:
     def test_env_supervised_flag_via_child(self, tmp_path: Path) -> None:
         marker = tmp_path / "env_check"
         sup = _make_supervisor(
-            command=[sys.executable, "-c", f"import os; open('{marker}', 'w').write(os.environ.get('OPIK_SUPERVISED', ''))"],
+            command=[
+                sys.executable,
+                "-c",
+                f"import os; open('{marker}', 'w').write(os.environ.get('OPIK_SUPERVISED', ''))",
+            ],
             repo_root=tmp_path,
         )
         child = sup._start_child()
@@ -87,17 +90,21 @@ class TestStopChild:
         with sup._child_lock:
             sup._child = sup._start_child()
         assert sup._child.poll() is None
-        exit_code = sup._stop_child()
+        sup._stop_child()
         assert sup._child is None
 
     def test_sigkill_after_timeout(self) -> None:
         sup = _make_supervisor(
-            command=[sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"],
+            command=[
+                sys.executable,
+                "-c",
+                "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)",
+            ],
         )
         with sup._child_lock:
             sup._child = sup._start_child()
         time.sleep(0.2)
-        exit_code = sup._stop_child(graceful_timeout=1)
+        sup._stop_child(graceful_timeout=1)
         assert sup._child is None
 
     def test_already_dead__no_error(self) -> None:
@@ -107,7 +114,7 @@ class TestStopChild:
         with sup._child_lock:
             sup._child = sup._start_child()
         sup._child.wait(timeout=5)
-        exit_code = sup._stop_child()
+        sup._stop_child()
         assert sup._child is None
 
 

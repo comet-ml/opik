@@ -1,9 +1,7 @@
 import threading
-import time
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, call, patch
+from typing import Dict, Optional
+from unittest.mock import MagicMock
 
-import pytest
 
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.bridge_command_batch_response import BridgeCommandBatchResponse
@@ -131,7 +129,9 @@ class TestBridgePollLoopPolling:
     def test_410_evicted__stops_loop(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
-        api.runners.next_bridge_commands.side_effect = ApiError(status_code=410, body=None)
+        api.runners.next_bridge_commands.side_effect = ApiError(
+            status_code=410, body=None
+        )
 
         loop = BridgePollLoop(api, "runner-1", {}, shutdown)
         loop.run()
@@ -300,7 +300,9 @@ class TestBridgePollLoopReporting:
         handler = MagicMock()
         handler.execute.return_value = {"ok": True}
 
-        api.runners.report_bridge_result.side_effect = ApiError(status_code=409, body=None)
+        api.runners.report_bridge_result.side_effect = ApiError(
+            status_code=409, body=None
+        )
 
         call_count = 0
 
