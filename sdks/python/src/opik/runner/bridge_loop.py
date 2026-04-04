@@ -24,6 +24,31 @@ _MAX_COMMAND_TIMEOUT = 300.0
 _MAX_BATCH_SIZE = 20
 
 
+def _pascal_case(snake: str) -> str:
+    return "".join(word.capitalize() for word in snake.split("_"))
+
+
+def _build_op_summary(cmd: BridgeCommandItem) -> str:
+    args = dict(cmd.args) if cmd.args else {}
+    path = args.get("path", "")
+    label = _pascal_case(cmd.type or "")
+    cmd_type = cmd.type or ""
+    if cmd_type == "edit_file":
+        edits = args.get("edits", [])
+        count = len(edits)
+        suffix = f" ({count} edit{'s' if count != 1 else ''})" if count else ""
+        return f"{label} {path}{suffix}"
+    if cmd_type in ("read_file", "write_file"):
+        return f"{label} {path}"
+    if cmd_type == "list_files":
+        pattern = args.get("pattern", "")
+        return f"{label} {pattern}"
+    if cmd_type == "search_files":
+        pattern = args.get("pattern", "")
+        return f"{label} {pattern}"
+    return label
+
+
 class BridgePollLoop:
     def __init__(
         self,
@@ -31,11 +56,15 @@ class BridgePollLoop:
         runner_id: str,
         handlers: Dict[str, BridgeCommandHandler],
         shutdown_event: threading.Event,
+        on_command_start: Optional[Any] = None,
+        on_command_end: Optional[Any] = None,
     ) -> None:
         self._api = api
         self._runner_id = runner_id
         self._handlers = handlers
         self._shutdown_event = shutdown_event
+        self._on_command_start = on_command_start
+        self._on_command_end = on_command_end
 
     def run(self) -> None:
         backoff = 1.0
@@ -110,8 +139,19 @@ class BridgePollLoop:
         return (resp.commands or [])[:_MAX_BATCH_SIZE]
 
     def _execute_and_report(self, cmd: BridgeCommandItem) -> None:
+        summary = _build_op_summary(cmd)
+        if self._on_command_start:
+            self._on_command_start(cmd.command_id or "", cmd.type or "", summary)
+
         status, result, error, duration_ms = self._execute_command(cmd)
         self._report_result(cmd.command_id or "", status, result, error, duration_ms)
+
+        if self._on_command_end:
+            self._on_command_end(
+                cmd.command_id or "",
+                status == "completed",
+                error.get("code") if error else None,
+            )
 
     def _execute_command(
         self, cmd: BridgeCommandItem

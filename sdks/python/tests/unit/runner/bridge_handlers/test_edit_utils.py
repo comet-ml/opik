@@ -2,10 +2,10 @@ import pytest
 
 from opik.runner.bridge_handlers import CommandError
 from opik.runner.bridge_handlers.edit_utils import (
-    MatchResult,
     apply_edits,
     detect_line_ending,
-    find_match,
+    find_exact,
+    find_fuzzy,
     fuzzy_normalize,
     generate_diff,
     normalize_to_lf,
@@ -71,61 +71,56 @@ class TestFuzzyNormalize:
         assert result == "fi"
 
 
-class TestFindMatch:
-    def test_exact__returns_position(self) -> None:
-        match = find_match("hello world", "world")
-        assert match is not None
-        assert match.pos == 6
-        assert match.length == 5
-        assert match.fuzzy is False
+class TestFindExact:
+    def test_found(self) -> None:
+        result = find_exact("hello world", "world")
+        assert result == (6, 5)
 
-    def test_fuzzy_fallback__returns_position(self) -> None:
-        content = "say \u201chello\u201d"
-        match = find_match(content, 'say "hello"')
-        assert match is not None
-        assert match.fuzzy is True
+    def test_not_found(self) -> None:
+        result = find_exact("hello world", "xyz")
+        assert result is None
 
-    def test_not_found__returns_none(self) -> None:
-        match = find_match("hello world", "xyz")
-        assert match is None
-
-    def test_multiple__raises(self) -> None:
+    def test_ambiguous(self) -> None:
         with pytest.raises(CommandError) as exc_info:
-            find_match("ab ab ab", "ab")
+            find_exact("ab ab ab", "ab")
+        assert exc_info.value.code == "match_ambiguous"
+
+
+class TestFindFuzzy:
+    def test_smart_quotes(self) -> None:
+        content = fuzzy_normalize("say \u201chello\u201d")
+        result = find_fuzzy(content, 'say "hello"')
+        assert result is not None
+
+    def test_not_found(self) -> None:
+        content = fuzzy_normalize("hello world")
+        result = find_fuzzy(content, "xyz")
+        assert result is None
+
+    def test_ambiguous(self) -> None:
+        content = fuzzy_normalize("ab ab ab")
+        with pytest.raises(CommandError) as exc_info:
+            find_fuzzy(content, "ab")
         assert exc_info.value.code == "match_ambiguous"
 
 
 class TestValidateEdits:
-    def test_no_change__raises(self) -> None:
-        m = MatchResult(pos=0, length=5, fuzzy=False)
-        with pytest.raises(CommandError) as exc_info:
-            validate_edits([(m, "hello", "hello")])
-        assert exc_info.value.code == "no_change"
-
     def test_overlap__raises(self) -> None:
-        m1 = MatchResult(pos=0, length=10, fuzzy=False)
-        m2 = MatchResult(pos=5, length=10, fuzzy=False)
         with pytest.raises(CommandError) as exc_info:
-            validate_edits([(m1, "aaaaaaaaaa", "b"), (m2, "aaaaaaaaaa", "c")])
+            validate_edits([(0, 10), (5, 10)])
         assert exc_info.value.code == "edits_overlap"
 
     def test_valid__no_error(self) -> None:
-        m1 = MatchResult(pos=0, length=5, fuzzy=False)
-        m2 = MatchResult(pos=10, length=5, fuzzy=False)
-        validate_edits([(m1, "hello", "world"), (m2, "foo12", "bar34")])
+        validate_edits([(0, 5), (10, 5)])
 
 
 class TestApplyEdits:
     def test_single_edit(self) -> None:
-        m = MatchResult(pos=6, length=5, fuzzy=False)
-        result = apply_edits("hello world", [(m, "earth")])
+        result = apply_edits("hello world", [(6, 5, "earth")])
         assert result == "hello earth"
 
     def test_multiple_reverse_order(self) -> None:
-        content = "aaa bbb ccc"
-        m1 = MatchResult(pos=0, length=3, fuzzy=False)
-        m2 = MatchResult(pos=8, length=3, fuzzy=False)
-        result = apply_edits(content, [(m1, "AAA"), (m2, "CCC")])
+        result = apply_edits("aaa bbb ccc", [(0, 3, "AAA"), (8, 3, "CCC")])
         assert result == "AAA bbb CCC"
 
 

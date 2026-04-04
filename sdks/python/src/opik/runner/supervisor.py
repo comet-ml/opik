@@ -4,10 +4,11 @@ import logging
 import shlex
 import signal
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..rest_api.core.api_error import ApiError
 from .bridge_handlers import FileMutationQueue
@@ -18,6 +19,7 @@ from .bridge_handlers.search_files import SearchFilesHandler
 from .bridge_handlers.write_file import WriteFileHandler
 from .bridge_loop import BridgePollLoop
 from .file_watcher import FileWatcher
+from .snapshot import build_checklist
 from .stability_guard import StabilityGuard
 
 LOGGER = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ LOGGER = logging.getLogger(__name__)
 _HEARTBEAT_INTERVAL = 5.0
 _GRACEFUL_TIMEOUT = 10
 _RESTART_DEBOUNCE = 1.0
+_STDERR_MAX_LINES = 500
 
 
 class Supervisor:
@@ -40,18 +43,28 @@ class Supervisor:
         repo_root: Path,
         runner_id: str,
         api: Any,
+        on_child_output: Optional[Callable[[str, str], None]] = None,
+        on_child_restart: Optional[Callable[[str], None]] = None,
+        on_command_start: Optional[Callable] = None,
+        on_command_end: Optional[Callable] = None,
     ) -> None:
         self._command = command
         self._env = env
         self._repo_root = repo_root
         self._runner_id = runner_id
         self._api = api
+        self._on_child_output = on_child_output or self._default_output_callback
+        self._on_child_restart = on_child_restart
+        self._on_command_start = on_command_start
+        self._on_command_end = on_command_end
         self._shutdown_event = threading.Event()
         self._child: Optional[subprocess.Popen] = None
         self._child_lock = threading.Lock()
         self._deliberate_restart = False
         self._guard = StabilityGuard()
         self._last_restart_time = 0.0
+        self._stderr_buffer: List[str] = []
+        self._stderr_lock = threading.Lock()
 
     def run(self) -> None:
         self._install_signal_handlers()
@@ -70,7 +83,12 @@ class Supervisor:
             "search_files": SearchFilesHandler(self._repo_root),
         }
         bridge_loop = BridgePollLoop(
-            self._api, self._runner_id, handlers, self._shutdown_event
+            self._api,
+            self._runner_id,
+            handlers,
+            self._shutdown_event,
+            on_command_start=self._on_command_start,
+            on_command_end=self._on_command_end,
         )
         bridge_thread = threading.Thread(
             target=bridge_loop.run, name="bridge-poll", daemon=True
@@ -88,10 +106,12 @@ class Supervisor:
 
         with self._child_lock:
             self._child = self._start_child()
+        self._send_checklist()
 
         try:
             self._main_loop()
         finally:
+            self._shutdown_event.set()
             self._stop_child()
             LOGGER.info("Supervisor shutdown complete")
 
@@ -124,28 +144,70 @@ class Supervisor:
                 break
 
             LOGGER.warning("Child exited with code %d", exit_code)
+            stderr_tail = self._get_stderr_tail()
             self._guard.record_crash()
 
             if not self._guard.is_stable():
                 LOGGER.error(
                     "Child crashed too many times in window, stopping restarts"
                 )
+                self._patch_crash_info(exit_code, stderr_tail)
                 self._shutdown_event.set()
                 break
 
             with self._child_lock:
                 self._child = self._start_child()
+            self._send_checklist()
 
     def _start_child(self) -> subprocess.Popen:
+        with self._stderr_lock:
+            self._stderr_buffer.clear()
         env = {**self._env, "OPIK_SUPERVISED": "true"}
         LOGGER.info("Starting child: %s", shlex.join(self._command))
-        return subprocess.Popen(
+        child = subprocess.Popen(
             self._command,
             env=env,
             cwd=self._repo_root,
-            stdout=None,
-            stderr=None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
+        threading.Thread(
+            target=self._read_stream,
+            args=(child, child.stdout, "stdout"),
+            name="child-stdout",
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=self._read_stream,
+            args=(child, child.stderr, "stderr"),
+            name="child-stderr",
+            daemon=True,
+        ).start()
+        return child
+
+    def _read_stream(self, child: subprocess.Popen, stream: Any, name: str) -> None:
+        try:
+            for raw_line in iter(stream.readline, b""):
+                if self._shutdown_event.is_set():
+                    break
+                try:
+                    line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
+                except Exception:
+                    continue
+                if name == "stderr":
+                    with self._stderr_lock:
+                        self._stderr_buffer.append(line)
+                        if len(self._stderr_buffer) > _STDERR_MAX_LINES:
+                            self._stderr_buffer = self._stderr_buffer[
+                                -_STDERR_MAX_LINES:
+                            ]
+                self._on_child_output(name, line)
+        except (ValueError, OSError):
+            pass
+
+    def _get_stderr_tail(self) -> str:
+        with self._stderr_lock:
+            return "\n".join(self._stderr_buffer)
 
     def _stop_child(self, graceful_timeout: int = _GRACEFUL_TIMEOUT) -> Optional[int]:
         with self._child_lock:
@@ -191,6 +253,8 @@ class Supervisor:
 
         if old_child is not None:
             LOGGER.info("Restarting child: %s", reason)
+            if self._on_child_restart:
+                self._on_child_restart(reason)
             if old_child.poll() is None:
                 try:
                     old_child.send_signal(signal.SIGTERM)
@@ -205,10 +269,43 @@ class Supervisor:
         if not self._shutdown_event.is_set():
             with self._child_lock:
                 self._child = self._start_child()
+            self._send_checklist()
 
     def _on_file_change(self, paths: set) -> None:
         names = [p.name for p in paths]
         self._restart_child(f"file changed: {', '.join(names[:3])}")
+
+    def _send_checklist(self) -> None:
+        try:
+            checklist = build_checklist(self._repo_root, self._command)
+            self._api.runners.patch_checklist(self._runner_id, request=checklist)
+            LOGGER.debug(
+                "Checklist sent (instrumented=%s)", checklist["instrumentation"]
+            )
+        except Exception:
+            LOGGER.debug("Failed to send checklist", exc_info=True)
+
+    def _patch_crash_info(self, exit_code: int, stderr_tail: str) -> None:
+        try:
+            self._api.runners.patch_checklist(
+                self._runner_id,
+                request={
+                    "child_status": "crashed",
+                    "last_crash": {
+                        "exit_code": exit_code,
+                        "stderr_tail": stderr_tail,
+                    },
+                },
+            )
+        except Exception:
+            LOGGER.debug("Failed to patch crash info", exc_info=True)
+
+    def _default_output_callback(self, stream: str, line: str) -> None:
+        target = sys.stderr if stream == "stderr" else sys.stdout
+        try:
+            print(line, file=target, flush=True)
+        except (BrokenPipeError, OSError):
+            pass
 
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():

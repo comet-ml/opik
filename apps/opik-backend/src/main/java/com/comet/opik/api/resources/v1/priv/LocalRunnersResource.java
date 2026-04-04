@@ -12,7 +12,6 @@ import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
 import com.comet.opik.api.runner.LocalRunnerConnectResponse;
-import com.comet.opik.api.runner.LocalRunnerHeartbeatRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
@@ -187,11 +186,17 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "410", description = "Gone", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response heartbeat(@PathParam("runnerId") UUID runnerId,
-            @Valid LocalRunnerHeartbeatRequest request) {
+            JsonNode body) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        List<String> capabilities = request != null ? request.capabilities() : null;
+        List<String> capabilities = null;
+        if (body != null && body.has("capabilities") && body.get("capabilities").isArray()) {
+            capabilities = new java.util.ArrayList<>();
+            for (JsonNode cap : body.get("capabilities")) {
+                capabilities.add(cap.asText());
+            }
+        }
         LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId, userName, capabilities);
         return Response.ok(response).build();
     }

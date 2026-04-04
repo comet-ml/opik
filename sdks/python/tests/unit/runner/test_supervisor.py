@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -74,14 +75,19 @@ class TestStartChild:
         child.wait(timeout=5)
         assert marker.read_text() == "true"
 
-    def test_inherits_terminal(self) -> None:
+    def test_captures_output_via_pipe(self) -> None:
         sup = _make_supervisor()
         with patch("opik.runner.supervisor.subprocess.Popen") as mock_popen:
-            mock_popen.return_value = MagicMock()
+            mock_proc = MagicMock()
+            mock_proc.stdout = MagicMock()
+            mock_proc.stdout.readline = MagicMock(return_value=b"")
+            mock_proc.stderr = MagicMock()
+            mock_proc.stderr.readline = MagicMock(return_value=b"")
+            mock_popen.return_value = mock_proc
             sup._start_child()
             call_kwargs = mock_popen.call_args.kwargs
-            assert call_kwargs.get("stdout") is None
-            assert call_kwargs.get("stderr") is None
+            assert call_kwargs.get("stdout") == subprocess.PIPE
+            assert call_kwargs.get("stderr") == subprocess.PIPE
 
 
 class TestStopChild:

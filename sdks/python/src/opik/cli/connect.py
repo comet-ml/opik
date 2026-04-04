@@ -11,6 +11,7 @@ import httpx
 from opik import Opik
 from opik.rest_api.core.api_error import ApiError
 from opik.runner.supervisor import Supervisor
+from opik.runner.tui import RunnerTUI
 
 
 @click.command(context_settings={"ignore_unknown_options": True})
@@ -65,7 +66,6 @@ def connect(
             click.echo("Error: server did not return a project_name")
             raise SystemExit(1)
 
-        click.echo(f"Runner connected (ID: {runner_id}).")
         env = {
             **os.environ,
             "OPIK_RUNNER_MODE": "true",
@@ -73,14 +73,27 @@ def connect(
             "OPIK_PROJECT_NAME": project_name,
         }
 
+        tui = RunnerTUI()
+        tui.start()
+        tui.print_banner(runner_id, project_name)
+
         supervisor = Supervisor(
             command=list(command),
             env=env,
             repo_root=Path.cwd(),
             runner_id=runner_id,
             api=api,
+            on_child_output=lambda stream, line: tui.app_line(line, stream),
+            on_child_restart=lambda reason: tui.child_restarted(reason),
+            on_command_start=lambda cid, ctype, summary: tui.op_start(
+                cid, ctype, summary
+            ),
+            on_command_end=lambda cid, success, error: tui.op_end(cid, success, error),
         )
-        supervisor.run()
+        try:
+            supervisor.run()
+        finally:
+            tui.stop()
     except ApiError as e:
         click.echo(f"Error: {e.body}" if e.body else f"Error: {e.status_code}")
         raise SystemExit(1)

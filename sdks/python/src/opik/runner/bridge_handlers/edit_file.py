@@ -6,14 +6,15 @@ from typing import Any, Dict, List, Tuple
 
 from . import CommandError, FileMutationQueue
 from .edit_utils import (
-    MatchResult,
     apply_edits,
-    find_match,
+    detect_line_ending,
+    find_exact,
+    find_fuzzy,
+    fuzzy_normalize,
     generate_diff,
     normalize_to_lf,
     restore_line_ending,
     strip_bom,
-    detect_line_ending,
     validate_edits,
 )
 from .path_utils import is_binary, validate_path
@@ -40,8 +41,12 @@ class EditFileHandler:
             raise CommandError("no_change", "No edits provided")
 
         for edit in edits:
-            if not edit.get("old_string"):
+            old = edit.get("old_string", "")
+            new = edit.get("new_string", "")
+            if not old:
                 raise CommandError("match_not_found", "Empty old_string")
+            if old == new:
+                raise CommandError("no_change", "old_string equals new_string")
 
         with self._mutation_queue.lock(path):
             _revalidate_path(path, self._repo_root)
@@ -55,36 +60,56 @@ class EditFileHandler:
 
             content, bom = strip_bom(raw_content)
             line_ending = detect_line_ending(content)
-            normalized = normalize_to_lf(content)
+            content_lf = normalize_to_lf(content)
 
-            matches: List[Tuple[MatchResult, str, str]] = []
+            # Tier 1: exact matching on LF-normalized content
+            matches: List[Tuple[int, int, str]] = []
+            all_exact = True
             for edit in edits:
-                old_str = edit["old_string"]
-                new_str = edit["new_string"]
-                match = find_match(normalized, old_str)
-                if match is None:
-                    raise CommandError(
-                        "match_not_found", "old_string not found in file"
-                    )
-                matches.append((match, old_str, new_str))
+                old_lf = normalize_to_lf(edit["old_string"])
+                result = find_exact(content_lf, old_lf)
+                if result is None:
+                    all_exact = False
+                    break
+                start, length = result
+                matches.append((start, length, normalize_to_lf(edit["new_string"])))
 
-            validate_edits(matches)
+            # Tier 2: fuzzy matching on normalized content if any exact match failed
+            fuzzy_used = False
+            if not all_exact:
+                matches = []
+                fuzzy_content = fuzzy_normalize(content_lf)
+                for edit in edits:
+                    old_lf = normalize_to_lf(edit["old_string"])
+                    new_lf = normalize_to_lf(edit["new_string"])
+                    result = find_fuzzy(fuzzy_content, old_lf)
+                    if result is None:
+                        raise CommandError(
+                            "match_not_found", "old_string not found in file"
+                        )
+                    start, length = result
+                    matches.append((start, length, new_lf))
+                    fuzzy_used = True
 
-            apply_pairs = [(m, new_str) for m, _, new_str in matches]
-            result_content = apply_edits(normalized, apply_pairs)
+            validate_edits([(m[0], m[1]) for m in matches])
 
-            result_content = bom + result_content
-            result_content = restore_line_ending(result_content, line_ending)
+            if fuzzy_used:
+                new_content = apply_edits(fuzzy_normalize(content_lf), matches)
+            else:
+                new_content = apply_edits(content_lf, matches)
+
+            new_content = bom + new_content
+            new_content = restore_line_ending(new_content, line_ending)
 
             rel = str(path.relative_to(self._repo_root))
-            diff = generate_diff(raw_content, result_content, rel)
+            diff = generate_diff(raw_content, new_content, rel)
 
-            path.write_bytes(result_content.encode("utf-8"))
+            path.write_bytes(new_content.encode("utf-8"))
 
         return {
             "diff": diff,
             "edits_applied": len(edits),
-            "fuzzy_match_used": any(m.fuzzy for m, _, _ in matches),
+            "fuzzy_match_used": fuzzy_used,
         }
 
 
