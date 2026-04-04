@@ -25,7 +25,10 @@ class TestHeartbeatSupervised:
                 started_threads.append(target.__func__.__name__)
             return t
 
-        with patch("opik.runner.in_process_loop.threading.Thread", side_effect=tracking_thread):
+        with patch(
+            "opik.runner.in_process_loop.threading.Thread",
+            side_effect=tracking_thread,
+        ):
             loop.run()
 
         assert "_heartbeat_loop" not in started_threads
@@ -33,6 +36,7 @@ class TestHeartbeatSupervised:
     @patch.dict("os.environ", {}, clear=False)
     def test_unsupervised__starts_heartbeat_thread(self) -> None:
         import os
+
         os.environ.pop("OPIK_SUPERVISED", None)
 
         api = MagicMock()
