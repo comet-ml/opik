@@ -3,5 +3,5 @@
 import typing
 
 BridgeCommandSubmitRequestType = typing.Union[
-    typing.Literal["read_file", "write_file", "edit_file", "list_files", "search_files"], typing.Any
+    typing.Literal["ReadFile", "WriteFile", "EditFile", "ListFiles", "SearchFiles"], typing.Any
 ]

@@ -3,9 +3,10 @@
 import logging
 import os
 import re
-import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
+
+from .bridge_handlers.common import git_ls_files
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def _matches_any(match_line: str, patterns: list) -> bool:
 
 
 def _build_file_tree(repo_root: Path) -> str:
-    git_files = _git_tracked_files(repo_root)
+    git_files = git_ls_files(repo_root)
 
     entries: List[str] = []
     dirs_seen: Set[str] = set()
@@ -108,7 +109,7 @@ def _build_file_tree(repo_root: Path) -> str:
 
 
 def _find_instrumentation(repo_root: Path) -> List[str]:
-    git_files = _git_tracked_files(repo_root)
+    git_files = git_ls_files(repo_root)
     matches: List[str] = []
 
     if git_files is not None:
@@ -159,35 +160,3 @@ def _find_instrumentation(repo_root: Path) -> List[str]:
                     break
 
     return matches
-
-
-def _git_tracked_files(repo_root: Path) -> Optional[Set[str]]:
-    try:
-        tracked = subprocess.run(
-            ["git", "ls-files"],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if tracked.returncode != 0:
-            return None
-
-        untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-
-        files = set()
-        for line in tracked.stdout.splitlines():
-            if line.strip():
-                files.add(line.strip())
-        for line in untracked.stdout.splitlines():
-            if line.strip():
-                files.add(line.strip())
-        return files
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None

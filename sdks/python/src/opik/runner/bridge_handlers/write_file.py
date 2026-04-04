@@ -1,12 +1,11 @@
 """write_file bridge command handler."""
 
 import difflib
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from . import CommandError, FileMutationQueue
-from .path_utils import validate_path
+from . import FileMutationQueue
+from .common import revalidate_path, validate_path
 
 
 class WriteFileHandler:
@@ -21,7 +20,7 @@ class WriteFileHandler:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         with self._mutation_queue.lock(path):
-            _revalidate_path(path, self._repo_root)
+            revalidate_path(path, self._repo_root)
 
             old_content: Optional[str] = None
             if path.exists():
@@ -35,28 +34,20 @@ class WriteFileHandler:
         diff: Optional[str] = None
         if old_content is not None:
             rel = str(path.relative_to(self._repo_root))
-            diff = _generate_diff(old_content, content, rel)
+            old_lines = old_content.splitlines(keepends=True)
+            new_lines = content.splitlines(keepends=True)
+            diff = "".join(
+                difflib.unified_diff(
+                    old_lines,
+                    new_lines,
+                    fromfile=f"a/{rel}",
+                    tofile=f"b/{rel}",
+                    n=4,
+                )
+            )
 
         return {
             "bytes_written": len(content.encode("utf-8")),
             "created": old_content is None,
             "diff": diff,
         }
-
-
-def _revalidate_path(path: Path, repo_root: Path) -> None:
-    """Re-check realpath inside the lock to prevent symlink TOCTOU."""
-    real = os.path.realpath(path)
-    real_root = os.path.realpath(repo_root)
-    if not real.startswith(real_root + os.sep) and real != real_root:
-        raise CommandError("path_traversal", "Path changed to point outside repository")
-
-
-def _generate_diff(old: str, new: str, path: str, context: int = 4) -> str:
-    old_lines = old.splitlines(keepends=True)
-    new_lines = new.splitlines(keepends=True)
-    return "".join(
-        difflib.unified_diff(
-            old_lines, new_lines, fromfile=f"a/{path}", tofile=f"b/{path}", n=context
-        )
-    )

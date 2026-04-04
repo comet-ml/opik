@@ -1,7 +1,6 @@
 """Bridge poll loop — runs in the supervisor, polls for bridge commands, dispatches to handlers."""
 
 import logging
-import random
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -11,6 +10,7 @@ from ..rest_api.core.api_error import ApiError
 from ..rest_api.core.request_options import RequestOptions
 from ..rest_api.types.bridge_command_item import BridgeCommandItem
 from .bridge_handlers import BridgeCommandHandler, CommandError
+from .bridge_handlers.common import backoff_wait
 
 LOGGER = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class BridgePollLoop:
                         LOGGER.debug(
                             "Bridge poll error (API %s)", e.status_code, exc_info=True
                         )
-                    self._backoff_wait(backoff)
+                    backoff_wait(self._shutdown_event, backoff)
                     backoff = min(backoff * 2, 30.0)
                     continue
                 except Exception:
@@ -105,7 +105,7 @@ class BridgePollLoop:
                         LOGGER.warning("Bridge poll error. Retrying...", exc_info=True)
                     else:
                         LOGGER.debug("Bridge poll error", exc_info=True)
-                    self._backoff_wait(backoff)
+                    backoff_wait(self._shutdown_event, backoff)
                     backoff = min(backoff * 2, 30.0)
                     continue
 
@@ -223,6 +223,15 @@ class BridgePollLoop:
                 if e.status_code == 409:
                     LOGGER.debug("Duplicate result report for %s, ignoring", command_id)
                     return
+                if e.status_code == 429:
+                    wait = _REPORT_BACKOFF_BASE * (2 ** (attempt + 1))
+                    LOGGER.warning(
+                        "Rate limited reporting %s, retrying in %.1fs",
+                        command_id,
+                        wait,
+                    )
+                    self._shutdown_event.wait(wait)
+                    continue
                 if attempt < _REPORT_MAX_RETRIES - 1:
                     wait = _REPORT_BACKOFF_BASE * (2**attempt)
                     LOGGER.debug(
@@ -255,7 +264,3 @@ class BridgePollLoop:
                         _REPORT_MAX_RETRIES,
                         exc_info=True,
                     )
-
-    def _backoff_wait(self, backoff: float) -> None:
-        wait = backoff * (0.5 + random.random() * 0.5)
-        self._shutdown_event.wait(wait)

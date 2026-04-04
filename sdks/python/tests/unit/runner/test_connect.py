@@ -8,10 +8,11 @@ from opik.rest_api.types.local_runner_connect_response import LocalRunnerConnect
 
 
 class TestConnect:
+    @patch("opik.cli.connect.RunnerTUI")
     @patch("opik.cli.connect.Supervisor")
     @patch("opik.cli.connect.Opik")
     def test_connect__with_pair_code__calls_connect_runner(
-        self, mock_opik_cls, mock_supervisor_cls
+        self, mock_opik_cls, mock_supervisor_cls, mock_tui_cls
     ):
         client = MagicMock()
         api = MagicMock()
@@ -27,15 +28,15 @@ class TestConnect:
         runner = CliRunner()
         result = runner.invoke(cli, ["connect", "--pair", "ABCD", "echo", "hello"])
         assert result.exit_code == 0
-        assert "r-abc" in result.output
 
         call_kwargs = api.runners.connect_runner.call_args[1]
         assert call_kwargs["pairing_code"] == "ABCD"
 
+    @patch("opik.cli.connect.RunnerTUI")
     @patch("opik.cli.connect.Supervisor")
     @patch("opik.cli.connect.Opik")
     def test_connect__with_command__creates_supervisor(
-        self, mock_opik_cls, mock_supervisor_cls
+        self, mock_opik_cls, mock_supervisor_cls, mock_tui_cls
     ):
         client = MagicMock()
         api = MagicMock()
@@ -61,10 +62,11 @@ class TestConnect:
 
         mock_supervisor_cls.return_value.run.assert_called_once()
 
+    @patch("opik.cli.connect.RunnerTUI")
     @patch("opik.cli.connect.Supervisor")
     @patch("opik.cli.connect.Opik")
     def test_connect__network_failure__shows_clean_error(
-        self, mock_opik_cls, mock_supervisor_cls
+        self, mock_opik_cls, mock_supervisor_cls, mock_tui_cls
     ):
         client = MagicMock()
         config = MagicMock()

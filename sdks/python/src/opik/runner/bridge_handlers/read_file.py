@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Any, Dict
 
 from . import CommandError
-from .path_utils import is_binary, validate_path
+from .common import is_binary, validate_path
 
 _MAX_LINES = 2000
-_MAX_BYTES = 512 * 1024
+_MAX_TOKENS = 128_000
+_CHARS_PER_TOKEN = 4
 
 
 class ReadFileHandler:
@@ -50,10 +51,10 @@ class ReadFileHandler:
         if len(selected) < total_lines - offset:
             truncated = True
 
-        if len(content.encode("utf-8")) > _MAX_BYTES:
+        max_chars = _MAX_TOKENS * _CHARS_PER_TOKEN
+        if len(content) > max_chars:
             truncated = True
-            encoded = content.encode("utf-8")[:_MAX_BYTES]
-            content = encoded.decode("utf-8", errors="ignore")
+            content = content[:max_chars]
 
         return {
             "content": content,

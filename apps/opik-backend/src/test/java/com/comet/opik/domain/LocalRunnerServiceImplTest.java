@@ -875,7 +875,7 @@ class LocalRunnerServiceImplTest {
             RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
             assertThat(cmdMap.get("command_id")).isEqualTo(commandId.toString());
             assertThat(cmdMap.get("runner_id")).isEqualTo(runnerId.toString());
-            assertThat(cmdMap.get("type")).isEqualTo("read_file");
+            assertThat(cmdMap.get("type")).isEqualTo("ReadFile");
             assertThat(cmdMap.get("status")).isEqualTo("pending");
             assertThat(cmdMap.get("submitted_at")).isNotBlank();
             assertThat(cmdMap.get("timeout_seconds")).isEqualTo("10");

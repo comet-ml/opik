@@ -58,7 +58,7 @@ class RunnerTUI:
         info = Text()
         info.append("   ")
         info.append("\u2800\u20dd", style="rgb(224,62,45)")
-        info.append("opik  ", style="bold")
+        info.append(" opik  ", style="bold")
         info.append(f"runner: {runner_id}", style="dim")
         if project_name:
             info.append(f"  project: {project_name}", style="dim")
@@ -70,7 +70,7 @@ class RunnerTUI:
             self._console.print(info)
             self._console.print()
 
-    def app_line(self, line: str, stream: str = "stdout") -> None:
+    def app_line(self, stream: str, line: str) -> None:
         color = _color_for_line(self._line_count)
         self._line_count += 1
         text = Text()

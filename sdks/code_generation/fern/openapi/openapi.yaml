@@ -4034,6 +4034,7 @@ paths:
           type: string
           format: uuid
       requestBody:
+        description: Optional heartbeat body with capabilities
         content:
           application/json:
             schema:
@@ -9596,9 +9597,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -10041,9 +10042,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10496,9 +10497,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -15824,11 +15825,11 @@ components:
         type:
           type: string
           enum:
-          - read_file
-          - write_file
-          - edit_file
-          - list_files
-          - search_files
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
         status:
           type: string
           enum:
@@ -16031,11 +16032,11 @@ components:
         type:
           type: string
           enum:
-          - read_file
-          - write_file
-          - edit_file
-          - list_files
-          - search_files
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
         args:
           $ref: "#/components/schemas/JsonNode"
         timeout_seconds:
@@ -16105,11 +16106,11 @@ components:
         type:
           type: string
           enum:
-          - read_file
-          - write_file
-          - edit_file
-          - list_files
-          - search_files
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
         args:
           $ref: "#/components/schemas/JsonNode"
         timeout_seconds:

@@ -10,7 +10,7 @@ class TestEditFileExact:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
         return EditFileHandler(tmp_path, FileMutationQueue())
 
-    def test_single_exact_match(self, tmp_path: Path) -> None:
+    def test_edit_file__single_exact_match__applies_edit(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("hello world\n")
         handler = self._handler(tmp_path)
@@ -26,7 +26,7 @@ class TestEditFileExact:
         assert f.read_text() == "hello earth\n"
         assert "-world" in result["diff"] or "-hello world" in result["diff"]
 
-    def test_multi_edit(self, tmp_path: Path) -> None:
+    def test_edit_file__multiple_edits__applies_all(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("aaa bbb ccc\n")
         handler = self._handler(tmp_path)
@@ -43,7 +43,7 @@ class TestEditFileExact:
         assert result["edits_applied"] == 2
         assert f.read_text() == "AAA bbb CCC\n"
 
-    def test_not_found__error(self, tmp_path: Path) -> None:
+    def test_edit_file__match_not_found__raises_error(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("hello\n")
         handler = self._handler(tmp_path)
@@ -57,7 +57,7 @@ class TestEditFileExact:
             )
         assert exc_info.value.code == "match_not_found"
 
-    def test_ambiguous__error(self, tmp_path: Path) -> None:
+    def test_edit_file__ambiguous_match__raises_error(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("ab ab ab\n")
         handler = self._handler(tmp_path)
@@ -71,7 +71,7 @@ class TestEditFileExact:
             )
         assert exc_info.value.code == "match_ambiguous"
 
-    def test_overlap__error(self, tmp_path: Path) -> None:
+    def test_edit_file__overlapping_edits__raises_error(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("hello world foo\n")
         handler = self._handler(tmp_path)
@@ -88,7 +88,7 @@ class TestEditFileExact:
             )
         assert exc_info.value.code == "edits_overlap"
 
-    def test_no_change__error(self, tmp_path: Path) -> None:
+    def test_edit_file__same_old_and_new__raises_error(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("hello\n")
         handler = self._handler(tmp_path)
@@ -107,7 +107,7 @@ class TestEditFileBom:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
         return EditFileHandler(tmp_path, FileMutationQueue())
 
-    def test_bom_file__matches_without_bom(self, tmp_path: Path) -> None:
+    def test_edit_file__bom_file__matches_without_bom(self, tmp_path: Path) -> None:
         f = tmp_path / "bom.py"
         f.write_text("\ufeffhello world\n", encoding="utf-8")
         handler = self._handler(tmp_path)
@@ -120,7 +120,7 @@ class TestEditFileBom:
         )
         assert result["edits_applied"] == 1
 
-    def test_bom_preserved(self, tmp_path: Path) -> None:
+    def test_edit_file__bom_file_edited__preserves_bom(self, tmp_path: Path) -> None:
         f = tmp_path / "bom.py"
         f.write_text("\ufeffhello\n", encoding="utf-8")
         handler = self._handler(tmp_path)
@@ -140,7 +140,7 @@ class TestEditFileLineEndings:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
         return EditFileHandler(tmp_path, FileMutationQueue())
 
-    def test_crlf_file__matches_with_lf(self, tmp_path: Path) -> None:
+    def test_edit_file__crlf_file__matches_with_lf(self, tmp_path: Path) -> None:
         f = tmp_path / "crlf.py"
         f.write_bytes(b"hello\r\nworld\r\n")
         handler = self._handler(tmp_path)
@@ -153,7 +153,7 @@ class TestEditFileLineEndings:
         )
         assert result["edits_applied"] == 1
 
-    def test_crlf_preserved(self, tmp_path: Path) -> None:
+    def test_edit_file__crlf_file_edited__preserves_crlf(self, tmp_path: Path) -> None:
         f = tmp_path / "crlf.py"
         f.write_bytes(b"hello\r\nworld\r\n")
         handler = self._handler(tmp_path)
@@ -173,7 +173,7 @@ class TestEditFileFuzzy:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
         return EditFileHandler(tmp_path, FileMutationQueue())
 
-    def test_smart_quotes__fuzzy(self, tmp_path: Path) -> None:
+    def test_edit_file__smart_quotes__uses_fuzzy_match(self, tmp_path: Path) -> None:
         f = tmp_path / "q.py"
         f.write_text("say \u201chello\u201d\n")
         handler = self._handler(tmp_path)
@@ -186,7 +186,9 @@ class TestEditFileFuzzy:
         )
         assert result["fuzzy_match_used"] is True
 
-    def test_fuzzy_flagged_in_result(self, tmp_path: Path) -> None:
+    def test_edit_file__unicode_dash__flags_fuzzy_in_result(
+        self, tmp_path: Path
+    ) -> None:
         f = tmp_path / "f.py"
         f.write_text("a\u2014b\n")
         handler = self._handler(tmp_path)
@@ -204,7 +206,9 @@ class TestEditFileMultiEdit:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
         return EditFileHandler(tmp_path, FileMutationQueue())
 
-    def test_reverse_order_application(self, tmp_path: Path) -> None:
+    def test_edit_file__reverse_order_edits__applies_both_correctly(
+        self, tmp_path: Path
+    ) -> None:
         f = tmp_path / "code.py"
         f.write_text("first\nsecond\nthird\n")
         handler = self._handler(tmp_path)
@@ -220,7 +224,9 @@ class TestEditFileMultiEdit:
         )
         assert f.read_text() == "FIRST\nsecond\nTHIRD\n"
 
-    def test_matched_against_original(self, tmp_path: Path) -> None:
+    def test_edit_file__multiple_edits_same_line__matches_against_original(
+        self, tmp_path: Path
+    ) -> None:
         f = tmp_path / "code.py"
         f.write_text("aaa bbb\n")
         handler = self._handler(tmp_path)
@@ -241,7 +247,7 @@ class TestEditFileEdgeCases:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
         return EditFileHandler(tmp_path, FileMutationQueue())
 
-    def test_binary__error(self, tmp_path: Path) -> None:
+    def test_edit_file__binary_file__raises_error(self, tmp_path: Path) -> None:
         f = tmp_path / "bin.dat"
         f.write_bytes(b"\x00\x01")
         handler = self._handler(tmp_path)
@@ -255,7 +261,7 @@ class TestEditFileEdgeCases:
             )
         assert exc_info.value.code == "binary_file"
 
-    def test_file_not_found__error(self, tmp_path: Path) -> None:
+    def test_edit_file__file_not_found__raises_error(self, tmp_path: Path) -> None:
         handler = self._handler(tmp_path)
         with pytest.raises(CommandError) as exc_info:
             handler.execute(
@@ -267,7 +273,7 @@ class TestEditFileEdgeCases:
             )
         assert exc_info.value.code == "file_not_found"
 
-    def test_empty_old_string__error(self, tmp_path: Path) -> None:
+    def test_edit_file__empty_old_string__raises_error(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
         f.write_text("hello\n")
         handler = self._handler(tmp_path)
@@ -281,7 +287,7 @@ class TestEditFileEdgeCases:
             )
         assert exc_info.value.code == "match_not_found"
 
-    def test_path_traversal__error(self, tmp_path: Path) -> None:
+    def test_edit_file__path_traversal__raises_error(self, tmp_path: Path) -> None:
         handler = self._handler(tmp_path)
         with pytest.raises(CommandError) as exc_info:
             handler.execute(

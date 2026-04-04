@@ -1,15 +1,13 @@
 """list_files bridge command handler."""
 
-import subprocess
-from pathlib import Path
-from typing import Any, Dict, List, Set
+from pathlib import Path, PurePosixPath
+from typing import Any, Dict, List
 
 from . import CommandError
-from .path_utils import validate_path
+from .common import git_ls_files, validate_path
 
 _MAX_ENTRIES = 1000
 _MAX_BYTES = 512 * 1024
-_EXCLUDED_DIRS = {".git", "__pycache__", ".venv", "node_modules"}
 
 
 class ListFilesHandler:
@@ -17,7 +15,7 @@ class ListFilesHandler:
         self._repo_root = repo_root
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
-        pattern = args.get("pattern", "**/*")
+        pattern = args.get("pattern") or "**/*"
         sub_path = args.get("path", "")
 
         if ".." in pattern.split("/"):
@@ -31,35 +29,35 @@ class ListFilesHandler:
         if not base.is_dir():
             raise CommandError("file_not_found", f"Directory not found: {sub_path}")
 
-        gitignored = self._load_gitignore_set()
+        all_files = git_ls_files(self._repo_root)
+        if all_files is None:
+            all_files = set()
+
+        try:
+            base_rel = str(base.relative_to(self._repo_root))
+        except ValueError:
+            base_rel = ""
+
+        filtered: List[str] = []
+        for rel in all_files:
+            if base_rel and base_rel != "." and not rel.startswith(base_rel + "/"):
+                continue
+            if not _matches_pattern(rel, pattern):
+                continue
+            filtered.append(rel)
+
+        filtered.sort(key=lambda r: _safe_mtime(self._repo_root / r), reverse=True)
 
         matches: List[str] = []
-        total = 0
+        total = len(filtered)
         byte_count = 0
         truncated = False
 
-        for p in sorted(base.glob(pattern), key=_safe_mtime, reverse=True):
-            if not p.is_file():
-                continue
-
-            if any(part in _EXCLUDED_DIRS for part in p.parts):
-                continue
-
-            try:
-                rel = str(p.relative_to(self._repo_root))
-            except ValueError:
-                continue
-
-            if rel in gitignored:
-                continue
-
-            total += 1
+        for rel in filtered:
             entry_bytes = len(rel.encode("utf-8")) + 1
-
             if len(matches) >= _MAX_ENTRIES or byte_count + entry_bytes > _MAX_BYTES:
                 truncated = True
                 continue
-
             matches.append(rel)
             byte_count += entry_bytes
 
@@ -69,20 +67,14 @@ class ListFilesHandler:
             "truncated": truncated,
         }
 
-    def _load_gitignore_set(self) -> Set[str]:
-        try:
-            result = subprocess.run(
-                ["git", "ls-files", "--others", "--ignored", "--exclude-standard"],
-                cwd=self._repo_root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if result.returncode == 0:
-                return set(result.stdout.strip().splitlines())
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-        return set()
+
+def _matches_pattern(rel: str, pattern: str) -> bool:
+    p = PurePosixPath(rel)
+    if p.match(pattern):
+        return True
+    if pattern.startswith("**/"):
+        return p.match(pattern[3:])
+    return False
 
 
 def _safe_mtime(path: Path) -> float:

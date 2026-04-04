@@ -7,8 +7,8 @@ import type * as serializers from "../index.js";
 export const BridgeCommandType: core.serialization.Schema<
     serializers.BridgeCommandType.Raw,
     OpikApi.BridgeCommandType
-> = core.serialization.enum_(["read_file", "write_file", "edit_file", "list_files", "search_files"]);
+> = core.serialization.enum_(["ReadFile", "WriteFile", "EditFile", "ListFiles", "SearchFiles"]);
 
 export declare namespace BridgeCommandType {
-    export type Raw = "read_file" | "write_file" | "edit_file" | "list_files" | "search_files";
+    export type Raw = "ReadFile" | "WriteFile" | "EditFile" | "ListFiles" | "SearchFiles";
 }

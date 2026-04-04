@@ -12,13 +12,13 @@ from opik.runner.bridge_handlers import (
 
 
 class TestStubHandler:
-    def test_raises_not_implemented(self) -> None:
+    def test_stub_handler__execute__raises_not_implemented(self) -> None:
         handler = StubHandler()
         with pytest.raises(CommandError) as exc_info:
             handler.execute({"path": "test.py"}, timeout=30.0)
         assert exc_info.value.code == "not_implemented"
 
-    def test_command_error_fields(self) -> None:
+    def test_command_error__fields__exposes_code_and_message(self) -> None:
         err = CommandError("file_not_found", "No such file: test.py")
         assert err.code == "file_not_found"
         assert err.message == "No such file: test.py"
@@ -26,7 +26,7 @@ class TestStubHandler:
 
 
 class TestFileMutationQueue:
-    def test_same_file__serialized(self, tmp_path: Path) -> None:
+    def test_mutation_queue__same_file__serializes_access(self, tmp_path: Path) -> None:
         queue = FileMutationQueue()
         f = tmp_path / "a.py"
         f.write_text("")
@@ -48,7 +48,9 @@ class TestFileMutationQueue:
 
         assert order == [1, 2]
 
-    def test_different_files__parallel(self, tmp_path: Path) -> None:
+    def test_mutation_queue__different_files__allows_parallel(
+        self, tmp_path: Path
+    ) -> None:
         queue = FileMutationQueue()
         f1 = tmp_path / "a.py"
         f2 = tmp_path / "b.py"
@@ -71,7 +73,9 @@ class TestFileMutationQueue:
 
         assert abs(start_times[1] - start_times[2]) < 0.05
 
-    def test_symlink__resolves_to_same_lock(self, tmp_path: Path) -> None:
+    def test_mutation_queue__symlink__resolves_to_same_lock(
+        self, tmp_path: Path
+    ) -> None:
         queue = FileMutationQueue()
         real = tmp_path / "real.py"
         real.write_text("")

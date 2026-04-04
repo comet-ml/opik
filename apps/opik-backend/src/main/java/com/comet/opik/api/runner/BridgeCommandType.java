@@ -8,11 +8,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum BridgeCommandType {
 
-    READ_FILE("read_file"),
-    WRITE_FILE("write_file"),
-    EDIT_FILE("edit_file"),
-    LIST_FILES("list_files"),
-    SEARCH_FILES("search_files");
+    READ_FILE("ReadFile"),
+    WRITE_FILE("WriteFile"),
+    EDIT_FILE("EditFile"),
+    LIST_FILES("ListFiles"),
+    SEARCH_FILES("SearchFiles");
 
     @JsonValue
     private final String value;

@@ -5,7 +5,7 @@ import type * as OpikApi from "../../../../index.js";
 /**
  * @example
  *     {
- *         type: "read_file",
+ *         type: "ReadFile",
  *         args: {
  *             "key": "value"
  *         }

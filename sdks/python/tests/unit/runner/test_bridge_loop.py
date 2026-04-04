@@ -33,7 +33,7 @@ def _empty_batch() -> BridgeCommandBatchResponse:
 
 
 class TestBridgePollLoopPolling:
-    def test_no_commands__loops(self) -> None:
+    def test_poll__no_commands__continues_looping(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         call_count = 0
@@ -52,7 +52,7 @@ class TestBridgePollLoopPolling:
 
         assert call_count >= 3
 
-    def test_single_command__dispatches_and_reports(self) -> None:
+    def test_poll__single_command__dispatches_and_reports(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         handler = MagicMock()
@@ -81,7 +81,7 @@ class TestBridgePollLoopPolling:
         assert report_call.kwargs["status"] == "completed"
         assert report_call.kwargs["result"] == {"content": "hello"}
 
-    def test_batch__dispatches_all(self) -> None:
+    def test_poll__batch_of_commands__dispatches_all(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         handler = MagicMock()
@@ -106,7 +106,7 @@ class TestBridgePollLoopPolling:
         assert handler.execute.call_count == 3
         assert api.runners.report_bridge_result.call_count == 3
 
-    def test_network_error__backs_off(self) -> None:
+    def test_poll__network_error__backs_off_and_retries(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         call_count = 0
@@ -126,7 +126,7 @@ class TestBridgePollLoopPolling:
 
         assert call_count >= 3
 
-    def test_410_evicted__stops_loop(self) -> None:
+    def test_poll__410_evicted__stops_loop(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         api.runners.next_bridge_commands.side_effect = ApiError(
@@ -138,7 +138,7 @@ class TestBridgePollLoopPolling:
 
         assert shutdown.is_set()
 
-    def test_shutdown__stops_loop(self) -> None:
+    def test_poll__shutdown_event__stops_loop(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         call_count = 0
@@ -159,7 +159,7 @@ class TestBridgePollLoopPolling:
 
 
 class TestBridgePollLoopDispatch:
-    def test_handler_exception__reports_failed(self) -> None:
+    def test_dispatch__handler_raises_error__reports_failed(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         handler = MagicMock()
@@ -184,7 +184,7 @@ class TestBridgePollLoopDispatch:
         assert report_call.kwargs["status"] == "failed"
         assert report_call.kwargs["error"]["code"] == "file_not_found"
 
-    def test_unknown_type__reports_failed(self) -> None:
+    def test_dispatch__unknown_command_type__reports_failed(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
 
@@ -209,7 +209,7 @@ class TestBridgePollLoopDispatch:
 
 
 class TestBridgePollLoopReporting:
-    def test_report_success__calls_api(self) -> None:
+    def test_report__success__calls_api_with_result(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         handler = MagicMock()
@@ -236,7 +236,7 @@ class TestBridgePollLoopReporting:
         assert kw["result"] == {"content": "data"}
         assert isinstance(kw["duration_ms"], int)
 
-    def test_report_network_error__retries(self) -> None:
+    def test_report__network_error__retries_successfully(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         handler = MagicMock()
@@ -269,7 +269,7 @@ class TestBridgePollLoopReporting:
 
         assert report_call_count == 2
 
-    def test_all_retries_fail__logs_and_continues(self) -> None:
+    def test_report__all_retries_fail__logs_and_continues(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         handler = MagicMock()
@@ -294,7 +294,7 @@ class TestBridgePollLoopReporting:
 
         assert api.runners.report_bridge_result.call_count == 3
 
-    def test_409_duplicate__swallowed(self) -> None:
+    def test_report__409_duplicate__swallows_error(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         handler = MagicMock()

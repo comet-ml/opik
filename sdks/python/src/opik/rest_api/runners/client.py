@@ -701,7 +701,7 @@ class RunnersClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.submit_bridge_command(runner_id='runnerId', type="read_file", args={'key': 'value'
+        client.runners.submit_bridge_command(runner_id='runnerId', type="ReadFile", args={'key': 'value'
         }, )
         """
         _response = self._raw_client.submit_bridge_command(
@@ -1444,7 +1444,7 @@ class AsyncRunnersClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.runners.submit_bridge_command(runner_id='runnerId', type="read_file", args={'key': 'value'
+            await client.runners.submit_bridge_command(runner_id='runnerId', type="ReadFile", args={'key': 'value'
             }, )
         asyncio.run(main())
         """

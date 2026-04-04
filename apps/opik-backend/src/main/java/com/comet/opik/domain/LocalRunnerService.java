@@ -251,6 +251,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     private static final String BRIDGE_FIELD_DURATION_MS = "duration_ms";
     private static final String BRIDGE_FIELD_WORKSPACE_ID = "workspace_id";
 
+    private static final List<String> DEFAULT_CAPABILITIES = List.of("jobs");
     private static final String BRIDGE_FIELD_COMPLETED_FLAG = "completed_flag";
     private static final String BRIDGE_DONE_SENTINEL = "done";
 
@@ -1271,9 +1272,21 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return new ValidatedJob(jobMap, fields);
     }
 
+    private Map<String, String> loadValidatedBridgeCommand(UUID runnerId, UUID commandId) {
+        RMap<String, String> commandMap = redisClient.getMap(bridgeCommandKey(commandId));
+        Map<String, String> fields = commandMap.readAllMap();
+        if (fields.isEmpty()) {
+            throw new NotFoundException("Command not found: " + commandId);
+        }
+        if (!runnerId.toString().equals(fields.get(BRIDGE_FIELD_RUNNER_ID))) {
+            throw new NotFoundException("Command not found: " + commandId);
+        }
+        return fields;
+    }
+
     private List<String> parseCapabilities(String value) {
         if (value == null || value.isBlank()) {
-            return List.of("jobs");
+            return DEFAULT_CAPABILITIES;
         }
         return List.of(value.split(","));
     }
@@ -1284,8 +1297,6 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         List<String> capabilities = parseCapabilities(caps);
         return capabilities.contains(capability);
     }
-
-    // ========== Bridge Command Methods ==========
 
     @Override
     public UUID submitBridgeCommand(@NonNull UUID runnerId, @NonNull String workspaceId, @NonNull String userName,
@@ -1401,16 +1412,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
         validateRunnerOwnership(runnerId, workspaceId, userName);
 
-        RMap<String, String> commandMap = redisClient.getMap(bridgeCommandKey(commandId));
-        Map<String, String> fields = commandMap.readAllMap();
-
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Command not found: " + commandId);
-        }
-
-        if (!runnerId.toString().equals(fields.get(BRIDGE_FIELD_RUNNER_ID))) {
-            throw new NotFoundException("Command not found: " + commandId);
-        }
+        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, commandId);
 
         BridgeCommandStatus currentStatus = parseBridgeCommandStatus(fields.get(BRIDGE_FIELD_STATUS));
         if (currentStatus != null && currentStatus.isTerminal()) {
@@ -1419,7 +1421,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     .build());
         }
 
-        // Atomic CAS: putIfAbsent returns null on success, non-null if another report won the race
+        RMap<String, String> commandMap = redisClient.getMap(bridgeCommandKey(commandId));
         String prev = commandMap.putIfAbsent(BRIDGE_FIELD_COMPLETED_FLAG, "1");
         if (prev != null) {
             throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
@@ -1458,16 +1460,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             @NonNull String userName, @NonNull UUID commandId) {
         validateRunnerOwnership(runnerId, workspaceId, userName);
 
-        RMap<String, String> commandMap = redisClient.getMap(bridgeCommandKey(commandId));
-        Map<String, String> fields = commandMap.readAllMap();
-
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Command not found: " + commandId);
-        }
-
-        if (!runnerId.toString().equals(fields.get(BRIDGE_FIELD_RUNNER_ID))) {
-            throw new NotFoundException("Command not found: " + commandId);
-        }
+        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, commandId);
 
         return buildBridgeCommand(fields);
     }
@@ -1537,16 +1530,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 (int) runnerConfig.getBridgeMaxCommandTimeout().toSeconds());
         validateRunnerOwnership(runnerId, workspaceId, userName);
 
-        RMap<String, String> commandMap = redisClient.getMap(bridgeCommandKey(commandId));
-        Map<String, String> fields = commandMap.readAllMap();
-
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Command not found: " + commandId);
-        }
-
-        if (!runnerId.toString().equals(fields.get(BRIDGE_FIELD_RUNNER_ID))) {
-            throw new NotFoundException("Command not found: " + commandId);
-        }
+        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, commandId);
 
         BridgeCommandStatus status = parseBridgeCommandStatus(fields.get(BRIDGE_FIELD_STATUS));
         if (status != null && status.isTerminal()) {

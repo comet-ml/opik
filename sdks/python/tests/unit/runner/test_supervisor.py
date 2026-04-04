@@ -190,7 +190,7 @@ class TestChildExit:
 
         assert restart_count >= 2
 
-    def test_stops_if_unstable(self) -> None:
+    def test_waits_if_unstable(self) -> None:
         sup = _make_supervisor(
             command=[sys.executable, "-c", "import sys; sys.exit(1)"],
         )
@@ -199,9 +199,15 @@ class TestChildExit:
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
-        t.join(timeout=10)
 
-        assert sup._shutdown_event.is_set()
+        time.sleep(3)
+
+        # Should be idle with no child, not shut down
+        assert sup._child is None
+        assert not sup._shutdown_event.is_set()
+
+        sup._shutdown_event.set()
+        t.join(timeout=10)
 
     def test_exit_0__no_restart(self) -> None:
         sup = _make_supervisor(

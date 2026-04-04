@@ -65,6 +65,7 @@ class Supervisor:
         self._last_restart_time = 0.0
         self._stderr_buffer: List[str] = []
         self._stderr_lock = threading.Lock()
+        self._reader_threads: List[threading.Thread] = []
 
     def run(self) -> None:
         self._install_signal_handlers()
@@ -148,12 +149,9 @@ class Supervisor:
             self._guard.record_crash()
 
             if not self._guard.is_stable():
-                LOGGER.error(
-                    "Child crashed too many times in window, stopping restarts"
-                )
+                LOGGER.error("Child crash-looping — waiting for file change to retry")
                 self._patch_crash_info(exit_code, stderr_tail)
-                self._shutdown_event.set()
-                break
+                continue
 
             with self._child_lock:
                 self._child = self._start_child()
@@ -171,18 +169,21 @@ class Supervisor:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        threading.Thread(
+        stdout_t = threading.Thread(
             target=self._read_stream,
             args=(child, child.stdout, "stdout"),
             name="child-stdout",
             daemon=True,
-        ).start()
-        threading.Thread(
+        )
+        stderr_t = threading.Thread(
             target=self._read_stream,
             args=(child, child.stderr, "stderr"),
             name="child-stderr",
             daemon=True,
-        ).start()
+        )
+        stdout_t.start()
+        stderr_t.start()
+        self._reader_threads = [stdout_t, stderr_t]
         return child
 
     def _read_stream(self, child: subprocess.Popen, stream: Any, name: str) -> None:
@@ -237,6 +238,10 @@ class Supervisor:
             except OSError:
                 pass
 
+        for t in self._reader_threads:
+            t.join(timeout=2)
+        self._reader_threads = []
+
         return child.returncode
 
     def _restart_child(self, reason: str) -> None:
@@ -272,6 +277,7 @@ class Supervisor:
             self._send_checklist()
 
     def _on_file_change(self, paths: set) -> None:
+        self._guard.reset()
         names = [p.name for p in paths]
         self._restart_child(f"file changed: {', '.join(names[:3])}")
 

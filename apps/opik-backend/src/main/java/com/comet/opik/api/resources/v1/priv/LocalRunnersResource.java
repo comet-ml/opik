@@ -12,6 +12,7 @@ import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
 import com.comet.opik.api.runner.LocalRunnerConnectResponse;
+import com.comet.opik.api.runner.LocalRunnerHeartbeatRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
@@ -186,7 +187,7 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "410", description = "Gone", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response heartbeat(@PathParam("runnerId") UUID runnerId,
-            JsonNode body) {
+            @RequestBody(description = "Optional heartbeat body with capabilities", content = @Content(schema = @Schema(implementation = LocalRunnerHeartbeatRequest.class))) JsonNode body) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
@@ -337,8 +338,6 @@ public class LocalRunnersResource {
         runnerService.cancelJob(jobId, workspaceId, userName);
         return Response.noContent().build();
     }
-
-    // ========== Bridge Command Endpoints ==========
 
     @POST
     @Path("/{runnerId}/bridge/commands")

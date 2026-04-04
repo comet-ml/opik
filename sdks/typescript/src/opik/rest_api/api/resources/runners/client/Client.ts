@@ -1611,7 +1611,7 @@ export class RunnersClient {
      *
      * @example
      *     await client.runners.submitBridgeCommand("runnerId", {
-     *         type: "read_file",
+     *         type: "ReadFile",
      *         args: {
      *             "key": "value"
      *         }
