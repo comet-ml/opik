@@ -5,6 +5,8 @@ import threading
 from pathlib import Path
 from typing import Callable, Set
 
+import watchfiles
+
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_EXTENSIONS = {".py", ".js", ".ts", ".yaml", ".yml", ".json", ".toml"}
@@ -25,13 +27,6 @@ class FileWatcher:
         self._debounce_seconds = debounce_seconds
 
     def run(self, shutdown_event: threading.Event) -> None:
-        try:
-            import watchfiles
-        except ImportError:
-            LOGGER.warning("watchfiles not installed, file watching disabled")
-            shutdown_event.wait()
-            return
-
         def _should_watch(change: watchfiles.Change, path: str) -> bool:
             p = Path(path)
             if p.suffix not in self._extensions:

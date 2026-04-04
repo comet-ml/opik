@@ -1,11 +1,7 @@
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-pytest.importorskip("watchfiles", reason="watchfiles required for file watcher tests")
+from unittest.mock import MagicMock
 
 from opik.runner.file_watcher import FileWatcher
 
@@ -17,17 +13,6 @@ class TestFileWatcher:
         assert watcher._repo_root == tmp_path
         assert watcher._extensions == {".py"}
         assert watcher._debounce_seconds == 0.5
-
-    def test_run__no_watchfiles__exits_on_shutdown(self, tmp_path: Path) -> None:
-        cb = MagicMock()
-        watcher = FileWatcher(tmp_path, cb)
-        shutdown = threading.Event()
-        shutdown.set()
-
-        with patch.dict("sys.modules", {"watchfiles": None}):
-            with patch("opik.runner.file_watcher.LOGGER") as mock_logger:
-                watcher.run(shutdown)
-                mock_logger.warning.assert_called_once()
 
     def test_run__py_change__triggers_callback(self, tmp_path: Path) -> None:
         cb = MagicMock()
