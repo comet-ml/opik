@@ -1442,6 +1442,16 @@ class LocalRunnerServiceImplTest {
                     MAPPER.createObjectNode().put("tracing", true)))
                     .isExactlyInstanceOf(NotFoundException.class);
         }
+
+        @Test
+        void patchChecklist_nonObject_throws400() {
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            assertThatThrownBy(() -> runnerService.patchChecklist(runnerId, WORKSPACE_ID, USER_NAME,
+                    MAPPER.createArrayNode().add("x")))
+                    .isExactlyInstanceOf(ClientErrorException.class)
+                    .hasMessageContaining("400");
+        }
     }
 
     @Nested

@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from opik.runner.file_watcher import FileWatcher, DEFAULT_EXTENSIONS, DEFAULT_IGNORE
+pytest.importorskip("watchfiles", reason="watchfiles required for file watcher tests")
+
+from opik.runner.file_watcher import FileWatcher
 
 
 class TestFileWatcher:

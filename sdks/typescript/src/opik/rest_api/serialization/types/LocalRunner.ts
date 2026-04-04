@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { Agent } from "./Agent.js";
+import { JsonNode } from "./JsonNode.js";
 import { LocalRunnerStatus } from "./LocalRunnerStatus.js";
 
 export const LocalRunner: core.serialization.ObjectSchema<serializers.LocalRunner.Raw, OpikApi.LocalRunner> =
@@ -15,6 +16,7 @@ export const LocalRunner: core.serialization.ObjectSchema<serializers.LocalRunne
         connectedAt: core.serialization.property("connected_at", core.serialization.date().optional()),
         agents: core.serialization.list(Agent).optional(),
         capabilities: core.serialization.list(core.serialization.string()).optional(),
+        checklist: JsonNode.optional(),
     });
 
 export declare namespace LocalRunner {
@@ -26,5 +28,6 @@ export declare namespace LocalRunner {
         connected_at?: string | null;
         agents?: Agent.Raw[] | null;
         capabilities?: string[] | null;
+        checklist?: JsonNode.Raw | null;
     }
 }

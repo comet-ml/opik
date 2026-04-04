@@ -4,8 +4,8 @@ import logging
 import random
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.core.request_options import RequestOptions
@@ -40,8 +40,13 @@ class BridgePollLoop:
     def run(self) -> None:
         backoff = 1.0
         poll_failures = 0
+        inflight_sem = threading.Semaphore(_MAX_WORKERS)
+        inflight: Set[Future] = set()
+        inflight_lock = threading.Lock()
 
-        pool = ThreadPoolExecutor(max_workers=_MAX_WORKERS, thread_name_prefix="bridge-exec")
+        pool = ThreadPoolExecutor(
+            max_workers=_MAX_WORKERS, thread_name_prefix="bridge-exec"
+        )
         try:
             while not self._shutdown_event.is_set():
                 try:
@@ -55,9 +60,13 @@ class BridgePollLoop:
                         return
                     poll_failures += 1
                     if poll_failures == 1:
-                        LOGGER.warning("Bridge poll error (API %s). Retrying...", e.status_code)
+                        LOGGER.warning(
+                            "Bridge poll error (API %s). Retrying...", e.status_code
+                        )
                     else:
-                        LOGGER.debug("Bridge poll error (API %s)", e.status_code, exc_info=True)
+                        LOGGER.debug(
+                            "Bridge poll error (API %s)", e.status_code, exc_info=True
+                        )
                     self._backoff_wait(backoff)
                     backoff = min(backoff * 2, 30.0)
                     continue
@@ -74,18 +83,21 @@ class BridgePollLoop:
                 if not batch:
                     continue
 
-                futures: Dict[Future, BridgeCommandItem] = {}
                 for cmd in batch:
-                    future = pool.submit(self._execute_and_report, cmd)
-                    futures[future] = cmd
-
-                for future in as_completed(futures):
                     if self._shutdown_event.is_set():
                         break
-                    try:
-                        future.result()
-                    except Exception:
-                        LOGGER.error("Unexpected error in execute_and_report", exc_info=True)
+                    if not inflight_sem.acquire(timeout=1.0):
+                        continue
+
+                    def _on_done(f: Future) -> None:
+                        with inflight_lock:
+                            inflight.discard(f)
+                        inflight_sem.release()
+
+                    future = pool.submit(self._execute_and_report, cmd)
+                    with inflight_lock:
+                        inflight.add(future)
+                    future.add_done_callback(_on_done)
         finally:
             pool.shutdown(wait=True, cancel_futures=True)
 
@@ -107,12 +119,26 @@ class BridgePollLoop:
         command_type = cmd.type or ""
         command_id = cmd.command_id or ""
         args = dict(cmd.args) if cmd.args else {}
-        raw_timeout = cmd.timeout_seconds if cmd.timeout_seconds is not None else _DEFAULT_COMMAND_TIMEOUT
-        timeout = max(_MIN_COMMAND_TIMEOUT, min(float(raw_timeout), _MAX_COMMAND_TIMEOUT))
+        raw_timeout = (
+            cmd.timeout_seconds
+            if cmd.timeout_seconds is not None
+            else _DEFAULT_COMMAND_TIMEOUT
+        )
+        timeout = max(
+            _MIN_COMMAND_TIMEOUT, min(float(raw_timeout), _MAX_COMMAND_TIMEOUT)
+        )
 
         handler = self._handlers.get(command_type)
         if handler is None:
-            return "failed", None, {"code": "unknown_type", "message": f"Unknown command type: {command_type}"}, None
+            return (
+                "failed",
+                None,
+                {
+                    "code": "unknown_type",
+                    "message": f"Unknown command type: {command_type}",
+                },
+                None,
+            )
 
         start = time.monotonic()
         try:
@@ -124,8 +150,15 @@ class BridgePollLoop:
             return "failed", None, {"code": e.code, "message": e.message}, duration_ms
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)
-            LOGGER.error("Handler error for command %s: %s", command_id, e, exc_info=True)
-            return "failed", None, {"code": "internal", "message": "Internal error"}, duration_ms
+            LOGGER.error(
+                "Handler error for command %s: %s", command_id, e, exc_info=True
+            )
+            return (
+                "failed",
+                None,
+                {"code": "internal", "message": "Internal error"},
+                duration_ms,
+            )
 
     def _report_result(
         self,
@@ -151,18 +184,37 @@ class BridgePollLoop:
                     LOGGER.debug("Duplicate result report for %s, ignoring", command_id)
                     return
                 if attempt < _REPORT_MAX_RETRIES - 1:
-                    wait = _REPORT_BACKOFF_BASE * (2 ** attempt)
-                    LOGGER.debug("Report failed for %s (attempt %d), retrying in %.1fs", command_id, attempt + 1, wait)
+                    wait = _REPORT_BACKOFF_BASE * (2**attempt)
+                    LOGGER.debug(
+                        "Report failed for %s (attempt %d), retrying in %.1fs",
+                        command_id,
+                        attempt + 1,
+                        wait,
+                    )
                     self._shutdown_event.wait(wait)
                 else:
-                    LOGGER.error("Failed to report result for command %s after %d attempts", command_id, _REPORT_MAX_RETRIES)
+                    LOGGER.error(
+                        "Failed to report result for command %s after %d attempts",
+                        command_id,
+                        _REPORT_MAX_RETRIES,
+                    )
             except Exception:
                 if attempt < _REPORT_MAX_RETRIES - 1:
-                    wait = _REPORT_BACKOFF_BASE * (2 ** attempt)
-                    LOGGER.debug("Report failed for %s (attempt %d), retrying in %.1fs", command_id, attempt + 1, wait)
+                    wait = _REPORT_BACKOFF_BASE * (2**attempt)
+                    LOGGER.debug(
+                        "Report failed for %s (attempt %d), retrying in %.1fs",
+                        command_id,
+                        attempt + 1,
+                        wait,
+                    )
                     self._shutdown_event.wait(wait)
                 else:
-                    LOGGER.error("Failed to report result for command %s after %d attempts", command_id, _REPORT_MAX_RETRIES, exc_info=True)
+                    LOGGER.error(
+                        "Failed to report result for command %s after %d attempts",
+                        command_id,
+                        _REPORT_MAX_RETRIES,
+                        exc_info=True,
+                    )
 
     def _backoff_wait(self, backoff: float) -> None:
         wait = backoff * (0.5 + random.random() * 0.5)

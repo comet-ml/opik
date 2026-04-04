@@ -15,4 +15,5 @@ export type { LocalRunnerHeartbeatRequest } from "./LocalRunnerHeartbeatRequest.
 export type { LocalRunnerJobResultRequest } from "./LocalRunnerJobResultRequest.js";
 export type { LocalRunnerPairRequest } from "./LocalRunnerPairRequest.js";
 export type { NextJobRequest } from "./NextJobRequest.js";
+export type { PatchChecklistRequest } from "./PatchChecklistRequest.js";
 export type { RegisterAgentsRequest } from "./RegisterAgentsRequest.js";

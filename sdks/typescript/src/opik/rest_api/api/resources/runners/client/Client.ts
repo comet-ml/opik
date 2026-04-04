@@ -1251,6 +1251,91 @@ export class RunnersClient {
     }
 
     /**
+     * Partial update of the runner's checklist (deep merge)
+     *
+     * @param {string} runnerId
+     * @param {OpikApi.PatchChecklistRequest} request
+     * @param {RunnersClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.runners.patchChecklist("runnerId", {
+     *         body: {
+     *             "key": "value"
+     *         }
+     *     })
+     */
+    public patchChecklist(
+        runnerId: string,
+        request: OpikApi.PatchChecklistRequest,
+        requestOptions?: RunnersClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__patchChecklist(runnerId, request, requestOptions));
+    }
+
+    private async __patchChecklist(
+        runnerId: string,
+        request: OpikApi.PatchChecklistRequest,
+        requestOptions?: RunnersClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const { body: _body } = request;
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}/checklist`,
+            ),
+            method: "PATCH",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.runners.patchChecklist.Request.jsonOrThrow(_body, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "PATCH",
+            "/v1/private/local-runners/{runnerId}/checklist",
+        );
+    }
+
+    /**
      * Register or update the local runner's agent list
      *
      * @param {string} runnerId

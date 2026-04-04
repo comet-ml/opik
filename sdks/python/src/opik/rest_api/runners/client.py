@@ -506,6 +506,39 @@ class RunnersClient:
         _response = self._raw_client.next_job(runner_id, request_options=request_options)
         return _response.data
 
+    def patch_checklist(
+        self,
+        runner_id: str,
+        *,
+        request: typing.Dict[str, typing.Optional[typing.Any]],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Partial update of the runner's checklist (deep merge)
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request : typing.Dict[str, typing.Optional[typing.Any]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.runners.patch_checklist(runner_id='runnerId', request={'key': 'value'
+        }, )
+        """
+        _response = self._raw_client.patch_checklist(runner_id, request=request, request_options=request_options)
+        return _response.data
+
     def register_agents(
         self,
         runner_id: str,
@@ -1200,6 +1233,42 @@ class AsyncRunnersClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.next_job(runner_id, request_options=request_options)
+        return _response.data
+
+    async def patch_checklist(
+        self,
+        runner_id: str,
+        *,
+        request: typing.Dict[str, typing.Optional[typing.Any]],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Partial update of the runner's checklist (deep merge)
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request : typing.Dict[str, typing.Optional[typing.Any]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.runners.patch_checklist(runner_id='runnerId', request={'key': 'value'
+            }, )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.patch_checklist(runner_id, request=request, request_options=request_options)
         return _response.data
 
     async def register_agents(

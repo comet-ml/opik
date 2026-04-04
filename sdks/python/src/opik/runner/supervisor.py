@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..rest_api.core.api_error import ApiError
-from .bridge_handlers import StubHandler
+from .bridge_handlers import FileMutationQueue
+from .bridge_handlers.edit_file import EditFileHandler
+from .bridge_handlers.list_files import ListFilesHandler
+from .bridge_handlers.read_file import ReadFileHandler
+from .bridge_handlers.search_files import SearchFilesHandler
+from .bridge_handlers.write_file import WriteFileHandler
 from .bridge_loop import BridgePollLoop
 from .file_watcher import FileWatcher
 from .stability_guard import StabilityGuard
@@ -23,6 +28,11 @@ _RESTART_DEBOUNCE = 1.0
 
 
 class Supervisor:
+    """Outer process for `opik connect`. Stays alive to manage heartbeat, bridge
+    command polling, and file watching while launching the user's app as a child
+    process via Popen. Restarts the child on file changes (debounced) and crashes
+    (with a stability guard). Shuts down cleanly on SIGTERM/SIGINT or runner eviction."""
+
     def __init__(
         self,
         command: List[str],
@@ -51,12 +61,13 @@ class Supervisor:
         )
         heartbeat_thread.start()
 
+        mutation_queue = FileMutationQueue()
         handlers: Dict[str, Any] = {
-            "read_file": StubHandler(),
-            "write_file": StubHandler(),
-            "edit_file": StubHandler(),
-            "list_files": StubHandler(),
-            "search_files": StubHandler(),
+            "read_file": ReadFileHandler(self._repo_root),
+            "write_file": WriteFileHandler(self._repo_root, mutation_queue),
+            "edit_file": EditFileHandler(self._repo_root, mutation_queue),
+            "list_files": ListFilesHandler(self._repo_root),
+            "search_files": SearchFilesHandler(self._repo_root),
         }
         bridge_loop = BridgePollLoop(
             self._api, self._runner_id, handlers, self._shutdown_event
@@ -68,7 +79,10 @@ class Supervisor:
 
         watcher = FileWatcher(self._repo_root, self._on_file_change)
         watcher_thread = threading.Thread(
-            target=watcher.run, args=(self._shutdown_event,), name="file-watcher", daemon=True
+            target=watcher.run,
+            args=(self._shutdown_event,),
+            name="file-watcher",
+            daemon=True,
         )
         watcher_thread.start()
 
@@ -113,7 +127,9 @@ class Supervisor:
             self._guard.record_crash()
 
             if not self._guard.is_stable():
-                LOGGER.error("Child crashed too many times in window, stopping restarts")
+                LOGGER.error(
+                    "Child crashed too many times in window, stopping restarts"
+                )
                 self._shutdown_event.set()
                 break
 
@@ -150,7 +166,9 @@ class Supervisor:
         try:
             child.wait(timeout=graceful_timeout)
         except subprocess.TimeoutExpired:
-            LOGGER.warning("Child did not exit after %ds, sending SIGKILL", graceful_timeout)
+            LOGGER.warning(
+                "Child did not exit after %ds, sending SIGKILL", graceful_timeout
+            )
             try:
                 child.kill()
                 child.wait(timeout=5)

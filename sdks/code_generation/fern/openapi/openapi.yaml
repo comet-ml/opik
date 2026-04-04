@@ -4213,6 +4213,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/checklist:
+    patch:
+      tags:
+      - Runners
+      summary: Patch runner checklist
+      description: Partial update of the runner's checklist (deep merge)
+      operationId: patchChecklist
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/local-runners/{runnerId}/agents:
     put:
       tags:
@@ -9568,9 +9596,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -10013,9 +10041,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10468,9 +10496,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -15926,6 +15954,8 @@ components:
           type: array
           items:
             type: string
+        checklist:
+          $ref: "#/components/schemas/JsonNode"
     Param:
       required:
       - name

@@ -427,7 +427,8 @@ public class LocalRunnersResource {
             return;
         }
 
-        int clampedTimeout = Math.min(Math.max(timeout, 1), 120);
+        int maxTimeout = (int) runnerConfig.getBridgeMaxCommandTimeout().toSeconds();
+        int clampedTimeout = Math.min(Math.max(timeout, 1), maxTimeout);
         long bufferSeconds = runnerConfig.getBridgeAsyncTimeoutBuffer().toSeconds();
         asyncResponse.setTimeout(clampedTimeout + bufferSeconds, TimeUnit.SECONDS);
         asyncResponse.setTimeoutHandler(ar -> {
