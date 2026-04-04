@@ -3,33 +3,42 @@
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List
 
-from . import CommandError
-from .common import git_ls_files, validate_path
+from pydantic import BaseModel
+
+from . import BaseHandler, CommandError
+from . import common
+
+
+class ListFilesArgs(BaseModel):
+    pattern: str = "**/*"
+    path: str = ""
+
 
 _MAX_ENTRIES = 1000
 _MAX_BYTES = 512 * 1024
 
 
-class ListFilesHandler:
+class ListFilesHandler(BaseHandler):
     def __init__(self, repo_root: Path) -> None:
         self._repo_root = repo_root
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
-        pattern = args.get("pattern") or "**/*"
-        sub_path = args.get("path", "")
+        parsed = ListFilesArgs(**args)
+        pattern = parsed.pattern or "**/*"
+        sub_path = parsed.path
 
         if ".." in pattern.split("/"):
             raise CommandError("path_traversal", "Pattern cannot contain '..'")
 
         if sub_path:
-            base = validate_path(sub_path, self._repo_root)
+            base = common.validate_path(sub_path, self._repo_root)
         else:
             base = self._repo_root
 
         if not base.is_dir():
             raise CommandError("file_not_found", f"Directory not found: {sub_path}")
 
-        all_files = git_ls_files(self._repo_root)
+        all_files = common.git_ls_files(self._repo_root)
         if all_files is None:
             all_files = set()
 

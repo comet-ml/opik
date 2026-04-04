@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from .bridge_handlers.common import git_ls_files
+from .bridge_handlers import common
 
 LOGGER = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def _matches_any(match_line: str, patterns: list) -> bool:
 
 
 def _build_file_tree(repo_root: Path) -> str:
-    git_files = git_ls_files(repo_root)
+    git_files = common.git_ls_files(repo_root)
 
     entries: List[str] = []
     dirs_seen: Set[str] = set()
@@ -109,7 +109,7 @@ def _build_file_tree(repo_root: Path) -> str:
 
 
 def _find_instrumentation(repo_root: Path) -> List[str]:
-    git_files = git_ls_files(repo_root)
+    git_files = common.git_ls_files(repo_root)
     matches: List[str] = []
 
     if git_files is not None:

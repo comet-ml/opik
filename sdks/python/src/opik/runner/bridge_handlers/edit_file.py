@@ -6,8 +6,20 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import CommandError, FileMutationQueue
-from .common import is_binary, revalidate_path, validate_path
+from pydantic import BaseModel
+
+from . import BaseHandler, CommandError, FileMutationQueue
+from . import common
+
+
+class EditEntry(BaseModel):
+    old_string: str
+    new_string: str
+
+
+class EditFileArgs(BaseModel):
+    path: str
+    edits: list[EditEntry]
 
 
 def _strip_bom(content: str) -> Tuple[str, str]:
@@ -99,36 +111,32 @@ def _generate_diff(old: str, new: str, path: str, context: int = 4) -> str:
     )
 
 
-class EditFileHandler:
+class EditFileHandler(BaseHandler):
     def __init__(self, repo_root: Path, mutation_queue: FileMutationQueue) -> None:
         self._repo_root = repo_root
         self._mutation_queue = mutation_queue
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
-        path = validate_path(args.get("path", ""), self._repo_root)
+        parsed = EditFileArgs(**args)
+        path = common.validate_path(parsed.path, self._repo_root)
 
         if not path.exists():
-            raise CommandError(
-                "file_not_found", f"File not found: {args.get('path', '')}"
-            )
+            raise CommandError("file_not_found", f"File not found: {parsed.path}")
 
-        if is_binary(path):
-            raise CommandError("binary_file", f"Binary file: {args.get('path', '')}")
+        if common.is_binary(path):
+            raise CommandError("binary_file", f"Binary file: {parsed.path}")
 
-        edits: List[Dict[str, str]] = args.get("edits", [])
-        if not edits:
+        if not parsed.edits:
             raise CommandError("no_change", "No edits provided")
 
-        for edit in edits:
-            old = edit.get("old_string", "")
-            new = edit.get("new_string", "")
-            if not old:
+        for edit in parsed.edits:
+            if not edit.old_string:
                 raise CommandError("match_not_found", "Empty old_string")
-            if old == new:
+            if edit.old_string == edit.new_string:
                 raise CommandError("no_change", "old_string equals new_string")
 
         with self._mutation_queue.lock(path):
-            revalidate_path(path, self._repo_root)
+            common.revalidate_path(path, self._repo_root)
 
             try:
                 raw_content = path.read_bytes().decode("utf-8")
@@ -143,22 +151,22 @@ class EditFileHandler:
 
             matches: List[Tuple[int, int, str]] = []
             all_exact = True
-            for edit in edits:
-                old_lf = _normalize_to_lf(edit["old_string"])
+            for edit in parsed.edits:
+                old_lf = _normalize_to_lf(edit.old_string)
                 result = _find_exact(content_lf, old_lf)
                 if result is None:
                     all_exact = False
                     break
                 start, length = result
-                matches.append((start, length, _normalize_to_lf(edit["new_string"])))
+                matches.append((start, length, _normalize_to_lf(edit.new_string)))
 
             fuzzy_used = False
             if not all_exact:
                 matches = []
                 fuzzy_content = _fuzzy_normalize(content_lf)
-                for edit in edits:
-                    old_lf = _normalize_to_lf(edit["old_string"])
-                    new_lf = _normalize_to_lf(edit["new_string"])
+                for edit in parsed.edits:
+                    old_lf = _normalize_to_lf(edit.old_string)
+                    new_lf = _normalize_to_lf(edit.new_string)
                     result = _find_fuzzy(fuzzy_content, old_lf)
                     if result is None:
                         raise CommandError(
@@ -183,6 +191,6 @@ class EditFileHandler:
 
         return {
             "diff": diff,
-            "edits_applied": len(edits),
+            "edits_applied": len(parsed.edits),
             "fuzzy_match_used": fuzzy_used,
         }

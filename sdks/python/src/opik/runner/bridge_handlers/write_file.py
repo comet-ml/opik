@@ -4,23 +4,30 @@ import difflib
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from . import FileMutationQueue
-from .common import revalidate_path, validate_path
+from pydantic import BaseModel
+
+from . import BaseHandler, FileMutationQueue
+from . import common
 
 
-class WriteFileHandler:
+class WriteFileArgs(BaseModel):
+    path: str
+    content: str = ""
+
+
+class WriteFileHandler(BaseHandler):
     def __init__(self, repo_root: Path, mutation_queue: FileMutationQueue) -> None:
         self._repo_root = repo_root
         self._mutation_queue = mutation_queue
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
-        path = validate_path(args.get("path", ""), self._repo_root)
-        content = args.get("content", "")
+        parsed = WriteFileArgs(**args)
+        path = common.validate_path(parsed.path, self._repo_root)
 
         path.parent.mkdir(parents=True, exist_ok=True)
 
         with self._mutation_queue.lock(path):
-            revalidate_path(path, self._repo_root)
+            common.revalidate_path(path, self._repo_root)
 
             old_content: Optional[str] = None
             if path.exists():
@@ -29,13 +36,13 @@ class WriteFileHandler:
                 except (UnicodeDecodeError, OSError):
                     old_content = None
 
-            path.write_text(content, encoding="utf-8")
+            path.write_text(parsed.content, encoding="utf-8")
 
         diff: Optional[str] = None
         if old_content is not None:
             rel = str(path.relative_to(self._repo_root))
             old_lines = old_content.splitlines(keepends=True)
-            new_lines = content.splitlines(keepends=True)
+            new_lines = parsed.content.splitlines(keepends=True)
             diff = "".join(
                 difflib.unified_diff(
                     old_lines,
@@ -47,7 +54,7 @@ class WriteFileHandler:
             )
 
         return {
-            "bytes_written": len(content.encode("utf-8")),
+            "bytes_written": len(parsed.content.encode("utf-8")),
             "created": old_content is None,
             "diff": diff,
         }

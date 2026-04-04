@@ -1,13 +1,10 @@
-"""Bridge command handler protocol, error types, file mutation queue, and stub handler."""
+"""Bridge command handler base, error types, file mutation queue, and stub handler."""
 
+import abc
 import os
 import threading
 from pathlib import Path
-from typing import Any, Dict, Protocol
-
-
-class BridgeCommandHandler(Protocol):
-    def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]: ...
+from typing import Any, Dict
 
 
 class CommandError(Exception):
@@ -15,6 +12,11 @@ class CommandError(Exception):
         self.code = code
         self.message = message
         super().__init__(f"{code}: {message}")
+
+
+class BaseHandler(abc.ABC):
+    @abc.abstractmethod
+    def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]: ...
 
 
 class FileMutationQueue:
@@ -32,7 +34,7 @@ class FileMutationQueue:
             return self._locks[real]
 
 
-class StubHandler:
+class StubHandler(BaseHandler):
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         raise CommandError("not_implemented", "Command type not yet implemented")
 

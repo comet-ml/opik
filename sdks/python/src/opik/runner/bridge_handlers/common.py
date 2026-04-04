@@ -13,6 +13,9 @@ _BINARY_CHECK_SIZE = 8192
 
 
 def validate_path(path: str, repo_root: Path) -> Path:
+    """Resolve a relative or absolute path against repo_root, ensuring it stays
+    within the repository. Rejects empty paths, '..' segments, and symlinks that
+    resolve outside the root."""
     if not path:
         raise CommandError("path_traversal", "Empty path")
 
@@ -29,7 +32,8 @@ def validate_path(path: str, repo_root: Path) -> Path:
 
 
 def revalidate_path(path: Path, repo_root: Path) -> None:
-    """Re-check realpath inside a lock to prevent symlink TOCTOU."""
+    """Re-check realpath inside a mutation lock to catch symlink TOCTOU races
+    where a symlink target changes between initial validation and file I/O."""
     real = os.path.realpath(path)
     real_root = os.path.realpath(repo_root)
     if not real.startswith(real_root + os.sep) and real != real_root:
@@ -37,6 +41,7 @@ def revalidate_path(path: Path, repo_root: Path) -> None:
 
 
 def is_binary(path: Path) -> bool:
+    """Check first 8KB for null bytes to detect binary files."""
     try:
         with open(path, "rb") as f:
             chunk = f.read(_BINARY_CHECK_SIZE)
@@ -46,7 +51,8 @@ def is_binary(path: Path) -> bool:
 
 
 def git_ls_files(repo_root: Path) -> Optional[Set[str]]:
-    """Return tracked + untracked-not-ignored files, or None if git unavailable."""
+    """Return all git-visible files (tracked + untracked non-ignored) as relative
+    paths. Returns None if git is unavailable or the directory isn't a repo."""
     try:
         tracked = subprocess.run(
             ["git", "ls-files"],
@@ -81,5 +87,9 @@ def git_ls_files(repo_root: Path) -> Optional[Set[str]]:
 def backoff_wait(
     shutdown_event: threading.Event, backoff: float, cap: float = 30.0
 ) -> None:
+    """Sleep with jitter, interruptible by the shutdown event.
+
+    Waits between 50-100% of the backoff value, capped at ``cap`` seconds.
+    """
     wait = min(backoff, cap) * (0.5 + random.random() * 0.5)
     shutdown_event.wait(wait)

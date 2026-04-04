@@ -59,14 +59,12 @@ setup(
         "tqdm",
         "uuid6",
         "jinja2",
+        "watchfiles>=1.0.0,<2.0.0",
     ],
     extras_require={
         "proxy": [
             "fastapi>=0.100.0",
             "uvicorn>=0.23.0",
-        ],
-        "connect": [
-            "watchfiles>=1.0.0,<2.0.0",
         ],
     },
     entry_points={

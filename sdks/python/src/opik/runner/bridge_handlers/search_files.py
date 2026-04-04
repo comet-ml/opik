@@ -4,8 +4,17 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import CommandError
-from .common import validate_path
+from pydantic import BaseModel
+
+from . import BaseHandler, CommandError
+from . import common
+
+
+class SearchFilesArgs(BaseModel):
+    pattern: str
+    glob: str = ""
+    path: str = ""
+
 
 _MAX_MATCHES = 100
 _MAX_BYTES = 512 * 1024
@@ -14,26 +23,27 @@ _CONTEXT_LINES = 3
 _MAX_PATTERN_LENGTH = 500
 
 
-class SearchFilesHandler:
+class SearchFilesHandler(BaseHandler):
     def __init__(self, repo_root: Path) -> None:
         self._repo_root = repo_root
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
-        pattern_str = args.get("pattern", "")
-        if not pattern_str:
+        parsed = SearchFilesArgs(**args)
+
+        if not parsed.pattern:
             raise CommandError("match_not_found", "Empty search pattern")
 
-        if len(pattern_str) > _MAX_PATTERN_LENGTH:
+        if len(parsed.pattern) > _MAX_PATTERN_LENGTH:
             raise CommandError(
                 "match_not_found",
                 f"Pattern too long (max {_MAX_PATTERN_LENGTH} chars)",
             )
 
-        glob_filter = args.get("glob", "")
-        sub_path = args.get("path", "")
+        glob_filter = parsed.glob
+        sub_path = parsed.path
 
         if sub_path:
-            base = validate_path(sub_path, self._repo_root)
+            base = common.validate_path(sub_path, self._repo_root)
             if not base.is_dir():
                 raise CommandError("file_not_found", f"Directory not found: {sub_path}")
 
@@ -44,7 +54,7 @@ class SearchFilesHandler:
             f"-C{_CONTEXT_LINES}",
             "--no-color",
             "-P",
-            pattern_str,
+            parsed.pattern,
         ]
 
         if glob_filter:

@@ -9,8 +9,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.core.request_options import RequestOptions
 from ..rest_api.types.bridge_command_item import BridgeCommandItem
-from .bridge_handlers import BridgeCommandHandler, CommandError
-from .bridge_handlers.common import backoff_wait
+from .bridge_handlers import BaseHandler, CommandError
+from .bridge_handlers import common
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class BridgePollLoop:
         self,
         api: Any,
         runner_id: str,
-        handlers: Dict[str, BridgeCommandHandler],
+        handlers: Dict[str, BaseHandler],
         shutdown_event: threading.Event,
         on_command_start: Optional[Any] = None,
         on_command_end: Optional[Any] = None,
@@ -96,7 +96,7 @@ class BridgePollLoop:
                         LOGGER.debug(
                             "Bridge poll error (API %s)", e.status_code, exc_info=True
                         )
-                    backoff_wait(self._shutdown_event, backoff)
+                    common.backoff_wait(self._shutdown_event, backoff)
                     backoff = min(backoff * 2, 30.0)
                     continue
                 except Exception:
@@ -105,7 +105,7 @@ class BridgePollLoop:
                         LOGGER.warning("Bridge poll error. Retrying...", exc_info=True)
                     else:
                         LOGGER.debug("Bridge poll error", exc_info=True)
-                    backoff_wait(self._shutdown_event, backoff)
+                    common.backoff_wait(self._shutdown_event, backoff)
                     backoff = min(backoff * 2, 30.0)
                     continue
 
