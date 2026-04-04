@@ -5,7 +5,7 @@ import random
 import subprocess
 import threading
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional, Set, Tuple
 
 from . import CommandError
 
@@ -48,6 +48,28 @@ def is_binary(path: Path) -> bool:
         return b"\x00" in chunk
     except OSError:
         return False
+
+
+def resolve_text_file(path_str: str, repo_root: Path) -> Tuple[Path, str]:
+    """Validate path, check it exists, is not binary, and read as UTF-8.
+
+    Returns (resolved_path, file_content_as_str). Reads raw bytes and decodes
+    to preserve original line endings (CRLF etc).
+    """
+    path = validate_path(path_str, repo_root)
+
+    if not path.exists():
+        raise CommandError("file_not_found", f"File not found: {path_str}")
+
+    if is_binary(path):
+        raise CommandError("binary_file", f"Binary file: {path_str}")
+
+    try:
+        raw = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise CommandError("binary_file", f"File is not valid UTF-8: {path_str}")
+
+    return path, raw
 
 
 def git_ls_files(repo_root: Path) -> Optional[Set[str]]:

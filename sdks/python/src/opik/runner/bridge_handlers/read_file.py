@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel
 
-from . import BaseHandler, CommandError
+from . import BaseHandler
 from . import common
 
 
@@ -26,21 +26,10 @@ class ReadFileHandler(BaseHandler):
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         parsed = ReadFileArgs(**args)
-        path = common.validate_path(parsed.path, self._repo_root)
-
-        if not path.exists():
-            raise CommandError("file_not_found", f"File not found: {parsed.path}")
-
-        if common.is_binary(path):
-            raise CommandError("binary_file", f"Binary file: {parsed.path}")
+        _, text = common.resolve_text_file(parsed.path, self._repo_root)
 
         offset = parsed.offset
         limit = min(parsed.limit, _MAX_LINES)
-
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            raise CommandError("binary_file", f"File is not valid UTF-8: {parsed.path}")
 
         lines = text.splitlines(keepends=True)
         total_lines = len(lines)

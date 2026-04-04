@@ -118,13 +118,7 @@ class EditFileHandler(BaseHandler):
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         parsed = EditFileArgs(**args)
-        path = common.validate_path(parsed.path, self._repo_root)
-
-        if not path.exists():
-            raise CommandError("file_not_found", f"File not found: {parsed.path}")
-
-        if common.is_binary(path):
-            raise CommandError("binary_file", f"Binary file: {parsed.path}")
+        path, _ = common.resolve_text_file(parsed.path, self._repo_root)
 
         if not parsed.edits:
             raise CommandError("no_change", "No edits provided")
@@ -138,12 +132,7 @@ class EditFileHandler(BaseHandler):
         with self._mutation_queue.lock(path):
             common.revalidate_path(path, self._repo_root)
 
-            try:
-                raw_content = path.read_bytes().decode("utf-8")
-            except UnicodeDecodeError:
-                raise CommandError(
-                    "binary_file", f"File is not valid UTF-8: {args.get('path', '')}"
-                )
+            raw_content = path.read_bytes().decode("utf-8")
 
             content, bom = _strip_bom(raw_content)
             line_ending = _detect_line_ending(content)
