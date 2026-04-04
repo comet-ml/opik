@@ -14,6 +14,7 @@ export const LocalRunner: core.serialization.ObjectSchema<serializers.LocalRunne
         status: LocalRunnerStatus.optional(),
         connectedAt: core.serialization.property("connected_at", core.serialization.date().optional()),
         agents: core.serialization.list(Agent).optional(),
+        capabilities: core.serialization.list(core.serialization.string()).optional(),
     });
 
 export declare namespace LocalRunner {
@@ -24,5 +25,6 @@ export declare namespace LocalRunner {
         status?: LocalRunnerStatus.Raw | null;
         connected_at?: string | null;
         agents?: Agent.Raw[] | null;
+        capabilities?: string[] | null;
     }
 }

@@ -16,6 +16,7 @@ class LocalRunner(UniversalBaseModel):
     status: typing.Optional[LocalRunnerStatus] = None
     connected_at: typing.Optional[dt.datetime] = None
     agents: typing.Optional[typing.List[Agent]] = None
+    capabilities: typing.Optional[typing.List[str]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
