@@ -290,7 +290,6 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 FIELD_PROJECT_ID, projectId.toString()));
         runnerMap.expire(runnerConfig.getDeadRunnerPurgeTime().toJavaDuration().multipliedBy(2));
 
-        evictExistingRunner(workspaceId, projectId, userName, runnerId);
         registerRunnerInSets(workspaceId, userName, projectId, runnerId);
 
         return LocalRunnerPairResponse.builder()

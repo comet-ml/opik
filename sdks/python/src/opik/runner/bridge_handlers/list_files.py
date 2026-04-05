@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Tuple
 
 from pydantic import BaseModel
 
@@ -39,9 +39,10 @@ class ListFilesHandler(BaseHandler):
         if not base.is_dir():
             raise CommandError("file_not_found", f"Directory not found: {sub_path}")
 
+        walk_truncated = False
         all_files = common.git_ls_files(self._repo_root)
         if all_files is None:
-            all_files = _walk_files(self._repo_root)
+            all_files, walk_truncated = _walk_files(self._repo_root)
 
         try:
             base_rel = str(base.relative_to(self._repo_root))
@@ -61,7 +62,7 @@ class ListFilesHandler(BaseHandler):
         matches: List[str] = []
         total = len(filtered)
         byte_count = 0
-        truncated = False
+        truncated = walk_truncated
 
         for rel in filtered:
             entry_bytes = len(rel.encode("utf-8")) + 1
@@ -90,7 +91,7 @@ def _matches_pattern(rel: str, pattern: str) -> bool:
 _WALK_MAX_FILES = 10_000
 
 
-def _walk_files(repo_root: Path) -> Set[str]:
+def _walk_files(repo_root: Path) -> Tuple[Set[str], bool]:
     files: Set[str] = set()
     for dirpath, dirnames, filenames in os.walk(repo_root):
         dirnames[:] = [
@@ -113,8 +114,8 @@ def _walk_files(repo_root: Path) -> Set[str]:
             except ValueError:
                 continue
             if len(files) >= _WALK_MAX_FILES:
-                return files
-    return files
+                return files, True
+    return files, False
 
 
 def _safe_mtime(path: Path) -> float:

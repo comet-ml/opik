@@ -485,20 +485,17 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void paginatesCorrectly() {
+        void newRunnerEvictsOldForSameProject() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
-            for (int i = 0; i < 3; i++) {
-                connectRunnerWithPairing("paginate-runner-" + i, projectId, ctx.apiKey, ctx.workspace);
-            }
+            connectRunnerWithPairing("runner-old", projectId, ctx.apiKey, ctx.workspace);
+            UUID newRunner = connectRunnerWithPairing("runner-new", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(projectId, 0, 2, ctx.apiKey, ctx.workspace);
-            assertThat(page0.content()).hasSize(2);
-            assertThat(page0.total()).isEqualTo(3);
-
-            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(projectId, 1, 2, ctx.apiKey, ctx.workspace);
-            assertThat(page1.content()).hasSize(1);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content().getFirst().id()).isEqualTo(newRunner);
         }
     }
 
