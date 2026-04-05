@@ -1,7 +1,8 @@
 """list_files bridge command handler."""
 
+import os
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from pydantic import BaseModel
 
@@ -40,7 +41,7 @@ class ListFilesHandler(BaseHandler):
 
         all_files = common.git_ls_files(self._repo_root)
         if all_files is None:
-            all_files = set()
+            all_files = _walk_files(self._repo_root)
 
         try:
             base_rel = str(base.relative_to(self._repo_root))
@@ -84,6 +85,36 @@ def _matches_pattern(rel: str, pattern: str) -> bool:
     if pattern.startswith("**/"):
         return p.match(pattern[3:])
     return False
+
+
+_WALK_MAX_FILES = 10_000
+
+
+def _walk_files(repo_root: Path) -> Set[str]:
+    files: Set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if not d.startswith(".") and d not in common.WALK_SKIP_DIRS
+        ]
+        for fname in filenames:
+            if fname.startswith("."):
+                continue
+            full = Path(dirpath) / fname
+            if full.is_symlink():
+                try:
+                    full.resolve().relative_to(repo_root.resolve())
+                except ValueError:
+                    continue
+            try:
+                rel = str(full.relative_to(repo_root))
+                files.add(rel)
+            except ValueError:
+                continue
+            if len(files) >= _WALK_MAX_FILES:
+                return files
+    return files
 
 
 def _safe_mtime(path: Path) -> float:

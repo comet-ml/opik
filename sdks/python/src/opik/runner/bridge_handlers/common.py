@@ -11,6 +11,21 @@ from . import CommandError
 
 _BINARY_CHECK_SIZE = 8192
 
+WALK_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+    }
+)
+
 
 def validate_path(path: str, repo_root: Path) -> Path:
     """Resolve a relative or absolute path against repo_root, ensuring it stays

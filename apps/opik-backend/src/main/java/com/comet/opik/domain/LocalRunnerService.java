@@ -989,6 +989,21 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         if (oldRunnerIdStr != null && !oldRunnerIdStr.equals(newRunnerId.toString())) {
             UUID oldRunnerId = UUID.fromString(oldRunnerIdStr);
             redisClient.getBucket(runnerHeartbeatKey(oldRunnerId)).delete();
+
+            RMap<String, String> oldRunnerMap = redisClient.getMap(runnerKey(oldRunnerId));
+            if (oldRunnerMap.isExists()) {
+                oldRunnerMap.put(FIELD_DISCONNECTED_AT, Instant.now().toString());
+            }
+
+            failOrphanedJobs(oldRunnerId);
+            failOrphanedBridgeCommands(oldRunnerId);
+
+            RSet<String> projectRunners = redisClient.getSet(
+                    projectRunnersKey(workspaceId, projectId));
+            projectRunners.remove(oldRunnerIdStr);
+
+            removeRunnerFromWorkspace(workspaceId, userName, oldRunnerId);
+
             log.info("Evicted runner '{}' in workspace '{}'", oldRunnerId, workspaceId);
         }
     }

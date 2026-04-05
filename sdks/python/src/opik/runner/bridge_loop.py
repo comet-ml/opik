@@ -24,14 +24,10 @@ _MAX_COMMAND_TIMEOUT = 300.0
 _MAX_BATCH_SIZE = 20
 
 
-def _pascal_case(snake: str) -> str:
-    return "".join(word.capitalize() for word in snake.split("_"))
-
-
 def _build_op_summary(cmd: BridgeCommandItem) -> str:
     args = dict(cmd.args) if cmd.args else {}
     path = args.get("path", "")
-    label = _pascal_case(cmd.type or "")
+    label = cmd.type or ""
     cmd_type = cmd.type or ""
     if cmd_type == "EditFile":
         edits = args.get("edits", [])

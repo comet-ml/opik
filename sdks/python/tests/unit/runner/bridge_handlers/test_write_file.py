@@ -77,3 +77,27 @@ class TestWriteFile:
             {"path": "same.py", "content": "unchanged\n"}, timeout=30.0
         )
         assert result["diff"] == ""
+
+    def test_write_file__readonly_file__raises_permission_denied(
+        self, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "readonly.py"
+        f.write_text("original\n")
+        f.chmod(0o444)
+        handler = self._handler(tmp_path)
+        with pytest.raises(CommandError) as exc_info:
+            handler.execute({"path": "readonly.py", "content": "new\n"}, timeout=30.0)
+        assert exc_info.value.code == "permission_denied"
+        f.chmod(0o644)
+
+    def test_write_file__readonly_parent__raises_permission_denied(
+        self, tmp_path: Path
+    ) -> None:
+        ro_dir = tmp_path / "locked"
+        ro_dir.mkdir()
+        ro_dir.chmod(0o444)
+        handler = self._handler(tmp_path)
+        with pytest.raises(CommandError) as exc_info:
+            handler.execute({"path": "locked/sub/new.py", "content": "x"}, timeout=30.0)
+        assert exc_info.value.code == "permission_denied"
+        ro_dir.chmod(0o755)

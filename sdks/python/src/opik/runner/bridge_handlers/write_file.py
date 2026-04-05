@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
-from . import BaseHandler, FileMutationQueue
+from . import BaseHandler, CommandError, FileMutationQueue
 from . import common
 
 
@@ -24,7 +24,13 @@ class WriteFileHandler(BaseHandler):
         parsed = WriteFileArgs(**args)
         path = common.validate_path(parsed.path, self._repo_root)
 
-        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            raise CommandError(
+                "permission_denied",
+                f"Cannot create parent directory for: {parsed.path}",
+            )
 
         with self._mutation_queue.lock(path):
             common.revalidate_path(path, self._repo_root)
@@ -36,7 +42,13 @@ class WriteFileHandler(BaseHandler):
                 except (UnicodeDecodeError, OSError):
                     old_content = None
 
-            path.write_text(parsed.content, encoding="utf-8")
+            try:
+                path.write_text(parsed.content, encoding="utf-8")
+            except PermissionError:
+                raise CommandError(
+                    "permission_denied",
+                    f"File is not writable: {parsed.path}",
+                )
 
         diff: Optional[str] = None
         if old_content is not None:

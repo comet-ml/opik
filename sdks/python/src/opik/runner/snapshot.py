@@ -85,8 +85,7 @@ def _build_file_tree(repo_root: Path) -> str:
             dirnames[:] = [
                 d
                 for d in sorted(dirnames)
-                if not d.startswith(".")
-                and d not in ("__pycache__", "node_modules", ".venv", "venv")
+                if not d.startswith(".") and d not in common.WALK_SKIP_DIRS
             ]
             rel_root = Path(root).relative_to(repo_root)
             if str(rel_root) != ".":
@@ -120,8 +119,7 @@ def _find_instrumentation(repo_root: Path) -> List[str]:
             dirnames[:] = [
                 d
                 for d in dirnames
-                if not d.startswith(".")
-                and d not in ("__pycache__", "node_modules", ".venv", "venv")
+                if not d.startswith(".") and d not in common.WALK_SKIP_DIRS
             ]
             for f in filenames:
                 if Path(f).suffix in _CODE_EXTENSIONS:

@@ -29,6 +29,23 @@ _GRACEFUL_TIMEOUT = 10
 _RESTART_DEBOUNCE = 1.0
 _STDERR_MAX_LINES = 500
 
+_RELOAD_INDICATORS = frozenset(
+    {
+        "--reload",
+        "--debug",
+        "nodemon",
+        "docker",
+        "docker-compose",
+    }
+)
+
+
+def _command_has_reload(command: List[str]) -> bool:
+    for token in command:
+        if token in _RELOAD_INDICATORS:
+            return True
+    return False
+
 
 class Supervisor:
     """Outer process for `opik connect`. Stays alive to manage heartbeat, bridge
@@ -47,6 +64,7 @@ class Supervisor:
         on_child_restart: Optional[Callable[[str], None]] = None,
         on_command_start: Optional[Callable] = None,
         on_command_end: Optional[Callable] = None,
+        watch: Optional[bool] = None,
     ) -> None:
         self._command = command
         self._env = env
@@ -57,6 +75,10 @@ class Supervisor:
         self._on_child_restart = on_child_restart
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
+        if watch is None:
+            self._watch = not _command_has_reload(command)
+        else:
+            self._watch = watch
         self._shutdown_event = threading.Event()
         self._child: Optional[subprocess.Popen] = None
         self._child_lock = threading.Lock()
@@ -96,14 +118,17 @@ class Supervisor:
         )
         bridge_thread.start()
 
-        watcher = FileWatcher(self._repo_root, self._on_file_change)
-        watcher_thread = threading.Thread(
-            target=watcher.run,
-            args=(self._shutdown_event,),
-            name="file-watcher",
-            daemon=True,
-        )
-        watcher_thread.start()
+        if self._watch:
+            watcher = FileWatcher(self._repo_root, self._on_file_change)
+            watcher_thread = threading.Thread(
+                target=watcher.run,
+                args=(self._shutdown_event,),
+                name="file-watcher",
+                daemon=True,
+            )
+            watcher_thread.start()
+        else:
+            LOGGER.info("File watcher disabled (framework handles restarts)")
 
         with self._child_lock:
             self._child = self._start_child()

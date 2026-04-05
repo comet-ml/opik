@@ -94,17 +94,6 @@ def _run(shutdown_event: threading.Event) -> None:
             timeout=0,
         ).dict()
 
-    def _sync_agent(name: str) -> None:
-        entry = registry.get_all().get(name)
-        if entry is None:
-            return
-        try:
-            api.runners.register_agents(runner_id, request={name: _to_payload(entry)})
-        except Exception:
-            LOGGER.warn("Failed to register agent '%s'", name, exc_info=True)
-
-    registry.on_register(_sync_agent)
-
     entrypoints = registry.get_all()
     if entrypoints:
         api.runners.register_agents(

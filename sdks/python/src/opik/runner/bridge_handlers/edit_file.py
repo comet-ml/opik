@@ -118,7 +118,7 @@ def _map_span_to_original(
         orig_end = offsets[norm_end]
     else:
         orig_end = original_len
-    return orig_start, orig_end - orig_start
+    return orig_start, max(1, orig_end - orig_start)
 
 
 def _find_exact(content: str, old_string: str) -> Optional[Tuple[int, int]]:
@@ -181,7 +181,7 @@ class EditFileHandler(BaseHandler):
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         parsed = EditFileArgs(**args)
-        path, _ = common.resolve_text_file(parsed.path, self._repo_root)
+        path = common.validate_path(parsed.path, self._repo_root)
 
         if not parsed.edits:
             raise CommandError("no_change", "No edits provided")
@@ -195,7 +195,19 @@ class EditFileHandler(BaseHandler):
         with self._mutation_queue.lock(path):
             common.revalidate_path(path, self._repo_root)
 
-            raw_content = path.read_bytes().decode("utf-8")
+            if not path.exists():
+                raise CommandError("file_not_found", f"File not found: {parsed.path}")
+            if not path.is_file():
+                raise CommandError("file_not_found", f"Not a file: {parsed.path}")
+            if common.is_binary(path):
+                raise CommandError("binary_file", f"Binary file: {parsed.path}")
+
+            try:
+                raw_content = path.read_bytes().decode("utf-8")
+            except UnicodeDecodeError:
+                raise CommandError(
+                    "binary_file", f"File is not valid UTF-8: {parsed.path}"
+                )
 
             content, bom = _strip_bom(raw_content)
             line_ending = _detect_line_ending(content)
@@ -241,7 +253,13 @@ class EditFileHandler(BaseHandler):
             rel = str(path.relative_to(self._repo_root))
             diff = _generate_diff(raw_content, new_content, rel)
 
-            path.write_bytes(new_content.encode("utf-8"))
+            try:
+                path.write_bytes(new_content.encode("utf-8"))
+            except PermissionError:
+                raise CommandError(
+                    "permission_denied",
+                    f"File is not writable: {parsed.path}",
+                )
 
         return {
             "diff": diff,

@@ -317,3 +317,21 @@ class TestEditFileEdgeCases:
                 timeout=30.0,
             )
         assert exc_info.value.code == "path_traversal"
+
+    def test_edit_file__readonly_file__raises_permission_denied(
+        self, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "locked.py"
+        f.write_text("hello world\n")
+        f.chmod(0o444)
+        handler = self._handler(tmp_path)
+        with pytest.raises(CommandError) as exc_info:
+            handler.execute(
+                {
+                    "path": "locked.py",
+                    "edits": [{"old_string": "world", "new_string": "earth"}],
+                },
+                timeout=30.0,
+            )
+        assert exc_info.value.code == "permission_denied"
+        f.chmod(0o644)

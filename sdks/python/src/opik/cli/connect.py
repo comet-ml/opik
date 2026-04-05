@@ -55,12 +55,18 @@ def _register_runner(
 @click.command(context_settings={"ignore_unknown_options": True})
 @click.option("--pair", "pair_code", required=True, help="Pairing code for the runner.")
 @click.option("--name", default=None, help="Runner name.")
+@click.option(
+    "--watch/--no-watch",
+    default=None,
+    help="Enable/disable file watcher. Auto-detected from command (e.g. --reload disables it).",
+)
 @click.argument("command", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def connect(
     ctx: click.Context,
     pair_code: str,
     name: Optional[str],
+    watch: Optional[bool],
     command: Tuple[str, ...],
 ) -> None:
     """Connect a local runner to Opik and launch a supervised process."""
@@ -94,6 +100,7 @@ def connect(
             on_child_restart=tui.child_restarted,
             on_command_start=tui.op_start,
             on_command_end=tui.op_end,
+            watch=watch,
         )
         try:
             supervisor.run()
