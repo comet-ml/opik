@@ -48,14 +48,77 @@ def _restore_line_ending(content: str, ending: str) -> str:
     return content
 
 
+_FUZZY_REPLACEMENTS: Dict[str, str] = {
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u2014": "-",
+    "\u2013": "-",
+    "\u2212": "-",
+    "\u00a0": " ",
+    "\u2009": " ",
+    "\u200a": " ",
+}
+
+
 def _fuzzy_normalize(text: str) -> str:
     text = unicodedata.normalize("NFKC", text)
-    text = text.replace("\u201c", '"').replace("\u201d", '"')
-    text = text.replace("\u2018", "'").replace("\u2019", "'")
-    text = text.replace("\u2014", "-").replace("\u2013", "-").replace("\u2212", "-")
-    text = text.replace("\u00a0", " ").replace("\u2009", " ").replace("\u200a", " ")
+    for orig, repl in _FUZZY_REPLACEMENTS.items():
+        text = text.replace(orig, repl)
     text = re.sub(r"[ \t]+\n", "\n", text)
     return text
+
+
+def _fuzzy_normalize_with_map(text: str) -> Tuple[str, List[int]]:
+    """Normalize text for fuzzy matching, returning an offset map from
+    normalized positions back to original positions."""
+    chars: List[str] = []
+    offsets: List[int] = []
+
+    for orig_pos, ch in enumerate(text):
+        normalized = unicodedata.normalize("NFKC", ch)
+        for nc in normalized:
+            replacement = _FUZZY_REPLACEMENTS.get(nc, nc)
+            chars.append(replacement)
+            offsets.append(orig_pos)
+
+    result: List[str] = []
+    result_offsets: List[int] = []
+    i = 0
+    n = len(chars)
+    while i < n:
+        if chars[i] in (" ", "\t"):
+            j = i
+            while j < n and chars[j] in (" ", "\t"):
+                j += 1
+            if j < n and chars[j] == "\n":
+                result.append("\n")
+                result_offsets.append(offsets[j])
+                i = j + 1
+            else:
+                result.append(chars[i])
+                result_offsets.append(offsets[i])
+                i += 1
+        else:
+            result.append(chars[i])
+            result_offsets.append(offsets[i])
+            i += 1
+
+    return "".join(result), result_offsets
+
+
+def _map_span_to_original(
+    norm_start: int, norm_length: int, offsets: List[int], original_len: int
+) -> Tuple[int, int]:
+    """Translate a span in normalized text back to original text coordinates."""
+    orig_start = offsets[norm_start]
+    norm_end = norm_start + norm_length
+    if norm_end < len(offsets):
+        orig_end = offsets[norm_end]
+    else:
+        orig_end = original_len
+    return orig_start, orig_end - orig_start
 
 
 def _find_exact(content: str, old_string: str) -> Optional[Tuple[int, int]]:
@@ -152,7 +215,7 @@ class EditFileHandler(BaseHandler):
             fuzzy_used = False
             if not all_exact:
                 matches = []
-                fuzzy_content = _fuzzy_normalize(content_lf)
+                fuzzy_content, offset_map = _fuzzy_normalize_with_map(content_lf)
                 for edit in parsed.edits:
                     old_lf = _normalize_to_lf(edit.old_string)
                     new_lf = _normalize_to_lf(edit.new_string)
@@ -161,14 +224,16 @@ class EditFileHandler(BaseHandler):
                         raise CommandError(
                             "match_not_found", "old_string not found in file"
                         )
-                    start, length = result
-                    matches.append((start, length, new_lf))
+                    norm_start, norm_length = result
+                    orig_start, orig_length = _map_span_to_original(
+                        norm_start, norm_length, offset_map, len(content_lf)
+                    )
+                    matches.append((orig_start, orig_length, new_lf))
                     fuzzy_used = True
 
             _validate_edits([(m[0], m[1]) for m in matches])
 
-            target = _fuzzy_normalize(content_lf) if fuzzy_used else content_lf
-            new_content = _apply_edits(target, matches)
+            new_content = _apply_edits(content_lf, matches)
 
             new_content = bom + new_content
             new_content = _restore_line_ending(new_content, line_ending)

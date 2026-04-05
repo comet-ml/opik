@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from opik.runner.bridge_handlers import CommandError
-from opik.runner.bridge_handlers.common import is_binary, revalidate_path, validate_path
+from opik.runner.bridge_handlers.common import (
+    is_binary,
+    resolve_text_file,
+    revalidate_path,
+    validate_path,
+)
 
 
 class TestValidatePath:
@@ -100,3 +105,14 @@ class TestIsBinary:
 
     def test_is_binary__nonexistent_file__returns_false(self, tmp_path: Path) -> None:
         assert is_binary(tmp_path / "nope") is False
+
+
+class TestResolveTextFile:
+    def test_resolve_text_file__directory_path__raises_error(
+        self, tmp_path: Path
+    ) -> None:
+        subdir = tmp_path / "mydir"
+        subdir.mkdir()
+        with pytest.raises(CommandError) as exc_info:
+            resolve_text_file("mydir", tmp_path)
+        assert exc_info.value.code == "file_not_found"

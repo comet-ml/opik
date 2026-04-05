@@ -61,6 +61,9 @@ def resolve_text_file(path_str: str, repo_root: Path) -> Tuple[Path, str]:
     if not path.exists():
         raise CommandError("file_not_found", f"File not found: {path_str}")
 
+    if not path.is_file():
+        raise CommandError("file_not_found", f"Not a file: {path_str}")
+
     if is_binary(path):
         raise CommandError("binary_file", f"Binary file: {path_str}")
 

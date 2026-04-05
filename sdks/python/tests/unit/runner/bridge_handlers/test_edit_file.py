@@ -185,6 +185,7 @@ class TestEditFileFuzzy:
             timeout=30.0,
         )
         assert result["fuzzy_match_used"] is True
+        assert f.read_text() == 'say "world"\n'
 
     def test_edit_file__unicode_dash__flags_fuzzy_in_result(
         self, tmp_path: Path
@@ -200,6 +201,24 @@ class TestEditFileFuzzy:
             timeout=30.0,
         )
         assert result["fuzzy_match_used"] is True
+
+    def test_edit_file__fuzzy_match__preserves_unmatched_unicode(
+        self, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "q.py"
+        f.write_text("region_a = \u201chello\u201d\nregion_b = \u201cworld\u201d\n")
+        handler = self._handler(tmp_path)
+        result = handler.execute(
+            {
+                "path": "q.py",
+                "edits": [{"old_string": '"hello"', "new_string": '"replaced"'}],
+            },
+            timeout=30.0,
+        )
+        assert result["fuzzy_match_used"] is True
+        content = f.read_text()
+        assert '"replaced"' in content
+        assert "\u201cworld\u201d" in content
 
 
 class TestEditFileMultiEdit:
