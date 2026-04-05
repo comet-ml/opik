@@ -1268,6 +1268,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
+          logsSource={LOGS_SOURCE.sdk}
         />
       </PageBodyStickyContainer>
       {selectedRows.length > 0 ? (
