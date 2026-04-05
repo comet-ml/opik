@@ -73,13 +73,13 @@ public class LocalRunnerConfig {
     private int maxLogEntriesPerBatch = 1000;
 
     @Valid @JsonProperty
-    @Min(1) private int bridgeMaxPendingPerRunner = 20;
+    @Min(1) private int bridgeMaxPendingPerRunner = 50;
 
     @Valid @JsonProperty
-    @Min(1) private int bridgeMaxCommandsPerMinute = 60;
+    @Min(1) private int bridgeMaxCommandsPerMinute = 600;
 
     @Valid @JsonProperty
-    @Min(1) private int bridgeMaxWriteCommandsPerMinute = 10;
+    @Min(1) private int bridgeMaxWriteCommandsPerMinute = 120;
 
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
