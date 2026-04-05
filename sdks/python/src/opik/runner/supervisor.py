@@ -77,11 +77,11 @@ class Supervisor:
 
         mutation_queue = FileMutationQueue()
         handlers: Dict[str, Any] = {
-            "read_file": ReadFileHandler(self._repo_root),
-            "write_file": WriteFileHandler(self._repo_root, mutation_queue),
-            "edit_file": EditFileHandler(self._repo_root, mutation_queue),
-            "list_files": ListFilesHandler(self._repo_root),
-            "search_files": SearchFilesHandler(self._repo_root),
+            "ReadFile": ReadFileHandler(self._repo_root),
+            "WriteFile": WriteFileHandler(self._repo_root, mutation_queue),
+            "EditFile": EditFileHandler(self._repo_root, mutation_queue),
+            "ListFiles": ListFilesHandler(self._repo_root),
+            "SearchFiles": SearchFilesHandler(self._repo_root),
         }
         bridge_loop = BridgePollLoop(
             self._api,

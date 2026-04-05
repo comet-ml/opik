@@ -33,17 +33,17 @@ def _build_op_summary(cmd: BridgeCommandItem) -> str:
     path = args.get("path", "")
     label = _pascal_case(cmd.type or "")
     cmd_type = cmd.type or ""
-    if cmd_type == "edit_file":
+    if cmd_type == "EditFile":
         edits = args.get("edits", [])
         count = len(edits)
         suffix = f" ({count} edit{'s' if count != 1 else ''})" if count else ""
         return f"{label} {path}{suffix}"
-    if cmd_type in ("read_file", "write_file"):
+    if cmd_type in ("ReadFile", "WriteFile"):
         return f"{label} {path}"
-    if cmd_type == "list_files":
+    if cmd_type == "ListFiles":
         pattern = args.get("pattern", "")
         return f"{label} {pattern}"
-    if cmd_type == "search_files":
+    if cmd_type == "SearchFiles":
         pattern = args.get("pattern", "")
         return f"{label} {pattern}"
     return label

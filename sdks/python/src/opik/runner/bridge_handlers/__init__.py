@@ -39,4 +39,4 @@ class StubHandler(BaseHandler):
         raise CommandError("not_implemented", "Command type not yet implemented")
 
 
-WRITE_COMMANDS = {"write_file", "edit_file"}
+WRITE_COMMANDS = {"WriteFile", "EditFile"}
