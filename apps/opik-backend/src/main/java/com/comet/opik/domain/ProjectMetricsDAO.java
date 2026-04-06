@@ -1767,7 +1767,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 Optional.ofNullable(request.threadFilters())
                         .ifPresent(filters -> {
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
-                                    .ifPresent(traceFilters -> template.add("trace_thread_filters", traceFilters));
+                                    .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
                                             scoresFilters -> template.add("thread_feedback_scores_filters",
