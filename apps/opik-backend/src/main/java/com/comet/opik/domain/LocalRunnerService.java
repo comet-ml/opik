@@ -1398,16 +1398,6 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
                     String now = Instant.now().toString();
 
-                    RBatch statusBatch = redisClient.createBatch();
-                    for (String cmdIdStr : commandIds) {
-                        UUID commandId = UUID.fromString(cmdIdStr);
-                        var batchMap = statusBatch.<String, String>getMap(
-                                bridgeCommandKey(commandId), StringCodec.INSTANCE);
-                        batchMap.putAsync(BRIDGE_FIELD_STATUS, BridgeCommandStatus.PICKED_UP.getValue());
-                        batchMap.putAsync(BRIDGE_FIELD_PICKED_UP_AT, now);
-                    }
-                    statusBatch.execute();
-
                     RBatch readBatch = redisClient.createBatch();
                     List<RFuture<Map<String, String>>> readFutures = new ArrayList<>(commandIds.size());
                     for (String cmdIdStr : commandIds) {
@@ -1417,12 +1407,41 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     }
                     readBatch.execute();
 
-                    List<BridgeCommandBatchResponse.BridgeCommandItem> items = new ArrayList<>();
-                    for (var future : readFutures) {
-                        Map<String, String> fields = future.toCompletableFuture().join();
-                        if (!fields.isEmpty()) {
-                            items.add(buildBridgeCommandItem(fields));
+                    List<String> liveCommandIds = new ArrayList<>();
+                    List<Map<String, String>> liveFields = new ArrayList<>();
+                    RList<String> activeList = redisClient.getList(activeKey, StringCodec.INSTANCE);
+                    for (int i = 0; i < commandIds.size(); i++) {
+                        Map<String, String> fields = readFutures.get(i).toCompletableFuture().join();
+                        if (fields.isEmpty() || fields.containsKey(BRIDGE_FIELD_COMPLETED_FLAG)) {
+                            activeList.remove(commandIds.get(i));
+                            continue;
                         }
+                        BridgeCommandStatus status = parseBridgeCommandStatus(
+                                fields.get(BRIDGE_FIELD_STATUS));
+                        if (status != null && status.isTerminal()) {
+                            activeList.remove(commandIds.get(i));
+                            continue;
+                        }
+                        liveCommandIds.add(commandIds.get(i));
+                        liveFields.add(fields);
+                    }
+
+                    if (!liveCommandIds.isEmpty()) {
+                        RBatch statusBatch = redisClient.createBatch();
+                        for (String cmdIdStr : liveCommandIds) {
+                            UUID commandId = UUID.fromString(cmdIdStr);
+                            var batchMap = statusBatch.<String, String>getMap(
+                                    bridgeCommandKey(commandId), StringCodec.INSTANCE);
+                            batchMap.putAsync(BRIDGE_FIELD_STATUS,
+                                    BridgeCommandStatus.PICKED_UP.getValue());
+                            batchMap.putAsync(BRIDGE_FIELD_PICKED_UP_AT, now);
+                        }
+                        statusBatch.execute();
+                    }
+
+                    List<BridgeCommandBatchResponse.BridgeCommandItem> items = new ArrayList<>();
+                    for (Map<String, String> fields : liveFields) {
+                        items.add(buildBridgeCommandItem(fields));
                     }
 
                     return BridgeCommandBatchResponse.builder().commands(items).build();
