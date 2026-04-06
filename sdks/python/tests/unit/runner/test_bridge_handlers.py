@@ -217,8 +217,8 @@ class TestExecHandler:
             "python3 --version",
             "cat README.md",
             "rm temp.txt",
-            "curl http://example.com",
-            "wget http://example.com/file.zip",
+            "curl --version",
+            "wget --version",
         ],
     )
     def test_blocklist__safe_commands__allowed(

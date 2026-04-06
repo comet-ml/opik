@@ -44,7 +44,7 @@ def _build_op_summary(cmd: BridgeCommandItem) -> str:
         return f"{label} {pattern}"
     if cmd_type == "Exec":
         command = args.get("command", "")
-        return f"{label} {command[:80]}"
+        return f"{label} {command}"
     return label
 
 
