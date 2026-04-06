@@ -180,11 +180,11 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     private static String bridgeCommandKey(UUID commandId) {
-        return "opik:runners:bridge:" + commandId;
+        return "opik:runners:bridge:command:" + commandId;
     }
 
     private static String bridgeCommandDoneKey(UUID commandId) {
-        return "opik:runners:bridge:" + commandId + ":done";
+        return "opik:runners:bridge:command:" + commandId + ":done";
     }
 
     private static String bridgePendingKey(UUID runnerId) {
@@ -1358,7 +1358,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         batch.<String, String>getMap(bridgeCommandKey(commandId), StringCodec.INSTANCE)
                 .putAllAsync(commandFields);
         batch.<String, String>getMap(bridgeCommandKey(commandId), StringCodec.INSTANCE)
-                .expireAsync(Duration.ofSeconds(timeoutSeconds + 30));
+                .expireAsync(Duration.ofSeconds(timeoutSeconds * 2 + 60));
         batch.<String>getList(bridgePendingKey(runnerId), StringCodec.INSTANCE)
                 .addAsync(commandId.toString());
         batch.execute();
@@ -1384,9 +1384,8 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     List<String> commandIds = new ArrayList<>();
                     commandIds.add(firstCommandId);
 
-                    RBlockingDeque<String> deque = redisClient.getBlockingDeque(pendingKey);
                     for (int i = 1; i < maxCommands; i++) {
-                        String nextId = deque.move(DequeMoveArgs.pollFirst().addLastTo(activeKey));
+                        String nextId = blockingDeque.move(DequeMoveArgs.pollFirst().addLastTo(activeKey));
                         if (nextId == null) {
                             break;
                         }
@@ -1394,15 +1393,22 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     }
 
                     String now = Instant.now().toString();
-                    List<BridgeCommandBatchResponse.BridgeCommandItem> items = new ArrayList<>();
 
+                    RBatch statusBatch = redisClient.createBatch();
                     for (String cmdIdStr : commandIds) {
                         UUID commandId = UUID.fromString(cmdIdStr);
-                        RMap<String, String> cmdMap = redisClient.getMap(bridgeCommandKey(commandId));
-                        cmdMap.put(BRIDGE_FIELD_STATUS, BridgeCommandStatus.PICKED_UP.getValue());
-                        cmdMap.put(BRIDGE_FIELD_PICKED_UP_AT, now);
+                        var batchMap = statusBatch.<String, String>getMap(
+                                bridgeCommandKey(commandId), StringCodec.INSTANCE);
+                        batchMap.putAsync(BRIDGE_FIELD_STATUS, BridgeCommandStatus.PICKED_UP.getValue());
+                        batchMap.putAsync(BRIDGE_FIELD_PICKED_UP_AT, now);
+                    }
+                    statusBatch.execute();
 
-                        Map<String, String> fields = cmdMap.readAllMap();
+                    List<BridgeCommandBatchResponse.BridgeCommandItem> items = new ArrayList<>();
+                    for (String cmdIdStr : commandIds) {
+                        UUID commandId = UUID.fromString(cmdIdStr);
+                        Map<String, String> fields = redisClient.<String, String>getMap(
+                                bridgeCommandKey(commandId)).readAllMap();
                         if (!fields.isEmpty()) {
                             items.add(buildBridgeCommandItem(fields));
                         }
@@ -1462,10 +1468,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 .putAllAsync(updates);
         resultBatch.<String, String>getMap(bridgeCommandKey(commandId), StringCodec.INSTANCE)
                 .expireAsync(runnerConfig.getBridgeCompletedCommandTtl().toJavaDuration());
+        resultBatch.getList(bridgeActiveKey(runnerId), StringCodec.INSTANCE)
+                .removeAsync(commandId.toString());
         resultBatch.execute();
-
-        RList<String> activeList = redisClient.getList(bridgeActiveKey(runnerId));
-        activeList.remove(commandId.toString());
 
         writeBridgeDoneSentinel(commandId);
     }

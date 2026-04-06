@@ -872,7 +872,7 @@ class LocalRunnerServiceImplTest {
             UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
-            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
+            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             assertThat(cmdMap.get("command_id")).isEqualTo(commandId.toString());
             assertThat(cmdMap.get("runner_id")).isEqualTo(runnerId.toString());
             assertThat(cmdMap.get("type")).isEqualTo("ReadFile");
@@ -981,7 +981,7 @@ class LocalRunnerServiceImplTest {
                     .build();
             UUID commandId = runnerService.submitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
 
-            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
+            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             assertThat(cmdMap.get("timeout_seconds")).isEqualTo("120");
         }
 
@@ -1027,7 +1027,7 @@ class LocalRunnerServiceImplTest {
             RList<String> pending = stringRedis.getList("opik:runners:bridge:" + runnerId + ":pending");
             assertThat(pending.size()).isZero();
 
-            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
+            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             assertThat(cmdMap.get("status")).isEqualTo("picked_up");
             assertThat(cmdMap.get("picked_up_at")).isNotBlank();
         }
@@ -1096,7 +1096,7 @@ class LocalRunnerServiceImplTest {
                             .durationMs(42L)
                             .build());
 
-            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
+            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             assertThat(cmdMap.get("status")).isEqualTo("completed");
             assertThat(cmdMap.get("completed_at")).isNotBlank();
             assertThat(cmdMap.get("result")).contains("file contents");
@@ -1121,7 +1121,7 @@ class LocalRunnerServiceImplTest {
                             .error(errorNode)
                             .build());
 
-            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
+            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             assertThat(cmdMap.get("status")).isEqualTo("failed");
             assertThat(cmdMap.get("error")).contains("file_not_found");
         }
@@ -1162,7 +1162,7 @@ class LocalRunnerServiceImplTest {
             runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build());
 
-            RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:" + commandId + ":done");
+            RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:command:" + commandId + ":done");
             assertThat(doneQueue.size()).isGreaterThan(0);
         }
 
@@ -1293,7 +1293,7 @@ class LocalRunnerServiceImplTest {
             runnerService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, commandId, 1).block();
 
             // Redis BLPOP does not create the key on timeout — verify no orphaned done queue
-            RList<String> doneList = stringRedis.getList("opik:runners:bridge:" + commandId + ":done");
+            RList<String> doneList = stringRedis.getList("opik:runners:bridge:command:" + commandId + ":done");
             assertThat(doneList.isExists()).isFalse();
         }
 
@@ -1306,7 +1306,7 @@ class LocalRunnerServiceImplTest {
             runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build());
 
-            RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:" + commandId + ":done");
+            RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:command:" + commandId + ":done");
             long ttlMs = doneQueue.remainTimeToLive();
             // Should be ~150s (bridgeMaxCommandTimeout 120s + 30s grace), not 3600s
             assertThat(ttlMs).isPositive();
@@ -1468,7 +1468,7 @@ class LocalRunnerServiceImplTest {
                 waitForHeartbeatExpiry();
                 runnerService.reapDeadRunners();
 
-                RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
+                RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
                 assertThat(cmdMap.get("status")).isEqualTo("timed_out");
             } finally {
                 runnerConfig.setDeadRunnerPurgeTime(Duration.hours(24));
@@ -1486,7 +1486,7 @@ class LocalRunnerServiceImplTest {
                 waitForHeartbeatExpiry();
                 runnerService.reapDeadRunners();
 
-                RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:" + commandId + ":done");
+                RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:command:" + commandId + ":done");
                 assertThat(doneQueue.size()).isGreaterThan(0);
             } finally {
                 runnerConfig.setDeadRunnerPurgeTime(Duration.hours(24));
@@ -1506,7 +1506,7 @@ class LocalRunnerServiceImplTest {
             UUID commandId = runnerService.submitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
             runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
-            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:" + commandId);
+            RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             cmdMap.put("picked_up_at", Instant.now().minusSeconds(60).toString());
 
             runnerService.reapStaleBridgeCommands(runnerId);

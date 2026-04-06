@@ -187,17 +187,11 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "410", description = "Gone", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response heartbeat(@PathParam("runnerId") UUID runnerId,
-            @RequestBody(description = "Optional heartbeat body with capabilities", content = @Content(schema = @Schema(implementation = LocalRunnerHeartbeatRequest.class))) JsonNode body) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerHeartbeatRequest.class))) LocalRunnerHeartbeatRequest body) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        List<String> capabilities = null;
-        if (body != null && body.has("capabilities") && body.get("capabilities").isArray()) {
-            capabilities = new java.util.ArrayList<>();
-            for (JsonNode cap : body.get("capabilities")) {
-                capabilities.add(cap.asText());
-            }
-        }
+        List<String> capabilities = body != null ? body.capabilities() : null;
         LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId, userName, capabilities);
         return Response.ok(response).build();
     }
