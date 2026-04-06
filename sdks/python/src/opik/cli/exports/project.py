@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
-from opik.api_objects.attachment.client import AttachmentClient
+from opik.api_objects.attachment import client as attachment_client
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
@@ -22,6 +22,7 @@ from .utils import (
     debug_print,
     extract_trace_id_from_filename,
     matches_name_pattern,
+    no_attachments_option,
     print_export_summary,
     trace_to_csv_rows,
     write_csv_data,
@@ -106,7 +107,7 @@ def _fetch_spans(
 
 
 def _fetch_attachments(
-    attachment_client: AttachmentClient,
+    attachment_client: attachment_client.AttachmentClient,
     project_name: str,
     trace_id: str,
     span_ids: list,
@@ -133,15 +134,22 @@ def _fetch_attachments(
                         "file_size": att.file_size,
                     }
                 )
-        except Exception as e:
+        except (ApiError, OSError, IOError) as e:
             LOGGER.warning(
                 "Failed to fetch attachments for %s %s: %s", entity_type, entity_id, e
             )
+        except Exception:
+            LOGGER.exception(
+                "Unexpected error fetching attachments for %s %s",
+                entity_type,
+                entity_id,
+            )
+            raise
     return attachments
 
 
 def _download_attachment_file(
-    attachment_client: AttachmentClient,
+    attachment_client: attachment_client.AttachmentClient,
     project_name: str,
     attachment: dict,
     project_dir: Path,
@@ -151,14 +159,29 @@ def _download_attachment_file(
 
     Saves to ``project_dir/attachments/<entity_type>/<entity_id>/<file_name>``.
     Skips if the file already exists and *force* is False.
-    Returns True on success, False on failure (warning logged, no raise).
+    Returns True on success, False on recoverable failure (warning logged, no raise).
+    Raises on unexpected errors.
     """
     entity_type = attachment["entity_type"]
     entity_id = attachment["entity_id"]
     file_name = attachment["file_name"]
     mime_type = attachment["mime_type"]
 
-    dest_path = project_dir / "attachments" / entity_type / entity_id / file_name
+    # Sanitize file_name to a bare filename (prevents path traversal via file_name).
+    safe_file_name = Path(file_name).name
+    if not safe_file_name or safe_file_name in (".", ".."):
+        LOGGER.warning("Skipping attachment with invalid file_name: %r", file_name)
+        return False
+
+    dest_path = project_dir / "attachments" / entity_type / entity_id / safe_file_name
+
+    # Verify the resolved destination stays inside project_dir.
+    if not dest_path.resolve().is_relative_to(project_dir.resolve()):
+        LOGGER.warning(
+            "Skipping attachment '%s' whose resolved path escapes project dir",
+            file_name,
+        )
+        return False
 
     if not force and dest_path.exists():
         return True
@@ -176,12 +199,20 @@ def _download_attachment_file(
             for chunk in chunks:
                 f.write(chunk)
         return True
-    except Exception as e:
+    except (ApiError, OSError) as e:
         console.print(
             f"[yellow]Warning: failed to download attachment '{file_name}' "
             f"for {entity_type} {entity_id}: {e}[/yellow]"
         )
         return False
+    except Exception:
+        LOGGER.exception(
+            "Unexpected error downloading attachment '%s' for %s %s",
+            file_name,
+            entity_type,
+            entity_id,
+        )
+        raise
 
 
 def export_traces(
@@ -199,9 +230,15 @@ def export_traces(
     include_attachments: bool = True,
 ) -> tuple[int, int, bool]:
     """Download traces and their spans with pagination support for large projects."""
-    att_client: Optional[AttachmentClient] = (
-        client.get_attachment_client() if include_attachments else None
-    )
+    att_client: Optional[attachment_client.AttachmentClient] = None
+    if include_attachments:
+        try:
+            att_client = client.get_attachment_client()
+        except Exception as e:
+            LOGGER.warning(
+                "Could not initialize attachment client; attachments will be skipped: %s",
+                e,
+            )
 
     if debug:
         debug_print(
@@ -405,19 +442,29 @@ def export_traces(
 
                             # Fetch and download attachments when requested
                             attachment_metadata: list = []
+                            attachment_download_ok = True
                             if att_client is not None:
                                 span_ids = [span.id for span in spans if span.id]
                                 attachment_metadata = _fetch_attachments(
                                     att_client, project_name, trace.id, span_ids
                                 )
                                 for att in attachment_metadata:
-                                    _download_attachment_file(
+                                    if not _download_attachment_file(
                                         att_client,
                                         project_name,
                                         att,
                                         project_dir,
                                         force,
-                                    )
+                                    ):
+                                        attachment_download_ok = False
+
+                            if not attachment_download_ok:
+                                had_errors = True
+                                LOGGER.warning(
+                                    "Skipping trace %s: one or more attachment downloads failed",
+                                    trace.id,
+                                )
+                                continue
 
                             trace_data = {
                                 "trace": trace.model_dump(),
@@ -937,11 +984,7 @@ def export_project_by_name_or_id(
     default="json",
     help="Format for exporting data. Defaults to json.",
 )
-@click.option(
-    "--no-attachments",
-    is_flag=True,
-    help="Skip downloading attachment files.",
-)
+@no_attachments_option()
 @click.pass_context
 def export_project_command(
     ctx: click.Context,

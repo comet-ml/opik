@@ -155,7 +155,7 @@ def _write_attachment_file(
 
 
 class TestFetchAttachments:
-    def test_returns_trace_attachment_metadata(self):
+    def test_fetch_attachments__trace_entity__returns_metadata(self):
         att_client = _make_attachment_client(
             trace_attachments=[
                 {"file_name": "img.png", "mime_type": "image/png", "file_size": 500}
@@ -172,7 +172,7 @@ class TestFetchAttachments:
             "file_size": 500,
         }
 
-    def test_returns_span_attachment_metadata(self):
+    def test_fetch_attachments__span_entity__returns_metadata(self):
         att_client = _make_attachment_client(
             span_attachments={
                 "span-1": [
@@ -191,7 +191,7 @@ class TestFetchAttachments:
             "file_size": 200,
         }
 
-    def test_returns_both_trace_and_span_attachments(self):
+    def test_fetch_attachments__trace_and_span__returns_both(self):
         att_client = _make_attachment_client(
             trace_attachments=[{"file_name": "trace.png"}],
             span_attachments={
@@ -204,12 +204,12 @@ class TestFetchAttachments:
         types = {a["entity_type"] for a in result}
         assert types == {"trace", "span"}
 
-    def test_returns_empty_list_when_no_attachments(self):
+    def test_fetch_attachments__no_attachments__returns_empty_list(self):
         att_client = _make_attachment_client()
         result = _fetch_attachments(att_client, "proj", "trace-1", ["span-1"])
         assert result == []
 
-    def test_collects_attachments_from_multiple_spans(self):
+    def test_fetch_attachments__multiple_spans__collects_all(self):
         att_client = _make_attachment_client(
             span_attachments={
                 "span-a": [{"file_name": "a.png"}],
@@ -222,15 +222,19 @@ class TestFetchAttachments:
         file_names = {a["file_name"] for a in result}
         assert file_names == {"a.png", "b.png", "c.png"}
 
-    def test_api_error_per_entity_does_not_raise(self):
+    def test_fetch_attachments__api_error__does_not_raise(self):
+        from opik.rest_api.core.api_error import ApiError
+
         att_client = MagicMock()
-        att_client.get_attachment_list.side_effect = RuntimeError("network failure")
+        att_client.get_attachment_list.side_effect = ApiError(
+            status_code=503, body="unavailable"
+        )
 
         # Must not raise; errors are logged and the function returns what it can
         result = _fetch_attachments(att_client, "proj", "trace-1", ["span-1"])
         assert result == []
 
-    def test_calls_get_attachment_list_for_trace_and_each_span(self):
+    def test_fetch_attachments__trace_and_spans__calls_get_list_for_each(self):
         att_client = _make_attachment_client()
         _fetch_attachments(att_client, "proj", "trace-1", ["span-a", "span-b"])
 
@@ -311,7 +315,7 @@ class TestDownloadAttachmentFile:
 
     def test_returns_false_on_download_error(self, tmp_path):
         att_client = MagicMock()
-        att_client.download_attachment.side_effect = Exception("S3 unavailable")
+        att_client.download_attachment.side_effect = OSError("S3 unavailable")
 
         result = _download_attachment_file(
             att_client, "proj", self._ATT, tmp_path, force=False
@@ -500,7 +504,7 @@ class TestUploadAttachmentsForTrace:
 
         att_client.upload_attachment.assert_not_called()
 
-    def test_upload_error_does_not_raise(self, tmp_path):
+    def test_upload_error_does_not_raise__returns_false(self, tmp_path):
         att_client = MagicMock()
         att_client.upload_attachment.side_effect = Exception("upload failed")
         project_dir = tmp_path / "my-project"
@@ -514,8 +518,8 @@ class TestUploadAttachmentsForTrace:
                 "mime_type": "image/png",
             }
         ]
-        # Should not raise — errors are warnings only
-        _upload_attachments_for_trace(
+        # Should not raise — errors are warnings only; returns False to signal failure
+        result = _upload_attachments_for_trace(
             att_client,
             project_dir,
             attachments,
@@ -523,6 +527,7 @@ class TestUploadAttachmentsForTrace:
             span_id_map={},
             project_name="proj",
         )
+        assert result is False
 
     def test_skips_entries_with_missing_required_keys(self, tmp_path):
         att_client = MagicMock()

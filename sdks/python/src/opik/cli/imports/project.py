@@ -1,6 +1,7 @@
 """Project import functionality."""
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -24,6 +25,7 @@ from .utils import (
 )
 
 console = Console()
+LOGGER = logging.getLogger(__name__)
 
 
 def _upload_attachments_for_trace(
@@ -33,7 +35,7 @@ def _upload_attachments_for_trace(
     new_trace_id: str,
     span_id_map: Dict[str, str],
     project_name: str,
-) -> None:
+) -> bool:
     """Upload attachment files for an imported trace and its spans.
 
     *project_dir* is the per-project directory that contains the
@@ -45,8 +47,10 @@ def _upload_attachments_for_trace(
     - span attachments   → looked up in *span_id_map*; skipped with a
                            warning when the mapping is missing.
 
-    Individual upload failures are logged as warnings and do not raise.
+    Returns True if all uploads succeeded (or were skipped), False if any
+    upload failed. Individual failures are logged as warnings and do not raise.
     """
+    all_ok = True
     for att in attachments:
         entity_type = att.get("entity_type")
         original_entity_id = att.get("entity_id")
@@ -74,6 +78,25 @@ def _upload_attachments_for_trace(
             project_dir / "attachments" / entity_type / original_entity_id / file_name
         )
 
+        # Validate the resolved path stays inside project_dir to prevent traversal.
+        base = (project_dir / "attachments").resolve()
+        try:
+            resolved = file_path.resolve()
+        except Exception:
+            console.print(
+                f"[yellow]Warning: could not resolve path for attachment '{file_name}'; "
+                "skipping[/yellow]"
+            )
+            all_ok = False
+            continue
+        if not resolved.is_relative_to(base):
+            console.print(
+                f"[yellow]Warning: attachment '{file_name}' path escapes project dir; "
+                "skipping[/yellow]"
+            )
+            all_ok = False
+            continue
+
         if not file_path.exists():
             continue
 
@@ -91,6 +114,8 @@ def _upload_attachments_for_trace(
                 f"[yellow]Warning: failed to upload attachment '{file_name}' "
                 f"for {entity_type} {new_entity_id}: {e}[/yellow]"
             )
+            all_ok = False
+    return all_ok
 
 
 def import_projects_from_directory(
@@ -131,11 +156,15 @@ def import_projects_from_directory(
         # traces that were imported in a previous (interrupted) run.
         trace_id_map: Dict[str, str] = manifest.get_trace_id_map() if manifest else {}
 
-        att_client: Optional[AttachmentClient] = (
-            client.get_attachment_client()
-            if include_attachments and not dry_run
-            else None
-        )
+        att_client: Optional[AttachmentClient] = None
+        if include_attachments and not dry_run:
+            try:
+                att_client = client.get_attachment_client()
+            except Exception as e:
+                LOGGER.warning(
+                    "Could not initialize attachment client; attachments will be skipped: %s",
+                    e,
+                )
 
         for project_dir in project_dirs:
             try:
@@ -300,10 +329,11 @@ def import_projects_from_directory(
                                 span_id_map[original_span_id] = span.id
 
                         # Upload attachments while span_id_map is still populated
+                        attachment_ok = True
                         if att_client is not None:
                             attachments = trace_data.get("attachments", [])
                             if attachments:
-                                _upload_attachments_for_trace(
+                                attachment_ok = _upload_attachments_for_trace(
                                     att_client,
                                     project_dir,
                                     attachments,
@@ -311,6 +341,14 @@ def import_projects_from_directory(
                                     span_id_map,
                                     project_name,
                                 )
+
+                        if not attachment_ok:
+                            traces_errors += 1
+                            if manifest:
+                                manifest.mark_file_failed(
+                                    trace_file, "one or more attachment uploads failed"
+                                )
+                            continue
 
                         traces_imported += 1
 

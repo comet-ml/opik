@@ -28,7 +28,7 @@ from .experiment import (
 )
 from .project import export_single_project
 from .prompt import export_single_prompt
-from .utils import debug_print, print_export_summary
+from .utils import debug_print, no_attachments_option, print_export_summary
 from ..include_validation import validate_include
 
 console = Console()
@@ -604,11 +604,7 @@ def _validate_include(
     default=None,
     help="Maximum number of traces/items to export per entity.",
 )
-@click.option(
-    "--no-attachments",
-    is_flag=True,
-    help="Skip downloading attachment files.",
-)
+@no_attachments_option()
 @click.pass_context
 def export_all_command(
     ctx: click.Context,
