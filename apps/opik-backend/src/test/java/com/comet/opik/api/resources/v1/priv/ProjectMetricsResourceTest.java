@@ -4400,9 +4400,8 @@ class ProjectMetricsResourceTest {
     class CrossFilterIsolationTest {
 
         @ParameterizedTest
-        @MethodSource("oneMetricPerEntityType")
-        void shouldNotFailWhenCrossEntityFiltersArePresent(
-                MetricType metricType, Class<? extends Number> valueClass) {
+        @EnumSource(MetricType.class)
+        void shouldNotFailWhenCrossEntityFiltersArePresent(MetricType metricType) {
             mockTargetWorkspace();
             TimeInterval interval = TimeInterval.HOURLY;
             Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
@@ -4451,18 +4450,11 @@ class ProjectMetricsResourceTest {
                     .build();
 
             var response = projectMetricsResourceClient.getProjectMetrics(
-                    projectId, request, valueClass, API_KEY, WORKSPACE_NAME);
+                    projectId, request, Number.class, API_KEY, WORKSPACE_NAME);
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(metricType);
             assertThat(response.interval()).isEqualTo(interval);
-        }
-
-        static Stream<Arguments> oneMetricPerEntityType() {
-            return Stream.of(
-                    arguments(MetricType.TRACE_COUNT, Integer.class),
-                    arguments(MetricType.THREAD_COUNT, Integer.class),
-                    arguments(MetricType.SPAN_COUNT, Integer.class));
         }
     }
 }
