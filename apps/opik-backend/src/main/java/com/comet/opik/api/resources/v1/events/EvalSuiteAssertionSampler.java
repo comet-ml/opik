@@ -93,7 +93,7 @@ public class EvalSuiteAssertionSampler {
         List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators);
 
         Map<UUID, List<PreparedEvaluator>> preparedItemEvaluatorsByItemId = prefetchItemEvaluators(
-                completeTraces, tracesBatch.workspaceId());
+                completeTraces, tracesBatch.workspaceId(), tracesBatch.userName());
 
         List<TraceToScoreLlmAsJudge> messages = new ArrayList<>();
 
@@ -156,7 +156,7 @@ public class EvalSuiteAssertionSampler {
     }
 
     private Map<UUID, List<PreparedEvaluator>> prefetchItemEvaluators(
-            List<Trace> traces, String workspaceId) {
+            List<Trace> traces, String workspaceId, String userName) {
 
         var uniqueItemIds = traces.stream()
                 .map(trace -> getMetadataString(trace, "eval_suite_dataset_item_id"))
@@ -166,7 +166,7 @@ public class EvalSuiteAssertionSampler {
 
         var result = new HashMap<UUID, List<PreparedEvaluator>>();
         for (UUID itemId : uniqueItemIds) {
-            List<EvaluatorItem> evaluators = fetchItemEvaluators(itemId, workspaceId);
+            List<EvaluatorItem> evaluators = fetchItemEvaluators(itemId, workspaceId, userName);
             List<PreparedEvaluator> prepared = prepareEvaluators(evaluators);
             if (!prepared.isEmpty()) {
                 result.put(itemId, prepared);
@@ -208,12 +208,12 @@ public class EvalSuiteAssertionSampler {
         return result;
     }
 
-    private List<EvaluatorItem> fetchItemEvaluators(UUID datasetItemId, String workspaceId) {
+    private List<EvaluatorItem> fetchItemEvaluators(UUID datasetItemId, String workspaceId, String userName) {
         try {
             DatasetItem item = datasetItemService.get(datasetItemId)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, workspaceId)
-                            .put(RequestContext.USER_NAME, "system")
+                            .put(RequestContext.USER_NAME, userName)
                             .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
                     .block();
 
