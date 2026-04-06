@@ -126,7 +126,7 @@ public class LocalRunnersResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json("{}"))) {
+                .post(Entity.json(LocalRunnerHeartbeatRequest.builder().build()))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return response.readEntity(LocalRunnerHeartbeatResponse.class);
         }
@@ -269,7 +269,7 @@ public class LocalRunnersResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json("{}"));
+                .post(Entity.json(LocalRunnerHeartbeatRequest.builder().build()));
     }
 
     public Response callCreateJob(CreateLocalRunnerJobRequest request, String apiKey, String workspaceName) {
