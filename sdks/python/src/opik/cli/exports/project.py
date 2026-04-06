@@ -492,10 +492,10 @@ def export_traces(
                             if not attachment_download_ok:
                                 had_errors = True
                                 LOGGER.warning(
-                                    "Skipping trace %s: one or more attachment downloads failed",
+                                    "Trace %s: one or more attachment downloads failed; "
+                                    "writing trace with partial attachments",
                                     trace.id,
                                 )
-                                continue
 
                             trace_data = {
                                 "trace": trace.model_dump(),

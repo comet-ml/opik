@@ -1,12 +1,23 @@
 """Common utilities for import functionality."""
 
 from collections import deque
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
+import click
 import opik
 from opik.types import FeedbackScoreDict
 from rich.console import Console
 from rich.table import Table
+
+
+def no_attachments_option() -> Callable:
+    """Shared Click decorator for the ``--no-attachments`` flag."""
+    return click.option(
+        "--no-attachments",
+        is_flag=True,
+        help="Skip uploading attachment files.",
+    )
+
 
 console = Console()
 

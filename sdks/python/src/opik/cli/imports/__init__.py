@@ -15,7 +15,7 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import print_import_summary, debug_print
+from .utils import debug_print, no_attachments_option, print_import_summary
 
 console = Console()
 
@@ -394,11 +394,7 @@ def import_dataset(
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
-@click.option(
-    "--no-attachments",
-    is_flag=True,
-    help="Skip uploading attachment files.",
-)
+@no_attachments_option()
 @click.pass_context
 def import_project(
     ctx: click.Context,

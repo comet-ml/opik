@@ -273,7 +273,9 @@ class TestDownloadAttachmentFile:
         "file_size": 12,
     }
 
-    def test_writes_bytes_to_correct_path(self, tmp_path):
+    def test_download_attachment_file__single_chunk__writes_bytes_to_correct_path(
+        self, tmp_path
+    ):
         att_client = MagicMock()
         att_client.download_attachment.return_value = iter([b"hello world"])
 
@@ -286,7 +288,9 @@ class TestDownloadAttachmentFile:
         assert dest.exists()
         assert dest.read_bytes() == b"hello world"
 
-    def test_concatenates_multiple_chunks(self, tmp_path):
+    def test_download_attachment_file__multiple_chunks__concatenates_bytes(
+        self, tmp_path
+    ):
         att_client = MagicMock()
         att_client.download_attachment.return_value = iter(
             [b"chunk1", b"chunk2", b"chunk3"]
@@ -297,7 +301,9 @@ class TestDownloadAttachmentFile:
         dest = tmp_path / "attachments" / "trace" / "trace-123" / "img.png"
         assert dest.read_bytes() == b"chunk1chunk2chunk3"
 
-    def test_skips_existing_file_when_not_force(self, tmp_path):
+    def test_download_attachment_file__existing_file_no_force__skips_download(
+        self, tmp_path
+    ):
         att_client = MagicMock()
         dest = tmp_path / "attachments" / "trace" / "trace-123" / "img.png"
         dest.parent.mkdir(parents=True)
@@ -311,7 +317,9 @@ class TestDownloadAttachmentFile:
         att_client.download_attachment.assert_not_called()
         assert dest.read_bytes() == b"original"  # unchanged
 
-    def test_overwrites_existing_file_when_force(self, tmp_path):
+    def test_download_attachment_file__existing_file_with_force__overwrites(
+        self, tmp_path
+    ):
         att_client = MagicMock()
         att_client.download_attachment.return_value = iter([b"new content"])
         dest = tmp_path / "attachments" / "trace" / "trace-123" / "img.png"
@@ -326,7 +334,7 @@ class TestDownloadAttachmentFile:
         att_client.download_attachment.assert_called_once()
         assert dest.read_bytes() == b"new content"
 
-    def test_returns_false_on_download_error(self, tmp_path):
+    def test_download_attachment_file__os_error__returns_false(self, tmp_path):
         att_client = MagicMock()
         att_client.download_attachment.side_effect = OSError("S3 unavailable")
 
@@ -336,7 +344,9 @@ class TestDownloadAttachmentFile:
 
         assert result is False
 
-    def test_creates_parent_directories(self, tmp_path):
+    def test_download_attachment_file__nested_entity_id__creates_parent_directories(
+        self, tmp_path
+    ):
         att_client = MagicMock()
         att_client.download_attachment.return_value = iter([b"data"])
         att = dict(self._ATT, entity_id="a/b/c", file_name="deep.txt")
@@ -346,7 +356,9 @@ class TestDownloadAttachmentFile:
         dest = tmp_path / "attachments" / "trace" / "a/b/c" / "deep.txt"
         assert dest.exists()
 
-    def test_span_entity_type_saved_under_span_directory(self, tmp_path):
+    def test_download_attachment_file__span_entity__saved_under_span_directory(
+        self, tmp_path
+    ):
         att_client = MagicMock()
         att_client.download_attachment.return_value = iter([b"span bytes"])
         att = {

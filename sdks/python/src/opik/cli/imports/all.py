@@ -14,7 +14,7 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import debug_print, print_import_summary
+from .utils import debug_print, no_attachments_option, print_import_summary
 from ..include_validation import validate_include
 
 console = Console()
@@ -229,11 +229,7 @@ def import_all(
         f"Defaults to all: {_DEFAULT_INCLUDE}."
     ),
 )
-@click.option(
-    "--no-attachments",
-    is_flag=True,
-    help="Skip uploading attachment files.",
-)
+@no_attachments_option()
 @click.pass_context
 def import_all_command(
     ctx: click.Context,
