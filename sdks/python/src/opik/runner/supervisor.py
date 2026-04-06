@@ -56,7 +56,7 @@ class Supervisor:
 
     def __init__(
         self,
-        command: List[str],
+        command: Optional[List[str]],
         env: Dict[str, str],
         repo_root: Path,
         runner_id: str,
@@ -76,7 +76,9 @@ class Supervisor:
         self._on_child_restart = on_child_restart
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
-        if watch is None:
+        if command is None:
+            self._watch = False
+        elif watch is None:
             self._watch = not _command_has_reload(command)
         else:
             self._watch = watch
@@ -133,16 +135,22 @@ class Supervisor:
         else:
             LOGGER.info("File watcher disabled (framework handles restarts)")
 
-        with self._child_lock:
-            self._child = self._start_child()
+        if self._command is not None:
+            with self._child_lock:
+                self._child = self._start_child()
         self._send_checklist()
 
         try:
-            self._main_loop()
+            if self._command is not None:
+                self._main_loop()
+            else:
+                LOGGER.info("Running in standalone mode (no child process)")
+                self._shutdown_event.wait()
         finally:
             self._shutdown_event.set()
             self._bg_tracker.shutdown()
-            self._stop_child()
+            if self._command is not None:
+                self._stop_child()
             LOGGER.info("Supervisor shutdown complete")
 
     def _main_loop(self) -> None:
@@ -187,6 +195,7 @@ class Supervisor:
             self._send_checklist()
 
     def _start_child(self) -> subprocess.Popen:
+        assert self._command is not None
         with self._stderr_lock:
             self._stderr_buffer.clear()
         env = {**self._env, "OPIK_SUPERVISED": "true"}

@@ -5,7 +5,7 @@ import os
 import platform
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from .bridge_handlers import common
 
@@ -39,7 +39,7 @@ _CONFIGURATION_PATTERNS = [
 _ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTERNS
 
 
-def build_checklist(repo_root: Path, command: List[str]) -> Dict[str, Any]:
+def build_checklist(repo_root: Path, command: Optional[List[str]]) -> Dict[str, Any]:
     file_tree = _build_file_tree(repo_root)
     matches = _find_instrumentation(repo_root)
 
@@ -50,7 +50,7 @@ def build_checklist(repo_root: Path, command: List[str]) -> Dict[str, Any]:
     )
 
     return {
-        "command": " ".join(command),
+        "command": " ".join(command) if command else None,
         "platform": platform.system().lower(),
         "file_tree": file_tree,
         "instrumentation": {

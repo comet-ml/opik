@@ -18,13 +18,7 @@ from opik.runner.tui import RunnerTUI
 
 def _validate_command(command: Tuple[str, ...]) -> None:
     if not command:
-        click.echo(
-            "Error: Missing command.\n\n"
-            "Usage: opik connect [OPTIONS] COMMAND [ARGS]...\n\n"
-            "Example: opik connect --pair <code> python3 main.py",
-            err=True,
-        )
-        raise SystemExit(2)
+        return
 
     executable = command[0]
     resolved = executable if os.path.isfile(executable) else shutil.which(executable)
@@ -101,7 +95,7 @@ def connect(
         ]
 
         supervisor = Supervisor(
-            command=list(command),
+            command=list(command) if command else None,
             env=env,
             repo_root=Path.cwd(),
             runner_id=runner_id,
@@ -126,7 +120,8 @@ def connect(
         )
         raise SystemExit(1)
     except OSError as e:
-        click.echo(f"Error: Could not execute command '{command[0]}': {e}")
+        cmd_name = command[0] if command else "unknown"
+        click.echo(f"Error: Could not execute command '{cmd_name}': {e}")
         raise SystemExit(1)
     finally:
         client.end()
