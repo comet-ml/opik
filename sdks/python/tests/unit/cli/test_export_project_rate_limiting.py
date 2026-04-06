@@ -402,9 +402,16 @@ class TestExportTracesInterPageDelay:
                         filter_string=None,
                     )
 
-        # sleep called once after page 1 and once after page 2
-        assert mock_sleep.call_count == 2
-        mock_sleep.assert_called_with(_PAGE_FETCH_DELAY_SECONDS)
+        # sleep called once after page 1 and once after page 2.
+        # Count only calls with _PAGE_FETCH_DELAY_SECONDS to avoid counting
+        # unrelated time.sleep(0.1) calls from Opik background threads that may
+        # be alive from earlier tests in the full CI suite.
+        from unittest.mock import call as mock_call
+
+        delay_calls = mock_sleep.call_args_list.count(
+            mock_call(_PAGE_FETCH_DELAY_SECONDS)
+        )
+        assert delay_calls == 2
 
     def test_export_traces__single_partial_page__sleep_not_called(self):
         """A partial (< 100 trace) page means we're at the end — no sleep needed."""
