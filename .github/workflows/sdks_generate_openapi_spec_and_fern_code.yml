@@ -110,7 +110,17 @@ jobs:
             echo "trigger_info=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Commit files
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
@@ -120,9 +130,10 @@ jobs:
           git add sdks/code_generation/fern/openapi/openapi.yaml
           git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
           git add apps/opik-documentation/documentation/fern/docs/agent_optimization/opik_optimizer/reference.mdx
-          git commit --allow-empty -m "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
+          git commit -m "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
 
       - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
         id: create-pr
         uses: peter-evans/create-pull-request@v6
         with:
