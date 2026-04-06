@@ -51,7 +51,8 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   const { data: runnerData } = useSandboxConnectionStatus({ projectId });
 
   const isConnected = runnerData?.status === SandboxConnectionStatus.CONNECTED;
-  const isReady = isConnected && (runnerData?.agents?.length ?? 0) > 0;
+  const agentName = runnerData?.agents?.[0]?.name ?? "";
+  const isReady = isConnected && Boolean(agentName);
 
   const createJobMutation = useSandboxCreateJobMutation();
 
@@ -85,8 +86,6 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
       refetchInterval: isJobRunning ? 1000 : false,
     },
   );
-
-  const agentName = runnerData?.agents?.[0]?.name ?? "";
 
   const handleRun = (inputs: Record<string, unknown>, maskId?: string) => {
     if (!agentName) {
