@@ -1759,47 +1759,58 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             }
             // Note: when uuid_to_time is null, WITH FILL clause is omitted entirely
 
-            Optional.ofNullable(request.traceFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
-                                .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                                .ifPresent(
-                                        scoresFilters -> template.add("trace_feedback_scores_filters", scoresFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                                .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                        feedbackScoreIsEmptyFilters));
-                        filterQueryBuilder.hasGuardrailsFilter(filters)
-                                .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
-                    });
+            // OPIK-5678: each SQL prefix only has placeholders for its own entity type's filters;
+            // binding mismatched filters causes NoSuchElementException from R2DBC
+            var metricType = request.metricType();
 
-            Optional.ofNullable(request.threadFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
-                                .ifPresent(traceFilters -> template.add("trace_thread_filters", traceFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                                .ifPresent(
-                                        scoresFilters -> template.add("thread_feedback_scores_filters", scoresFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                                .ifPresent(
-                                        feedbackScoreIsEmptyFilters -> template.add(
-                                                "thread_feedback_scores_empty_filters",
-                                                feedbackScoreIsEmptyFilters));
-                    });
-
-            Optional.ofNullable(request.spanFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
-                                .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
-                                .ifPresent(
-                                        scoresFilters -> template.add("span_feedback_scores_filters", scoresFilters));
-                        filterQueryBuilder
-                                .toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
-                                .ifPresent(
-                                        feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                                feedbackScoreIsEmptyFilters));
-                    });
+            if (THREAD_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.threadFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                                    .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                                    .ifPresent(
+                                            scoresFilters -> template.add("thread_feedback_scores_filters",
+                                                    scoresFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                    .ifPresent(
+                                            feedbackScoreIsEmptyFilters -> template.add(
+                                                    "thread_feedback_scores_empty_filters",
+                                                    feedbackScoreIsEmptyFilters));
+                        });
+            } else if (SPAN_TIME_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.spanFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                                    .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                                    .ifPresent(
+                                            scoresFilters -> template.add("span_feedback_scores_filters",
+                                                    scoresFilters));
+                            filterQueryBuilder
+                                    .toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                                    .ifPresent(
+                                            feedbackScoreIsEmptyFilters -> template
+                                                    .add("feedback_scores_empty_filters",
+                                                            feedbackScoreIsEmptyFilters));
+                        });
+            } else {
+                Optional.ofNullable(request.traceFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                                    .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                                    .ifPresent(
+                                            scoresFilters -> template.add("trace_feedback_scores_filters",
+                                                    scoresFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                    .ifPresent(feedbackScoreIsEmptyFilters -> template
+                                            .add("feedback_scores_empty_filters",
+                                                    feedbackScoreIsEmptyFilters));
+                            filterQueryBuilder.hasGuardrailsFilter(filters)
+                                    .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
+                        });
+            }
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
@@ -1816,26 +1827,28 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 statement.bind("metadata_key", request.breakdown().metadataKey());
             }
 
-            Optional.ofNullable(request.traceFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                    });
-
-            Optional.ofNullable(request.threadFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                    });
-
-            Optional.ofNullable(request.spanFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
-                    });
+            if (THREAD_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.threadFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                        });
+            } else if (SPAN_TIME_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.spanFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
+                        });
+            } else {
+                Optional.ofNullable(request.traceFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                        });
+            }
 
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
@@ -1852,6 +1865,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.SPAN_AVERAGE_DURATION,
             MetricType.SPAN_COST,
             MetricType.SPAN_ERROR_RATE);
+
+    private static final Set<MetricType> THREAD_METRICS = EnumSet.of(
+            MetricType.THREAD_COUNT,
+            MetricType.THREAD_DURATION,
+            MetricType.THREAD_FEEDBACK_SCORES,
+            MetricType.THREAD_AVERAGE_DURATION,
+            MetricType.THREAD_COST);
 
     private String getTimeField(MetricType metricType) {
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";
