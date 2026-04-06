@@ -14,9 +14,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
 from opik.api_objects.attachment import client as attachment_client
+from opik import exceptions as opik_exceptions
+from opik.rate_limit import rate_limit
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
+from .._attachment_path import safe_attachment_path
 from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
@@ -134,7 +137,25 @@ def _fetch_attachments(
                         "file_size": att.file_size,
                     }
                 )
-        except (ApiError, OSError, IOError) as e:
+        except ApiError as e:
+            if e.status_code == 409:
+                pass  # Conflict — entity has no attachments or is not indexable; skip.
+            elif e.status_code == 429:
+                rate_limiter = rate_limit.parse_rate_limit(e.headers or {})
+                raise opik_exceptions.OpikCloudRequestsRateLimited(
+                    headers=e.headers or {},
+                    retry_after=rate_limiter.retry_after() if rate_limiter else 60.0,
+                )
+            else:
+                LOGGER.error(
+                    "API error fetching attachments for %s %s (status %s): %s",
+                    entity_type,
+                    entity_id,
+                    e.status_code,
+                    e,
+                )
+                raise
+        except (OSError, IOError) as e:
             LOGGER.warning(
                 "Failed to fetch attachments for %s %s: %s", entity_type, entity_id, e
             )
@@ -167,18 +188,12 @@ def _download_attachment_file(
     file_name = attachment["file_name"]
     mime_type = attachment["mime_type"]
 
-    # Sanitize file_name to a bare filename (prevents path traversal via file_name).
-    safe_file_name = Path(file_name).name
-    if not safe_file_name or safe_file_name in (".", ".."):
-        LOGGER.warning("Skipping attachment with invalid file_name: %r", file_name)
-        return False
-
-    dest_path = project_dir / "attachments" / entity_type / entity_id / safe_file_name
-
-    # Verify the resolved destination stays inside project_dir.
-    if not dest_path.resolve().is_relative_to(project_dir.resolve()):
+    dest_path = safe_attachment_path(project_dir, entity_type, entity_id, file_name)
+    if dest_path is None:
         LOGGER.warning(
-            "Skipping attachment '%s' whose resolved path escapes project dir",
+            "Skipping attachment with invalid or unsafe path: entity_type=%s entity_id=%s file_name=%r",
+            entity_type,
+            entity_id,
             file_name,
         )
         return False
@@ -199,7 +214,26 @@ def _download_attachment_file(
             for chunk in chunks:
                 f.write(chunk)
         return True
-    except (ApiError, OSError) as e:
+    except ApiError as e:
+        if e.status_code == 409:
+            return True  # Conflict — treat as already-present; no local write needed.
+        elif e.status_code == 429:
+            rate_limiter = rate_limit.parse_rate_limit(e.headers or {})
+            raise opik_exceptions.OpikCloudRequestsRateLimited(
+                headers=e.headers or {},
+                retry_after=rate_limiter.retry_after() if rate_limiter else 60.0,
+            )
+        else:
+            LOGGER.error(
+                "API error downloading attachment '%s' for %s %s (status %s): %s",
+                file_name,
+                entity_type,
+                entity_id,
+                e.status_code,
+                e,
+            )
+            raise
+    except OSError as e:
         console.print(
             f"[yellow]Warning: failed to download attachment '{file_name}' "
             f"for {entity_type} {entity_id}: {e}[/yellow]"

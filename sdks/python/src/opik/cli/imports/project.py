@@ -11,6 +11,7 @@ from opik import id_helpers
 from opik.api_objects.attachment.client import AttachmentClient
 from rich.console import Console
 
+from .._attachment_path import safe_attachment_path
 from ..migration_manifest import MigrationManifest
 from .experiment import recreate_experiments
 from .utils import (
@@ -74,25 +75,15 @@ def _upload_attachments_for_trace(
         else:
             continue
 
-        file_path = (
-            project_dir / "attachments" / entity_type / original_entity_id / file_name
+        # Use the same basename normalisation as the exporter so that files
+        # saved as e.g. "img.png" (from "dir/img.png") are found correctly.
+        file_path = safe_attachment_path(
+            project_dir, entity_type, original_entity_id, file_name
         )
-
-        # Validate the resolved path stays inside project_dir to prevent traversal.
-        base = (project_dir / "attachments").resolve()
-        try:
-            resolved = file_path.resolve()
-        except Exception:
+        if file_path is None:
             console.print(
-                f"[yellow]Warning: could not resolve path for attachment '{file_name}'; "
-                "skipping[/yellow]"
-            )
-            all_ok = False
-            continue
-        if not resolved.is_relative_to(base):
-            console.print(
-                f"[yellow]Warning: attachment '{file_name}' path escapes project dir; "
-                "skipping[/yellow]"
+                f"[yellow]Warning: attachment '{file_name}' has an invalid or unsafe "
+                "path; skipping[/yellow]"
             )
             all_ok = False
             continue

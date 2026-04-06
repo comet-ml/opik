@@ -222,7 +222,19 @@ class TestFetchAttachments:
         file_names = {a["file_name"] for a in result}
         assert file_names == {"a.png", "b.png", "c.png"}
 
-    def test_fetch_attachments__api_error__does_not_raise(self):
+    def test_fetch_attachments__conflict_409__skips_entity(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        att_client = MagicMock()
+        att_client.get_attachment_list.side_effect = ApiError(
+            status_code=409, body="conflict"
+        )
+
+        # 409 is silently skipped; the function returns what it could collect
+        result = _fetch_attachments(att_client, "proj", "trace-1", ["span-1"])
+        assert result == []
+
+    def test_fetch_attachments__unexpected_api_error__raises(self):
         from opik.rest_api.core.api_error import ApiError
 
         att_client = MagicMock()
@@ -230,9 +242,10 @@ class TestFetchAttachments:
             status_code=503, body="unavailable"
         )
 
-        # Must not raise; errors are logged and the function returns what it can
-        result = _fetch_attachments(att_client, "proj", "trace-1", ["span-1"])
-        assert result == []
+        import pytest
+
+        with pytest.raises(ApiError):
+            _fetch_attachments(att_client, "proj", "trace-1", [])
 
     def test_fetch_attachments__trace_and_spans__calls_get_list_for_each(self):
         att_client = _make_attachment_client()
@@ -357,6 +370,16 @@ class TestDownloadAttachmentFile:
 
 
 class TestUploadAttachmentsForTrace:
+    """Unit tests for the _upload_attachments_for_trace helper.
+
+    This private helper is tested directly (rather than solely via
+    import_projects_from_directory) because it contains security-critical path
+    validation logic (traversal prevention) and ID-translation rules that are
+    difficult to observe through the public API without significant fixture
+    overhead.  The integration-level behaviour (attachment uploads wired into
+    the full import flow) is covered by TestImportProjectsUploadsAttachments.
+    """
+
     def test_uploads_trace_attachment_with_new_trace_id(self, tmp_path):
         att_client = MagicMock()
         project_dir = tmp_path / "my-project"
