@@ -79,9 +79,11 @@ def _run(shutdown_event: threading.Event) -> None:
         )
         return
 
-    _print_banner(runner_id, project_name)
+    supervised = os.environ.get("OPIK_SUPERVISED") == "true"
 
-    prefixed_output.install()
+    if not supervised:
+        _print_banner(runner_id, project_name)
+        prefixed_output.install()
 
     client = Opik(_show_misconfiguration_message=False)
     api = client.rest_client
@@ -101,7 +103,8 @@ def _run(shutdown_event: threading.Event) -> None:
             request={name: _to_payload(entry) for name, entry in entrypoints.items()},
         )
 
-    LOGGER.info("Runner activated")
+    if os.environ.get("OPIK_SUPERVISED") != "true":
+        LOGGER.info("Runner activated")
 
     loop = InProcessRunnerLoop(api, runner_id, shutdown_event)
 

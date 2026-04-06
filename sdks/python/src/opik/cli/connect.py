@@ -1,3 +1,4 @@
+import logging
 import os
 import platform
 import shutil
@@ -89,6 +90,15 @@ def connect(
         tui = RunnerTUI()
         tui.start()
         tui.print_banner(runner_id, project_name)
+
+        # Suppress OPIK log lines from leaking into the TUI
+        opik_logger = logging.getLogger("opik")
+        opik_logger.handlers = [
+            h
+            for h in opik_logger.handlers
+            if not isinstance(h, logging.StreamHandler)
+            or isinstance(h, logging.FileHandler)
+        ]
 
         supervisor = Supervisor(
             command=list(command),
