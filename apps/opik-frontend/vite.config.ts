@@ -70,9 +70,9 @@ export default defineConfig(({ mode }) => {
           rewrite: (p) => p.replace(/^\/assistant-api/, ""),
         },
         "/assistant": {
-          target: `http://localhost:${assistantApiPort}`,
+          target: `http://localhost:${assistantPort}`,
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/assistant/, "/console"),
+          rewrite: (p) => p.replace(/^\/assistant/, ""),
         },
       },
     },
