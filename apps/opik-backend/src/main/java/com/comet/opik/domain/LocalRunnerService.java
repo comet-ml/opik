@@ -40,6 +40,7 @@ import org.redisson.api.RBatch;
 import org.redisson.api.RBlockingDeque;
 import org.redisson.api.RBlockingQueue;
 import org.redisson.api.RBucket;
+import org.redisson.api.RFuture;
 import org.redisson.api.RList;
 import org.redisson.api.RMap;
 import org.redisson.api.RMapReactive;
@@ -1287,10 +1288,13 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return new ValidatedJob(jobMap, fields);
     }
 
-    private Map<String, String> loadValidatedBridgeCommand(UUID runnerId, UUID commandId) {
+    private Map<String, String> loadValidatedBridgeCommand(UUID runnerId, String workspaceId, UUID commandId) {
         RMap<String, String> commandMap = redisClient.getMap(bridgeCommandKey(commandId));
         Map<String, String> fields = commandMap.readAllMap();
         if (fields.isEmpty()) {
+            throw new NotFoundException("Command not found: " + commandId);
+        }
+        if (!workspaceId.equals(fields.get(BRIDGE_FIELD_WORKSPACE_ID))) {
             throw new NotFoundException("Command not found: " + commandId);
         }
         if (!runnerId.toString().equals(fields.get(BRIDGE_FIELD_RUNNER_ID))) {
@@ -1404,11 +1408,18 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     }
                     statusBatch.execute();
 
-                    List<BridgeCommandBatchResponse.BridgeCommandItem> items = new ArrayList<>();
+                    RBatch readBatch = redisClient.createBatch();
+                    List<RFuture<Map<String, String>>> readFutures = new ArrayList<>(commandIds.size());
                     for (String cmdIdStr : commandIds) {
                         UUID commandId = UUID.fromString(cmdIdStr);
-                        Map<String, String> fields = redisClient.<String, String>getMap(
-                                bridgeCommandKey(commandId)).readAllMap();
+                        readFutures.add(readBatch.<String, String>getMap(
+                                bridgeCommandKey(commandId), StringCodec.INSTANCE).readAllMapAsync());
+                    }
+                    readBatch.execute();
+
+                    List<BridgeCommandBatchResponse.BridgeCommandItem> items = new ArrayList<>();
+                    for (var future : readFutures) {
+                        Map<String, String> fields = future.toCompletableFuture().join();
                         if (!fields.isEmpty()) {
                             items.add(buildBridgeCommandItem(fields));
                         }
@@ -1433,7 +1444,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
         validateRunnerOwnership(runnerId, workspaceId, userName);
 
-        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, commandId);
+        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, workspaceId, commandId);
 
         BridgeCommandStatus currentStatus = parseBridgeCommandStatus(fields.get(BRIDGE_FIELD_STATUS));
         if (currentStatus != null && currentStatus.isTerminal()) {
@@ -1480,7 +1491,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             @NonNull String userName, @NonNull UUID commandId) {
         validateRunnerOwnership(runnerId, workspaceId, userName);
 
-        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, commandId);
+        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, workspaceId, commandId);
 
         return buildBridgeCommand(fields);
     }
@@ -1550,7 +1561,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 (int) runnerConfig.getBridgeMaxCommandTimeout().toSeconds());
         validateRunnerOwnership(runnerId, workspaceId, userName);
 
-        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, commandId);
+        Map<String, String> fields = loadValidatedBridgeCommand(runnerId, workspaceId, commandId);
 
         BridgeCommandStatus status = parseBridgeCommandStatus(fields.get(BRIDGE_FIELD_STATUS));
         if (status != null && status.isTerminal()) {

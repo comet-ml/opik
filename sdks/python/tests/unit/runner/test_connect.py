@@ -84,11 +84,28 @@ class TestConnect:
         assert result.exit_code != 0
         assert "Could not connect to Opik at https://api.test" in result.output
 
-    def test_connect__no_command__shows_usage(self):
+    @patch("opik.cli.connect.RunnerTUI")
+    @patch("opik.cli.connect.Supervisor")
+    @patch("opik.cli.connect.Opik")
+    def test_connect__no_command__standalone_mode(
+        self, mock_opik_cls, mock_supervisor_cls, mock_tui_cls
+    ):
+        client = MagicMock()
+        api = MagicMock()
+        api.runners.connect_runner.return_value = LocalRunnerConnectResponse(
+            runner_id="r-standalone",
+            project_name="proj",
+        )
+        client.rest_client = api
+        mock_opik_cls.return_value = client
+
         runner = CliRunner()
         result = runner.invoke(cli, ["connect", "--pair", "CODE"])
-        assert result.exit_code == 2
-        assert "Missing command" in result.output
+        assert result.exit_code == 0
+
+        mock_supervisor_cls.assert_called_once()
+        call_kwargs = mock_supervisor_cls.call_args[1]
+        assert call_kwargs["command"] is None
 
     def test_connect__no_pair_code__shows_error(self):
         runner = CliRunner()
