@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ..rest_api.core.api_error import ApiError
 from .bridge_handlers import FileMutationQueue
 from .bridge_handlers.edit_file import EditFileHandler
-from .bridge_handlers.exec_command import ExecHandler
+from .bridge_handlers.exec_command import BackgroundProcessTracker, ExecHandler
 from .bridge_handlers.list_files import ListFilesHandler
 from .bridge_handlers.read_file import ReadFileHandler
 from .bridge_handlers.search_files import SearchFilesHandler
@@ -99,13 +99,14 @@ class Supervisor:
         heartbeat_thread.start()
 
         mutation_queue = FileMutationQueue()
+        self._bg_tracker = BackgroundProcessTracker()
         handlers: Dict[str, Any] = {
             "ReadFile": ReadFileHandler(self._repo_root),
             "WriteFile": WriteFileHandler(self._repo_root, mutation_queue),
             "EditFile": EditFileHandler(self._repo_root, mutation_queue),
             "ListFiles": ListFilesHandler(self._repo_root),
             "SearchFiles": SearchFilesHandler(self._repo_root),
-            "Exec": ExecHandler(self._repo_root),
+            "Exec": ExecHandler(self._repo_root, self._bg_tracker),
         }
         bridge_loop = BridgePollLoop(
             self._api,
@@ -140,6 +141,7 @@ class Supervisor:
             self._main_loop()
         finally:
             self._shutdown_event.set()
+            self._bg_tracker.shutdown()
             self._stop_child()
             LOGGER.info("Supervisor shutdown complete")
 
