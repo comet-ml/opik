@@ -15,7 +15,8 @@ public enum BridgeCommandType {
     WRITE_FILE("WriteFile"),
     EDIT_FILE("EditFile"),
     LIST_FILES("ListFiles"),
-    SEARCH_FILES("SearchFiles");
+    SEARCH_FILES("SearchFiles"),
+    EXEC("Exec");
 
     @JsonValue
     private final String value;
@@ -29,6 +30,6 @@ public enum BridgeCommandType {
     }
 
     public boolean isWriteCommand() {
-        return this == WRITE_FILE || this == EDIT_FILE;
+        return this == WRITE_FILE || this == EDIT_FILE || this == EXEC;
     }
 }

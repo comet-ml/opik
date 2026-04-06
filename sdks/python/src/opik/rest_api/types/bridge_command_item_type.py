@@ -3,5 +3,5 @@
 import typing
 
 BridgeCommandItemType = typing.Union[
-    typing.Literal["ReadFile", "WriteFile", "EditFile", "ListFiles", "SearchFiles"], typing.Any
+    typing.Literal["ReadFile", "WriteFile", "EditFile", "ListFiles", "SearchFiles", "Exec"], typing.Any
 ]

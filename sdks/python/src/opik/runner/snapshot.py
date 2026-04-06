@@ -2,6 +2,7 @@
 
 import logging
 import os
+import platform
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Set
@@ -50,6 +51,7 @@ def build_checklist(repo_root: Path, command: List[str]) -> Dict[str, Any]:
 
     return {
         "command": " ".join(command),
+        "platform": platform.system().lower(),
         "file_tree": file_tree,
         "instrumentation": {
             "tracing": has_tracing,

@@ -4034,7 +4034,6 @@ paths:
           type: string
           format: uuid
       requestBody:
-        description: Optional heartbeat body with capabilities
         content:
           application/json:
             schema:
@@ -15830,6 +15829,7 @@ components:
           - EditFile
           - ListFiles
           - SearchFiles
+          - Exec
         status:
           type: string
           enum:
@@ -16037,6 +16037,7 @@ components:
           - EditFile
           - ListFiles
           - SearchFiles
+          - Exec
         args:
           $ref: "#/components/schemas/JsonNode"
         timeout_seconds:
@@ -16111,6 +16112,7 @@ components:
           - EditFile
           - ListFiles
           - SearchFiles
+          - Exec
         args:
           $ref: "#/components/schemas/JsonNode"
         timeout_seconds:

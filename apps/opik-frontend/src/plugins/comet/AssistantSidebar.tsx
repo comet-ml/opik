@@ -262,9 +262,7 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: IS_DEV
-          ? "/assistant/shell"
-          : `${manifestBase}/${manifest.shell}`,
+        shellUrl: `${manifestBase}/${manifest.shell}`,
         version: manifest.ver,
       };
     },

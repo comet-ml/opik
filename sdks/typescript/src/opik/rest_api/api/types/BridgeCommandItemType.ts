@@ -6,5 +6,6 @@ export const BridgeCommandItemType = {
     EditFile: "EditFile",
     ListFiles: "ListFiles",
     SearchFiles: "SearchFiles",
+    Exec: "Exec",
 } as const;
 export type BridgeCommandItemType = (typeof BridgeCommandItemType)[keyof typeof BridgeCommandItemType];

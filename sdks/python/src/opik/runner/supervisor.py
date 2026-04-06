@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ..rest_api.core.api_error import ApiError
 from .bridge_handlers import FileMutationQueue
 from .bridge_handlers.edit_file import EditFileHandler
+from .bridge_handlers.exec_command import ExecHandler
 from .bridge_handlers.list_files import ListFilesHandler
 from .bridge_handlers.read_file import ReadFileHandler
 from .bridge_handlers.search_files import SearchFilesHandler
@@ -104,6 +105,7 @@ class Supervisor:
             "EditFile": EditFileHandler(self._repo_root, mutation_queue),
             "ListFiles": ListFilesHandler(self._repo_root),
             "SearchFiles": SearchFilesHandler(self._repo_root),
+            "Exec": ExecHandler(self._repo_root),
         }
         bridge_loop = BridgePollLoop(
             self._api,

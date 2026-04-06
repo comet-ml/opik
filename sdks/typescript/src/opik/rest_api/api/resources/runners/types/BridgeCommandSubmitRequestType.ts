@@ -6,6 +6,7 @@ export const BridgeCommandSubmitRequestType = {
     EditFile: "EditFile",
     ListFiles: "ListFiles",
     SearchFiles: "SearchFiles",
+    Exec: "Exec",
 } as const;
 export type BridgeCommandSubmitRequestType =
     (typeof BridgeCommandSubmitRequestType)[keyof typeof BridgeCommandSubmitRequestType];

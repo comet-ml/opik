@@ -42,6 +42,9 @@ def _build_op_summary(cmd: BridgeCommandItem) -> str:
     if cmd_type == "SearchFiles":
         pattern = args.get("pattern", "")
         return f"{label} {pattern}"
+    if cmd_type == "Exec":
+        command = args.get("command", "")
+        return f"{label} {command[:80]}"
     return label
 
 
