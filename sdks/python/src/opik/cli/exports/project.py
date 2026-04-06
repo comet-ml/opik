@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional, Set
 
 import click
+import httpx
 import tenacity
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -16,7 +17,10 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import opik
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
-from opik.rest_client_configurator.retry_decorator import _allowed_to_retry
+from opik.rest_client_configurator.retry_decorator import (
+    RETRYABLE_STATUS_CODES,
+    _allowed_to_retry,
+)
 from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
@@ -36,6 +40,10 @@ MAX_WORKERS = 3
 
 # Delay (seconds) between fetching successive pages of traces.
 _PAGE_FETCH_DELAY_SECONDS = 1.0
+
+# If this many consecutive page fetches fail (after all per-request retries),
+# abort the loop rather than endlessly skipping pages — something systemic is wrong.
+MAX_CONSECUTIVE_PAGE_FAILURES = 5
 
 # Export-specific retry: more attempts and longer waits than the default
 # SDK decorator, to survive aggressive server-side rate limiting during
@@ -74,6 +82,28 @@ _export_rest_retry = tenacity.retry(
     retry=tenacity.retry_if_exception(_allowed_to_retry),
     reraise=True,
 )
+
+
+def _print_project_export_status(
+    descriptor: str,
+    output_dir: Path,
+    exported_count: int,
+    had_errors: bool,
+) -> None:
+    """Print a consistent post-export status line for a single project."""
+    if had_errors:
+        console.print(
+            f"[yellow]Export of '{descriptor}' completed with errors — some traces may be "
+            "missing. Run the export again to download any skipped traces.[/yellow]"
+        )
+    elif exported_count > 0:
+        console.print(
+            f"[green]Successfully exported project '{descriptor}' to {output_dir}[/green]"
+        )
+    else:
+        console.print(
+            f"[yellow]Project '{descriptor}' already up to date (use --force to re-download)[/yellow]"
+        )
 
 
 def _print_oql_examples() -> None:
@@ -176,6 +206,7 @@ def export_traces(
     page_size = 100  # Fixed batch size per API request
     current_page = 1
     total_processed = 0
+    consecutive_page_failures = 0
 
     # Build the set of already-downloaded trace IDs once, before the loop.
     # Manifest DB lookup is faster and survives aborted exports; filesystem
@@ -247,7 +278,28 @@ def export_traces(
                 trace_page = _fetch_traces_page(
                     client, project_name, parsed_filter, current_page, current_page_size
                 )
-            except Exception as e:
+            except (
+                ApiError,
+                httpx.RemoteProtocolError,
+                httpx.ConnectError,
+                httpx.TimeoutException,
+            ) as e:
+                # Re-raise permanent API errors (e.g. 400, 401, 403) — these indicate
+                # a misconfiguration and skipping the page would silently hide the problem.
+                if (
+                    isinstance(e, ApiError)
+                    and e.status_code not in RETRYABLE_STATUS_CODES
+                ):
+                    raise
+                # Transient error that exhausted all retries — skip this page.
+                consecutive_page_failures += 1
+                if consecutive_page_failures >= MAX_CONSECUTIVE_PAGE_FAILURES:
+                    console.print(
+                        f"[red]{consecutive_page_failures} consecutive page fetch failures — "
+                        "aborting export. Run again to resume.[/red]"
+                    )
+                    had_errors = True
+                    break
                 console.print(
                     f"[red]Error fetching page {current_page}: {e} — skipping page and continuing.[/red]"
                 )
@@ -256,6 +308,7 @@ def export_traces(
                 time.sleep(_PAGE_FETCH_DELAY_SECONDS)
                 continue
 
+            consecutive_page_failures = 0
             traces = trace_page.content or []
             if debug:
                 debug_print(
@@ -547,19 +600,7 @@ def export_project_by_name(
         # Show export summary
         print_export_summary(stats, format)
 
-        if had_errors:
-            console.print(
-                f"[yellow]Export of '{name}' completed with errors — some traces may be missing. "
-                "Run the export again to download any skipped traces.[/yellow]"
-            )
-        elif exported_count > 0:
-            console.print(
-                f"[green]Successfully exported project '{name}' to {output_dir}[/green]"
-            )
-        else:
-            console.print(
-                f"[yellow]Project '{name}' already up to date (use --force to re-download)[/yellow]"
-            )
+        _print_project_export_status(name, output_dir, exported_count, had_errors)
 
     except ValueError as e:
         # Filter validation errors are already formatted, just exit
@@ -711,29 +752,26 @@ def export_single_project(
             manifest.complete(export_start_time)
 
         # Project export only exports traces - datasets and prompts must be exported separately
+        project_exported = 1 if (traces_exported > 0 or traces_skipped > 0) else 0
         if traces_exported > 0:
             if debug:
                 debug_print(
                     f"Exported project: {project.name} with {traces_exported} traces",
                     debug,
                 )
-            return (1, traces_exported, traces_skipped, traces_had_errors)
         elif traces_skipped > 0:
-            # Traces were skipped (already exist)
             if debug:
                 debug_print(
                     f"Project {project.name} already has {traces_skipped} trace files",
                     debug,
                 )
-            return (1, traces_exported, traces_skipped, traces_had_errors)
         else:
-            # No traces found or exported
             if debug:
                 debug_print(
                     f"No traces found in project: {project.name}",
                     debug,
                 )
-            return (1, traces_exported, traces_skipped, traces_had_errors)
+        return (project_exported, traces_exported, traces_skipped, traces_had_errors)
 
     except Exception as e:
         console.print(f"[red]Error exporting project {project.name}: {e}[/red]")
@@ -806,19 +844,12 @@ def export_project_by_name_or_id(
             }
             print_export_summary(stats, format)
 
-            if had_errors:
-                console.print(
-                    f"[yellow]Export of '{project.name}' (ID: {project.id}) completed with errors — "
-                    "some traces may be missing. Run the export again to download any skipped traces.[/yellow]"
-                )
-            elif exported_count > 0:
-                console.print(
-                    f"[green]Successfully exported project '{project.name}' (ID: {project.id}) to {output_dir}[/green]"
-                )
-            else:
-                console.print(
-                    f"[yellow]Project '{project.name}' (ID: {project.id}) already up to date (use --force to re-download)[/yellow]"
-                )
+            _print_project_export_status(
+                f"{project.name} (ID: {project.id})",
+                output_dir,
+                exported_count,
+                had_errors,
+            )
             return
 
         except ApiError as e:

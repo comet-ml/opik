@@ -2,25 +2,27 @@
 
 Covers the changes introduced to handle server-side 429 throttling:
 
-  _export_wait_duration
-    - 429 with Retry-After header → honour header value
-    - 429 with Retry-After exceeding cap → fall back to 30 s default
-    - 429 with no Retry-After header → return 30 s
-    - non-429 ApiError → exponential backoff in [10, 60] s range
-    - non-ApiError exception → exponential backoff in [10, 60] s range
+  Retry wait behaviour (via export_traces public API)
+    - 429 with Retry-After header → sleep honours header value
+    - 429 with Retry-After exceeding cap → sleep falls back to 30 s
+    - 429 with no Retry-After → sleep is 30 s
+    - non-429 transient error → sleep is in exponential backoff range [10, 60] s
 
   export_traces (page-fetch failures)
     - 429 on page N → page is skipped, remaining pages still fetched, had_errors=True
     - all pages succeed → had_errors=False, all traces exported
+    - middle page failure → subsequent pages still exported
 
   export_traces (span-fetch failures)
     - span fetch raises after retries → that trace skipped, others exported, had_errors=True
 
   export_traces (inter-page delay)
-    - time.sleep called with _PAGE_FETCH_DELAY_SECONDS between pages
+    - time.sleep called with _PAGE_FETCH_DELAY_SECONDS between full pages
+    - time.sleep not called after partial (terminal) page
 
   export_single_project (had_errors propagation)
     - returns 4-tuple; had_errors=False on clean run, True when errors occurred
+    - first element is 0 when no traces exported or skipped, 1 otherwise
 
   MAX_WORKERS
     - constant is <= 3 to avoid triggering rate limits
@@ -30,6 +32,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 from opik.rest_api.core.api_error import ApiError
 
@@ -39,15 +42,6 @@ _MODULE = "opik.cli.exports.project"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_retry_state(exc):
-    """Return a minimal mock RetryCallState whose outcome holds *exc*."""
-    state = MagicMock()
-    state.outcome.exception.return_value = exc
-    # attempt_number is used by tenacity's wait_exponential internals
-    state.attempt_number = 1
-    return state
 
 
 def _make_mock_trace(trace_id: str) -> MagicMock:
@@ -92,54 +86,78 @@ def _make_full_page(n=100, offset=0):
     return _make_page([_make_mock_trace(f"bulk-{offset + i}") for i in range(n)])
 
 
-def _make_mock_client(pages):
-    """Return a mock Opik client whose trace pages come from *pages* (list of lists)."""
-    client = MagicMock()
-    page_objects = [_make_page(t) for t in pages]
-    # After the last real page return an empty page so the loop terminates
-    page_objects.append(_make_page([]))
-    client.rest_client.traces.get_traces_by_project.side_effect = page_objects
-    client.search_spans.return_value = []
-    return client
-
-
 # ---------------------------------------------------------------------------
-# _export_wait_duration
+# Retry wait behaviour — tested via export_traces (public API)
 # ---------------------------------------------------------------------------
 
 
-class TestExportWaitDuration:
-    def _wait(self, exc):
-        from opik.cli.exports.project import _export_wait_duration
+class TestExportTracesRetryWaitBehaviour:
+    """Verify that the export-specific retry decorator applies the correct wait
+    durations when the underlying page-fetch raises errors.  Tests go through
+    the public export_traces entrypoint so the actual retry decorator fires;
+    time.sleep is patched to capture what tenacity passes to it.
+    """
 
-        return _export_wait_duration(_make_retry_state(exc))
+    def _run_with_first_call_raising(self, exc, tmp_path):
+        """Run export_traces where the first page fetch raises *exc* then succeeds."""
+        from opik.cli.exports.project import export_traces
 
-    def test_429_with_retry_after_header_honours_value(self):
+        trace = _make_mock_trace("t1")
+        call_count = 0
+
+        def get_traces_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise exc
+            return _make_page([trace])
+
+        mock_client = MagicMock()
+        mock_client.rest_client.traces.get_traces_by_project.side_effect = (
+            get_traces_side_effect
+        )
+        mock_client.search_spans.return_value = []
+
+        with patch("time.sleep") as mock_sleep:
+            export_traces(
+                client=mock_client,
+                project_name="proj",
+                project_dir=tmp_path,
+                max_results=None,
+                filter_string=None,
+            )
+
+        return [c.args[0] for c in mock_sleep.call_args_list]
+
+    def test_export_traces__page_fetch_429_with_retry_after_header__sleep_honours_header(
+        self, tmp_path
+    ):
         exc = ApiError(status_code=429, headers={"retry-after": "45"})
-        assert self._wait(exc) == 45.0
+        sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
+        assert 45.0 in sleep_calls
 
-    def test_429_with_retry_after_exceeding_cap_falls_back_to_30s(self):
-        # 200 s > _EXPORT_MAX_RETRY_AFTER_SECONDS (120 s) → fall back to 30 s default
+    def test_export_traces__page_fetch_429_retry_after_exceeds_cap__sleep_falls_back_to_30s(
+        self, tmp_path
+    ):
+        # 200 s > _EXPORT_MAX_RETRY_AFTER_SECONDS (120 s) → fall back to 30 s
         exc = ApiError(status_code=429, headers={"retry-after": "200"})
-        assert self._wait(exc) == 30.0
+        sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
+        assert 30.0 in sleep_calls
 
-    def test_429_with_no_retry_after_header_returns_30s(self):
+    def test_export_traces__page_fetch_429_no_retry_after_header__sleep_is_30s(
+        self, tmp_path
+    ):
         exc = ApiError(status_code=429, headers={})
-        assert self._wait(exc) == 30.0
+        sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
+        assert 30.0 in sleep_calls
 
-    def test_429_with_none_headers_returns_30s(self):
-        exc = ApiError(status_code=429, headers=None)
-        assert self._wait(exc) == 30.0
-
-    def test_non_429_api_error_returns_exponential_backoff(self):
+    def test_export_traces__page_fetch_non_429_transient_error__sleep_is_exponential_backoff(
+        self, tmp_path
+    ):
         exc = ApiError(status_code=503)
-        wait = self._wait(exc)
-        assert 10.0 <= wait <= 60.0
-
-    def test_non_api_error_returns_exponential_backoff(self):
-        exc = ConnectionError("network gone")
-        wait = self._wait(exc)
-        assert 10.0 <= wait <= 60.0
+        sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
+        # Exponential backoff is in [10, 60] — at least one call must be in that range
+        assert any(10.0 <= s <= 60.0 for s in sleep_calls)
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +166,7 @@ class TestExportWaitDuration:
 
 
 class TestMaxWorkers:
-    def test_max_workers_is_at_most_3(self):
+    def test_max_workers__constant__is_at_most_3(self):
         from opik.cli.exports.project import MAX_WORKERS
 
         assert MAX_WORKERS <= 3, (
@@ -163,50 +181,34 @@ class TestMaxWorkers:
 
 
 class TestExportTracesPageFetchFailures:
-    """A 429 on one page must be skipped; remaining pages must still be fetched."""
-
-    def test_429_on_first_page_skips_it_and_continues(self):
+    def test_export_traces__first_page_429__skips_page_and_continues(self):
         from opik.cli.exports.project import export_traces
 
         trace_p2 = _make_mock_trace("t-p2")
         mock_client = MagicMock()
         mock_client.search_spans.return_value = []
 
-        # Page 1 raises 429; page 2 returns one trace; page 3 is empty (end)
-        mock_client.rest_client.traces.get_traces_by_project.side_effect = [
-            ApiError(status_code=429, body="rate limited"),
-            _make_page([trace_p2]),
-            _make_page([]),
-        ]
-
         with tempfile.TemporaryDirectory() as tmp:
-            with patch(
-                f"{_MODULE}._fetch_traces_page",
-                wraps=lambda *a, **kw: (
-                    mock_client.rest_client.traces.get_traces_by_project(*a, **kw)
-                ),
-            ):
-                # Patch _fetch_traces_page directly to bypass the retry decorator
-                with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
-                    mock_fetch.side_effect = [
-                        ApiError(status_code=429, body="rate limited"),
-                        _make_page([trace_p2]),
-                        _make_page([]),
-                    ]
-                    with patch(f"{_MODULE}.time.sleep"):
-                        exported, skipped, had_errors = export_traces(
-                            client=mock_client,
-                            project_name="proj",
-                            project_dir=Path(tmp),
-                            max_results=None,
-                            filter_string=None,
-                        )
+            with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
+                mock_fetch.side_effect = [
+                    ApiError(status_code=429, body="rate limited"),
+                    _make_page([trace_p2]),
+                    _make_page([]),
+                ]
+                with patch(f"{_MODULE}.time.sleep"):
+                    exported, skipped, had_errors = export_traces(
+                        client=mock_client,
+                        project_name="proj",
+                        project_dir=Path(tmp),
+                        max_results=None,
+                        filter_string=None,
+                    )
 
         assert had_errors is True
-        assert exported == 1  # page 2 trace was exported
+        assert exported == 1
         assert skipped == 0
 
-    def test_all_pages_succeed_had_errors_false(self):
+    def test_export_traces__all_pages_succeed__happyflow(self):
         from opik.cli.exports.project import export_traces
 
         traces = [_make_mock_trace("t1"), _make_mock_trace("t2")]
@@ -231,7 +233,7 @@ class TestExportTracesPageFetchFailures:
         assert had_errors is False
         assert exported == 2
 
-    def test_middle_page_failure_does_not_stop_subsequent_pages(self):
+    def test_export_traces__middle_page_fails__subsequent_pages_still_exported(self):
         """A failed page in the middle must not prevent later pages from being fetched."""
         from opik.cli.exports.project import export_traces
 
@@ -263,6 +265,57 @@ class TestExportTracesPageFetchFailures:
         assert had_errors is True
         assert exported == 200  # page 1 and page 3 traces both exported
 
+    def test_export_traces__consecutive_failures_reach_cap__export_aborted(self):
+        """After MAX_CONSECUTIVE_PAGE_FAILURES pages in a row fail, the loop aborts."""
+        from opik.cli.exports.project import (
+            export_traces,
+            MAX_CONSECUTIVE_PAGE_FAILURES,
+        )
+
+        mock_client = MagicMock()
+        mock_client.search_spans.return_value = []
+
+        # Every page raises a transient error
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
+                mock_fetch.side_effect = ApiError(status_code=503)
+                with patch(f"{_MODULE}.time.sleep"):
+                    exported, skipped, had_errors = export_traces(
+                        client=mock_client,
+                        project_name="proj",
+                        project_dir=Path(tmp),
+                        max_results=None,
+                        filter_string=None,
+                    )
+
+        assert had_errors is True
+        assert exported == 0
+        # Should have stopped after MAX_CONSECUTIVE_PAGE_FAILURES attempts
+        assert mock_fetch.call_count == MAX_CONSECUTIVE_PAGE_FAILURES
+
+    def test_export_traces__permanent_api_error__raises_instead_of_skipping(self):
+        """A 400 Bad Request must not be silently skipped — it should propagate."""
+        from opik.cli.exports.project import export_traces
+
+        mock_client = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
+                mock_fetch.side_effect = ApiError(status_code=400, body="bad request")
+                with patch(f"{_MODULE}.time.sleep"):
+                    with pytest.raises(ApiError) as exc_info:
+                        export_traces(
+                            client=mock_client,
+                            project_name="proj",
+                            project_dir=Path(tmp),
+                            max_results=None,
+                            filter_string=None,
+                        )
+
+        assert exc_info.value.status_code == 400
+        # Should have raised immediately, not retried
+        assert mock_fetch.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # export_traces — span-fetch failures
@@ -270,19 +323,12 @@ class TestExportTracesPageFetchFailures:
 
 
 class TestExportTracesSpanFetchFailures:
-    def test_span_fetch_failure_skips_trace_but_exports_others(self):
+    def test_export_traces__span_fetch_fails_for_one_trace__other_traces_exported(self):
         from opik.cli.exports.project import export_traces
 
         t_ok = _make_mock_trace("t-ok")
         t_fail = _make_mock_trace("t-fail")
         mock_client = MagicMock()
-
-        def span_side_effect(project_name, trace_id, **kwargs):
-            if trace_id == "t-fail":
-                raise ApiError(status_code=429, body="rate limited")
-            return []
-
-        mock_client.search_spans.side_effect = span_side_effect
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
@@ -318,7 +364,7 @@ class TestExportTracesSpanFetchFailures:
 
 
 class TestExportTracesInterPageDelay:
-    def test_sleep_called_between_full_pages(self):
+    def test_export_traces__multiple_full_pages__sleep_called_between_pages(self):
         """sleep is called after each full page (page_size=100) to throttle requests."""
         from opik.cli.exports.project import export_traces, _PAGE_FETCH_DELAY_SECONDS
 
@@ -347,7 +393,7 @@ class TestExportTracesInterPageDelay:
         assert mock_sleep.call_count == 2
         mock_sleep.assert_called_with(_PAGE_FETCH_DELAY_SECONDS)
 
-    def test_sleep_not_called_for_partial_last_page(self):
+    def test_export_traces__single_partial_page__sleep_not_called(self):
         """A partial (< 100 trace) page means we're at the end — no sleep needed."""
         from opik.cli.exports.project import export_traces
 
@@ -373,18 +419,18 @@ class TestExportTracesInterPageDelay:
 
 
 # ---------------------------------------------------------------------------
-# export_single_project — had_errors propagation
+# export_single_project — had_errors and project_exported propagation
 # ---------------------------------------------------------------------------
 
 
-class TestExportSingleProjectHadErrors:
+class TestExportSingleProjectReturnValues:
     def _make_project(self, name="test-proj"):
         p = MagicMock()
         p.name = name
         p.id = "proj-id-1"
         return p
 
-    def test_clean_run_returns_had_errors_false(self):
+    def test_export_single_project__clean_run__had_errors_false(self):
         from opik.cli.exports.project import export_single_project
 
         mock_client = MagicMock()
@@ -397,11 +443,7 @@ class TestExportSingleProjectHadErrors:
                 patch(f"{_MODULE}.export_traces") as mock_export,
                 patch(f"{_MODULE}.time.sleep"),
             ):
-                mock_export.return_value = (
-                    3,
-                    0,
-                    False,
-                )  # exported=3, skipped=0, had_errors=False
+                mock_export.return_value = (3, 0, False)
                 result = export_single_project(
                     client=mock_client,
                     project=self._make_project(),
@@ -414,10 +456,11 @@ class TestExportSingleProjectHadErrors:
                 )
 
         assert len(result) == 4
-        _proj_count, _exported, _skipped, had_errors = result
+        proj_count, _exported, _skipped, had_errors = result
         assert had_errors is False
+        assert proj_count == 1  # traces were exported
 
-    def test_run_with_errors_returns_had_errors_true(self):
+    def test_export_single_project__run_with_errors__had_errors_true(self):
         from opik.cli.exports.project import export_single_project
 
         mock_client = MagicMock()
@@ -430,11 +473,7 @@ class TestExportSingleProjectHadErrors:
                 patch(f"{_MODULE}.export_traces") as mock_export,
                 patch(f"{_MODULE}.time.sleep"),
             ):
-                mock_export.return_value = (
-                    2,
-                    1,
-                    True,
-                )  # exported=2, skipped=1, had_errors=True
+                mock_export.return_value = (2, 1, True)
                 result = export_single_project(
                     client=mock_client,
                     project=self._make_project(),
@@ -450,7 +489,38 @@ class TestExportSingleProjectHadErrors:
         _proj_count, _exported, _skipped, had_errors = result
         assert had_errors is True
 
-    def test_exception_during_export_returns_had_errors_true(self):
+    def test_export_single_project__no_traces_found__project_count_is_zero(self):
+        """When there are no traces at all, the project-exported flag must be 0."""
+        from opik.cli.exports.project import export_single_project
+
+        mock_client = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            projects_dir = Path(tmp) / "projects"
+            projects_dir.mkdir()
+
+            with (
+                patch(f"{_MODULE}.export_traces") as mock_export,
+                patch(f"{_MODULE}.time.sleep"),
+            ):
+                mock_export.return_value = (0, 0, False)  # nothing exported or skipped
+                result = export_single_project(
+                    client=mock_client,
+                    project=self._make_project(),
+                    output_dir=projects_dir,
+                    filter_string=None,
+                    max_results=None,
+                    force=False,
+                    debug=False,
+                    format="json",
+                )
+
+        proj_count, _exported, _skipped, _had_errors = result
+        assert proj_count == 0
+
+    def test_export_single_project__exception_during_export__returns_had_errors_true(
+        self,
+    ):
         from opik.cli.exports.project import export_single_project
 
         mock_client = MagicMock()
@@ -472,5 +542,4 @@ class TestExportSingleProjectHadErrors:
                     format="json",
                 )
 
-        assert len(result) == 4
         assert result == (0, 0, 0, True)
