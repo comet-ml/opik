@@ -105,6 +105,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             try {
+                // When scoreNameMapping is null (regular online scoring), names pass through unchanged.
+                // When categoryName is null, scores default to the standard feedback_scores table.
                 List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
                         .map(item -> {
                             String scoreName = item.name();

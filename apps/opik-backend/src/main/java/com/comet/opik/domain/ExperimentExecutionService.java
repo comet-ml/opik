@@ -13,6 +13,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,9 +29,10 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class ExperimentExecutionService {
 
+    /** Default fallback; prefer dataset-specific value when available */
     private static final int DEFAULT_RUNS_PER_ITEM = 1;
     private static final int MAX_CONCURRENT_ITEMS = 5;
-    private static final String DEFAULT_PROJECT_NAME = "playground";
+    private static final String PLAYGROUND_PROJECT_NAME = "playground";
 
     private final ExperimentService experimentService;
     private final DatasetItemService datasetItemService;
@@ -63,7 +65,7 @@ public class ExperimentExecutionService {
             @NonNull String workspaceId,
             @NonNull String userName) {
 
-        String projectName = request.projectName() != null ? request.projectName() : DEFAULT_PROJECT_NAME;
+        String projectName = request.projectName() != null ? request.projectName() : PLAYGROUND_PROJECT_NAME;
 
         List<DatasetItem> datasetItems = fetchAllDatasetItems(request, workspaceId, userName);
 
@@ -76,7 +78,11 @@ public class ExperimentExecutionService {
                     .build();
         }
 
-        ExecutionPolicy versionExecutionPolicy = fetchVersionExecutionPolicy(
+        if (request.datasetId() == null) {
+            throw new BadRequestException("Dataset ID is required for experiment execution");
+        }
+
+        ExecutionPolicy datasetExecutionPolicy = fetchDatasetExecutionPolicy(
                 request.datasetId(), request.versionHash(), workspaceId);
 
         List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = new ArrayList<>();
@@ -119,10 +125,10 @@ public class ExperimentExecutionService {
                     .build());
         }
 
-        int totalItems = calculateTotalItems(datasetItems, versionExecutionPolicy, request.prompts().size());
+        int totalItems = calculateTotalItems(datasetItems, datasetExecutionPolicy, request.prompts().size());
 
         dispatchAsyncProcessing(request, datasetItems, experimentIds,
-                versionExecutionPolicy, projectName, workspaceId, userName);
+                datasetExecutionPolicy, projectName, workspaceId, userName);
 
         log.info("Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
                 experimentIds.size(), totalItems, request.datasetName(), workspaceId);
@@ -137,6 +143,7 @@ public class ExperimentExecutionService {
             String workspaceId, String userName) {
         var streamRequest = DatasetItemStreamRequest.builder()
                 .datasetName(request.datasetName())
+                .datasetVersion(request.versionHash())
                 .build();
 
         return datasetItemService.getItems(workspaceId, streamRequest, List.of())
@@ -148,10 +155,7 @@ public class ExperimentExecutionService {
                 .block();
     }
 
-    private ExecutionPolicy fetchVersionExecutionPolicy(UUID datasetId, String versionHash, String workspaceId) {
-        if (datasetId == null) {
-            return null;
-        }
+    private ExecutionPolicy fetchDatasetExecutionPolicy(UUID datasetId, String versionHash, String workspaceId) {
         try {
             if (versionHash != null) {
                 var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
@@ -162,8 +166,7 @@ public class ExperimentExecutionService {
                     .map(v -> v.executionPolicy())
                     .orElse(null);
         } catch (Exception e) {
-            log.warn("Failed to fetch version execution policy for dataset '{}': '{}'",
-                    datasetId, e.getMessage());
+            log.warn("Failed to fetch dataset execution policy for dataset '{}'", datasetId, e);
             return null;
         }
     }
@@ -191,7 +194,7 @@ public class ExperimentExecutionService {
             ExperimentExecutionRequest request,
             List<DatasetItem> datasetItems,
             List<UUID> experimentIds,
-            ExecutionPolicy versionExecutionPolicy,
+            ExecutionPolicy datasetExecutionPolicy,
             String projectName,
             String workspaceId,
             String userName) {
@@ -199,7 +202,7 @@ public class ExperimentExecutionService {
         var futures = new ArrayList<CompletableFuture<Void>>();
 
         for (DatasetItem item : datasetItems) {
-            int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), versionExecutionPolicy);
+            int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
 
             for (int run = 0; run < runsPerItem; run++) {
                 for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
@@ -213,8 +216,8 @@ public class ExperimentExecutionService {
                                     request.datasetId(), request.versionHash(),
                                     projectName, workspaceId, userName);
                         } catch (Exception e) {
-                            log.error("Failed to process item '{}' for experiment '{}': '{}'",
-                                    item.id(), experimentId, e.getMessage(), e);
+                            log.error("Failed to process item '{}' for experiment '{}'",
+                                    item.id(), experimentId, e);
                         }
                     }, executorService));
                 }
@@ -224,13 +227,13 @@ public class ExperimentExecutionService {
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .whenComplete((v, ex) -> {
                     if (ex != null) {
-                        log.error("Unexpected error during experiment processing: '{}'",
-                                ex.getMessage(), ex);
+                        log.error("Unexpected error during experiment processing", ex);
                     }
                     finishExperiments(experimentIds, workspaceId, userName);
                 });
     }
 
+    /** userName is required for audit context in the reactive pipeline */
     private void finishExperiments(List<UUID> experimentIds, String workspaceId, String userName) {
         try {
             java.util.function.Function<reactor.util.context.Context, reactor.util.context.Context> reactorContext = ctx -> ctx
@@ -254,7 +257,7 @@ public class ExperimentExecutionService {
                     .block();
             log.info("Finished '{}' experiments", experimentIds.size());
         } catch (Exception e) {
-            log.error("Failed to finish experiments: '{}'", e.getMessage(), e);
+            log.error("Failed to finish experiments", e);
         }
     }
 }

@@ -21,6 +21,7 @@ import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
@@ -32,34 +33,18 @@ import java.util.UUID;
 
 @Singleton
 @Slf4j
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class ExperimentItemProcessor {
 
     private static final String TRACE_SPAN_NAME = "chat_completion_create";
 
-    private final ChatCompletionService chatCompletionService;
-    private final LlmProviderFactory llmProviderFactory;
-    private final TraceService traceService;
-    private final SpanService spanService;
-    private final ExperimentItemService experimentItemService;
-    private final IdGenerator idGenerator;
-    private final MustacheParser mustacheParser;
-
-    @Inject
-    public ExperimentItemProcessor(
-            @NonNull ChatCompletionService chatCompletionService,
-            @NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull TraceService traceService,
-            @NonNull SpanService spanService,
-            @NonNull ExperimentItemService experimentItemService,
-            @NonNull IdGenerator idGenerator) {
-        this.chatCompletionService = chatCompletionService;
-        this.llmProviderFactory = llmProviderFactory;
-        this.traceService = traceService;
-        this.spanService = spanService;
-        this.experimentItemService = experimentItemService;
-        this.idGenerator = idGenerator;
-        this.mustacheParser = new MustacheParser();
-    }
+    private final @NonNull ChatCompletionService chatCompletionService;
+    private final @NonNull LlmProviderFactory llmProviderFactory;
+    private final @NonNull TraceService traceService;
+    private final @NonNull SpanService spanService;
+    private final @NonNull ExperimentItemService experimentItemService;
+    private final @NonNull IdGenerator idGenerator;
+    private final MustacheParser mustacheParser = new MustacheParser();
 
     public void process(
             @NonNull ExperimentExecutionRequest.PromptVariant prompt,
@@ -85,8 +70,8 @@ public class ExperimentItemProcessor {
             var chatRequest = buildChatCompletionRequest(prompt, renderedMessages);
             llmResponse = chatCompletionService.create(chatRequest, workspaceId);
         } catch (Exception e) {
-            log.warn("LLM call failed for experiment '{}', dataset item '{}': '{}'",
-                    experimentId, datasetItem.id(), e.getMessage());
+            log.warn("LLM call failed for experiment '{}', dataset item '{}'",
+                    experimentId, datasetItem.id(), e);
             errorMessage = e.getMessage();
         }
 
@@ -102,17 +87,13 @@ public class ExperimentItemProcessor {
     }
 
     private Map<String, Object> buildTemplateContext(DatasetItem datasetItem) {
-        var context = new HashMap<String, Object>();
-        if (datasetItem.data() != null) {
-            for (var entry : datasetItem.data().entrySet()) {
-                JsonNode value = entry.getValue();
-                if (value.isTextual()) {
-                    context.put(entry.getKey(), value.asText());
-                } else {
-                    context.put(entry.getKey(), value.toString());
-                }
-            }
+        if (datasetItem.data() == null) {
+            return Map.of();
         }
+        // Mustache context requires String values; JsonNode must be converted
+        var context = new HashMap<String, Object>();
+        datasetItem.data().forEach((key, value) -> context.put(key,
+                value.isTextual() ? value.asText() : value.toString()));
         return context;
     }
 
@@ -163,7 +144,7 @@ public class ExperimentItemProcessor {
             List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages) {
 
         List<Message> messages = renderedMessages.stream()
-                .map(this::toOpenAiMessage)
+                .map(this::toLangChain4jMessage)
                 .toList();
 
         var builder = ChatCompletionRequest.builder()
@@ -178,7 +159,7 @@ public class ExperimentItemProcessor {
         return builder.build();
     }
 
-    private Message toOpenAiMessage(ExperimentExecutionRequest.PromptVariant.Message msg) {
+    private Message toLangChain4jMessage(ExperimentExecutionRequest.PromptVariant.Message msg) {
         String contentStr = msg.content().isTextual()
                 ? msg.content().asText()
                 : msg.content().toString();
@@ -212,6 +193,7 @@ public class ExperimentItemProcessor {
         };
     }
 
+    /** Config keys use camelCase matching the frontend form field names */
     private void applyConfigs(ChatCompletionRequest.Builder builder, Map<String, JsonNode> configs) {
         var temperature = configs.get("temperature");
         if (temperature != null && temperature.isNumber()) {
@@ -239,13 +221,8 @@ public class ExperimentItemProcessor {
         }
     }
 
-    private void createTrace(UUID traceId, String projectName,
-            List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages,
-            ChatCompletionResponse llmResponse, String errorMessage,
-            Instant startTime, Instant endTime,
-            UUID datasetId, String versionHash, UUID datasetItemId,
-            String workspaceId, String userName) {
-
+    private ObjectNode buildMessagesInput(
+            List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages) {
         ObjectNode input = JsonUtils.createObjectNode();
         var messagesArray = JsonUtils.getMapper().createArrayNode();
         for (var msg : renderedMessages) {
@@ -255,7 +232,10 @@ public class ExperimentItemProcessor {
             messagesArray.add(msgNode);
         }
         input.set("messages", messagesArray);
+        return input;
+    }
 
+    private ObjectNode buildLlmOutput(ChatCompletionResponse llmResponse) {
         ObjectNode output = JsonUtils.createObjectNode();
         if (llmResponse != null && llmResponse.choices() != null && !llmResponse.choices().isEmpty()) {
             var choice = llmResponse.choices().getFirst();
@@ -263,6 +243,18 @@ public class ExperimentItemProcessor {
                 output.put("output", choice.message().content());
             }
         }
+        return output;
+    }
+
+    private void createTrace(UUID traceId, String projectName,
+            List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages,
+            ChatCompletionResponse llmResponse, String errorMessage,
+            Instant startTime, Instant endTime,
+            UUID datasetId, String versionHash, UUID datasetItemId,
+            String workspaceId, String userName) {
+
+        ObjectNode input = buildMessagesInput(renderedMessages);
+        ObjectNode output = buildLlmOutput(llmResponse);
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
@@ -299,23 +291,8 @@ public class ExperimentItemProcessor {
             Instant startTime, Instant endTime,
             String workspaceId, String userName) {
 
-        ObjectNode input = JsonUtils.createObjectNode();
-        var messagesArray = JsonUtils.getMapper().createArrayNode();
-        for (var msg : renderedMessages) {
-            var msgNode = JsonUtils.createObjectNode();
-            msgNode.put("role", msg.role());
-            msgNode.set("content", msg.content());
-            messagesArray.add(msgNode);
-        }
-        input.set("messages", messagesArray);
-
-        ObjectNode output = JsonUtils.createObjectNode();
-        if (llmResponse != null && llmResponse.choices() != null && !llmResponse.choices().isEmpty()) {
-            var choice = llmResponse.choices().getFirst();
-            if (choice.message() != null && choice.message().content() != null) {
-                output.put("output", choice.message().content());
-            }
-        }
+        ObjectNode input = buildMessagesInput(renderedMessages);
+        ObjectNode output = buildLlmOutput(llmResponse);
 
         Map<String, Integer> usage = null;
         if (llmResponse != null && llmResponse.usage() != null) {

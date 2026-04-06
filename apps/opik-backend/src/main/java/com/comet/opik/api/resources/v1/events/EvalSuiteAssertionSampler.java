@@ -13,6 +13,7 @@ import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -20,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
@@ -37,31 +39,23 @@ import java.util.stream.Collectors;
  * dataset version (default evaluators), then enqueues them for LLM-as-judge evaluation
  * via the same Redis pipeline used by online scoring.
  *
- * Evaluator resolution follows the SDK pattern:
+ * Evaluator resolution:
  * - Dataset version evaluators apply to all items
  * - Each dataset item can have additional evaluators
- * - Both are concatenated for the final evaluator set (not replaced)
+ * - Both are concatenated for the final evaluator set
  */
 @EagerSingleton
 @Slf4j
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class EvalSuiteAssertionSampler {
 
     private static final String DEFAULT_MODEL_NAME = "gpt-5-nano";
     private static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
 
-    private final DatasetItemService datasetItemService;
-    private final DatasetVersionService datasetVersionService;
-    private final OnlineScorePublisher onlineScorePublisher;
-
-    @Inject
-    public EvalSuiteAssertionSampler(
-            @NonNull DatasetItemService datasetItemService,
-            @NonNull DatasetVersionService datasetVersionService,
-            @NonNull OnlineScorePublisher onlineScorePublisher) {
-        this.datasetItemService = datasetItemService;
-        this.datasetVersionService = datasetVersionService;
-        this.onlineScorePublisher = onlineScorePublisher;
-    }
+    private final @NonNull DatasetItemService datasetItemService;
+    private final @NonNull DatasetVersionService datasetVersionService;
+    private final @NonNull OnlineScorePublisher onlineScorePublisher;
+    private final @NonNull IdGenerator idGenerator;
 
     @Subscribe
     public void onTracesCreated(TracesCreated tracesBatch) {
@@ -74,7 +68,7 @@ public class EvalSuiteAssertionSampler {
         }
 
         var firstTrace = completeTraces.getFirst();
-        var evalSuiteDatasetId = extractStringMetadata(firstTrace, "eval_suite_dataset_id");
+        var evalSuiteDatasetId = getMetadataString(firstTrace, "eval_suite_dataset_id");
 
         if (evalSuiteDatasetId.isEmpty()) {
             return;
@@ -88,75 +82,50 @@ public class EvalSuiteAssertionSampler {
             return;
         }
 
-        var evalSuiteVersionHash = extractStringMetadata(firstTrace, "eval_suite_version_hash");
+        var evalSuiteVersionHash = getMetadataString(firstTrace, "eval_suite_version_hash");
 
         log.info("Eval suite assertion evaluation triggered for dataset '{}', version hash '{}', '{}' traces",
                 datasetId, evalSuiteVersionHash.orElse("latest"), completeTraces.size());
 
-        // Fetch version-level default evaluators
-        List<EvaluatorItem> versionEvaluators = fetchVersionEvaluators(
+        List<EvaluatorItem> datasetEvaluators = fetchDatasetEvaluators(
                 datasetId, evalSuiteVersionHash.orElse(null), tracesBatch.workspaceId());
+
+        List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators);
 
         List<TraceToScoreLlmAsJudge> messages = new ArrayList<>();
 
         for (Trace trace : completeTraces) {
-            // Get per-item evaluators from the dataset item
-            var datasetItemId = extractStringMetadata(trace, "eval_suite_dataset_item_id");
-            List<EvaluatorItem> itemEvaluators = List.of();
-
-            if (datasetItemId.isPresent()) {
-                itemEvaluators = fetchItemEvaluators(
-                        UUID.fromString(datasetItemId.get()), tracesBatch.workspaceId());
-            }
-
-            // Concatenate: version-level evaluators apply to all items,
-            // item-level evaluators are additional (matching SDK behavior)
-            List<EvaluatorItem> evaluators = new ArrayList<>(versionEvaluators);
-            evaluators.addAll(itemEvaluators);
-
-            if (evaluators.isEmpty()) {
-                log.debug("No evaluators found for trace '{}', dataset item '{}'",
-                        trace.id(), datasetItemId.orElse("unknown"));
+            var datasetItemId = getMetadataString(trace, "eval_suite_dataset_item_id");
+            if (datasetItemId.isEmpty()) {
+                log.debug("Skipping trace '{}' — no eval_suite_dataset_item_id in metadata", trace.id());
                 continue;
             }
 
-            for (EvaluatorItem evaluator : evaluators) {
-                if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
-                    log.debug("Skipping non-LLM evaluator '{}' of type '{}'", evaluator.name(), evaluator.type());
-                    continue;
-                }
+            List<EvaluatorItem> itemEvaluators = fetchItemEvaluators(
+                    UUID.fromString(datasetItemId.get()), tracesBatch.workspaceId());
 
-                try {
-                    LlmAsJudgeCode code = deserializeEvaluatorConfig(evaluator.config());
-                    code = resolveModelName(code);
-                    code = injectAssertionsVariable(code);
-                    code = convertMessagesToMustacheFormat(code);
+            List<PreparedEvaluator> allEvaluators = new ArrayList<>(preparedDatasetEvaluators);
+            allEvaluators.addAll(prepareEvaluators(itemEvaluators));
 
-                    // Map schema field names to assertion description for assertion result naming
-                    // (matches SDK behavior where assertion names are the full assertion text)
-                    Map<String, String> scoreNameMapping = code.schema() != null
-                            ? code.schema().stream()
-                                    .collect(Collectors.toMap(
-                                            LlmAsJudgeOutputSchema::name,
-                                            LlmAsJudgeOutputSchema::description))
-                            : Map.of();
+            if (allEvaluators.isEmpty()) {
+                log.debug("No evaluators found for trace '{}', dataset item '{}'",
+                        trace.id(), datasetItemId.get());
+                continue;
+            }
 
-                    var message = TraceToScoreLlmAsJudge.builder()
-                            .trace(trace)
-                            .ruleId(generateDeterministicId(evaluator.name()))
-                            .ruleName(evaluator.name())
-                            .llmAsJudgeCode(code)
-                            .workspaceId(tracesBatch.workspaceId())
-                            .userName(tracesBatch.userName())
-                            .categoryName(SUITE_ASSERTION_CATEGORY)
-                            .scoreNameMapping(scoreNameMapping)
-                            .build();
+            for (PreparedEvaluator prepared : allEvaluators) {
+                var message = TraceToScoreLlmAsJudge.builder()
+                        .trace(trace)
+                        .ruleId(idGenerator.generateId())
+                        .ruleName(prepared.name)
+                        .llmAsJudgeCode(prepared.code)
+                        .workspaceId(tracesBatch.workspaceId())
+                        .userName(tracesBatch.userName())
+                        .categoryName(SUITE_ASSERTION_CATEGORY)
+                        .scoreNameMapping(prepared.scoreNameMapping)
+                        .build();
 
-                    messages.add(message);
-                } catch (Exception e) {
-                    log.error("Failed to deserialize evaluator config for '{}': '{}'",
-                            evaluator.name(), e.getMessage(), e);
-                }
+                messages.add(message);
             }
         }
 
@@ -166,7 +135,7 @@ public class EvalSuiteAssertionSampler {
         }
     }
 
-    private List<EvaluatorItem> fetchVersionEvaluators(UUID datasetId, String versionHash, String workspaceId) {
+    private List<EvaluatorItem> fetchDatasetEvaluators(UUID datasetId, String versionHash, String workspaceId) {
         try {
             Optional<DatasetVersion> version;
             if (versionHash != null) {
@@ -180,10 +149,42 @@ public class EvalSuiteAssertionSampler {
                     .map(v -> v.evaluators() != null ? v.evaluators() : List.<EvaluatorItem>of())
                     .orElse(List.of());
         } catch (Exception e) {
-            log.error("Failed to fetch version evaluators for dataset '{}': '{}'",
-                    datasetId, e.getMessage(), e);
+            log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
             return List.of();
         }
+    }
+
+    private record PreparedEvaluator(String name, LlmAsJudgeCode code, Map<String, String> scoreNameMapping) {
+    }
+
+    private List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators) {
+        var result = new ArrayList<PreparedEvaluator>();
+        for (EvaluatorItem evaluator : evaluators) {
+            if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
+                log.debug("Skipping non-LLM evaluator '{}' of type '{}'", evaluator.name(), evaluator.type());
+                continue;
+            }
+            try {
+                LlmAsJudgeCode code = deserializeEvaluatorConfig(evaluator.config());
+                code = resolveModelName(code);
+                code = injectAssertionsVariable(code);
+                code = convertMessagesToMustacheFormat(code);
+
+                Map<String, String> scoreNameMapping = code.schema() != null
+                        ? code.schema().stream()
+                                .collect(Collectors.toMap(
+                                        LlmAsJudgeOutputSchema::name,
+                                        LlmAsJudgeOutputSchema::description))
+                        : Map.of();
+
+                result.add(new PreparedEvaluator(evaluator.name(), code, scoreNameMapping));
+            } catch (java.io.UncheckedIOException e) {
+                log.error("Failed to deserialize evaluator config for '{}'", evaluator.name(), e);
+            } catch (Exception e) {
+                log.error("Failed to process evaluator '{}'", evaluator.name(), e);
+            }
+        }
+        return result;
     }
 
     private List<EvaluatorItem> fetchItemEvaluators(UUID datasetItemId, String workspaceId) {
@@ -200,8 +201,7 @@ public class EvalSuiteAssertionSampler {
             }
             return List.of();
         } catch (Exception e) {
-            log.error("Failed to fetch item evaluators for dataset item '{}': '{}'",
-                    datasetItemId, e.getMessage(), e);
+            log.error("Failed to fetch item evaluators for dataset item '{}'", datasetItemId, e);
             return List.of();
         }
     }
@@ -211,8 +211,8 @@ public class EvalSuiteAssertionSampler {
     }
 
     /**
-     * Builds assertions text from the schema field and adds it as a literal variable,
-     * matching the SDK's format_assertions() output format:
+     * Builds assertions text from the schema fields and adds it as a template variable.
+     * Format:
      * - `assertion_1`: description text
      * - `assertion_2`: description text
      */
@@ -236,16 +236,15 @@ public class EvalSuiteAssertionSampler {
     }
 
     /**
-     * Converts SDK-style Python format string templates {var} in message content
+     * Converts Python-style format string templates {var} in message content
      * to Mustache triple-brace format {{{var}}} used by OnlineScoringEngine.
-     * Triple braces prevent Mustache from HTML-escaping substituted values,
-     * which is needed because assertions text contains backticks and newlines.
+     * Triple braces prevent Mustache from HTML-escaping substituted values.
      */
     private LlmAsJudgeCode convertMessagesToMustacheFormat(LlmAsJudgeCode code) {
         var convertedMessages = code.messages().stream()
                 .map(msg -> {
                     if (msg.isStringContent()) {
-                        String converted = convertSdkTemplateToMustache(msg.asString());
+                        String converted = convertPythonTemplateToMustache(msg.asString());
                         return msg.toBuilder().content(converted).build();
                     }
                     return msg;
@@ -254,7 +253,7 @@ public class EvalSuiteAssertionSampler {
         return new LlmAsJudgeCode(code.model(), convertedMessages, code.variables(), code.schema());
     }
 
-    private static String convertSdkTemplateToMustache(String template) {
+    private static String convertPythonTemplateToMustache(String template) {
         // Match {word_chars} not preceded by { and not followed by }
         return template.replaceAll("(?<!\\{)\\{(\\w+)}(?!})", "{{{$1}}}");
     }
@@ -273,7 +272,7 @@ public class EvalSuiteAssertionSampler {
         return code;
     }
 
-    private Optional<String> extractStringMetadata(Trace trace, String key) {
+    private Optional<String> getMetadataString(Trace trace, String key) {
         return Optional.ofNullable(trace.metadata())
                 .map(metadata -> metadata.get(key))
                 .filter(JsonNode::isTextual)
@@ -281,7 +280,4 @@ public class EvalSuiteAssertionSampler {
                 .filter(s -> !s.isEmpty());
     }
 
-    private UUID generateDeterministicId(String name) {
-        return UUID.nameUUIDFromBytes(name.getBytes());
-    }
 }
