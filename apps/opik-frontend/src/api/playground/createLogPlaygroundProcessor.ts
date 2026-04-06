@@ -153,7 +153,7 @@ const getTraceFromRun = (
     trace.metadata = {
       ...trace.metadata,
       eval_suite_dataset_id: run.evalSuiteDatasetId,
-      eval_suite_version_hash: run.evalSuiteVersionHash,
+      eval_suite_dataset_version_hash: run.evalSuiteVersionHash,
       eval_suite_dataset_item_id: run.datasetItemId,
     };
   }

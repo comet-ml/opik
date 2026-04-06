@@ -260,7 +260,7 @@ public class ExperimentItemProcessor {
         metadata.put("created_from", "playground");
         metadata.put("eval_suite_dataset_id", datasetId.toString());
         if (versionHash != null) {
-            metadata.put("eval_suite_version_hash", versionHash);
+            metadata.put("eval_suite_dataset_version_hash", versionHash);
         }
         metadata.put("eval_suite_dataset_item_id", datasetItemId.toString());
 

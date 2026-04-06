@@ -82,7 +82,7 @@ public class EvalSuiteAssertionSampler {
             return;
         }
 
-        var evalSuiteVersionHash = getMetadataString(firstTrace, "eval_suite_version_hash");
+        var evalSuiteVersionHash = getMetadataString(firstTrace, "eval_suite_dataset_version_hash");
 
         log.info("Eval suite assertion evaluation triggered for dataset '{}', version hash '{}', '{}' traces",
                 datasetId, evalSuiteVersionHash.orElse("latest"), completeTraces.size());

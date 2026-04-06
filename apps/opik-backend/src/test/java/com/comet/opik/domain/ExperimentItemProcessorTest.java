@@ -195,7 +195,7 @@ class ExperimentItemProcessorTest {
 
             assertThat(metadata.get("created_from").asText()).isEqualTo("playground");
             assertThat(metadata.get("eval_suite_dataset_id").asText()).isEqualTo(datasetId.toString());
-            assertThat(metadata.get("eval_suite_version_hash").asText()).isEqualTo(versionHash);
+            assertThat(metadata.get("eval_suite_dataset_version_hash").asText()).isEqualTo(versionHash);
             assertThat(metadata.get("eval_suite_dataset_item_id").asText()).isEqualTo(datasetItemId.toString());
         }
 
@@ -559,7 +559,7 @@ class ExperimentItemProcessorTest {
             verify(traceService).create(captor.capture());
 
             var metadata = captor.getValue().metadata();
-            assertThat(metadata.has("eval_suite_version_hash")).isFalse();
+            assertThat(metadata.has("eval_suite_dataset_version_hash")).isFalse();
         }
     }
 }

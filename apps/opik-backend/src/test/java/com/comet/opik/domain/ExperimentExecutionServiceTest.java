@@ -130,6 +130,7 @@ class ExperimentExecutionServiceTest {
             var prompt2 = buildPrompt("claude-3", "Hi {{input}}");
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(prompt1, prompt2))
                     .build();
 
@@ -155,6 +156,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteSetsEvaluationSuiteMethodAndRunningStatus() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build();
 
@@ -177,6 +179,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteUsesCustomProjectNameWhenProvided() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .projectName("my-project")
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build();
@@ -197,6 +200,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteUsesDefaultProjectNameWhenNotProvided() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build();
 
@@ -221,6 +225,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteCalculatesTotalItemsWithDefaultRunsPerItem() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build();
 
@@ -300,6 +305,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteMultipliesItemsByPromptCount() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(
                             buildPrompt("gpt-4", "Hello"),
                             buildPrompt("claude-3", "Hi")))
@@ -353,22 +359,18 @@ class ExperimentExecutionServiceTest {
         }
 
         @Test
-        void createAndExecuteFallsBackToDefaultWhenNoDatasetId() {
+        void createAndExecuteThrowsWhenNoDatasetId() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build();
 
             stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
-            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
-            stubExperimentCreate();
-            stubFinishExperiments();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
-
-            assertThat(response.totalItems()).isEqualTo(1);
-            verify(datasetVersionService, never()).resolveVersionId(any(), any(), any());
-            verify(datasetVersionService, never()).getLatestVersion(any(), any());
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                    () -> service.createAndExecute(request, WORKSPACE_ID, USER_NAME))
+                    .isInstanceOf(jakarta.ws.rs.BadRequestException.class)
+                    .hasMessageContaining("Dataset ID is required");
         }
     }
 
@@ -380,6 +382,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteIncludesModelAndMessagesInMetadata() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(buildPrompt("gpt-4o", "Tell me about {{input}}")))
                     .build();
 
@@ -416,6 +419,7 @@ class ExperimentExecutionServiceTest {
 
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(prompt))
                     .build();
 
