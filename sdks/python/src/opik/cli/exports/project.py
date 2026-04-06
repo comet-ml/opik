@@ -17,10 +17,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import opik
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
-from opik.rest_client_configurator.retry_decorator import (
-    RETRYABLE_STATUS_CODES,
-    _allowed_to_retry,
-)
+from opik.rest_client_configurator import retry_decorator
 from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
@@ -79,7 +76,7 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
 _export_rest_retry = tenacity.retry(
     stop=tenacity.stop_after_attempt(8),
     wait=_export_wait_duration,
-    retry=tenacity.retry_if_exception(_allowed_to_retry),
+    retry=tenacity.retry_if_exception(retry_decorator._allowed_to_retry),
     reraise=True,
 )
 
@@ -288,7 +285,7 @@ def export_traces(
                 # a misconfiguration and skipping the page would silently hide the problem.
                 if (
                     isinstance(e, ApiError)
-                    and e.status_code not in RETRYABLE_STATUS_CODES
+                    and e.status_code not in retry_decorator.RETRYABLE_STATUS_CODES
                 ):
                     raise
                 # Transient error that exhausted all retries — skip this page.
