@@ -308,10 +308,16 @@ def _export_all_projects(
             for future in as_completed(future_to_project):
                 project = future_to_project[future]
                 try:
-                    proj_count, t_exported, t_skipped = future.result()
+                    proj_count, t_exported, t_skipped, proj_had_errors = future.result()
                     projects_exported += proj_count
                     traces_exported += t_exported
                     traces_skipped += t_skipped
+                    if proj_had_errors:
+                        had_errors = True
+                        console.print(
+                            f"[yellow]Project '{project.name}' exported with errors — "
+                            "some traces may be missing. Run the export again to fill gaps.[/yellow]"
+                        )
                 except Exception as e:
                     console.print(
                         f"[red]Error exporting project '{project.name}': {e}[/red]"

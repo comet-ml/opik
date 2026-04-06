@@ -1,6 +1,7 @@
 """Project export functionality."""
 
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
@@ -8,13 +9,14 @@ from pathlib import Path
 from typing import Any, Optional, Set
 
 import click
+import tenacity
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
-from opik.rest_client_configurator import retry_decorator
+from opik.rest_client_configurator.retry_decorator import _allowed_to_retry
 from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
@@ -29,7 +31,49 @@ from .utils import (
 console = Console()
 
 # Maximum number of concurrent workers for parallel span fetching.
-MAX_WORKERS = 10
+# Keep low to avoid hitting server-side rate limits.
+MAX_WORKERS = 3
+
+# Delay (seconds) between fetching successive pages of traces.
+_PAGE_FETCH_DELAY_SECONDS = 1.0
+
+# Export-specific retry: more attempts and longer waits than the default
+# SDK decorator, to survive aggressive server-side rate limiting during
+# bulk exports without aborting the whole operation.
+_EXPORT_MAX_RETRY_AFTER_SECONDS = 120.0
+
+
+def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
+    """Wait strategy for export retries.
+
+    Honours the server's ``Retry-After`` header for 429 responses (up to
+    ``_EXPORT_MAX_RETRY_AFTER_SECONDS``).  Falls back to a longer exponential
+    backoff than the standard SDK decorator so bulk export jobs can survive
+    sustained rate limiting without aborting.
+    """
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if isinstance(exc, ApiError) and exc.status_code == 429:
+        headers = getattr(exc, "headers", {}) or {}
+        raw = headers.get("retry-after") or headers.get("Retry-After")
+        if raw is not None:
+            try:
+                seconds = float(raw)
+                if 0 <= seconds <= _EXPORT_MAX_RETRY_AFTER_SECONDS:
+                    return seconds
+            except (ValueError, TypeError):
+                pass
+        # No header — wait 30 s before retrying a rate-limit response.
+        return 30.0
+    # Other transient errors: exponential backoff up to 60 s.
+    return tenacity.wait_exponential(multiplier=5, min=10, max=60)(retry_state)
+
+
+_export_rest_retry = tenacity.retry(
+    stop=tenacity.stop_after_attempt(8),
+    wait=_export_wait_duration,
+    retry=tenacity.retry_if_exception(_allowed_to_retry),
+    reraise=True,
+)
 
 
 def _print_oql_examples() -> None:
@@ -65,7 +109,7 @@ def _validate_filter_syntax(filter_string: str) -> None:
         raise
 
 
-@retry_decorator.opik_rest_retry
+@_export_rest_retry
 def _fetch_traces_page(
     client: opik.Opik,
     project_name: str,
@@ -73,7 +117,7 @@ def _fetch_traces_page(
     page: int,
     page_size: int,
 ) -> Any:
-    """Fetch one page of traces. Retries on 429/5xx via opik_rest_retry."""
+    """Fetch one page of traces. Retries on 429/5xx via _export_rest_retry."""
     return client.rest_client.traces.get_traces_by_project(
         project_name=project_name,
         filters=parsed_filter,
@@ -83,7 +127,7 @@ def _fetch_traces_page(
     )
 
 
-@retry_decorator.opik_rest_retry
+@_export_rest_retry
 def _fetch_spans(
     client: opik.Opik,
     trace: Any,
@@ -91,8 +135,8 @@ def _fetch_spans(
 ) -> tuple:
     """Fetch spans for a single trace. Returns (trace, spans).
 
-    Retries on transient errors (429, 5xx, network issues) via the shared
-    opik_rest_retry decorator; re-raises on permanent failures.
+    Retries on transient errors (429, 5xx, network issues) via
+    _export_rest_retry; re-raises on permanent failures.
     """
     return trace, client.search_spans(
         project_name=project_name,
@@ -199,14 +243,18 @@ def export_traces(
                     debug_print(f"DEBUG: Parsed filter to JSON: {parsed_filter}", debug)
 
             try:
-                # _fetch_traces_page retries on 429/5xx via opik_rest_retry.
+                # _fetch_traces_page retries on 429/5xx via _export_rest_retry.
                 trace_page = _fetch_traces_page(
                     client, project_name, parsed_filter, current_page, current_page_size
                 )
             except Exception as e:
-                console.print(f"[red]Error searching traces: {e}[/red]")
+                console.print(
+                    f"[red]Error fetching page {current_page}: {e} — skipping page and continuing.[/red]"
+                )
                 had_errors = True
-                break
+                current_page += 1
+                time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+                continue
 
             traces = trace_page.content or []
             if debug:
@@ -372,6 +420,9 @@ def export_traces(
             if len(traces) < current_page_size:
                 break
 
+            # Throttle page fetches to avoid triggering server-side rate limits.
+            time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+
         # Final progress update
         if exported_count == 0 and skipped_count == 0:
             console.print("[yellow]No traces found in the project.[/yellow]")
@@ -472,15 +523,17 @@ def export_project_by_name(
             debug_print(f"Found project by exact match: {matching_project.name}", debug)
 
         # Export the project
-        exported_count, traces_exported, traces_skipped = export_single_project(
-            client,
-            matching_project,
-            output_dir,
-            filter_string,
-            max_results,
-            force,
-            debug,
-            format,
+        exported_count, traces_exported, traces_skipped, had_errors = (
+            export_single_project(
+                client,
+                matching_project,
+                output_dir,
+                filter_string,
+                max_results,
+                force,
+                debug,
+                format,
+            )
         )
 
         # Collect statistics for summary using actual export counts
@@ -494,13 +547,18 @@ def export_project_by_name(
         # Show export summary
         print_export_summary(stats, format)
 
-        if exported_count > 0:
+        if had_errors:
+            console.print(
+                f"[yellow]Export of '{name}' completed with errors — some traces may be missing. "
+                "Run the export again to download any skipped traces.[/yellow]"
+            )
+        elif exported_count > 0:
             console.print(
                 f"[green]Successfully exported project '{name}' to {output_dir}[/green]"
             )
         else:
             console.print(
-                f"[yellow]Project '{name}' already exists (use --force to re-download)[/yellow]"
+                f"[yellow]Project '{name}' already up to date (use --force to re-download)[/yellow]"
             )
 
     except ValueError as e:
@@ -525,7 +583,7 @@ def export_single_project(
     debug: bool,
     format: str,
     show_progress: bool = True,
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, bool]:
     """Export a single project."""
     try:
         # Create project-specific directory for traces
@@ -659,7 +717,7 @@ def export_single_project(
                     f"Exported project: {project.name} with {traces_exported} traces",
                     debug,
                 )
-            return (1, traces_exported, traces_skipped)
+            return (1, traces_exported, traces_skipped, traces_had_errors)
         elif traces_skipped > 0:
             # Traces were skipped (already exist)
             if debug:
@@ -667,7 +725,7 @@ def export_single_project(
                     f"Project {project.name} already has {traces_skipped} trace files",
                     debug,
                 )
-            return (1, traces_exported, traces_skipped)
+            return (1, traces_exported, traces_skipped, traces_had_errors)
         else:
             # No traces found or exported
             if debug:
@@ -675,13 +733,11 @@ def export_single_project(
                     f"No traces found in project: {project.name}",
                     debug,
                 )
-            # Still return 1 to indicate the project was processed
-            # (the empty directory will remain, but that's expected if there are no traces)
-            return (1, traces_exported, traces_skipped)
+            return (1, traces_exported, traces_skipped, traces_had_errors)
 
     except Exception as e:
         console.print(f"[red]Error exporting project {project.name}: {e}[/red]")
-        return (0, 0, 0)
+        return (0, 0, 0, True)
 
 
 def export_project_by_name_or_id(
@@ -729,15 +785,17 @@ def export_project_by_name_or_id(
                 )
 
             # Export the project
-            exported_count, traces_exported, traces_skipped = export_single_project(
-                client,
-                project,
-                output_dir,
-                filter_string,
-                max_results,
-                force,
-                debug,
-                format,
+            exported_count, traces_exported, traces_skipped, had_errors = (
+                export_single_project(
+                    client,
+                    project,
+                    output_dir,
+                    filter_string,
+                    max_results,
+                    force,
+                    debug,
+                    format,
+                )
             )
 
             # Show export summary
@@ -748,13 +806,18 @@ def export_project_by_name_or_id(
             }
             print_export_summary(stats, format)
 
-            if exported_count > 0:
+            if had_errors:
+                console.print(
+                    f"[yellow]Export of '{project.name}' (ID: {project.id}) completed with errors — "
+                    "some traces may be missing. Run the export again to download any skipped traces.[/yellow]"
+                )
+            elif exported_count > 0:
                 console.print(
                     f"[green]Successfully exported project '{project.name}' (ID: {project.id}) to {output_dir}[/green]"
                 )
             else:
                 console.print(
-                    f"[yellow]Project '{project.name}' (ID: {project.id}) already exists (use --force to re-download)[/yellow]"
+                    f"[yellow]Project '{project.name}' (ID: {project.id}) already up to date (use --force to re-download)[/yellow]"
                 )
             return
 
