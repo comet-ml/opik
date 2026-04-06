@@ -109,6 +109,29 @@ def _fetch_spans(
     )
 
 
+def _handle_attachment_api_error(e: ApiError, context: str) -> None:
+    """Centralised ApiError handler for attachment operations.
+
+    - 409 Conflict: silently ignored (caller continues).
+    - 429 Too Many Requests: raises ``OpikCloudRequestsRateLimited``.
+    - All other codes: logged at ERROR level then re-raised.
+
+    *context* is a human-readable string included in log messages
+    (e.g. ``"fetching attachments for trace abc"``).
+    """
+    if e.status_code == 409:
+        return  # Conflict — skip without error.
+    elif e.status_code == 429:
+        rate_limiter = rate_limit.parse_rate_limit(e.headers or {})
+        raise opik_exceptions.OpikCloudRequestsRateLimited(
+            headers=e.headers or {},
+            retry_after=rate_limiter.retry_after() if rate_limiter else 60.0,
+        )
+    else:
+        LOGGER.error("API error %s (status %s): %s", context, e.status_code, e)
+        raise
+
+
 def _fetch_attachments(
     attachment_client: attachment_client.AttachmentClient,
     project_name: str,
@@ -138,23 +161,9 @@ def _fetch_attachments(
                     }
                 )
         except ApiError as e:
-            if e.status_code == 409:
-                pass  # Conflict — entity has no attachments or is not indexable; skip.
-            elif e.status_code == 429:
-                rate_limiter = rate_limit.parse_rate_limit(e.headers or {})
-                raise opik_exceptions.OpikCloudRequestsRateLimited(
-                    headers=e.headers or {},
-                    retry_after=rate_limiter.retry_after() if rate_limiter else 60.0,
-                )
-            else:
-                LOGGER.error(
-                    "API error fetching attachments for %s %s (status %s): %s",
-                    entity_type,
-                    entity_id,
-                    e.status_code,
-                    e,
-                )
-                raise
+            _handle_attachment_api_error(
+                e, f"fetching attachments for {entity_type} {entity_id}"
+            )
         except (OSError, IOError) as e:
             LOGGER.warning(
                 "Failed to fetch attachments for %s %s: %s", entity_type, entity_id, e
@@ -217,22 +226,10 @@ def _download_attachment_file(
     except ApiError as e:
         if e.status_code == 409:
             return True  # Conflict — treat as already-present; no local write needed.
-        elif e.status_code == 429:
-            rate_limiter = rate_limit.parse_rate_limit(e.headers or {})
-            raise opik_exceptions.OpikCloudRequestsRateLimited(
-                headers=e.headers or {},
-                retry_after=rate_limiter.retry_after() if rate_limiter else 60.0,
-            )
-        else:
-            LOGGER.error(
-                "API error downloading attachment '%s' for %s %s (status %s): %s",
-                file_name,
-                entity_type,
-                entity_id,
-                e.status_code,
-                e,
-            )
-            raise
+        _handle_attachment_api_error(
+            e, f"downloading attachment '{file_name}' for {entity_type} {entity_id}"
+        )
+        raise  # unreachable — _handle_attachment_api_error always raises for non-409
     except OSError as e:
         console.print(
             f"[yellow]Warning: failed to download attachment '{file_name}' "
