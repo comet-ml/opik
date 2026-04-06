@@ -1115,7 +1115,7 @@ export class RunnersClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}/bridge/next`,
+                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}/bridge/commands/next`,
             ),
             method: "POST",
             headers: _headers,
@@ -1163,7 +1163,7 @@ export class RunnersClient {
             _response.error,
             _response.rawResponse,
             "POST",
-            "/v1/private/local-runners/{runnerId}/bridge/next",
+            "/v1/private/local-runners/{runnerId}/bridge/commands/next",
         );
     }
 
@@ -1468,7 +1468,7 @@ export class RunnersClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}/bridge/commands/${core.url.encodePathParam(commandId)}/result`,
+                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}/bridge/commands/${core.url.encodePathParam(commandId)}/results`,
             ),
             method: "POST",
             headers: _headers,
@@ -1509,7 +1509,7 @@ export class RunnersClient {
             _response.error,
             _response.rawResponse,
             "POST",
-            "/v1/private/local-runners/{runnerId}/bridge/commands/{commandId}/result",
+            "/v1/private/local-runners/{runnerId}/bridge/commands/{commandId}/results",
         );
     }
 

@@ -804,7 +804,7 @@ class RawRunnersClient:
             Commands batch
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/next",
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/next",
             method="POST",
             json={
                 "max_commands": max_commands,
@@ -1041,7 +1041,7 @@ class RawRunnersClient:
         HttpResponse[None]
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}/result",
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}/results",
             method="POST",
             json={
                 "status": status,
@@ -2023,7 +2023,7 @@ class AsyncRawRunnersClient:
             Commands batch
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/next",
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/next",
             method="POST",
             json={
                 "max_commands": max_commands,
@@ -2260,7 +2260,7 @@ class AsyncRawRunnersClient:
         AsyncHttpResponse[None]
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}/result",
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}/results",
             method="POST",
             json={
                 "status": status,

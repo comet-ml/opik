@@ -363,7 +363,7 @@ public class LocalRunnersResource {
     }
 
     @POST
-    @Path("/{runnerId}/bridge/next")
+    @Path("/{runnerId}/bridge/commands/next")
     @Operation(operationId = "nextBridgeCommands", summary = "Poll next bridge commands", description = "Long-poll for pending bridge commands (batch)", responses = {
             @ApiResponse(responseCode = "200", description = "Commands batch", content = @Content(schema = @Schema(implementation = BridgeCommandBatchResponse.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
@@ -396,7 +396,7 @@ public class LocalRunnersResource {
     }
 
     @POST
-    @Path("/{runnerId}/bridge/commands/{commandId}/result")
+    @Path("/{runnerId}/bridge/commands/{commandId}/results")
     @Operation(operationId = "reportBridgeResult", summary = "Report bridge command result", description = "Report bridge command completion or failure", responses = {
             @ApiResponse(responseCode = "200", description = "Result accepted"),
             @ApiResponse(responseCode = "404", description = "Command not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
