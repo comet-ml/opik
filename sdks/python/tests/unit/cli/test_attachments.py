@@ -765,7 +765,7 @@ _TRACE_WITH_ATTACHMENTS = {
             "name": "child-span",
             "type": "general",
             "start_time": "2026-01-01T00:00:00Z",
-            "end_time": "2026-01-01T00:00:00.5Z",
+            "end_time": "2026-01-01T00:00:00.500000Z",
             "input": {},
             "output": {},
             "metadata": None,
