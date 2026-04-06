@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
@@ -101,11 +102,18 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           forceMount
           hidden={activeTab !== "input"}
         >
-          <AgentRunnerInputForm
-            fields={inputFields}
-            onSubmit={handleRun}
-            isRunning={isRunning}
-          />
+          {agent ? (
+            <AgentRunnerInputForm
+              fields={inputFields}
+              onSubmit={handleRun}
+              isRunning={isRunning}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-8 text-muted-slate">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <p className="comet-body-s">Loading agent...</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent
