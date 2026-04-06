@@ -16,6 +16,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
 from opik.rest_api.core.api_error import ApiError
+from opik.rest_api.core.http_client import _parse_retry_after
 from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
 from ..export_manifest import ExportManifest
@@ -59,15 +60,10 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
     exc = retry_state.outcome.exception() if retry_state.outcome else None
     if isinstance(exc, ApiError) and exc.status_code == 429:
         headers = getattr(exc, "headers", {}) or {}
-        raw = headers.get("retry-after") or headers.get("Retry-After")
-        if raw is not None:
-            try:
-                seconds = float(raw)
-                if 0 <= seconds <= _EXPORT_MAX_RETRY_AFTER_SECONDS:
-                    return seconds
-            except (ValueError, TypeError):
-                pass
-        # No header — wait 30 s before retrying a rate-limit response.
+        seconds = _parse_retry_after(httpx.Headers(headers))
+        if seconds is not None and 0 <= seconds <= _EXPORT_MAX_RETRY_AFTER_SECONDS:
+            return seconds
+        # No parseable header — wait 30 s before retrying a rate-limit response.
         return 30.0
     # Other transient errors: exponential backoff up to 60 s.
     return tenacity.wait_exponential(multiplier=5, min=10, max=60)(retry_state)

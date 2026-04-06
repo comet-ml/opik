@@ -144,6 +144,19 @@ class TestExportTracesRetryWaitBehaviour:
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
         assert 30.0 in sleep_calls
 
+    def test_export_traces__page_fetch_429_retry_after_http_date__sleep_honours_header(
+        self, tmp_path
+    ):
+        import email.utils
+        import time
+
+        # Build an HTTP-date Retry-After 60 seconds in the future.
+        future = email.utils.formatdate(timeval=time.time() + 60, usegmt=True)
+        exc = ApiError(status_code=429, headers={"retry-after": future})
+        sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
+        # Should sleep approximately 60 s (allow ±2 s for test execution time).
+        assert any(58.0 <= s <= 62.0 for s in sleep_calls)
+
     def test_export_traces__page_fetch_429_no_retry_after_header__sleep_is_30s(
         self, tmp_path
     ):
