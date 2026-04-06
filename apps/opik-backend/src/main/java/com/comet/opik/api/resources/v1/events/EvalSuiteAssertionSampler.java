@@ -92,6 +92,9 @@ public class EvalSuiteAssertionSampler {
 
         List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators);
 
+        Map<UUID, List<PreparedEvaluator>> preparedItemEvaluatorsByItemId = prefetchItemEvaluators(
+                completeTraces, tracesBatch.workspaceId());
+
         List<TraceToScoreLlmAsJudge> messages = new ArrayList<>();
 
         for (Trace trace : completeTraces) {
@@ -101,11 +104,9 @@ public class EvalSuiteAssertionSampler {
                 continue;
             }
 
-            List<EvaluatorItem> itemEvaluators = fetchItemEvaluators(
-                    UUID.fromString(datasetItemId.get()), tracesBatch.workspaceId());
-
+            UUID itemId = UUID.fromString(datasetItemId.get());
             List<PreparedEvaluator> allEvaluators = new ArrayList<>(preparedDatasetEvaluators);
-            allEvaluators.addAll(prepareEvaluators(itemEvaluators));
+            allEvaluators.addAll(preparedItemEvaluatorsByItemId.getOrDefault(itemId, List.of()));
 
             if (allEvaluators.isEmpty()) {
                 log.debug("No evaluators found for trace '{}', dataset item '{}'",
@@ -152,6 +153,26 @@ public class EvalSuiteAssertionSampler {
             log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
             return List.of();
         }
+    }
+
+    private Map<UUID, List<PreparedEvaluator>> prefetchItemEvaluators(
+            List<Trace> traces, String workspaceId) {
+
+        var uniqueItemIds = traces.stream()
+                .map(trace -> getMetadataString(trace, "eval_suite_dataset_item_id"))
+                .filter(Optional::isPresent)
+                .map(opt -> UUID.fromString(opt.get()))
+                .collect(Collectors.toSet());
+
+        var result = new HashMap<UUID, List<PreparedEvaluator>>();
+        for (UUID itemId : uniqueItemIds) {
+            List<EvaluatorItem> evaluators = fetchItemEvaluators(itemId, workspaceId);
+            List<PreparedEvaluator> prepared = prepareEvaluators(evaluators);
+            if (!prepared.isEmpty()) {
+                result.put(itemId, prepared);
+            }
+        }
+        return result;
     }
 
     private record PreparedEvaluator(String name, LlmAsJudgeCode code, Map<String, String> scoreNameMapping) {
