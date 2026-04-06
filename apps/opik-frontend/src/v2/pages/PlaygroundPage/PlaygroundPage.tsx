@@ -194,6 +194,8 @@ const PlaygroundPage = () => {
     datasetItems,
     datasetName,
     datasetVersionId: parsedVersionId || undefined,
+    datasetId: plainDatasetId || undefined,
+    versionHash: versionHash || undefined,
     projectName: activeProject?.name,
   });
 

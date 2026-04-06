@@ -106,11 +106,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             try {
                 List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
-                        .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
-                                .id(trace.id())
-                                .projectId(trace.projectId())
-                                .projectName(trace.projectName())
-                                .build())
+                        .map(item -> {
+                            String scoreName = item.name();
+                            if (message.scoreNameMapping() != null
+                                    && message.scoreNameMapping().containsKey(scoreName)) {
+                                scoreName = message.scoreNameMapping().get(scoreName);
+                            }
+                            return (FeedbackScoreBatchItem) item.toBuilder()
+                                    .name(scoreName)
+                                    .categoryName(message.categoryName())
+                                    .id(trace.id())
+                                    .projectId(trace.projectId())
+                                    .projectName(trace.projectName())
+                                    .build();
+                        })
                         .toList();
                 var loggedScores = storeScores(scores, trace, message.userName(), message.workspaceId());
                 userFacingLogger.info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores);

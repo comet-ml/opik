@@ -36,6 +36,8 @@ export const WORKSPACE_CONFIG_REST_ENDPOINT =
 export const TRACE_ANALYZER_REST_ENDPOINT = "/trace-analyzer/session/";
 export const PLAYGROUND_EVALUATION_REST_ENDPOINT =
   "/v1/private/playground/evaluations/";
+export const EXPERIMENT_EXECUTION_REST_ENDPOINT =
+  "/v1/private/experiments/execute";
 export const DASHBOARDS_REST_ENDPOINT = "/v1/private/dashboards/";
 export const INSIGHTS_VIEWS_REST_ENDPOINT = "/v1/private/insights-views/";
 export const AGENT_CONFIGS_REST_ENDPOINT = "/v1/private/agent-configs/";

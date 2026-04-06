@@ -18,6 +18,8 @@ import PlaygroundOutputColumnHeader from "@/v2/pages/PlaygroundPage/PlaygroundOu
 import PlaygroundVariableCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { useDatasetType } from "@/store/PlaygroundStore";
+import { DATASET_TYPE } from "@/types/datasets";
 import { useIncrementalDatasetHydration } from "@/v2/pages/PlaygroundPage/useIncrementalDatasetHydration";
 import PlaygroundTagsCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
 
@@ -47,6 +49,9 @@ const PlaygroundOutputTable = ({
   isLoadingDatasetItems,
   isFetchingData,
 }: PlaygroundOutputTableProps) => {
+  const datasetType = useDatasetType();
+  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
@@ -139,7 +144,9 @@ const PlaygroundOutputTable = ({
     const outputColumns = promptIds.map((promptId, promptIdx) => {
       return {
         id: `output-${promptId}`,
-        label: `Output ${getAlphabetLetter(promptIdx)}`,
+        label: `${isEvaluationSuite ? "Result" : "Output"} ${getAlphabetLetter(
+          promptIdx,
+        )}`,
         type: COLUMN_TYPE.string,
         header: PlaygroundOutputColumnHeader as never,
         cell: PlaygroundOutputCell as never,
@@ -159,7 +166,7 @@ const PlaygroundOutputTable = ({
     );
 
     return retVal;
-  }, [promptIds]);
+  }, [promptIds, isEvaluationSuite]);
 
   const resizeConfig = useMemo(
     () => ({

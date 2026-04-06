@@ -6,6 +6,7 @@ import VerticallySplitCellWrapper, {
 } from "@/shared/DataTableCells/VerticallySplitCellWrapper";
 import AssertionsBreakdownTooltip from "./AssertionsBreakdownTooltip";
 import { Tag, TagProps } from "@/ui/tag";
+import { cn } from "@/lib/utils";
 import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import {
   AssertionResult,
@@ -31,7 +32,9 @@ type StatusInfo = {
   totalCount: number;
 };
 
-function getStatusFromExperimentItems(row: ExperimentsCompare): StatusInfo {
+export function getStatusFromExperimentItems(
+  row: ExperimentsCompare,
+): StatusInfo {
   const items = row.experiment_items;
   if (!items?.length) {
     return {
@@ -111,12 +114,15 @@ function getStatusInfoForExperiment(
   };
 }
 
-const StatusTag: React.FC<StatusInfo & { tagSize?: TagProps["size"] }> = ({
+export const StatusTag: React.FC<
+  StatusInfo & { tagSize?: TagProps["size"]; className?: string }
+> = ({
   status,
   assertionsByRun,
   passedCount,
   totalCount,
   tagSize = "md",
+  className,
 }) => {
   const isMultiRun = totalCount > 1;
 
@@ -129,7 +135,7 @@ const StatusTag: React.FC<StatusInfo & { tagSize?: TagProps["size"] }> = ({
       <Tag
         variant={STATUS_DISPLAY[status].variant}
         size={tagSize}
-        className="cursor-default"
+        className={cn("cursor-default", className)}
       >
         {STATUS_DISPLAY[status].label}
         {isMultiRun && ` (${passedCount}/${totalCount})`}

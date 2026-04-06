@@ -26,7 +26,7 @@ import useRulesList from "@/api/automations/useRulesList";
 import { useIsRunning } from "@/store/PlaygroundStore";
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { Dataset, DatasetItemColumn } from "@/types/datasets";
+import { Dataset, DatasetItemColumn, DATASET_TYPE } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import {
   buildDatasetFilterColumns,
@@ -46,6 +46,7 @@ interface RunOnDatasetDialogProps {
     datasetId: string;
     versionId?: string;
     datasetName: string;
+    datasetType: DATASET_TYPE;
     selectedRuleIds: string[] | null;
     experimentNamePrefix: string;
     filters: Filters;
@@ -101,8 +102,11 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     { enabled: open && !!activeProjectId },
   );
   const datasets = datasetsData?.content || EMPTY_DATASETS;
-  const datasetName =
-    datasets.find((ds) => ds.id === plainDatasetId)?.name || null;
+  const selectedDataset = datasets.find((ds) => ds.id === plainDatasetId);
+  const datasetName = selectedDataset?.name || null;
+  const selectedDatasetType = selectedDataset?.type ?? null;
+  const isEvaluationSuite =
+    selectedDatasetType === DATASET_TYPE.EVALUATION_SUITE;
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: plainDatasetId!, page: 1, size: MAX_VERSIONS_TO_FETCH },
@@ -176,7 +180,8 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
       datasetId,
       versionId: parsedDatasetId?.versionId,
       datasetName,
-      selectedRuleIds,
+      datasetType: selectedDatasetType ?? DATASET_TYPE.DATASET,
+      selectedRuleIds: isEvaluationSuite ? [] : selectedRuleIds,
       experimentNamePrefix: experimentPrefix,
       filters,
     });
@@ -185,6 +190,8 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     datasetId,
     datasetName,
     parsedDatasetId?.versionId,
+    selectedDatasetType,
+    isEvaluationSuite,
     selectedRuleIds,
     experimentPrefix,
     filters,
@@ -239,19 +246,21 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label>Metrics</Label>
-              <MetricSelector
-                rules={rules}
-                selectedRuleIds={selectedRuleIds}
-                onSelectionChange={setSelectedRuleIds}
-                datasetId={datasetId}
-                onCreateRuleClick={() => setIsRuleDialogOpen(true)}
-                workspaceName={workspaceName}
-                projectId={activeProjectId ?? undefined}
-                canUsePlayground={!!activeProjectId || canCreateProjects}
-              />
-            </div>
+            {plainDatasetId && selectedDataset && !isEvaluationSuite && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Metrics</Label>
+                <MetricSelector
+                  rules={rules}
+                  selectedRuleIds={selectedRuleIds}
+                  onSelectionChange={setSelectedRuleIds}
+                  datasetId={datasetId}
+                  onCreateRuleClick={() => setIsRuleDialogOpen(true)}
+                  workspaceName={workspaceName}
+                  projectId={activeProjectId ?? undefined}
+                  canUsePlayground={!!activeProjectId || canCreateProjects}
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter>

@@ -5,6 +5,7 @@ import pick from "lodash/pick";
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
+import { DATASET_TYPE } from "@/types/datasets";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -111,6 +112,8 @@ export type PlaygroundStore = {
   progressTotal: number;
   progressCompleted: number;
   experimentNamePrefix: string | null;
+  datasetType: DATASET_TYPE | null;
+  experimentByPromptId: Record<string, string>;
 
   setPromptMap: (
     promptIds: string[],
@@ -151,6 +154,8 @@ export type PlaygroundStore = {
   setProgress: (completed: number, total: number) => void;
   resetProgress: () => void;
   setLastActiveProjectId: (projectId: string | null) => void;
+  setDatasetType: (type: DATASET_TYPE | null) => void;
+  setExperimentByPromptId: (map: Record<string, string>) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -173,6 +178,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressTotal: 0,
       progressCompleted: 0,
       experimentNamePrefix: null,
+      datasetType: null,
+      experimentByPromptId: {},
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -332,6 +339,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           return {
             ...state,
             createdExperiments: [],
+            experimentByPromptId: {},
           };
         });
       },
@@ -413,6 +421,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
+      },
+      setDatasetType: (type) => {
+        set((state) => ({ ...state, datasetType: type }));
+      },
+      setExperimentByPromptId: (map) => {
+        set((state) => ({ ...state, experimentByPromptId: map }));
       },
     }),
     {
@@ -631,5 +645,20 @@ export const useLastActiveProjectId = () =>
 
 export const useSetLastActiveProjectId = () =>
   usePlaygroundStore((state) => state.setLastActiveProjectId);
+
+export const useDatasetType = () =>
+  usePlaygroundStore((state) => state.datasetType);
+
+export const useSetDatasetType = () =>
+  usePlaygroundStore((state) => state.setDatasetType);
+
+export const useExperimentByPromptId = () =>
+  usePlaygroundStore((state) => state.experimentByPromptId);
+
+export const useExperimentIdByPromptId = (promptId: string) =>
+  usePlaygroundStore((state) => state.experimentByPromptId[promptId] ?? null);
+
+export const useSetExperimentByPromptId = () =>
+  usePlaygroundStore((state) => state.setExperimentByPromptId);
 
 export default usePlaygroundStore;

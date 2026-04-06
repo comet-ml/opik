@@ -43,6 +43,9 @@ export interface LogQueueParams extends RunStreamingReturn {
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
+  evaluationMethod?: string;
+  evalSuiteDatasetId?: string;
+  evalSuiteVersionHash?: string;
 }
 
 export interface TraceMapping {
@@ -52,10 +55,13 @@ export interface TraceMapping {
 }
 
 export interface LogProcessorArgs {
-  onAddExperimentRegistry: (loggedExperiments: LogExperiment[]) => void;
+  onAddExperimentRegistry: (
+    loggedExperiments: LogExperiment[],
+    experimentPromptMap: Record<string, string>,
+  ) => void;
   onError: (error: Error) => void;
   onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
-  onExperimentItemsComplete?: () => void;
+  onExperimentItemsComplete?: (experimentIds: string[]) => void;
   projectName?: string;
 }
 
@@ -142,6 +148,16 @@ const getTraceFromRun = (
     };
   }
 
+  // Add eval suite metadata if provided (triggers backend assertion evaluation)
+  if (run.evalSuiteDatasetId) {
+    trace.metadata = {
+      ...trace.metadata,
+      eval_suite_dataset_id: run.evalSuiteDatasetId,
+      eval_suite_version_hash: run.evalSuiteVersionHash,
+      eval_suite_dataset_item_id: run.datasetItemId,
+    };
+  }
+
   // Add opik_prompts to trace metadata if prompt is from library and unchanged
   // This follows the Python SDK format for associating prompts with traces
   if (run.promptLibraryMetadata) {
@@ -224,6 +240,9 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
       datasetVersionId: run.datasetVersionId,
     }),
     metadata: experimentMetadata,
+    ...(run.evaluationMethod && {
+      evaluationMethod: run.evaluationMethod,
+    }),
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,
     }),
@@ -297,7 +316,7 @@ const createLogPlaygroundProcessor = ({
   }, CREATE_EXPERIMENT_CONCURRENCY_RATE);
 
   experimentsQueue.drain(() => {
-    onAddExperimentRegistry(experimentRegistry);
+    onAddExperimentRegistry(experimentRegistry, experimentPromptMap);
     areExperimentsCreated = true;
     tryFinishExperiments();
   });
@@ -314,7 +333,7 @@ const createLogPlaygroundProcessor = ({
       try {
         const experimentIds = experimentRegistry.map((e) => e.id);
         await finishExperiments(experimentIds);
-        onExperimentItemsComplete?.();
+        onExperimentItemsComplete?.(experimentIds);
       } catch {
         onError(
           new Error("There has been an error with finishing experiments"),

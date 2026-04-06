@@ -122,6 +122,7 @@ export interface LogExperiment {
   datasetVersionId?: string;
   name?: string;
   metadata?: object;
+  evaluationMethod?: string;
   prompt_versions?: LogExperimentPromptVersion[];
 }
 
