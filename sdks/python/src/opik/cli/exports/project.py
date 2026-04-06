@@ -1,5 +1,6 @@
 """Project export functionality."""
 
+import logging
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
@@ -12,6 +13,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
+from opik.api_objects.attachment.client import AttachmentClient
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
@@ -27,6 +29,7 @@ from .utils import (
 )
 
 console = Console()
+LOGGER = logging.getLogger(__name__)
 
 # Maximum number of concurrent workers for parallel span fetching.
 MAX_WORKERS = 10
@@ -102,6 +105,85 @@ def _fetch_spans(
     )
 
 
+def _fetch_attachments(
+    attachment_client: AttachmentClient,
+    project_name: str,
+    trace_id: str,
+    span_ids: list,
+) -> list:
+    """Fetch attachment metadata for a trace and all its spans.
+
+    Returns a list of dicts with keys: entity_type, entity_id, file_name,
+    mime_type, file_size. Failures per-entity are logged and skipped.
+    """
+    attachments = []
+    entities = [("trace", trace_id)] + [("span", sid) for sid in span_ids]
+    for entity_type, entity_id in entities:
+        try:
+            att_list = attachment_client.get_attachment_list(
+                project_name, entity_id, entity_type
+            )
+            for att in att_list:
+                attachments.append(
+                    {
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "file_name": att.file_name,
+                        "mime_type": att.mime_type,
+                        "file_size": att.file_size,
+                    }
+                )
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to fetch attachments for %s %s: %s", entity_type, entity_id, e
+            )
+    return attachments
+
+
+def _download_attachment_file(
+    attachment_client: AttachmentClient,
+    project_name: str,
+    attachment: dict,
+    project_dir: Path,
+    force: bool,
+) -> bool:
+    """Download a single attachment binary to disk.
+
+    Saves to ``project_dir/attachments/<entity_type>/<entity_id>/<file_name>``.
+    Skips if the file already exists and *force* is False.
+    Returns True on success, False on failure (warning logged, no raise).
+    """
+    entity_type = attachment["entity_type"]
+    entity_id = attachment["entity_id"]
+    file_name = attachment["file_name"]
+    mime_type = attachment["mime_type"]
+
+    dest_path = project_dir / "attachments" / entity_type / entity_id / file_name
+
+    if not force and dest_path.exists():
+        return True
+
+    try:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        chunks = attachment_client.download_attachment(
+            project_name=project_name,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            file_name=file_name,
+            mime_type=mime_type,
+        )
+        with open(dest_path, "wb") as f:
+            for chunk in chunks:
+                f.write(chunk)
+        return True
+    except Exception as e:
+        console.print(
+            f"[yellow]Warning: failed to download attachment '{file_name}' "
+            f"for {entity_type} {entity_id}: {e}[/yellow]"
+        )
+        return False
+
+
 def export_traces(
     client: opik.Opik,
     project_name: str,
@@ -114,8 +196,13 @@ def export_traces(
     force: bool = False,
     show_progress: bool = True,
     manifest: Optional[ExportManifest] = None,
+    include_attachments: bool = True,
 ) -> tuple[int, int, bool]:
     """Download traces and their spans with pagination support for large projects."""
+    att_client: Optional[AttachmentClient] = (
+        client.get_attachment_client() if include_attachments else None
+    )
+
     if debug:
         debug_print(
             f"DEBUG: _export_traces called with project_name: {project_name}, project_dir: {project_dir}",
@@ -315,9 +402,27 @@ def export_traces(
                         trace = future_to_trace[future]
                         try:
                             _, spans = future.result()
+
+                            # Fetch and download attachments when requested
+                            attachment_metadata: list = []
+                            if att_client is not None:
+                                span_ids = [span.id for span in spans if span.id]
+                                attachment_metadata = _fetch_attachments(
+                                    att_client, project_name, trace.id, span_ids
+                                )
+                                for att in attachment_metadata:
+                                    _download_attachment_file(
+                                        att_client,
+                                        project_name,
+                                        att,
+                                        project_dir,
+                                        force,
+                                    )
+
                             trace_data = {
                                 "trace": trace.model_dump(),
                                 "spans": [span.model_dump() for span in spans],
+                                "attachments": attachment_metadata,
                                 "downloaded_at": datetime.now().isoformat(),
                                 "project_name": project_name,
                             }
@@ -391,6 +496,7 @@ def export_project_by_name(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    include_attachments: bool = True,
 ) -> None:
     """Export a project by exact name."""
     try:
@@ -481,6 +587,7 @@ def export_project_by_name(
             force,
             debug,
             format,
+            include_attachments=include_attachments,
         )
 
         # Collect statistics for summary using actual export counts
@@ -525,6 +632,7 @@ def export_single_project(
     debug: bool,
     format: str,
     show_progress: bool = True,
+    include_attachments: bool = True,
 ) -> tuple[int, int, int]:
     """Export a single project."""
     try:
@@ -644,6 +752,7 @@ def export_single_project(
             force,
             show_progress,
             manifest,
+            include_attachments,
         )
 
         # Only mark the manifest complete when the export finished without errors.
@@ -694,6 +803,7 @@ def export_project_by_name_or_id(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    include_attachments: bool = True,
 ) -> None:
     """Export a project by name or ID.
 
@@ -738,6 +848,7 @@ def export_project_by_name_or_id(
                 force,
                 debug,
                 format,
+                include_attachments=include_attachments,
             )
 
             # Show export summary
@@ -783,6 +894,7 @@ def export_project_by_name_or_id(
             debug,
             format,
             api_key,
+            include_attachments,
         )
 
     except Exception as e:
@@ -825,6 +937,11 @@ def export_project_by_name_or_id(
     default="json",
     help="Format for exporting data. Defaults to json.",
 )
+@click.option(
+    "--no-attachments",
+    is_flag=True,
+    help="Skip downloading attachment files.",
+)
 @click.pass_context
 def export_project_command(
     ctx: click.Context,
@@ -835,6 +952,7 @@ def export_project_command(
     force: bool,
     debug: bool,
     format: str,
+    no_attachments: bool,
 ) -> None:
     """Export a project by name or ID to workspace/projects.
 
@@ -844,5 +962,14 @@ def export_project_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_project_by_name_or_id(
-        name_or_id, workspace, path, filter, max_results, force, debug, format, api_key
+        name_or_id,
+        workspace,
+        path,
+        filter,
+        max_results,
+        force,
+        debug,
+        format,
+        api_key,
+        include_attachments=not no_attachments,
     )

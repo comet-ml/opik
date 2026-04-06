@@ -258,6 +258,7 @@ def _export_all_projects(
     format: str,
     max_workers: int = 5,
     filter_string: Optional[str] = None,
+    include_attachments: bool = True,
 ) -> tuple[int, int, int, bool]:
     """Export all projects in the workspace.
 
@@ -302,6 +303,7 @@ def _export_all_projects(
                     debug,
                     format,
                     False,  # show_progress=False — outer bar tracks progress
+                    include_attachments,
                 ): project
                 for project in all_projects
             }
@@ -440,6 +442,7 @@ def export_all(
     format: str,
     api_key: Optional[str] = None,
     filter_string: Optional[str] = None,
+    include_attachments: bool = True,
 ) -> None:
     """Export all data from the workspace."""
     try:
@@ -489,6 +492,7 @@ def export_all(
                 debug,
                 format,
                 filter_string=filter_string,
+                include_attachments=include_attachments,
             )
             total_stats["projects"] = proj_exp
             # Accumulate traces (experiments may also add traces below)
@@ -600,6 +604,11 @@ def _validate_include(
     default=None,
     help="Maximum number of traces/items to export per entity.",
 )
+@click.option(
+    "--no-attachments",
+    is_flag=True,
+    help="Skip downloading attachment files.",
+)
 @click.pass_context
 def export_all_command(
     ctx: click.Context,
@@ -610,6 +619,7 @@ def export_all_command(
     debug: bool,
     include: list[str],
     max_results: Optional[int],
+    no_attachments: bool,
 ) -> None:
     """Export all datasets, prompts, projects, and experiments from the workspace.
 
@@ -640,4 +650,5 @@ def export_all_command(
         format,
         api_key,
         filter_string=filter,
+        include_attachments=not no_attachments,
     )

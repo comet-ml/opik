@@ -7,6 +7,7 @@ from typing import Dict, Optional
 
 import opik
 from opik import id_helpers
+from opik.api_objects.attachment.client import AttachmentClient
 from rich.console import Console
 
 from ..migration_manifest import MigrationManifest
@@ -25,6 +26,73 @@ from .utils import (
 console = Console()
 
 
+def _upload_attachments_for_trace(
+    attachment_client: AttachmentClient,
+    project_dir: Path,
+    attachments: list,
+    new_trace_id: str,
+    span_id_map: Dict[str, str],
+    project_name: str,
+) -> None:
+    """Upload attachment files for an imported trace and its spans.
+
+    *project_dir* is the per-project directory that contains the
+    ``attachments/<entity_type>/<original_entity_id>/<file_name>`` tree
+    created during export.
+
+    ID translation:
+    - trace attachments  → uploaded against *new_trace_id*
+    - span attachments   → looked up in *span_id_map*; skipped with a
+                           warning when the mapping is missing.
+
+    Individual upload failures are logged as warnings and do not raise.
+    """
+    for att in attachments:
+        entity_type = att.get("entity_type")
+        original_entity_id = att.get("entity_id")
+        file_name = att.get("file_name")
+        mime_type = att.get("mime_type")
+
+        if not all([entity_type, original_entity_id, file_name]):
+            continue
+
+        new_entity_id: Optional[str]
+        if entity_type == "trace":
+            new_entity_id = new_trace_id
+        elif entity_type == "span":
+            new_entity_id = span_id_map.get(original_entity_id)
+            if not new_entity_id:
+                console.print(
+                    f"[yellow]Warning: span {original_entity_id} not in span map; "
+                    f"skipping attachment '{file_name}'[/yellow]"
+                )
+                continue
+        else:
+            continue
+
+        file_path = (
+            project_dir / "attachments" / entity_type / original_entity_id / file_name
+        )
+
+        if not file_path.exists():
+            continue
+
+        try:
+            attachment_client.upload_attachment(
+                project_name=project_name,
+                entity_type=entity_type,
+                entity_id=new_entity_id,
+                file_path=str(file_path),
+                file_name=file_name,
+                mime_type=mime_type,
+            )
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: failed to upload attachment '{file_name}' "
+                f"for {entity_type} {new_entity_id}: {e}[/yellow]"
+            )
+
+
 def import_projects_from_directory(
     client: opik.Opik,
     source_dir: Path,
@@ -33,6 +101,7 @@ def import_projects_from_directory(
     debug: bool,
     recreate_experiments_flag: bool = False,
     manifest: Optional[MigrationManifest] = None,
+    include_attachments: bool = True,
 ) -> Dict[str, int]:
     """Import projects from a directory.
 
@@ -61,6 +130,12 @@ def import_projects_from_directory(
         # Seed trace_id_map from the manifest so experiments can cross-reference
         # traces that were imported in a previous (interrupted) run.
         trace_id_map: Dict[str, str] = manifest.get_trace_id_map() if manifest else {}
+
+        att_client: Optional[AttachmentClient] = (
+            client.get_attachment_client()
+            if include_attachments and not dry_run
+            else None
+        )
 
         for project_dir in project_dirs:
             try:
@@ -223,6 +298,19 @@ def import_projects_from_directory(
                             # Map original span ID to new span ID for parent relationship mapping
                             if original_span_id and span.id:
                                 span_id_map[original_span_id] = span.id
+
+                        # Upload attachments while span_id_map is still populated
+                        if att_client is not None:
+                            attachments = trace_data.get("attachments", [])
+                            if attachments:
+                                _upload_attachments_for_trace(
+                                    att_client,
+                                    project_dir,
+                                    attachments,
+                                    trace.id,
+                                    span_id_map,
+                                    project_name,
+                                )
 
                         traces_imported += 1
 
