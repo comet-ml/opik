@@ -8,6 +8,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.template.MustacheParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -64,13 +65,18 @@ class ExperimentItemProcessorTest {
     @Mock
     private IdGenerator idGenerator;
 
+    @Mock
+    private MustacheParser mustacheParser;
+
     private ExperimentItemProcessor processor;
 
     @BeforeEach
     void setUp() {
+        var messageRenderer = new ExperimentMessageRenderer(mustacheParser);
+        var tracePersistence = new ExperimentTracePersistence(
+                traceService, spanService, experimentItemService, llmProviderFactory, idGenerator);
         processor = new ExperimentItemProcessor(
-                chatCompletionService, llmProviderFactory, traceService,
-                spanService, experimentItemService, idGenerator);
+                chatCompletionService, messageRenderer, tracePersistence, idGenerator);
     }
 
     private ExperimentExecutionRequest.PromptVariant buildPrompt(String model, String role, String content) {
@@ -111,6 +117,7 @@ class ExperimentItemProcessorTest {
         when(traceService.create(any(Trace.class))).thenReturn(Mono.just(UUID.randomUUID()));
         when(spanService.create(any(Span.class))).thenReturn(Mono.just(UUID.randomUUID()));
         when(experimentItemService.create(any())).thenReturn(Mono.empty());
+        when(mustacheParser.renderUnescaped(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Nested
@@ -118,7 +125,7 @@ class ExperimentItemProcessorTest {
     class TemplateRendering {
 
         @Test
-        void processRendersMessagesWithDatasetItemData() {
+        void processCallsRenderUnescapedWithTemplateAndContext() {
             var prompt = buildPrompt("gpt-4", "user", "Hello {{name}}, how is {{city}}?");
             var datasetItem = buildDatasetItem(UUID.randomUUID(),
                     Map.of("name", new TextNode("Alice"), "city", new TextNode("London")));
@@ -126,23 +133,25 @@ class ExperimentItemProcessorTest {
             var datasetId = UUID.randomUUID();
 
             stubCommonMocks();
+            when(mustacheParser.renderUnescaped(eq("Hello {{name}}, how is {{city}}?"), any()))
+                    .thenReturn("Hello Alice, how is London?");
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("Hi Alice!"));
 
             processor.process(prompt, datasetItem, experimentId, datasetId, null,
                     PROJECT_NAME, WORKSPACE_ID, USER_NAME);
 
-            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
-            verify(chatCompletionService).create(captor.capture(), eq(WORKSPACE_ID));
+            @SuppressWarnings("unchecked")
+            var contextCaptor = ArgumentCaptor.forClass(Map.class);
+            verify(mustacheParser).renderUnescaped(eq("Hello {{name}}, how is {{city}}?"), contextCaptor.capture());
 
-            var messages = captor.getValue().messages();
-            assertThat(messages).hasSize(1);
-            var messageContent = messages.getFirst();
-            assertThat(messageContent).isInstanceOf(com.comet.opik.domain.llm.langchain4j.OpikUserMessage.class);
+            var context = contextCaptor.getValue();
+            assertThat(context).containsEntry("name", "Alice");
+            assertThat(context).containsEntry("city", "London");
         }
 
         @Test
-        void processRendersWithoutHtmlEscaping() {
+        void processUsesRenderedContentInChatRequest() {
             var prompt = buildPrompt("gpt-4", "user", "{{content}}");
             var datasetItem = buildDatasetItem(UUID.randomUUID(),
                     Map.of("content", new TextNode("<b>bold</b> & 'quoted'")));
@@ -150,6 +159,8 @@ class ExperimentItemProcessorTest {
             var datasetId = UUID.randomUUID();
 
             stubCommonMocks();
+            when(mustacheParser.renderUnescaped(eq("{{content}}"), any()))
+                    .thenReturn("<b>bold</b> & 'quoted'");
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
@@ -327,6 +338,7 @@ class ExperimentItemProcessorTest {
             when(traceService.create(any(Trace.class))).thenReturn(Mono.just(traceId));
             when(spanService.create(any(Span.class))).thenReturn(Mono.just(spanId));
             when(experimentItemService.create(any())).thenReturn(Mono.empty());
+            when(mustacheParser.renderUnescaped(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
@@ -363,6 +375,7 @@ class ExperimentItemProcessorTest {
             when(traceService.create(any(Trace.class))).thenReturn(Mono.just(traceId));
             when(spanService.create(any(Span.class))).thenReturn(Mono.just(spanId));
             when(experimentItemService.create(any())).thenReturn(Mono.empty());
+            when(mustacheParser.renderUnescaped(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 

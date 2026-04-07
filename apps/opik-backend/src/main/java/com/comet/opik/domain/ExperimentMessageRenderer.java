@@ -10,15 +10,20 @@ import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 class ExperimentMessageRenderer {
 
-    private final MustacheParser mustacheParser = new MustacheParser();
+    private final @NonNull MustacheParser mustacheParser;
 
     Map<String, Object> buildTemplateContext(@NonNull DatasetItem datasetItem) {
         if (datasetItem.data() == null) {
@@ -40,7 +45,7 @@ class ExperimentMessageRenderer {
                         String rendered = mustacheParser.renderUnescaped(msg.content().asText(), context);
                         return ExperimentExecutionRequest.PromptVariant.Message.builder()
                                 .role(msg.role())
-                                .content(JsonUtils.getJsonNodeFromString("\"" + escapeJsonString(rendered) + "\""))
+                                .content(JsonUtils.valueToTree(rendered))
                                 .build();
                     }
                     if (msg.content().isArray()) {
@@ -143,13 +148,5 @@ class ExperimentMessageRenderer {
         if (presencePenalty != null && presencePenalty.isNumber()) {
             builder.presencePenalty(presencePenalty.doubleValue());
         }
-    }
-
-    private String escapeJsonString(String value) {
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 }

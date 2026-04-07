@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Source;
@@ -51,24 +52,23 @@ class ExperimentTracePersistence {
             @NonNull String workspaceId,
             @NonNull String userName) {
 
-        createTrace(traceId, projectName, renderedMessages, llmResponse, errorMessage,
+        ObjectNode input = buildMessagesInput(renderedMessages);
+        ObjectNode output = buildLlmOutput(llmResponse);
+
+        createTrace(traceId, projectName, input, output, errorMessage,
                 startTime, endTime, datasetId, versionHash, datasetItemId, workspaceId, userName);
 
-        createSpan(traceId, projectName, prompt, renderedMessages, llmResponse, errorMessage,
+        createSpan(traceId, projectName, prompt, input, output, llmResponse, errorMessage,
                 startTime, endTime, workspaceId, userName);
 
         createExperimentItem(experimentId, datasetItemId, traceId, workspaceId, userName);
     }
 
     private void createTrace(UUID traceId, String projectName,
-            List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages,
-            ChatCompletionResponse llmResponse, String errorMessage,
+            ObjectNode input, ObjectNode output, String errorMessage,
             Instant startTime, Instant endTime,
             UUID datasetId, String versionHash, UUID datasetItemId,
             String workspaceId, String userName) {
-
-        ObjectNode input = buildMessagesInput(renderedMessages);
-        ObjectNode output = buildLlmOutput(llmResponse);
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
@@ -78,7 +78,7 @@ class ExperimentTracePersistence {
         }
         metadata.put("eval_suite_dataset_item_id", datasetItemId.toString());
 
-        var trace = Trace.builder()
+        var traceBuilder = Trace.builder()
                 .id(traceId)
                 .projectName(projectName)
                 .name(TRACE_SPAN_NAME)
@@ -87,8 +87,17 @@ class ExperimentTracePersistence {
                 .input(input)
                 .output(output)
                 .metadata(metadata)
-                .source(Source.EXPERIMENT)
-                .build();
+                .source(Source.EXPERIMENT);
+
+        if (errorMessage != null) {
+            traceBuilder.errorInfo(ErrorInfo.builder()
+                    .exceptionType("LlmProviderError")
+                    .message(errorMessage)
+                    .traceback(errorMessage)
+                    .build());
+        }
+
+        var trace = traceBuilder.build();
 
         traceService.create(trace)
                 .contextWrite(ctx -> ctx
@@ -100,13 +109,10 @@ class ExperimentTracePersistence {
 
     private void createSpan(UUID traceId, String projectName,
             ExperimentExecutionRequest.PromptVariant prompt,
-            List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages,
+            ObjectNode input, ObjectNode output,
             ChatCompletionResponse llmResponse, String errorMessage,
             Instant startTime, Instant endTime,
             String workspaceId, String userName) {
-
-        ObjectNode input = buildMessagesInput(renderedMessages);
-        ObjectNode output = buildLlmOutput(llmResponse);
 
         Map<String, Integer> usage = null;
         if (llmResponse != null && llmResponse.usage() != null) {
@@ -125,7 +131,7 @@ class ExperimentTracePersistence {
 
         var resolvedModelInfo = llmProviderFactory.getResolvedModelInfo(prompt.model());
 
-        var span = Span.builder()
+        var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
                 .traceId(traceId)
                 .projectName(projectName)
@@ -138,8 +144,17 @@ class ExperimentTracePersistence {
                 .model(resolvedModelInfo.actualModel())
                 .provider(resolvedModelInfo.provider())
                 .usage(usage)
-                .source(Source.EXPERIMENT)
-                .build();
+                .source(Source.EXPERIMENT);
+
+        if (errorMessage != null) {
+            spanBuilder.errorInfo(ErrorInfo.builder()
+                    .exceptionType("LlmProviderError")
+                    .message(errorMessage)
+                    .traceback(errorMessage)
+                    .build());
+        }
+
+        var span = spanBuilder.build();
 
         spanService.create(span)
                 .contextWrite(ctx -> ctx

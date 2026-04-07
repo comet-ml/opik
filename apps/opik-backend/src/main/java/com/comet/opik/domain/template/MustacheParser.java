@@ -6,6 +6,7 @@ import com.github.mustachejava.Mustache;
 import com.github.mustachejava.MustacheException;
 import com.github.mustachejava.MustacheFactory;
 import com.github.mustachejava.codes.ValueCode;
+import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -21,6 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
+@Singleton
 public class MustacheParser implements TemplateParser {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();

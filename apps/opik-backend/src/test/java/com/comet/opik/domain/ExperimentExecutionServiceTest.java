@@ -55,7 +55,7 @@ class ExperimentExecutionServiceTest {
     private DatasetVersionService datasetVersionService;
 
     @Mock
-    private ExperimentItemProcessor itemProcessor;
+    private ExperimentItemPublisher itemPublisher;
 
     @Mock
     private IdGenerator idGenerator;
@@ -66,7 +66,7 @@ class ExperimentExecutionServiceTest {
     void setUp() {
         service = new ExperimentExecutionService(
                 experimentService, datasetItemService, datasetVersionService,
-                itemProcessor, idGenerator, new EvalSuiteConfig(), new ExperimentExecutionConfig());
+                itemPublisher, idGenerator, new EvalSuiteConfig(), new ExperimentExecutionConfig());
     }
 
     private ExperimentExecutionRequest.PromptVariant buildPrompt(String model, String content) {

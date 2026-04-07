@@ -238,10 +238,12 @@ const useActionButtonActions = ({
         if (isToStopRef.current) return;
 
         try {
+          const controller = new AbortController();
+          abortControllersRef.current.set("poll-assertion", controller);
           const { data } = await api.get(
             `${DATASETS_REST_ENDPOINT}${curDatasetId}/items/experiments/items`,
             {
-              signal: new AbortController().signal,
+              signal: controller.signal,
               params: {
                 workspace_name: workspaceName,
                 experiment_ids: JSON.stringify(experimentIds),
@@ -312,12 +314,13 @@ const useActionButtonActions = ({
         if (isToStopRef.current) return;
 
         try {
+          const controller = new AbortController();
+          abortControllersRef.current.set("poll-experiment", controller);
           const results = await Promise.all(
             experimentIds.map((id) =>
-              getExperimentById(
-                { signal: new AbortController().signal } as never,
-                { experimentId: id },
-              ),
+              getExperimentById({ signal: controller.signal } as never, {
+                experimentId: id,
+              }),
             ),
           );
 
