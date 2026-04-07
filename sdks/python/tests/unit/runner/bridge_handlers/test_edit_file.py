@@ -2,13 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from opik.runner.bridge_handlers import CommandError, FileMutationQueue
+from opik.runner.bridge_handlers import CommandError, FileLockRegistry
 from opik.runner.bridge_handlers.edit_file import EditFileHandler
 
 
 class TestEditFileExact:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
-        return EditFileHandler(tmp_path, FileMutationQueue())
+        return EditFileHandler(tmp_path, FileLockRegistry())
 
     def test_edit_file__single_exact_match__applies_edit(self, tmp_path: Path) -> None:
         f = tmp_path / "code.py"
@@ -105,7 +105,7 @@ class TestEditFileExact:
 
 class TestEditFileBom:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
-        return EditFileHandler(tmp_path, FileMutationQueue())
+        return EditFileHandler(tmp_path, FileLockRegistry())
 
     def test_edit_file__bom_file__matches_without_bom(self, tmp_path: Path) -> None:
         f = tmp_path / "bom.py"
@@ -138,7 +138,7 @@ class TestEditFileBom:
 
 class TestEditFileLineEndings:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
-        return EditFileHandler(tmp_path, FileMutationQueue())
+        return EditFileHandler(tmp_path, FileLockRegistry())
 
     def test_edit_file__crlf_file__matches_with_lf(self, tmp_path: Path) -> None:
         f = tmp_path / "crlf.py"
@@ -171,7 +171,7 @@ class TestEditFileLineEndings:
 
 class TestEditFileFuzzy:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
-        return EditFileHandler(tmp_path, FileMutationQueue())
+        return EditFileHandler(tmp_path, FileLockRegistry())
 
     def test_edit_file__smart_quotes__uses_fuzzy_match(self, tmp_path: Path) -> None:
         f = tmp_path / "q.py"
@@ -223,7 +223,7 @@ class TestEditFileFuzzy:
 
 class TestEditFileMultiEdit:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
-        return EditFileHandler(tmp_path, FileMutationQueue())
+        return EditFileHandler(tmp_path, FileLockRegistry())
 
     def test_edit_file__reverse_order_edits__applies_both_correctly(
         self, tmp_path: Path
@@ -264,7 +264,7 @@ class TestEditFileMultiEdit:
 
 class TestEditFileEdgeCases:
     def _handler(self, tmp_path: Path) -> EditFileHandler:
-        return EditFileHandler(tmp_path, FileMutationQueue())
+        return EditFileHandler(tmp_path, FileLockRegistry())
 
     def test_edit_file__binary_file__raises_error(self, tmp_path: Path) -> None:
         f = tmp_path / "bin.dat"

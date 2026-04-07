@@ -19,7 +19,7 @@ class BaseHandler(abc.ABC):
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]: ...
 
 
-class FileMutationQueue:
+class FileLockRegistry:
     """Per-file lock keyed by realpath. Serializes writes to the same file."""
 
     def __init__(self) -> None:

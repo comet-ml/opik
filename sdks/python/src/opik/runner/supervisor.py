@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from ..rest_api.core.api_error import ApiError
-from .bridge_handlers import FileMutationQueue
+from .bridge_handlers import FileLockRegistry
 from .bridge_handlers.edit_file import EditFileHandler
 from .bridge_handlers.exec_command import BackgroundProcessTracker, ExecHandler
 from .bridge_handlers.list_files import ListFilesHandler
@@ -100,7 +100,7 @@ class Supervisor:
         )
         heartbeat_thread.start()
 
-        mutation_queue = FileMutationQueue()
+        mutation_queue = FileLockRegistry()
         self._bg_tracker = BackgroundProcessTracker()
         handlers: Dict[str, Any] = {
             "ReadFile": ReadFileHandler(self._repo_root),

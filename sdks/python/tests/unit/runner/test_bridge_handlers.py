@@ -7,7 +7,7 @@ import pytest
 
 from opik.runner.bridge_handlers import (
     CommandError,
-    FileMutationQueue,
+    FileLockRegistry,
     StubHandler,
 )
 from opik.runner.bridge_handlers.exec_command import (
@@ -30,9 +30,9 @@ class TestStubHandler:
         assert "file_not_found" in str(err)
 
 
-class TestFileMutationQueue:
+class TestFileLockRegistry:
     def test_mutation_queue__same_file__serializes_access(self, tmp_path: Path) -> None:
-        queue = FileMutationQueue()
+        queue = FileLockRegistry()
         f = tmp_path / "a.py"
         f.write_text("")
 
@@ -56,7 +56,7 @@ class TestFileMutationQueue:
     def test_mutation_queue__different_files__allows_parallel(
         self, tmp_path: Path
     ) -> None:
-        queue = FileMutationQueue()
+        queue = FileLockRegistry()
         f1 = tmp_path / "a.py"
         f2 = tmp_path / "b.py"
         f1.write_text("")
@@ -81,7 +81,7 @@ class TestFileMutationQueue:
     def test_mutation_queue__symlink__resolves_to_same_lock(
         self, tmp_path: Path
     ) -> None:
-        queue = FileMutationQueue()
+        queue = FileLockRegistry()
         real = tmp_path / "real.py"
         real.write_text("")
         link = tmp_path / "link.py"

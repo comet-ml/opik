@@ -2,13 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from opik.runner.bridge_handlers import CommandError, FileMutationQueue
+from opik.runner.bridge_handlers import CommandError, FileLockRegistry
 from opik.runner.bridge_handlers.write_file import WriteFileHandler
 
 
 class TestWriteFile:
     def _handler(self, tmp_path: Path) -> WriteFileHandler:
-        return WriteFileHandler(tmp_path, FileMutationQueue())
+        return WriteFileHandler(tmp_path, FileLockRegistry())
 
     def test_write_file__new_file__creates_file(self, tmp_path: Path) -> None:
         handler = self._handler(tmp_path)

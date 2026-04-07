@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
-from . import BaseHandler, CommandError, FileMutationQueue
+from . import BaseHandler, CommandError, FileLockRegistry
 from . import common
 
 
@@ -16,7 +16,7 @@ class WriteFileArgs(BaseModel):
 
 
 class WriteFileHandler(BaseHandler):
-    def __init__(self, repo_root: Path, mutation_queue: FileMutationQueue) -> None:
+    def __init__(self, repo_root: Path, mutation_queue: FileLockRegistry) -> None:
         self._repo_root = repo_root
         self._mutation_queue = mutation_queue
 

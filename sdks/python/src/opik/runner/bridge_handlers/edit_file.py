@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel
 
-from . import BaseHandler, CommandError, FileMutationQueue
+from . import BaseHandler, CommandError, FileLockRegistry
 from . import common
 
 
@@ -175,7 +175,7 @@ def _generate_diff(old: str, new: str, path: str, context: int = 4) -> str:
 
 
 class EditFileHandler(BaseHandler):
-    def __init__(self, repo_root: Path, mutation_queue: FileMutationQueue) -> None:
+    def __init__(self, repo_root: Path, mutation_queue: FileLockRegistry) -> None:
         self._repo_root = repo_root
         self._mutation_queue = mutation_queue
 
