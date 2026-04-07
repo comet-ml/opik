@@ -1,6 +1,13 @@
 export type BridgeTheme = "light" | "dark";
 export type NotificationType = "success" | "error" | "info";
 
+export interface ProjectStats {
+  traceCount: number;
+  experimentCount: number;
+  optimizationCount: number;
+  blueprintVersionCount: number;
+}
+
 export interface BridgeContext {
   workspaceId: string;
   workspaceName: string;
@@ -10,6 +17,7 @@ export interface BridgeContext {
   baseApiUrl: string;
   assistantBackendUrl: string;
   theme: BridgeTheme;
+  projectStats?: ProjectStats;
 }
 
 /** Host → Sidebar events */
