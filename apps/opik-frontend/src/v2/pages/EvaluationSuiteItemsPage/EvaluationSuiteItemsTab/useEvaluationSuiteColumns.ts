@@ -58,7 +58,7 @@ export function useEvaluationSuiteColumns({
         },
         {
           id: "assertions",
-          label: "Assertions",
+          label: "Custom assertions",
           type: COLUMN_TYPE.string,
           iconType: "assertions",
           cell: AssertionsCountCell as never,
