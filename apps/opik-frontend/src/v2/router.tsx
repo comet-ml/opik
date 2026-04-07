@@ -51,7 +51,7 @@ import EvaluationSuitePage from "@/v2/pages/EvaluationSuitePage/EvaluationSuiteP
 import EvaluationSuiteItemsPage from "@/v2/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
-import InsightsPage from "@/v2/pages/InsightsPage/InsightsPage";
+import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -191,13 +191,13 @@ const logsRoute = createRoute({
   },
 });
 
-// ----------- insights (project-scoped)
-const insightsRoute = createRoute({
-  path: "/insights",
+// ----------- dashboards (project-scoped)
+const projectDashboardsRoute = createRoute({
+  path: "/dashboards",
   getParentRoute: () => projectScopedRoute,
-  component: InsightsPage,
+  component: ProjectDashboardsPage,
   staticData: {
-    title: "Insights",
+    title: "Dashboards",
   },
 });
 
@@ -543,7 +543,7 @@ const routeTree = rootRoute.addChildren([
         projectScopedRoute.addChildren([
           projectHomeRoute,
           logsRoute,
-          insightsRoute,
+          projectDashboardsRoute,
           tracesRedirectRoute,
           experimentsRoute.addChildren([
             experimentsListRoute,

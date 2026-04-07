@@ -8,8 +8,8 @@ const TAB_ROUTE_MAP: Record<string, string> = {
   "annotation-queues": "/annotation-queues",
   rules: "/online-evaluation",
   configuration: "/agent-configuration",
-  insights: "/insights",
-  metrics: "/insights",
+  insights: "/dashboards",
+  metrics: "/dashboards",
 };
 
 const TracesTabRedirect = () => {
@@ -60,9 +60,9 @@ const TracesTabRedirect = () => {
       return;
     }
 
-    // Legacy ?view=dashboards → insights
+    // Legacy ?view=dashboards → dashboards
     if (legacyView === "dashboards") {
-      navigateToProjectRoute("/insights");
+      navigateToProjectRoute("/dashboards");
       return;
     }
 
