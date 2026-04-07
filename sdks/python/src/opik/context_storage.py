@@ -237,6 +237,30 @@ trim_span_data_stack_to_certain_span = (
 )
 
 
+def resolve_project_name(
+    default: Optional[str],
+    caller: str,
+) -> Optional[str]:
+    """Resolve project name for an integration or callback.
+
+    If an active project context exists (set by ``@track`` or
+    ``opik.project_context``), it takes precedence over *default*.
+    A warning is logged when *default* is overridden.
+    """
+    context_project = get_context_project_name()
+    if context_project is not None:
+        if default is not None and default != context_project:
+            LOGGER.warning(
+                '%s was initialized with project "%s", but the active '
+                'context uses "%s". The context project will be used.',
+                caller,
+                default,
+                context_project,
+            )
+        return context_project
+    return default
+
+
 def get_current_context_instance() -> OpikContextStorage:
     return _context_storage
 
