@@ -156,13 +156,14 @@ public class EvalSuiteAssertionSampler {
             }
 
             return version
-                    .map(v -> new DatasetEvaluatorsResult(
-                            v.id(),
-                            v.evaluators() != null ? v.evaluators() : List.of()))
-                    .orElse(new DatasetEvaluatorsResult(null, List.of()));
+                    .map(v -> DatasetEvaluatorsResult.builder()
+                            .versionId(v.id())
+                            .evaluators(v.evaluators() != null ? v.evaluators() : List.of())
+                            .build())
+                    .orElse(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
         } catch (Exception e) {
             log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
-            return new DatasetEvaluatorsResult(null, List.of());
+            return DatasetEvaluatorsResult.builder().evaluators(List.of()).build();
         }
     }
 
@@ -195,10 +196,13 @@ public class EvalSuiteAssertionSampler {
         }
     }
 
-    private record DatasetEvaluatorsResult(UUID versionId, List<EvaluatorItem> evaluators) {
+    @lombok.Builder(toBuilder = true)
+    private record DatasetEvaluatorsResult(UUID versionId, @NonNull List<EvaluatorItem> evaluators) {
     }
 
-    private record PreparedEvaluator(String name, LlmAsJudgeCode code, Map<String, String> scoreNameMapping) {
+    @lombok.Builder(toBuilder = true)
+    private record PreparedEvaluator(@NonNull String name, @NonNull LlmAsJudgeCode code,
+            @NonNull Map<String, String> scoreNameMapping) {
     }
 
     private List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators) {
@@ -221,7 +225,11 @@ public class EvalSuiteAssertionSampler {
                                         LlmAsJudgeOutputSchema::description))
                         : Map.of();
 
-                result.add(new PreparedEvaluator(evaluator.name(), code, scoreNameMapping));
+                result.add(PreparedEvaluator.builder()
+                        .name(evaluator.name())
+                        .code(code)
+                        .scoreNameMapping(scoreNameMapping)
+                        .build());
             } catch (java.io.UncheckedIOException e) {
                 log.error("Failed to deserialize evaluator config for '{}'", evaluator.name(), e);
             } catch (Exception e) {
