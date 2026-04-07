@@ -6,15 +6,28 @@ File operation flow: write → list → search → edit → read, all via the AP
 
 import time
 
+from opik.rest_api.errors.conflict_error import ConflictError
+
 from .conftest import RunnerInfo
+
+_BRIDGE_READY_TIMEOUT = 15
 
 
 def _submit_and_wait(api_client, runner_id, cmd_type, args):
-    resp = api_client.runners.create_bridge_command(
-        runner_id,
-        type=cmd_type,
-        args=args,
-    )
+    deadline = time.monotonic() + _BRIDGE_READY_TIMEOUT
+    while True:
+        try:
+            resp = api_client.runners.create_bridge_command(
+                runner_id,
+                type=cmd_type,
+                args=args,
+            )
+            break
+        except ConflictError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(1)
+
     return api_client.runners.get_bridge_command(
         runner_id,
         resp.command_id,
