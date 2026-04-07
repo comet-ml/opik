@@ -85,6 +85,7 @@ from ..types import (
     SpanType,
     TraceSource,
 )
+from .. import context_storage
 from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
@@ -358,8 +359,7 @@ class Opik:
         )
         last_updated_at = datetime_helpers.local_timestamp()
 
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
@@ -580,8 +580,7 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         if trace_id is None:
             trace_id = id_helpers.generate_id()
@@ -809,7 +808,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self.project_name,
+            project_name=self._resolve_project_name(project_name),
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -858,7 +857,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self.project_name,
+            project_name=self._resolve_project_name(project_name),
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -1821,7 +1820,7 @@ class Opik:
                 self._rest_client.check.get_workspace_name().workspace_name
             )
 
-        project_name = project_name or self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         return url_helpers.get_project_url_by_workspace(
             workspace=dereferenced_workspace, project_name=project_name
@@ -2388,8 +2387,7 @@ class Opik:
         feedback_definition_names: Optional[List[str]],
     ) -> QueueT:
         """Helper method to create an annotation queue with the specified scope."""
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, project_name
@@ -2541,7 +2539,7 @@ class Opik:
             List[TracesAnnotationQueue]: A list of traces annotation queue objects.
         """
         project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name or self._project_name
+            self._rest_client, self._resolve_project_name(project_name)
         )
 
         return annotation_queue_rest_operations.get_traces_annotation_queues(
@@ -2566,7 +2564,7 @@ class Opik:
             List[ThreadsAnnotationQueue]: A list of threads annotation queue objects.
         """
         project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name or self._project_name
+            self._rest_client, self._resolve_project_name(project_name)
         )
 
         return annotation_queue_rest_operations.get_threads_annotation_queues(
@@ -2610,7 +2608,7 @@ class Opik:
             )
 
         manager = AgentConfigManager(
-            project_name=project_name or self._project_name,
+            project_name=self._resolve_project_name(project_name),
             rest_client_=self._rest_client,
         )
         return config._create_version(manager, description)
@@ -2666,7 +2664,7 @@ class Opik:
         if selectors == 0:
             env = "prod"
 
-        resolved_project = project_name or self._project_name
+        resolved_project = self._resolve_project_name(project_name)
         manager = AgentConfigManager(
             project_name=resolved_project,
             rest_client_=self._rest_client,
@@ -2685,9 +2683,14 @@ class Opik:
         )
 
     def _resolve_project_name(self, project_name: Optional[str]) -> str:
-        if project_name is None:
-            return self._project_name
-        return project_name
+        if project_name is not None:
+            return project_name
+
+        context_project = context_storage.get_context_project_name()
+        if context_project is not None:
+            return context_project
+
+        return self._project_name
 
 
 @functools.lru_cache()
