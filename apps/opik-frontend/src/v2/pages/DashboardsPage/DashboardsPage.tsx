@@ -36,8 +36,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
@@ -354,15 +352,18 @@ const DashboardsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-4">
-      <div className="mb-1 flex items-center justify-between">
-        <div className="flex items-center">
-          <h1 className="comet-title-xs truncate break-words">Dashboards</h1>
-        </div>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">Dashboards</h1>
+        {canCreateDashboards && (
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewDashboardClick}
+          >
+            Create new dashboard
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_dashboards]}
-      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -393,15 +394,6 @@ const DashboardsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          {canCreateDashboards && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleNewDashboardClick}
-            >
-              Create new dashboard
-            </Button>
-          )}
         </div>
       </div>
       <DataTable
