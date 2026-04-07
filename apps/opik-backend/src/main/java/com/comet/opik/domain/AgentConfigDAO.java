@@ -395,7 +395,7 @@ interface AgentConfigDAO {
                     AND b.type = 'blueprint'
                 GROUP BY b.id, b.project_id, b.workspace_id, b.name, b.type, b.description,
                          b.created_by, b.created_at, b.last_updated_by, b.last_updated_at
-                ORDER BY b.id DESC
+                ORDER BY b.created_at DESC, b.id DESC
                 LIMIT :limit OFFSET :offset
             ) bh
             LEFT JOIN agent_config_values v
@@ -404,7 +404,7 @@ interface AgentConfigDAO {
                 AND v.valid_from_blueprint_id = bh.id
             GROUP BY bh.id, bh.project_id, bh.name, bh.type, bh.description,
                      bh.created_by, bh.created_at, bh.last_updated_by, bh.last_updated_at, bh.envs
-            ORDER BY bh.id DESC
+            ORDER BY bh.created_at DESC, bh.id DESC
             """)
     List<AgentBlueprint> getBlueprintHistory(
             @Bind("workspace_id") String workspaceId,
