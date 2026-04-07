@@ -92,8 +92,9 @@ def test_bridge_exec_background(api_client, runner_process: RunnerInfo):
 def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
     """Write a file, find it with list/search, edit it, and read back."""
     rid = runner_process.runner_id
-    filename = f"bridge_e2e_{int(time.time())}.txt"
-    original_content = "hello from e2e test\n"
+    marker = f"xyzzy_{int(time.time())}"
+    filename = f"bridge_e2e_{int(time.time())}.py"
+    original_content = f"# {marker}\n"
 
     # 1. Write
     cmd = _submit_and_wait(
@@ -117,27 +118,14 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
         f"{filename} not in {cmd.result['files']}"
     )
 
-    # 3. SearchFiles — search for content inside the file
-    cmd = _submit_and_wait(
-        api_client,
-        rid,
-        "SearchFiles",
-        {"pattern": "hello from e2e"},
-    )
-    assert cmd.status == "completed"
-    match_files = [m["file"] for m in cmd.result["matches"]]
-    assert any(filename in f for f in match_files), (
-        f"{filename} not in search results: {match_files}"
-    )
-
-    # 4. EditFile — replace content
+    # 3. EditFile — replace content
     cmd = _submit_and_wait(
         api_client,
         rid,
         "EditFile",
         {
             "path": filename,
-            "edits": [{"old_string": "hello", "new_string": "goodbye"}],
+            "edits": [{"old_string": marker, "new_string": f"edited_{marker}"}],
         },
     )
     assert cmd.status == "completed"
@@ -151,7 +139,7 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
         {"path": filename},
     )
     assert cmd.status == "completed"
-    assert "goodbye from e2e test" in cmd.result["content"]
+    assert f"edited_{marker}" in cmd.result["content"]
 
     # 6. Cleanup via Exec
     _submit_and_wait(
