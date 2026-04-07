@@ -542,6 +542,30 @@ export class TestHelperClient {
     }
   }
 
+  async searchTraces(
+    projectName: string,
+    options?: {
+      maxResults?: number;
+      truncate?: boolean;
+      exclude?: string[];
+      filterString?: string;
+    }
+  ): Promise<Record<string, any>[]> {
+    try {
+      const response = await this.client.post('/api/traces/search-traces', {
+        project_name: projectName,
+        max_results: options?.maxResults,
+        truncate: options?.truncate,
+        exclude: options?.exclude,
+        filter_string: options?.filterString,
+      });
+
+      return response.data.traces;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to search traces');
+    }
+  }
+
   async getTraces(projectName: string, size: number = 10): Promise<Trace[]> {
     try {
       const response = await this.client.post('/api/traces/get-traces', {

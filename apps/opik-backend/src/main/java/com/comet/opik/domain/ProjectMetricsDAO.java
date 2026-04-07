@@ -160,21 +160,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String ALERT_METRIC_QUERY_NAME_PREFIX = "AlertMetrics_";
 
     private static final String TRACE_FILTERED_PREFIX = """
-            WITH feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = 'trace'
-                  AND workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
-                UNION ALL
+            WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -182,37 +168,37 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        author
-                 FROM authored_feedback_scores
-                 WHERE entity_type = 'trace'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
-                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
-             ),
-             feedback_scores_with_ranking AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
-                 FROM feedback_scores_combined_raw
-             ),
-             feedback_scores_combined AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author
-                 FROM feedback_scores_with_ranking
-                 WHERE rn = 1
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -221,7 +207,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), guardrails_agg AS (
                 SELECT
@@ -312,21 +298,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     private static final String SPAN_FILTERED_PREFIX = """
-            WITH feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
-                UNION ALL
+            WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -334,37 +306,37 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        author
-                 FROM authored_feedback_scores
-                 WHERE entity_type = 'span'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
-                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
-             ),
-             feedback_scores_with_ranking AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
-                 FROM feedback_scores_combined_raw
-             ),
-             feedback_scores_combined AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author
-                 FROM feedback_scores_with_ranking
-                 WHERE rn = 1
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'span'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'span'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
+                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -373,7 +345,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
             <if(feedback_scores_empty_filters)>
@@ -476,21 +448,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM trace_threads_final)
-            ), feedback_scores_combined_raw AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    value,
-                    last_updated_at,
-                    last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                UNION ALL
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -498,36 +456,36 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        value,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-            ),
-            feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ),
-            feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
+                FROM (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -536,7 +494,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
             <if(thread_feedback_scores_empty_filters)>
@@ -1759,47 +1717,58 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             }
             // Note: when uuid_to_time is null, WITH FILL clause is omitted entirely
 
-            Optional.ofNullable(request.traceFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
-                                .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                                .ifPresent(
-                                        scoresFilters -> template.add("trace_feedback_scores_filters", scoresFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                                .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                        feedbackScoreIsEmptyFilters));
-                        filterQueryBuilder.hasGuardrailsFilter(filters)
-                                .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
-                    });
+            // OPIK-5678: each SQL prefix only has placeholders for its own entity type's filters;
+            // binding mismatched filters causes NoSuchElementException from R2DBC
+            var metricType = request.metricType();
 
-            Optional.ofNullable(request.threadFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
-                                .ifPresent(traceFilters -> template.add("trace_thread_filters", traceFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                                .ifPresent(
-                                        scoresFilters -> template.add("thread_feedback_scores_filters", scoresFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                                .ifPresent(
-                                        feedbackScoreIsEmptyFilters -> template.add(
-                                                "thread_feedback_scores_empty_filters",
-                                                feedbackScoreIsEmptyFilters));
-                    });
-
-            Optional.ofNullable(request.spanFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
-                                .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
-                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
-                                .ifPresent(
-                                        scoresFilters -> template.add("span_feedback_scores_filters", scoresFilters));
-                        filterQueryBuilder
-                                .toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
-                                .ifPresent(
-                                        feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                                feedbackScoreIsEmptyFilters));
-                    });
+            if (THREAD_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.threadFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                                    .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                                    .ifPresent(
+                                            scoresFilters -> template.add("thread_feedback_scores_filters",
+                                                    scoresFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                    .ifPresent(
+                                            feedbackScoreIsEmptyFilters -> template.add(
+                                                    "thread_feedback_scores_empty_filters",
+                                                    feedbackScoreIsEmptyFilters));
+                        });
+            } else if (SPAN_TIME_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.spanFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                                    .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                                    .ifPresent(
+                                            scoresFilters -> template.add("span_feedback_scores_filters",
+                                                    scoresFilters));
+                            filterQueryBuilder
+                                    .toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                                    .ifPresent(
+                                            feedbackScoreIsEmptyFilters -> template
+                                                    .add("feedback_scores_empty_filters",
+                                                            feedbackScoreIsEmptyFilters));
+                        });
+            } else {
+                Optional.ofNullable(request.traceFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                                    .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                                    .ifPresent(
+                                            scoresFilters -> template.add("trace_feedback_scores_filters",
+                                                    scoresFilters));
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                    .ifPresent(feedbackScoreIsEmptyFilters -> template
+                                            .add("feedback_scores_empty_filters",
+                                                    feedbackScoreIsEmptyFilters));
+                            filterQueryBuilder.hasGuardrailsFilter(filters)
+                                    .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
+                        });
+            }
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
@@ -1816,26 +1785,28 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 statement.bind("metadata_key", request.breakdown().metadataKey());
             }
 
-            Optional.ofNullable(request.traceFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                    });
-
-            Optional.ofNullable(request.threadFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                    });
-
-            Optional.ofNullable(request.spanFilters())
-                    .ifPresent(filters -> {
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
-                        filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
-                    });
+            if (THREAD_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.threadFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                        });
+            } else if (SPAN_TIME_METRICS.contains(metricType)) {
+                Optional.ofNullable(request.spanFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
+                        });
+            } else {
+                Optional.ofNullable(request.traceFilters())
+                        .ifPresent(filters -> {
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                            filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                        });
+            }
 
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
@@ -1852,6 +1823,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.SPAN_AVERAGE_DURATION,
             MetricType.SPAN_COST,
             MetricType.SPAN_ERROR_RATE);
+
+    private static final Set<MetricType> THREAD_METRICS = EnumSet.of(
+            MetricType.THREAD_COUNT,
+            MetricType.THREAD_DURATION,
+            MetricType.THREAD_FEEDBACK_SCORES,
+            MetricType.THREAD_AVERAGE_DURATION,
+            MetricType.THREAD_COST);
 
     private String getTimeField(MetricType metricType) {
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";

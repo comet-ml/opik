@@ -9,6 +9,7 @@ import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
@@ -24,7 +25,10 @@ import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -47,6 +51,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -193,7 +198,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .id(idGenerator.generateId())
                                         .source(DatasetItemSource.TRACE)
                                         .traceId(entry.getKey())
-                                        .data(entry.getValue())
+                                        .data(filterDataForDatasetType(entry.getValue(), dataset.type()))
                                         .build())
                                 .toList();
 
@@ -242,7 +247,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .id(idGenerator.generateId())
                                         .source(DatasetItemSource.SPAN)
                                         .spanId(entry.getKey())
-                                        .data(entry.getValue())
+                                        .data(filterDataForDatasetType(entry.getValue(), dataset.type()))
                                         .build())
                                 .toList();
 
@@ -261,6 +266,28 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         return saveBatch(batch, datasetId);
                     });
         }).then();
+    }
+
+    Map<String, JsonNode> filterDataForDatasetType(
+            Map<String, JsonNode> data, DatasetType datasetType) {
+        if (datasetType != DatasetType.EVALUATION_SUITE) {
+            return data;
+        }
+
+        // For evaluation suites, use only the input value as top-level data
+        var inputNode = data.get("input");
+        if (inputNode == null || inputNode.isNull()) {
+            return Map.of();
+        }
+
+        // Object inputs: unwrap fields as top-level keys (existing behavior)
+        if (inputNode.isObject()) {
+            return JsonUtils.convertValue(inputNode, new TypeReference<Map<String, JsonNode>>() {
+            });
+        }
+
+        // Non-object inputs (array, string, number, boolean): wrap under "input" key
+        return Map.of("input", inputNode);
     }
 
     private Mono<UUID> resolveProjectId(DatasetItemBatch batch) {

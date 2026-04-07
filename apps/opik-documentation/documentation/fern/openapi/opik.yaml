@@ -18956,6 +18956,41 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        exclude:
+          uniqueItems: true
+          type: array
+          description: Fields to exclude from the response
+          items:
+            type: string
+            description: Fields to exclude from the response
+            enum:
+            - name
+            - start_time
+            - end_time
+            - input
+            - output
+            - metadata
+            - tags
+            - error_info
+            - usage
+            - created_at
+            - created_by
+            - last_updated_by
+            - feedback_scores
+            - span_feedback_scores
+            - comments
+            - guardrails_validations
+            - total_estimated_cost
+            - span_count
+            - llm_span_count
+            - has_tool_spans
+            - duration
+            - ttft
+            - thread_id
+            - visibility_mode
+            - providers
+            - experiment
+            - source
         from_time:
           type: string
           description: Filter traces created from this time (ISO-8601 format).

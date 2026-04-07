@@ -22,16 +22,27 @@ jobs:
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
           cp apps/opik-backend/src/main/resources/model_prices_and_context_window.json apps/opik-frontend/src/data/model_prices_and_context_window.json
 
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Commit files
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "Github Actions (${{ github.actor }})"
           git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
           git add apps/opik-frontend/src/data/model_prices_and_context_window.json
-          git commit --allow-empty -m "[NA] [BE] Update model prices file"
+          git commit -m "[NA] [BE] Update model prices file"
 
       - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}

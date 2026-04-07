@@ -12,13 +12,15 @@ export async function searchTracesWithFilters(
   projectName: string,
   filters: OpikApi.TraceFilterPublic[] | null,
   maxResults: number,
-  truncate: boolean
+  truncate: boolean,
+  exclude?: string[]
 ): Promise<OpikApi.TracePublic[]> {
   const streamResponse = await apiClient.traces.searchTraces({
     projectName,
     filters: filters ?? undefined,
     limit: maxResults,
     truncate,
+    exclude: exclude as OpikApi.TraceSearchStreamRequestPublicExcludeItem[] | undefined,
   });
 
   const traces = await parseNdjsonStreamToArray<OpikApi.TracePublic>(

@@ -70,6 +70,9 @@ databaseAnalytics:
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1
+  #  Default: 1s
+  #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
+  healthCheckTimeout: 1s
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -720,3 +723,9 @@ webhook:
     # Default: 2s
     # Description: Fixed delay between metrics alert job executions (waits this duration after completion)
     fixedDelay: 2s
+
+# Agent configuration settings
+agentConfig:
+  # Default: 5000ms
+  # Description: Duration of the distributed lock held during blueprint create/update operations
+  blueprintLockDuration: 5000ms

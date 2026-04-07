@@ -1,17 +1,16 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/ui/select";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
+import useAgentConfigCreateMutation from "@/api/agent-configs/useAgentConfigCreateMutation";
 import { LocalRunner } from "@/types/agent-sandbox";
 import AgentRunnerInputForm from "./AgentRunnerInputForm";
-import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
+import AgentConfigurationEditView, {
+  AgentConfigurationEditViewHandle,
+} from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
+import { LoadableSelectBox } from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import { DropdownOption } from "@/types/shared";
 
 type AgentRunnerConnectedStateProps = {
   projectId: string;
@@ -28,6 +27,8 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState("input");
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
+  const configEditRef = useRef<AgentConfigurationEditViewHandle>(null);
+  const { mutateAsync: createConfigAsync } = useAgentConfigCreateMutation();
 
   const { data: configData } = useConfigHistoryListInfinite({ projectId });
 
@@ -47,8 +48,37 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
     return allVersions[0] ?? null;
   }, [allVersions, selectedVersionId]);
 
+  const versionOptions: DropdownOption<string>[] = useMemo(
+    () =>
+      allVersions.map((v) => ({
+        value: v.id,
+        label:
+          v.tags?.length > 0 ? `${v.name} (${v.tags.join(" · ")})` : v.name,
+      })),
+    [allVersions],
+  );
+
   const agent = runner.agents?.[0];
   const inputFields = agent?.params ?? [];
+
+  const handleRun = useCallback(
+    async (inputs: Record<string, unknown>) => {
+      const editView = configEditRef.current;
+      if (editView?.hasChanges()) {
+        const payload = await editView.buildMaskPayload();
+        if (!payload) return;
+        try {
+          const { id } = await createConfigAsync({ agentConfig: payload });
+          onRun(inputs, id);
+        } catch {
+          return;
+        }
+      } else {
+        onRun(inputs);
+      }
+    },
+    [onRun, createConfigAsync],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -72,11 +102,18 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           forceMount
           hidden={activeTab !== "input"}
         >
-          <AgentRunnerInputForm
-            fields={inputFields}
-            onSubmit={onRun}
-            isRunning={isRunning}
-          />
+          {agent ? (
+            <AgentRunnerInputForm
+              fields={inputFields}
+              onSubmit={handleRun}
+              isRunning={isRunning}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-8 text-muted-slate">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <p className="comet-body-s">Loading agent...</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent
@@ -88,31 +125,25 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           {activeVersion ? (
             <AgentConfigurationEditView
               key={activeVersion.id}
+              ref={configEditRef}
               item={activeVersion}
               projectId={projectId}
               onSaved={() => setSelectedVersionId("")}
               headerLeft={
-                <Select
+                <LoadableSelectBox
                   value={selectedVersionId || activeVersion.id}
-                  onValueChange={setSelectedVersionId}
-                >
-                  <SelectTrigger className="h-6 w-auto gap-1 px-2 text-xs focus:border-input">
-                    <span>Configuration:</span>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allVersions.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.name}
-                        {v.tags?.length > 0 && (
-                          <span className="ml-2 text-muted-slate">
-                            ({v.tags.join(" · ")})
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={setSelectedVersionId}
+                  options={versionOptions}
+                  buttonClassName="h-6 w-auto px-2 text-xs"
+                  align="start"
+                  minWidth={200}
+                  renderTitle={(option) => (
+                    <div className="flex items-center gap-1 truncate">
+                      <span>Configuration:</span>
+                      <span className="truncate">{option.label}</span>
+                    </div>
+                  )}
+                />
               }
             />
           ) : (

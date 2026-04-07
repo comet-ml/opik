@@ -13,6 +13,7 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
@@ -2448,6 +2449,175 @@ class DatasetVersionResourceTest {
                     .toList();
             assertThat(spanItems).hasSize(2);
             assertThat(spanItems).allMatch(item -> item.spanId() != null);
+        }
+
+        @Test
+        @DisplayName("Success: Create items from traces for EVALUATION_SUITE only includes unwrapped input")
+        void createFromTraces__whenEvaluationSuite__thenDataContainsOnlyInput() {
+            // Given - Create an EVALUATION_SUITE dataset
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .name(UUID.randomUUID().toString())
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create a trace with known input
+            String projectName = traceIdGenerator.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"topic\": \"Formula1\", \"lang\": \"en\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"F1 is a sport\"}"))
+                    .tags(Set.of("trace-tag"))
+                    .build();
+
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            // When - Create dataset items from traces
+            var enrichmentOptions = TraceEnrichmentOptions.builder()
+                    .includeSpans(false)
+                    .includeTags(true)
+                    .includeFeedbackScores(false)
+                    .includeComments(false)
+                    .includeUsage(false)
+                    .includeMetadata(false)
+                    .build();
+
+            var request = CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(trace.id()))
+                    .enrichmentOptions(enrichmentOptions)
+                    .build();
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify data contains only the unwrapped input fields (not full enriched data)
+            var items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(items).hasSize(1);
+
+            var itemData = items.getFirst().data();
+            // Should contain only the input fields unwrapped as top-level keys
+            assertThat(itemData).containsKey("topic");
+            assertThat(itemData).containsKey("lang");
+            assertThat(itemData.get("topic").asText()).isEqualTo("Formula1");
+            assertThat(itemData.get("lang").asText()).isEqualTo("en");
+            // Should NOT contain the enriched keys like "input", "output", "tags", etc.
+            assertThat(itemData).doesNotContainKey("input");
+            assertThat(itemData).doesNotContainKey("output");
+            assertThat(itemData).doesNotContainKey("expected_output");
+            assertThat(itemData).doesNotContainKey("tags");
+        }
+
+        @Test
+        @DisplayName("Success: Create items from spans for EVALUATION_SUITE only includes unwrapped input")
+        void createFromSpans__whenEvaluationSuite__thenDataContainsOnlyInput() {
+            // Given - Create an EVALUATION_SUITE dataset
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .name(UUID.randomUUID().toString())
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create a trace and span with known input
+            String projectName = traceIdGenerator.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"parent trace\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"parent response\"}"))
+                    .build();
+
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .name("test-span")
+                    .input(JsonUtils.getJsonNodeFromString("{\"question\": \"What is F1?\", \"context\": \"sports\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"answer\": \"Formula 1 racing\"}"))
+                    .tags(Set.of("span-tag"))
+                    .build();
+
+            spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // When - Create dataset items from spans
+            var enrichmentOptions = SpanEnrichmentOptions.builder()
+                    .includeTags(true)
+                    .includeFeedbackScores(false)
+                    .includeComments(false)
+                    .includeUsage(false)
+                    .includeMetadata(false)
+                    .build();
+
+            var request = CreateDatasetItemsFromSpansRequest.builder()
+                    .spanIds(Set.of(span.id()))
+                    .enrichmentOptions(enrichmentOptions)
+                    .build();
+
+            datasetResourceClient.createDatasetItemsFromSpans(datasetId, request, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify data contains only the unwrapped input fields
+            var items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(items).hasSize(1);
+
+            var itemData = items.getFirst().data();
+            // Should contain only the input fields unwrapped as top-level keys
+            assertThat(itemData).containsKey("question");
+            assertThat(itemData).containsKey("context");
+            assertThat(itemData.get("question").asText()).isEqualTo("What is F1?");
+            assertThat(itemData.get("context").asText()).isEqualTo("sports");
+            // Should NOT contain the enriched keys
+            assertThat(itemData).doesNotContainKey("input");
+            assertThat(itemData).doesNotContainKey("output");
+            assertThat(itemData).doesNotContainKey("tags");
+        }
+
+        @Test
+        @DisplayName("Success: Create items from traces for regular DATASET includes all enriched data")
+        void createFromTraces__whenRegularDataset__thenDataContainsAllEnrichedFields() {
+            // Given - Create a regular DATASET
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create a trace with known input
+            String projectName = traceIdGenerator.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"topic\": \"Formula1\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"F1 is a sport\"}"))
+                    .tags(Set.of("trace-tag"))
+                    .build();
+
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            // When - Create dataset items from traces
+            var enrichmentOptions = TraceEnrichmentOptions.builder()
+                    .includeSpans(false)
+                    .includeTags(true)
+                    .includeFeedbackScores(false)
+                    .includeComments(false)
+                    .includeUsage(false)
+                    .includeMetadata(false)
+                    .build();
+
+            var request = CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(trace.id()))
+                    .enrichmentOptions(enrichmentOptions)
+                    .build();
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify data contains the full enriched data (input, output, tags, etc.)
+            var items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(items).hasSize(1);
+
+            var itemData = items.getFirst().data();
+            // Regular dataset should preserve all enriched fields
+            // Note: trace "output" is mapped to "expected_output" during enrichment
+            assertThat(itemData).containsKey("input");
+            assertThat(itemData).containsKey("expected_output");
+            assertThat(itemData).containsKey("tags");
         }
     }
 
