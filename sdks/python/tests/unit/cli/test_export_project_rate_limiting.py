@@ -415,7 +415,7 @@ class TestExportTracesInterPageDelay:
 
     def test_export_traces__single_partial_page__sleep_not_called(self):
         """A partial (< 100 trace) page means we're at the end — no sleep needed."""
-        from opik.cli.exports.project import export_traces
+        from opik.cli.exports.project import export_traces, _PAGE_FETCH_DELAY_SECONDS
 
         mock_client = MagicMock()
         mock_client.search_spans.return_value = []
@@ -435,7 +435,12 @@ class TestExportTracesInterPageDelay:
                         filter_string=None,
                     )
 
-        assert mock_sleep.call_count == 0
+        from unittest.mock import call as mock_call
+
+        delay_calls = mock_sleep.call_args_list.count(
+            mock_call(_PAGE_FETCH_DELAY_SECONDS)
+        )
+        assert delay_calls == 0
 
 
 # ---------------------------------------------------------------------------
