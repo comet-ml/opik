@@ -2,6 +2,7 @@ import React, { useRef, useMemo } from "react";
 
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
+import { ExperimentsCompare } from "@/types/datasets";
 import {
   StatusTag,
   getStatusFromExperimentItems,
@@ -9,6 +10,19 @@ import {
 
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
+
+const areAllExperimentItemsScored = (
+  matchingRow: ExperimentsCompare,
+  datasetItemId: string,
+): boolean => {
+  const relatedItems =
+    matchingRow.experiment_items?.filter(
+      (ei) => ei.dataset_item_id === datasetItemId,
+    ) ?? [];
+  return (
+    relatedItems.length > 0 && relatedItems.every((ei) => ei.status != null)
+  );
+};
 
 interface PlaygroundOutputAssertionStatusProps {
   experimentId: string | undefined;
@@ -55,16 +69,8 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
 
         if (!matchingRow) return REFETCH_INTERVAL;
 
-        // Stop polling only when ALL experiment items for this dataset item are scored
-        const relatedItems =
-          matchingRow.experiment_items?.filter(
-            (ei) => ei.dataset_item_id === datasetItemId,
-          ) ?? [];
-        const allScored =
-          relatedItems.length > 0 &&
-          relatedItems.every((ei) => ei.status != null);
-
-        if (allScored) return false;
+        if (areAllExperimentItemsScored(matchingRow, datasetItemId))
+          return false;
 
         return REFETCH_INTERVAL;
       },
@@ -84,15 +90,7 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
       return undefined;
     }
 
-    // Only show status when all experiment items for this dataset item are scored
-    const relatedItems =
-      matchingRow.experiment_items?.filter(
-        (ei) => ei.dataset_item_id === datasetItemId,
-      ) ?? [];
-    const allScored =
-      relatedItems.length > 0 && relatedItems.every((ei) => ei.status != null);
-
-    if (!allScored) {
+    if (!areAllExperimentItemsScored(matchingRow, datasetItemId)) {
       return undefined;
     }
 

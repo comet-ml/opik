@@ -253,16 +253,15 @@ const useActionButtonActions = ({
           );
 
           const rows: ExperimentsCompare[] = data?.content ?? [];
+          const totalItems = data?.total ?? 0;
 
           // Count dataset items that have all their experiment items scored
           let scoredItems = 0;
-          let totalItems = 0;
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
             if (experimentItems.length === 0) continue;
 
-            totalItems++;
             const allScored = experimentItems.every((ei) => ei.status != null);
             if (allScored) {
               scoredItems++;

@@ -407,6 +407,10 @@ class EvalSuiteAssertionSamplerTest {
             assertThat(messages).hasSize(1);
             assertThat(messages.getFirst().categoryName()).isEqualTo("suite_assertion");
             assertThat(messages.getFirst().trace().id()).isEqualTo(trace.id());
+            assertThat(messages.getFirst().ruleName()).isEqualTo("item-evaluator");
+            assertThat(messages.getFirst().llmAsJudgeCode().model().name()).isEqualTo("gpt-5-nano");
+            assertThat(messages.getFirst().llmAsJudgeCode().schema()).hasSize(1);
+            assertThat(messages.getFirst().llmAsJudgeCode().schema().getFirst().name()).isEqualTo("check");
         }
 
         @Test
