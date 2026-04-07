@@ -36,8 +36,6 @@ import AnnotationQueueProgressCell from "@/v2/pages-shared/annotation-queues/Ann
 import AnnotationQueueRowActionsCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/v2/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/v2/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/v2/pages-shared/annotation-queues/NoAnnotationQueuesPage";
 
@@ -403,16 +401,17 @@ export const AnnotationQueuesPage: React.FC = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">
           Annotation queues
         </h1>
+        {canCreateAnnotationQueues && (
+          <Button size="sm" onClick={handleNewQueue}>
+            Create new queue
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
-      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -448,11 +447,6 @@ export const AnnotationQueuesPage: React.FC = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          {canCreateAnnotationQueues && (
-            <Button size="sm" onClick={handleNewQueue}>
-              Create new queue
-            </Button>
-          )}
         </div>
       </div>
       <DataTable

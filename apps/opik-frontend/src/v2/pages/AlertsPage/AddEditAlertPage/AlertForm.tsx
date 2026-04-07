@@ -168,7 +168,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
           />
         </div>
       )}
-      <h1 className="comet-title-l">{title}</h1>
+      <h1 className="comet-title-xs">{title}</h1>
 
       <div className="relative mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="flex-1 lg:max-w-[720px]">

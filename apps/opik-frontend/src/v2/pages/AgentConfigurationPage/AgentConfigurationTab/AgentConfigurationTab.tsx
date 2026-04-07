@@ -83,37 +83,34 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
   }
 
   return (
-    <div className="flex gap-0">
-      <div className="w-[50vw] min-w-0 flex-1 [overflow-anchor:none]">
-        <div className="mx-6 mt-6">
-          <p className="comet-body-s-accented">Agent configuration</p>
+    <div>
+      <h1 className="comet-title-xs px-6 pt-4">Agent configuration</h1>
+      <div className="flex gap-0">
+        <div className="w-[50vw] min-w-0 flex-1 [overflow-anchor:none]">
+          {selectedItem ? (
+            <AgentConfigurationDetailView
+              item={selectedItem}
+              projectId={projectId}
+              versions={allRows}
+              onEdit={() => setEditItem(allRows[0])}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-slate">
+              Select a version to view its configuration
+            </div>
+          )}
         </div>
 
-        {selectedItem ? (
-          <AgentConfigurationDetailView
-            item={selectedItem}
-            projectId={projectId}
-            versions={allRows}
-            onEdit={() => setEditItem(allRows[0])}
+        <div className="w-[25vw] shrink-0 pr-2">
+          <AgentConfigurationHistoryTimeline
+            items={allRows}
+            selectedIndex={selectedIndex}
+            onSelect={(index) => setSelectedId(allRows[index]?.id ?? undefined)}
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            onLoadMore={fetchNextPage}
           />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-slate">
-            Select a version to view its configuration
-          </div>
-        )}
-      </div>
-
-      <div className="w-[25vw] shrink-0 pr-2">
-        <p className="comet-body-s-accented ml-3 mt-6">Version history</p>
-
-        <AgentConfigurationHistoryTimeline
-          items={allRows}
-          selectedIndex={selectedIndex}
-          onSelect={(index) => setSelectedId(allRows[index]?.id ?? undefined)}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={fetchNextPage}
-        />
+        </div>
       </div>
     </div>
   );

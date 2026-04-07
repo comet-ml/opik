@@ -319,9 +319,9 @@ const OptimizationsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
+    <div className="pt-4">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
+        <h1 className="comet-title-xs truncate break-words">
           Optimization Studio
         </h1>
       </div>
@@ -329,7 +329,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
       />
       {isOptimizationStudioEnabled && <StudioTemplates />}
-      <div className="pt-6">
+      <div className="pt-4">
         <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
           Optimization runs
         </h2>

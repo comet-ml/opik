@@ -13,7 +13,7 @@ const AnnotatingHeader: React.FunctionComponent<AnnotatingHeaderProps> = ({
   return (
     <>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
+        <h1 className="comet-title-xs truncate break-words">
           {annotationQueue?.name}
         </h1>
         {content}

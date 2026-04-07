@@ -40,11 +40,10 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { PlusIcon } from "lucide-react";
 
 export const getRowId = (p: Prompt) => p.id;
 
@@ -338,14 +337,16 @@ const PromptsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Prompt library</h1>
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">Prompt library</h1>
+        {canCreatePrompts && (
+          <Button variant="default" size="sm" onClick={handleNewPromptClick}>
+            <PlusIcon className="mr-2 size-4" />
+            Create new prompt
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_prompt_library]}
-      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -376,11 +377,6 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          {canCreatePrompts && (
-            <Button variant="default" size="sm" onClick={handleNewPromptClick}>
-              Create new prompt
-            </Button>
-          )}
         </div>
       </div>
       <DataTable

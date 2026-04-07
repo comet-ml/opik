@@ -353,10 +353,10 @@ const DashboardsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
+    <div className="pt-4">
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center">
-          <h1 className="comet-title-l truncate break-words">Dashboards</h1>
+          <h1 className="comet-title-xs truncate break-words">Dashboards</h1>
         </div>
       </div>
       <ExplainerDescription
