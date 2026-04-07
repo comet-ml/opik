@@ -591,7 +591,12 @@ public class ExperimentsResource {
         log.info("Executing experiment for dataset '{}', workspaceId '{}', prompts '{}'",
                 request.datasetName(), workspaceId, request.prompts().size());
 
-        var response = experimentExecutionService.createAndExecute(request, workspaceId, userName);
+        var response = experimentExecutionService.createAndExecute(request)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                .block();
 
         return Response.status(Response.Status.ACCEPTED)
                 .entity(response)

@@ -88,8 +88,6 @@ public interface DatasetItemVersionDAO {
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
-    Mono<Map<UUID, List<EvaluatorItem>>> getItemEvaluatorsByDatasetId(UUID datasetId, UUID versionId);
-
     /**
      * Copies items from a source version to a new target version directly within dataset_item_versions.
      * Each copied item gets a new UUIDv7 but retains the same dataset_item_id.
@@ -329,22 +327,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             ORDER BY dataset_item_id DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
-            """;
-
-    private static final String SELECT_ITEM_EVALUATORS_BY_DATASET = """
-            SELECT dataset_item_id, evaluators
-            FROM (
-                SELECT dataset_item_id, evaluators
-                FROM dataset_item_versions
-                WHERE dataset_id = :dataset_id
-                AND dataset_version_id = :version_id
-                AND workspace_id = :workspace_id
-                ORDER BY dataset_item_id DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            )
-            WHERE evaluators != '[]'
-            SETTINGS log_comment = '<log_comment>'
-            ;
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
@@ -2296,32 +2278,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnSuccess(items -> log.info("Retrieved '{}' item IDs and hashes for version '{}'", items.size(),
                             versionId))
                     .flatMapMany(Flux::fromIterable);
-        });
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Map<UUID, List<EvaluatorItem>>> getItemEvaluatorsByDatasetId(
-            @NonNull UUID datasetId, @NonNull UUID versionId) {
-        return asyncTemplate.nonTransaction(connection -> {
-            var template = getSTWithLogComment(SELECT_ITEM_EVALUATORS_BY_DATASET,
-                    "get_item_evaluators_by_dataset", "", "", datasetId);
-            var statement = connection.createStatement(template.render())
-                    .bind("dataset_id", datasetId)
-                    .bind("version_id", versionId);
-
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
-                    "get_item_evaluators_by_dataset");
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, metadata) -> {
-                        var itemId = UUID.fromString(row.get("dataset_item_id", String.class));
-                        var evaluators = DatasetItemResultMapper.getEvaluators(row, metadata);
-                        return Map.entry(itemId, evaluators);
-                    }))
-                    .filter(entry -> entry.getValue() != null && !entry.getValue().isEmpty())
-                    .collectMap(Map.Entry::getKey, Map.Entry::getValue);
         });
     }
 

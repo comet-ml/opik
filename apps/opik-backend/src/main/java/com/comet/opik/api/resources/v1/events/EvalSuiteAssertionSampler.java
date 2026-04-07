@@ -23,6 +23,7 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -92,14 +93,18 @@ public class EvalSuiteAssertionSampler {
         log.info("Eval suite assertion evaluation triggered for dataset '{}', version hash '{}', '{}' traces",
                 datasetId, evalSuiteVersionHash.orElse("latest"), completeTraces.size());
 
+        var reactiveContext = reactor.util.context.Context.of(
+                RequestContext.WORKSPACE_ID, tracesBatch.workspaceId(),
+                RequestContext.USER_NAME, tracesBatch.userName(),
+                RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
+
         DatasetEvaluatorsResult datasetEvaluators = fetchDatasetEvaluators(
-                datasetId, evalSuiteVersionHash.orElse(null), tracesBatch.workspaceId());
+                datasetId, evalSuiteVersionHash.orElse(null))
+                .contextWrite(reactiveContext)
+                .timeout(Duration.ofSeconds(10))
+                .block();
 
         List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators.evaluators());
-
-        Map<UUID, List<PreparedEvaluator>> preparedItemEvaluatorsByItemId = prefetchItemEvaluators(
-                datasetId, datasetEvaluators.versionId(), tracesBatch.workspaceId(),
-                tracesBatch.userName());
 
         List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
                 .flatMap(trace -> {
@@ -112,8 +117,7 @@ public class EvalSuiteAssertionSampler {
                     return parseUUID(datasetItemId.get(), trace.id()).stream()
                             .flatMap(itemId -> {
                                 List<PreparedEvaluator> allEvaluators = new ArrayList<>(preparedDatasetEvaluators);
-                                allEvaluators.addAll(
-                                        preparedItemEvaluatorsByItemId.getOrDefault(itemId, List.of()));
+                                allEvaluators.addAll(fetchItemEvaluators(itemId, reactiveContext));
 
                                 if (allEvaluators.isEmpty()) {
                                     log.debug("No evaluators found for trace '{}', dataset item '{}'",
@@ -141,55 +145,47 @@ public class EvalSuiteAssertionSampler {
         }
     }
 
-    private DatasetEvaluatorsResult fetchDatasetEvaluators(UUID datasetId, String versionHash, String workspaceId) {
-        try {
-            Optional<DatasetVersion> version;
-            if (versionHash != null) {
-                var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
-                version = Optional.of(datasetVersionService.getVersionById(workspaceId, datasetId, versionId));
-            } else {
-                version = datasetVersionService.getLatestVersion(datasetId, workspaceId);
-            }
+    private Mono<DatasetEvaluatorsResult> fetchDatasetEvaluators(UUID datasetId, String versionHash) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            try {
+                Optional<DatasetVersion> version;
+                if (versionHash != null) {
+                    var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
+                    version = Optional.of(datasetVersionService.getVersionById(workspaceId, datasetId, versionId));
+                } else {
+                    version = datasetVersionService.getLatestVersion(datasetId, workspaceId);
+                }
 
-            return version
-                    .map(v -> DatasetEvaluatorsResult.builder()
-                            .versionId(v.id())
-                            .evaluators(v.evaluators() != null ? v.evaluators() : List.of())
-                            .build())
-                    .orElse(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
-        } catch (Exception e) {
-            log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
-            return DatasetEvaluatorsResult.builder().evaluators(List.of()).build();
-        }
+                return Mono.just(version
+                        .map(v -> DatasetEvaluatorsResult.builder()
+                                .versionId(v.id())
+                                .evaluators(v.evaluators() != null ? v.evaluators() : List.of())
+                                .build())
+                        .orElse(DatasetEvaluatorsResult.builder().evaluators(List.of()).build()));
+            } catch (Exception e) {
+                log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
+                return Mono.just(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
+            }
+        });
     }
 
-    private Map<UUID, List<PreparedEvaluator>> prefetchItemEvaluators(
-            UUID datasetId, UUID versionId, String workspaceId, String userName) {
-
-        if (versionId == null) {
-            return Map.of();
-        }
-
+    private List<PreparedEvaluator> fetchItemEvaluators(
+            UUID itemId, reactor.util.context.Context reactiveContext) {
         try {
-            Map<UUID, List<EvaluatorItem>> itemEvaluators = datasetItemService
-                    .getItemEvaluatorsByDatasetId(datasetId, versionId)
-                    .contextWrite(ctx -> ctx
-                            .put(RequestContext.WORKSPACE_ID, workspaceId)
-                            .put(RequestContext.USER_NAME, userName))
+            var item = datasetItemService.get(itemId)
+                    .contextWrite(reactiveContext)
                     .timeout(Duration.ofSeconds(10))
                     .block();
 
-            if (itemEvaluators == null || itemEvaluators.isEmpty()) {
-                return Map.of();
+            if (item == null || item.evaluators() == null || item.evaluators().isEmpty()) {
+                return List.of();
             }
 
-            return itemEvaluators.entrySet().stream()
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            entry -> prepareEvaluators(entry.getValue())));
+            return prepareEvaluators(item.evaluators());
         } catch (Exception e) {
-            log.error("Failed to fetch item evaluators for dataset '{}'", datasetId, e);
-            return Map.of();
+            log.error("Failed to fetch evaluators for item '{}'", itemId, e);
+            return List.of();
         }
     }
 

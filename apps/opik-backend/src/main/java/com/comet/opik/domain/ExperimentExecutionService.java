@@ -17,15 +17,19 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Singleton
 @Slf4j
@@ -62,98 +66,114 @@ public class ExperimentExecutionService {
     /**
      * Creates experiments and dispatches async processing.
      * Returns immediately with experiment IDs so the caller can start polling.
+     * Dataset items are streamed rather than collected into memory to support large datasets.
      */
-    public ExperimentExecutionResponse createAndExecute(
-            @NonNull ExperimentExecutionRequest request,
-            @NonNull String workspaceId,
-            @NonNull String userName) {
+    public Mono<ExperimentExecutionResponse> createAndExecute(
+            @NonNull ExperimentExecutionRequest request) {
 
-        String projectName = request.projectName() != null
-                ? request.projectName()
-                : experimentExecutionConfig.getDefaultProjectName();
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-        List<DatasetItem> datasetItems = fetchAllDatasetItems(request, workspaceId, userName);
+            String projectName = request.projectName() != null
+                    ? request.projectName()
+                    : experimentExecutionConfig.getDefaultProjectName();
 
-        if (datasetItems.isEmpty()) {
-            log.warn("No dataset items found for dataset '{}', workspaceId '{}'",
-                    request.datasetName(), workspaceId);
-            return ExperimentExecutionResponse.builder()
-                    .experiments(List.of())
-                    .totalItems(0)
-                    .build();
-        }
+            ExecutionPolicy datasetExecutionPolicy = fetchDatasetExecutionPolicy(
+                    request.datasetId(), request.versionHash(), workspaceId);
 
-        ExecutionPolicy datasetExecutionPolicy = fetchDatasetExecutionPolicy(
-                request.datasetId(), request.versionHash(), workspaceId);
+            return createExperiments(request, projectName)
+                    .collectList()
+                    .flatMap(experimentEntries -> {
+                        List<UUID> experimentIds = experimentEntries.stream()
+                                .map(ExperimentEntry::experimentId).toList();
+                        List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries.stream()
+                                .map(ExperimentEntry::info).toList();
 
-        List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = new ArrayList<>();
-        List<UUID> experimentIds = new ArrayList<>();
+                        var totalItems = new AtomicInteger(0);
+                        var futures = Collections.synchronizedList(new ArrayList<CompletableFuture<Void>>());
 
-        for (int i = 0; i < request.prompts().size(); i++) {
-            var prompt = request.prompts().get(i);
-            UUID experimentId = idGenerator.generateId();
+                        return streamDatasetItems(request)
+                                .doOnNext(item -> dispatchItemProcessing(
+                                        item, request, experimentIds, datasetExecutionPolicy,
+                                        projectName, workspaceId, userName, totalItems, futures))
+                                .count()
+                                .map(itemCount -> {
+                                    if (itemCount == 0) {
+                                        log.warn("No dataset items found for dataset '{}', workspaceId '{}'",
+                                                request.datasetName(), workspaceId);
+                                    } else {
+                                        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                                                .whenComplete((v, ex) -> {
+                                                    if (ex != null) {
+                                                        log.error("Unexpected error during experiment processing", ex);
+                                                    }
+                                                    finishExperiments(experimentIds, workspaceId, userName);
+                                                });
 
-            ObjectNode metadata = JsonUtils.createObjectNode();
-            metadata.put("model", prompt.model());
-            metadata.set("messages", JsonUtils.getMapper().valueToTree(prompt.messages()));
-            if (prompt.configs() != null) {
-                metadata.set("model_config", JsonUtils.getMapper().valueToTree(prompt.configs()));
-            }
+                                        log.info(
+                                                "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
+                                                experimentIds.size(), totalItems.get(), request.datasetName(),
+                                                workspaceId);
+                                    }
 
-            var experiment = Experiment.builder()
-                    .id(experimentId)
-                    .datasetName(request.datasetName())
-                    .datasetVersionId(request.datasetVersionId())
-                    .projectName(projectName)
-                    .metadata(metadata)
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
-                    .status(ExperimentStatus.RUNNING)
-                    .promptVersions(
-                            prompt.promptVersions() != null ? prompt.promptVersions() : request.promptVersions())
-                    .build();
-
-            experimentService.create(experiment)
-                    .contextWrite(ctx -> ctx
-                            .put(RequestContext.WORKSPACE_ID, workspaceId)
-                            .put(RequestContext.USER_NAME, userName)
-                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
-                    .block();
-
-            experimentIds.add(experimentId);
-            experimentInfos.add(ExperimentExecutionResponse.ExperimentInfo.builder()
-                    .experimentId(experimentId)
-                    .promptIndex(i)
-                    .build());
-        }
-
-        int totalItems = calculateTotalItems(datasetItems, datasetExecutionPolicy, request.prompts().size());
-
-        dispatchAsyncProcessing(request, datasetItems, experimentIds,
-                datasetExecutionPolicy, projectName, workspaceId, userName);
-
-        log.info("Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
-                experimentIds.size(), totalItems, request.datasetName(), workspaceId);
-
-        return ExperimentExecutionResponse.builder()
-                .experiments(experimentInfos)
-                .totalItems(totalItems)
-                .build();
+                                    return ExperimentExecutionResponse.builder()
+                                            .experiments(experimentInfos)
+                                            .totalItems(totalItems.get())
+                                            .build();
+                                });
+                    });
+        });
     }
 
-    private List<DatasetItem> fetchAllDatasetItems(ExperimentExecutionRequest request,
-            String workspaceId, String userName) {
-        var streamRequest = DatasetItemStreamRequest.builder()
-                .datasetName(request.datasetName())
-                .datasetVersion(request.versionHash())
-                .build();
+    private record ExperimentEntry(UUID experimentId, ExperimentExecutionResponse.ExperimentInfo info) {
+    }
 
-        return datasetItemService.getItems(workspaceId, streamRequest, List.of())
-                .collectList()
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
-                .block();
+    private Flux<ExperimentEntry> createExperiments(ExperimentExecutionRequest request, String projectName) {
+        return Flux.range(0, request.prompts().size())
+                .concatMap(i -> {
+                    var prompt = request.prompts().get(i);
+                    UUID experimentId = idGenerator.generateId();
+
+                    ObjectNode metadata = JsonUtils.createObjectNode();
+                    metadata.put("model", prompt.model());
+                    metadata.set("messages", JsonUtils.getMapper().valueToTree(prompt.messages()));
+                    if (prompt.configs() != null) {
+                        metadata.set("model_config", JsonUtils.getMapper().valueToTree(prompt.configs()));
+                    }
+
+                    var experiment = Experiment.builder()
+                            .id(experimentId)
+                            .datasetName(request.datasetName())
+                            .datasetVersionId(request.datasetVersionId())
+                            .projectName(projectName)
+                            .metadata(metadata)
+                            .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                            .status(ExperimentStatus.RUNNING)
+                            .promptVersions(
+                                    prompt.promptVersions() != null
+                                            ? prompt.promptVersions()
+                                            : request.promptVersions())
+                            .build();
+
+                    return experimentService.create(experiment)
+                            .map(id -> new ExperimentEntry(experimentId,
+                                    ExperimentExecutionResponse.ExperimentInfo.builder()
+                                            .experimentId(experimentId)
+                                            .promptIndex(i)
+                                            .build()));
+                });
+    }
+
+    private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request) {
+        return Flux.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(request.datasetName())
+                    .datasetVersion(request.versionHash())
+                    .build();
+            return datasetItemService.getItems(workspaceId, streamRequest, List.of());
+        });
     }
 
     private ExecutionPolicy fetchDatasetExecutionPolicy(UUID datasetId, String versionHash, String workspaceId) {
@@ -172,15 +192,6 @@ public class ExperimentExecutionService {
         }
     }
 
-    private int calculateTotalItems(List<DatasetItem> items, ExecutionPolicy versionPolicy, int promptCount) {
-        int total = 0;
-        for (DatasetItem item : items) {
-            int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), versionPolicy);
-            total += runsPerItem;
-        }
-        return total * promptCount;
-    }
-
     private int getEffectiveRunsPerItem(ExecutionPolicy itemPolicy, ExecutionPolicy versionPolicy) {
         if (itemPolicy != null && itemPolicy.runsPerItem() > 0) {
             return itemPolicy.runsPerItem();
@@ -191,71 +202,58 @@ public class ExperimentExecutionService {
         return evalSuiteConfig.getDefaultRunsPerItem();
     }
 
-    private void dispatchAsyncProcessing(
+    private void dispatchItemProcessing(
+            DatasetItem item,
             ExperimentExecutionRequest request,
-            List<DatasetItem> datasetItems,
             List<UUID> experimentIds,
             ExecutionPolicy datasetExecutionPolicy,
             String projectName,
             String workspaceId,
-            String userName) {
+            String userName,
+            AtomicInteger totalItems,
+            List<CompletableFuture<Void>> futures) {
 
-        var futures = new ArrayList<CompletableFuture<Void>>();
+        int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
+        totalItems.addAndGet(runsPerItem * request.prompts().size());
 
-        for (DatasetItem item : datasetItems) {
-            int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
+        for (int run = 0; run < runsPerItem; run++) {
+            for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
+                var prompt = request.prompts().get(promptIdx);
+                UUID experimentId = experimentIds.get(promptIdx);
 
-            for (int run = 0; run < runsPerItem; run++) {
-                for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
-                    var prompt = request.prompts().get(promptIdx);
-                    UUID experimentId = experimentIds.get(promptIdx);
-
-                    futures.add(CompletableFuture.runAsync(() -> {
-                        try {
-                            itemProcessor.process(
-                                    prompt, item, experimentId,
-                                    request.datasetId(), request.versionHash(),
-                                    projectName, workspaceId, userName);
-                        } catch (Exception e) {
-                            log.error("Failed to process item '{}' for experiment '{}'",
-                                    item.id(), experimentId, e);
-                        }
-                    }, executorService));
-                }
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        itemProcessor.process(
+                                prompt, item, experimentId,
+                                request.datasetId(), request.versionHash(),
+                                projectName, workspaceId, userName);
+                    } catch (Exception e) {
+                        log.error("Failed to process item '{}' for experiment '{}'",
+                                item.id(), experimentId, e);
+                    }
+                }, executorService));
             }
         }
-
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .whenComplete((v, ex) -> {
-                    if (ex != null) {
-                        log.error("Unexpected error during experiment processing", ex);
-                    }
-                    finishExperiments(experimentIds, workspaceId, userName);
-                });
     }
 
-    /** userName is required for audit context in the reactive pipeline */
     private void finishExperiments(List<UUID> experimentIds, String workspaceId, String userName) {
         try {
-            java.util.function.Function<reactor.util.context.Context, reactor.util.context.Context> reactorContext = ctx -> ctx
-                    .put(RequestContext.WORKSPACE_ID, workspaceId)
-                    .put(RequestContext.USER_NAME, userName)
-                    .put(RequestContext.WORKSPACE_NAME, workspaceId)
-                    .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
+            var reactorContext = reactor.util.context.Context.of(
+                    RequestContext.WORKSPACE_ID, workspaceId,
+                    RequestContext.USER_NAME, userName,
+                    RequestContext.WORKSPACE_NAME, workspaceId,
+                    RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
 
             var statusUpdate = com.comet.opik.api.ExperimentUpdate.builder()
                     .status(ExperimentStatus.COMPLETED)
                     .build();
 
-            for (UUID experimentId : experimentIds) {
-                experimentService.update(experimentId, statusUpdate)
-                        .contextWrite(reactorContext)
-                        .block();
-            }
-
-            experimentService.finishExperiments(Set.copyOf(experimentIds))
+            Flux.fromIterable(experimentIds)
+                    .concatMap(experimentId -> experimentService.update(experimentId, statusUpdate))
+                    .then(experimentService.finishExperiments(Set.copyOf(experimentIds)))
                     .contextWrite(reactorContext)
                     .block();
+
             log.info("Finished '{}' experiments", experimentIds.size());
         } catch (Exception e) {
             log.error("Failed to finish experiments", e);
