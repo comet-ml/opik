@@ -142,13 +142,6 @@ from .types import (
     BooleanFeedbackDetailUpdate,
     BreakdownConfigPublic,
     BreakdownConfigPublicField,
-    BridgeCommand,
-    BridgeCommandBatchResponse,
-    BridgeCommandItem,
-    BridgeCommandItemType,
-    BridgeCommandStatus,
-    BridgeCommandSubmitResponse,
-    BridgeCommandType,
     CategoricalFeedbackDefinition,
     CategoricalFeedbackDefinitionCreate,
     CategoricalFeedbackDefinitionPublic,
@@ -691,12 +684,7 @@ from .projects import (
 )
 from .prompts import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
 from .retention_rules import RetentionRuleWriteRetention
-from .runners import (
-    BridgeCommandResultRequestStatus,
-    BridgeCommandSubmitRequestType,
-    ListRunnersRequestStatus,
-    LocalRunnerJobResultRequestStatus,
-)
+from .runners import ListRunnersRequestStatus, LocalRunnerJobResultRequestStatus
 from .spans import (
     FindFeedbackScoreNames1RequestType,
     GetSpanStatsRequestType,
@@ -849,15 +837,6 @@ __all__ = [
     "BooleanFeedbackDetailUpdate",
     "BreakdownConfigPublic",
     "BreakdownConfigPublicField",
-    "BridgeCommand",
-    "BridgeCommandBatchResponse",
-    "BridgeCommandItem",
-    "BridgeCommandItemType",
-    "BridgeCommandResultRequestStatus",
-    "BridgeCommandStatus",
-    "BridgeCommandSubmitRequestType",
-    "BridgeCommandSubmitResponse",
-    "BridgeCommandType",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",

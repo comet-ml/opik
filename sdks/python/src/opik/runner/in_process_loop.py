@@ -6,7 +6,6 @@ import contextvars
 import inspect
 import json
 import logging
-import os
 import random
 import threading
 import time
@@ -101,12 +100,11 @@ class InProcessRunnerLoop:
         self._log_streamer: Optional[LogStreamer] = None
 
     def run(self) -> None:
-        if os.environ.get("OPIK_SUPERVISED") != "true":
-            heartbeat_thread = threading.Thread(
-                target=self._heartbeat_loop,
-                daemon=True,
-            )
-            heartbeat_thread.start()
+        heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            daemon=True,
+        )
+        heartbeat_thread.start()
 
         poll_thread = threading.Thread(
             target=self._poll_loop,

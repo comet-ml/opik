@@ -2,17 +2,10 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.runner.BridgeCommand;
-import com.comet.opik.api.runner.BridgeCommandBatchResponse;
-import com.comet.opik.api.runner.BridgeCommandNextRequest;
-import com.comet.opik.api.runner.BridgeCommandResultRequest;
-import com.comet.opik.api.runner.BridgeCommandSubmitRequest;
-import com.comet.opik.api.runner.BridgeCommandSubmitResponse;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
 import com.comet.opik.api.runner.LocalRunnerConnectResponse;
-import com.comet.opik.api.runner.LocalRunnerHeartbeatRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
@@ -24,7 +17,6 @@ import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -42,7 +34,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -164,21 +155,6 @@ public class LocalRunnersResource {
         return Response.noContent().build();
     }
 
-    @PATCH
-    @Path("/{runnerId}/checklist")
-    @RateLimited
-    @Operation(operationId = "patchChecklist", summary = "Patch runner checklist", description = "Partial update of the runner's checklist (deep merge)", responses = {
-            @ApiResponse(responseCode = "204", description = "No content"),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public Response patchChecklist(@PathParam("runnerId") UUID runnerId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Object.class))) @NotNull JsonNode updates) {
-        ensureEnabled();
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        runnerService.patchChecklist(runnerId, workspaceId, userName, updates);
-        return Response.noContent().build();
-    }
-
     @POST
     @Path("/{runnerId}/heartbeats")
     @RateLimited
@@ -186,13 +162,11 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "200", description = "Heartbeat response", content = @Content(schema = @Schema(implementation = LocalRunnerHeartbeatResponse.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "410", description = "Gone", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public Response heartbeat(@PathParam("runnerId") UUID runnerId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerHeartbeatRequest.class))) LocalRunnerHeartbeatRequest body) {
+    public Response heartbeat(@PathParam("runnerId") UUID runnerId) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        List<String> capabilities = body != null ? body.capabilities() : null;
-        LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId, userName, capabilities);
+        LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId, userName);
         return Response.ok(response).build();
     }
 
@@ -331,135 +305,6 @@ public class LocalRunnersResource {
         String userName = requestContext.get().getUserName();
         runnerService.cancelJob(jobId, workspaceId, userName);
         return Response.noContent().build();
-    }
-
-    @POST
-    @Path("/{runnerId}/bridge/commands")
-    @RateLimited
-    @Operation(operationId = "submitBridgeCommand", summary = "Submit bridge command", description = "Submit a bridge command for execution by the local daemon", responses = {
-            @ApiResponse(responseCode = "201", description = "Command submitted", headers = @Header(name = "Location", description = "URI of the command"), content = @Content(schema = @Schema(implementation = BridgeCommandSubmitResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Runner not found or not connected", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "409", description = "Runner does not support bridge", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public Response submitBridgeCommand(@PathParam("runnerId") UUID runnerId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = BridgeCommandSubmitRequest.class))) @NotNull @Valid BridgeCommandSubmitRequest request,
-            @Context UriInfo uriInfo) {
-        ensureEnabled();
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        UUID commandId = runnerService.submitBridgeCommand(runnerId, workspaceId, userName, request);
-        var uri = uriInfo.getBaseUriBuilder()
-                .path("v1/private/local-runners/{runnerId}/bridge/commands/{commandId}")
-                .build(runnerId, commandId);
-        return Response.created(uri)
-                .entity(BridgeCommandSubmitResponse.builder().commandId(commandId).build())
-                .build();
-    }
-
-    @POST
-    @Path("/{runnerId}/bridge/commands/next")
-    @Operation(operationId = "nextBridgeCommands", summary = "Poll next bridge commands", description = "Long-poll for pending bridge commands (batch)", responses = {
-            @ApiResponse(responseCode = "200", description = "Commands batch", content = @Content(schema = @Schema(implementation = BridgeCommandBatchResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public void nextBridgeCommands(@PathParam("runnerId") UUID runnerId,
-            @Valid BridgeCommandNextRequest request,
-            @Suspended AsyncResponse asyncResponse) {
-        ensureEnabled();
-        int maxCommands = request != null ? request.effectiveMaxCommands() : 10;
-        long pollTimeoutSeconds = runnerConfig.getBridgePollTimeout().toSeconds();
-        long bufferSeconds = runnerConfig.getBridgeAsyncTimeoutBuffer().toSeconds();
-        asyncResponse.setTimeout(pollTimeoutSeconds + bufferSeconds, TimeUnit.SECONDS);
-        asyncResponse.setTimeoutHandler(
-                ar -> ar.resume(Response.ok(BridgeCommandBatchResponse.builder()
-                        .commands(List.of()).build()).build()));
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        runnerService.nextBridgeCommands(runnerId, workspaceId, userName, maxCommands)
-                .map(batch -> Response.ok(batch).build())
-                .subscribe(
-                        asyncResponse::resume,
-                        error -> {
-                            if (error instanceof WebApplicationException wae) {
-                                asyncResponse.resume(wae);
-                            } else {
-                                log.error("Error polling bridge commands for runner='{}' workspace='{}'", runnerId,
-                                        workspaceId, error);
-                                asyncResponse.resume(Response.serverError().build());
-                            }
-                        });
-    }
-
-    @POST
-    @Path("/{runnerId}/bridge/commands/{commandId}/results")
-    @Operation(operationId = "reportBridgeResult", summary = "Report bridge command result", description = "Report bridge command completion or failure", responses = {
-            @ApiResponse(responseCode = "200", description = "Result accepted"),
-            @ApiResponse(responseCode = "404", description = "Command not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "409", description = "Already completed", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public Response reportBridgeResult(@PathParam("runnerId") UUID runnerId,
-            @PathParam("commandId") UUID commandId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = BridgeCommandResultRequest.class))) @NotNull @Valid BridgeCommandResultRequest request) {
-        ensureEnabled();
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        runnerService.reportBridgeCommandResult(runnerId, workspaceId, userName, commandId, request);
-        return Response.ok().build();
-    }
-
-    @GET
-    @Path("/{runnerId}/bridge/commands/{commandId}")
-    @Operation(operationId = "getBridgeCommand", summary = "Get bridge command", description = "Get bridge command status, optionally long-polling for completion", responses = {
-            @ApiResponse(responseCode = "200", description = "Command state", content = @Content(schema = @Schema(implementation = BridgeCommand.class))),
-            @ApiResponse(responseCode = "404", description = "Command not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public void getBridgeCommand(@PathParam("runnerId") UUID runnerId,
-            @PathParam("commandId") UUID commandId,
-            @QueryParam("wait") @DefaultValue("false") boolean wait,
-            @QueryParam("timeout") @DefaultValue("30") int timeout,
-            @Suspended AsyncResponse asyncResponse) {
-        ensureEnabled();
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-
-        if (!wait) {
-            BridgeCommand command = runnerService.getBridgeCommand(runnerId, workspaceId, userName, commandId);
-            asyncResponse.resume(Response.ok(command).build());
-            return;
-        }
-
-        int maxTimeout = (int) runnerConfig.getBridgeMaxCommandTimeout().toSeconds();
-        int clampedTimeout = Math.min(Math.max(timeout, 1), maxTimeout);
-        long bufferSeconds = runnerConfig.getBridgeAsyncTimeoutBuffer().toSeconds();
-        asyncResponse.setTimeout(clampedTimeout + bufferSeconds, TimeUnit.SECONDS);
-        asyncResponse.setTimeoutHandler(ar -> {
-            try {
-                BridgeCommand cmd = runnerService.getBridgeCommand(runnerId, workspaceId, userName, commandId);
-                ar.resume(Response.ok(cmd).build());
-            } catch (Exception e) {
-                ar.resume(e);
-            }
-        });
-
-        try {
-            runnerService.awaitBridgeCommand(runnerId, workspaceId, userName, commandId, clampedTimeout)
-                    .map(cmd -> Response.ok(cmd).build())
-                    .subscribe(
-                            asyncResponse::resume,
-                            error -> {
-                                if (error instanceof WebApplicationException wae) {
-                                    asyncResponse.resume(wae);
-                                } else {
-                                    log.error("Error awaiting bridge command='{}' runner='{}' workspace='{}'",
-                                            commandId,
-                                            runnerId, workspaceId, error);
-                                    asyncResponse.resume(Response.serverError().build());
-                                }
-                            });
-        } catch (WebApplicationException wae) {
-            asyncResponse.resume(wae);
-        } catch (Exception e) {
-            log.error("Error setting up bridge command await='{}' runner='{}' workspace='{}'", commandId,
-                    runnerId, workspaceId, e);
-            asyncResponse.resume(Response.serverError().build());
-        }
     }
 
     private void ensureEnabled() {

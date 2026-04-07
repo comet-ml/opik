@@ -177,13 +177,6 @@ from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
 from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
 from .breakdown_config_public import BreakdownConfigPublic
 from .breakdown_config_public_field import BreakdownConfigPublicField
-from .bridge_command import BridgeCommand
-from .bridge_command_batch_response import BridgeCommandBatchResponse
-from .bridge_command_item import BridgeCommandItem
-from .bridge_command_item_type import BridgeCommandItemType
-from .bridge_command_status import BridgeCommandStatus
-from .bridge_command_submit_response import BridgeCommandSubmitResponse
-from .bridge_command_type import BridgeCommandType
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
 from .categorical_feedback_definition_create import CategoricalFeedbackDefinitionCreate
 from .categorical_feedback_definition_public import CategoricalFeedbackDefinitionPublic
@@ -804,13 +797,6 @@ __all__ = [
     "BooleanFeedbackDetailUpdate",
     "BreakdownConfigPublic",
     "BreakdownConfigPublicField",
-    "BridgeCommand",
-    "BridgeCommandBatchResponse",
-    "BridgeCommandItem",
-    "BridgeCommandItemType",
-    "BridgeCommandStatus",
-    "BridgeCommandSubmitResponse",
-    "BridgeCommandType",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",

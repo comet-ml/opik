@@ -4,6 +4,4 @@
  * @example
  *     {}
  */
-export interface BridgeCommandNextRequest {
-    maxCommands?: number;
-}
+export type HeartbeatRequest = {};

@@ -79,11 +79,9 @@ def _run(shutdown_event: threading.Event) -> None:
         )
         return
 
-    supervised = os.environ.get("OPIK_SUPERVISED") == "true"
+    _print_banner(runner_id, project_name)
 
-    if not supervised:
-        _print_banner(runner_id, project_name)
-        prefixed_output.install()
+    prefixed_output.install()
 
     client = Opik(_show_misconfiguration_message=False)
     api = client.rest_client
@@ -96,6 +94,17 @@ def _run(shutdown_event: threading.Event) -> None:
             timeout=0,
         ).dict()
 
+    def _sync_agent(name: str) -> None:
+        entry = registry.get_all().get(name)
+        if entry is None:
+            return
+        try:
+            api.runners.register_agents(runner_id, request={name: _to_payload(entry)})
+        except Exception:
+            LOGGER.warn("Failed to register agent '%s'", name, exc_info=True)
+
+    registry.on_register(_sync_agent)
+
     entrypoints = registry.get_all()
     if entrypoints:
         api.runners.register_agents(
@@ -103,8 +112,7 @@ def _run(shutdown_event: threading.Event) -> None:
             request={name: _to_payload(entry) for name, entry in entrypoints.items()},
         )
 
-    if os.environ.get("OPIK_SUPERVISED") != "true":
-        LOGGER.info("Runner activated")
+    LOGGER.info("Runner activated")
 
     loop = InProcessRunnerLoop(api, runner_id, shutdown_event)
 

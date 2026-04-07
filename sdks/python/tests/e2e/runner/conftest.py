@@ -101,7 +101,7 @@ def runner_process(api_client, subprocess_env, project_id, request):
 
     while time.monotonic() < deadline:
         for line in list(output_lines):
-            match = re.search(r"runner: (\S+)", line)
+            match = re.search(r"Runner connected \(ID: ([^)]+)\)", line)
             if match:
                 runner_id = match.group(1)
                 break
