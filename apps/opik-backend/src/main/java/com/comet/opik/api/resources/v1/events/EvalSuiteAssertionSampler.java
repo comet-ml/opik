@@ -92,7 +92,8 @@ public class EvalSuiteAssertionSampler {
         List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators.evaluators());
 
         Map<UUID, List<PreparedEvaluator>> preparedItemEvaluatorsByItemId = prefetchItemEvaluators(
-                datasetId, datasetEvaluators.versionId(), tracesBatch.workspaceId());
+                datasetId, datasetEvaluators.versionId(), tracesBatch.workspaceId(),
+                tracesBatch.userName());
 
         List<TraceToScoreLlmAsJudge> messages = new ArrayList<>();
 
@@ -157,7 +158,7 @@ public class EvalSuiteAssertionSampler {
     }
 
     private Map<UUID, List<PreparedEvaluator>> prefetchItemEvaluators(
-            UUID datasetId, UUID versionId, String workspaceId) {
+            UUID datasetId, UUID versionId, String workspaceId, String userName) {
 
         if (versionId == null) {
             return Map.of();
@@ -166,7 +167,9 @@ public class EvalSuiteAssertionSampler {
         try {
             Map<UUID, List<EvaluatorItem>> itemEvaluators = datasetItemService
                     .getItemEvaluatorsByDatasetId(datasetId, versionId)
-                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName))
                     .block();
 
             if (itemEvaluators == null || itemEvaluators.isEmpty()) {

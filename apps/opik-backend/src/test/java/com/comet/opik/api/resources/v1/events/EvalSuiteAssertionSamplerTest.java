@@ -1,21 +1,45 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
+import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
+import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.domain.DatasetItemService;
+import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.uuid.Generators;
+import dev.langchain4j.data.message.ChatMessageType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests for eval suite assertion evaluation logic in EvalSuiteAssertionSampler.
@@ -240,6 +264,226 @@ class EvalSuiteAssertionSamplerTest {
                     "Input: user question, Output: ai answer, Assertions: "
                             + "- `assertion_1`: No table of contents.\n"
                             + "- `assertion_2`: Has TL;DR section.");
+        }
+    }
+
+    @Nested
+    @DisplayName("onTracesCreated integration")
+    @ExtendWith(MockitoExtension.class)
+    class OnTracesCreated {
+
+        @Mock
+        DatasetItemService datasetItemService;
+
+        @Mock
+        DatasetVersionService datasetVersionService;
+
+        @Mock
+        OnlineScorePublisher onlineScorePublisher;
+
+        @Mock
+        IdGenerator idGenerator;
+
+        private EvalSuiteAssertionSampler sampler;
+
+        @org.junit.jupiter.api.BeforeEach
+        void setUp() {
+            sampler = new EvalSuiteAssertionSampler(
+                    datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator);
+        }
+
+        @Test
+        @DisplayName("calls resolveVersionId when version hash is present in trace metadata")
+        void callsResolveVersionId() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID versionId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String versionHash = "abc123";
+
+            var datasetVersion = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .evaluators(List.of())
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
+                    .thenReturn(datasetVersion);
+            when(datasetItemService.getItemEvaluatorsByDatasetId(any(), any()))
+                    .thenReturn(Mono.just(Map.of()));
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                            .formatted(datasetId, versionHash, UUID.randomUUID()));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            verify(datasetVersionService).resolveVersionId(workspaceId, datasetId, versionHash);
+        }
+
+        @Test
+        @DisplayName("includes item-level evaluators in scoring messages")
+        void includesItemLevelEvaluators() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID versionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            UUID ruleId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String versionHash = "abc123";
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("Is it correct?")
+                            .build()));
+
+            var itemEvaluator = EvaluatorItem.builder()
+                    .name("item-evaluator")
+                    .type(EvaluatorType.LLM_JUDGE)
+                    .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                    .build();
+
+            var datasetVersion = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .evaluators(List.of())
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
+                    .thenReturn(datasetVersion);
+            when(datasetItemService.getItemEvaluatorsByDatasetId(any(UUID.class), any(UUID.class)))
+                    .thenReturn(Mono.just(Map.of(datasetItemId, List.of(itemEvaluator))));
+            when(idGenerator.generateId()).thenReturn(ruleId);
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                            .formatted(datasetId, versionHash, datasetItemId));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            List<TraceToScoreLlmAsJudge> messages = captor.getValue();
+            assertThat(messages).hasSize(1);
+            assertThat(messages.getFirst().categoryName()).isEqualTo("suite_assertion");
+            assertThat(messages.getFirst().trace().id()).isEqualTo(trace.id());
+        }
+
+        @Test
+        @DisplayName("combines dataset-level and item-level evaluators")
+        void combinesDatasetAndItemEvaluators() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID versionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            UUID ruleId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String versionHash = "abc123";
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("Is it correct?")
+                            .build()));
+
+            var datasetEvaluator = EvaluatorItem.builder()
+                    .name("dataset-evaluator")
+                    .type(EvaluatorType.LLM_JUDGE)
+                    .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                    .build();
+
+            var itemEvaluator = EvaluatorItem.builder()
+                    .name("item-evaluator")
+                    .type(EvaluatorType.LLM_JUDGE)
+                    .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                    .build();
+
+            var datasetVersion = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .evaluators(List.of(datasetEvaluator))
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
+                    .thenReturn(datasetVersion);
+            when(datasetItemService.getItemEvaluatorsByDatasetId(datasetId, versionId))
+                    .thenReturn(Mono.just(Map.of(datasetItemId, List.of(itemEvaluator))));
+            when(idGenerator.generateId()).thenReturn(ruleId);
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                            .formatted(datasetId, versionHash, datasetItemId));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            List<TraceToScoreLlmAsJudge> messages = captor.getValue();
+            assertThat(messages).hasSize(2);
         }
     }
 
