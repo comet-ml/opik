@@ -8,6 +8,8 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -15,6 +17,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,16 +31,13 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class ExperimentExecutionService {
 
-    /** Default fallback; prefer dataset-specific value when available */
-    private static final int DEFAULT_RUNS_PER_ITEM = 1;
-    private static final int MAX_CONCURRENT_ITEMS = 5;
-    private static final String PLAYGROUND_PROJECT_NAME = "playground";
-
     private final ExperimentService experimentService;
     private final DatasetItemService datasetItemService;
     private final DatasetVersionService datasetVersionService;
     private final ExperimentItemProcessor itemProcessor;
     private final IdGenerator idGenerator;
+    private final EvalSuiteConfig evalSuiteConfig;
+    private final ExperimentExecutionConfig experimentExecutionConfig;
     private final ExecutorService executorService;
 
     @Inject
@@ -46,13 +46,17 @@ public class ExperimentExecutionService {
             @NonNull DatasetItemService datasetItemService,
             @NonNull DatasetVersionService datasetVersionService,
             @NonNull ExperimentItemProcessor itemProcessor,
-            @NonNull IdGenerator idGenerator) {
+            @NonNull IdGenerator idGenerator,
+            @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig,
+            @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig) {
         this.experimentService = experimentService;
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.itemProcessor = itemProcessor;
         this.idGenerator = idGenerator;
-        this.executorService = Executors.newFixedThreadPool(MAX_CONCURRENT_ITEMS);
+        this.evalSuiteConfig = evalSuiteConfig;
+        this.experimentExecutionConfig = experimentExecutionConfig;
+        this.executorService = Executors.newFixedThreadPool(experimentExecutionConfig.getMaxConcurrentItems());
     }
 
     /**
@@ -64,7 +68,9 @@ public class ExperimentExecutionService {
             @NonNull String workspaceId,
             @NonNull String userName) {
 
-        String projectName = request.projectName() != null ? request.projectName() : PLAYGROUND_PROJECT_NAME;
+        String projectName = request.projectName() != null
+                ? request.projectName()
+                : experimentExecutionConfig.getDefaultProjectName();
 
         List<DatasetItem> datasetItems = fetchAllDatasetItems(request, workspaceId, userName);
 
@@ -182,7 +188,7 @@ public class ExperimentExecutionService {
         if (versionPolicy != null && versionPolicy.runsPerItem() > 0) {
             return versionPolicy.runsPerItem();
         }
-        return DEFAULT_RUNS_PER_ITEM;
+        return evalSuiteConfig.getDefaultRunsPerItem();
     }
 
     private void dispatchAsyncProcessing(

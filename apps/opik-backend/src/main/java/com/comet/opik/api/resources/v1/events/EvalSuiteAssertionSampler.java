@@ -14,6 +14,7 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
+import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +24,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,13 +50,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class EvalSuiteAssertionSampler {
 
-    private static final String DEFAULT_MODEL_NAME = "gpt-5-nano";
     private static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
 
     private final @NonNull DatasetItemService datasetItemService;
     private final @NonNull DatasetVersionService datasetVersionService;
     private final @NonNull OnlineScorePublisher onlineScorePublisher;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig;
 
     @Subscribe
     public void onTracesCreated(TracesCreated tracesBatch) {
@@ -295,7 +297,7 @@ public class EvalSuiteAssertionSampler {
         if (code.model() == null || code.model().name() == null || code.model().name().isBlank()) {
             var existingModel = code.model();
             var resolvedModel = LlmAsJudgeModelParameters.builder()
-                    .name(DEFAULT_MODEL_NAME)
+                    .name(evalSuiteConfig.getDefaultModelName())
                     .temperature(existingModel != null ? existingModel.temperature() : null)
                     .seed(existingModel != null ? existingModel.seed() : null)
                     .customParameters(existingModel != null ? existingModel.customParameters() : null)

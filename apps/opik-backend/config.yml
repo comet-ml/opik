@@ -590,6 +590,24 @@ onlineScoring:
       streamMaxLen: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
       streamTrimLimit: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
 
+# Configuration for Evaluation Suite assertions
+evalSuite:
+  # Default: gpt-5-nano
+  # Description: Default LLM model used for eval suite assertions when the evaluator config has no model specified
+  defaultModelName: ${EVAL_SUITE_DEFAULT_MODEL_NAME:-gpt-5-nano}
+  # Default: 1
+  # Description: Number of LLM runs per dataset item during eval suite execution
+  defaultRunsPerItem: ${EVAL_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
+
+# Configuration for Experiment Execution
+experimentExecution:
+  # Default: 5
+  # Description: Maximum number of dataset items processed concurrently during experiment execution
+  maxConcurrentItems: ${EXPERIMENT_EXECUTION_MAX_CONCURRENT_ITEMS:-5}
+  # Default: playground
+  # Description: Default project name when experiments are run from the playground without an explicit project
+  defaultProjectName: ${EXPERIMENT_EXECUTION_DEFAULT_PROJECT_NAME:-playground}
+
 # Configuration for Dataset Export
 datasetExport:
   # Default: false

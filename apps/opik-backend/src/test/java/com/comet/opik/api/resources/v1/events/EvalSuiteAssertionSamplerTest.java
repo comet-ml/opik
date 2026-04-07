@@ -17,6 +17,7 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
+import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.uuid.Generators;
@@ -288,8 +289,10 @@ class EvalSuiteAssertionSamplerTest {
 
         @org.junit.jupiter.api.BeforeEach
         void setUp() {
+            var evalSuiteConfig = new EvalSuiteConfig();
             sampler = new EvalSuiteAssertionSampler(
-                    datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator);
+                    datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
+                    evalSuiteConfig);
         }
 
         @Test
