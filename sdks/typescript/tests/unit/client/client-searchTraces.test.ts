@@ -68,12 +68,25 @@ describe("OpikClient searchTraces", () => {
         projectName: "custom-project",
         maxResults: 50,
         truncate: false,
+        exclude: ["feedback_scores"],
       });
 
       const callArgs = searchTracesWithFiltersSpy.mock.calls[0];
       expect(callArgs[1]).toBe("custom-project");
       expect(callArgs[3]).toBe(50);
       expect(callArgs[4]).toBe(false);
+      expect(callArgs[5]).toEqual(["feedback_scores"]);
+    });
+
+    it("should pass multiple exclude fields", async () => {
+      searchTracesWithFiltersSpy.mockResolvedValue([]);
+
+      await client.searchTraces({
+        exclude: ["feedback_scores", "input", "output"],
+      });
+
+      const callArgs = searchTracesWithFiltersSpy.mock.calls[0];
+      expect(callArgs[5]).toEqual(["feedback_scores", "input", "output"]);
     });
   });
 
@@ -204,6 +217,7 @@ describe("OpikClient searchTraces", () => {
         filterString: 'name = "test-trace" and duration > 100',
         maxResults: 50,
         truncate: false,
+        exclude: ["feedback_scores"],
         waitForAtLeast: 3,
         waitForTimeout: 10,
       });
@@ -215,6 +229,7 @@ describe("OpikClient searchTraces", () => {
       expect(callArgs[2]).toHaveLength(2);
       expect(callArgs[3]).toBe(50);
       expect(callArgs[4]).toBe(false);
+      expect(callArgs[5]).toEqual(["feedback_scores"]);
 
       expect(searchAndWaitForDoneSpy).toHaveBeenCalled();
     });

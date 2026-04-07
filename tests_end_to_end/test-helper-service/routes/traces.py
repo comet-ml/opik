@@ -308,6 +308,29 @@ def get_traces():
     return success_response({"traces": traces_response.dict()["content"]})
 
 
+@traces_bp.route("/search-traces", methods=["POST"])
+def search_traces():
+    data = request.get_json()
+    validate_required_fields(data, ["project_name"])
+
+    project_name = data["project_name"]
+    max_results = data.get("max_results", 1000)
+    truncate = data.get("truncate", True)
+    exclude = data.get("exclude", None)
+    filter_string = data.get("filter_string", None)
+    client = get_opik_client()
+
+    traces = client.search_traces(
+        project_name=project_name,
+        max_results=max_results,
+        truncate=truncate,
+        exclude=exclude,
+        filter_string=filter_string,
+    )
+
+    return success_response({"traces": [t.dict() for t in traces]})
+
+
 @traces_bp.route("/delete-traces", methods=["DELETE"])
 def delete_traces():
     data = request.get_json()
