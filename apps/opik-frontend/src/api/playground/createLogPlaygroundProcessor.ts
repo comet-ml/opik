@@ -43,9 +43,6 @@ export interface LogQueueParams extends RunStreamingReturn {
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
-  evaluationMethod?: string;
-  evalSuiteDatasetId?: string;
-  evalSuiteVersionHash?: string;
 }
 
 export interface TraceMapping {
@@ -148,16 +145,6 @@ const getTraceFromRun = (
     };
   }
 
-  // Add eval suite metadata if provided (triggers backend assertion evaluation)
-  if (run.evalSuiteDatasetId) {
-    trace.metadata = {
-      ...trace.metadata,
-      eval_suite_dataset_id: run.evalSuiteDatasetId,
-      eval_suite_dataset_version_hash: run.evalSuiteVersionHash,
-      eval_suite_dataset_item_id: run.datasetItemId,
-    };
-  }
-
   // Add opik_prompts to trace metadata if prompt is from library and unchanged
   // This follows the Python SDK format for associating prompts with traces
   if (run.promptLibraryMetadata) {
@@ -240,9 +227,6 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
       datasetVersionId: run.datasetVersionId,
     }),
     metadata: experimentMetadata,
-    ...(run.evaluationMethod && {
-      evaluationMethod: run.evaluationMethod,
-    }),
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,
     }),
