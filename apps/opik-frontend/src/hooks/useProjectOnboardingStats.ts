@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, UseQueryResult } from "@tanstack/react-query";
 import api, {
   PROJECTS_REST_ENDPOINT,
   OPTIMIZATIONS_KEY,
@@ -7,6 +7,25 @@ import api, {
 } from "@/api/api";
 import { ProjectStats } from "@/types/assistant-sidebar";
 import { generateProjectFilters, processFilters } from "@/lib/filters";
+
+function useOnboardingCountQuery(
+  key: string,
+  endpoint: string,
+  enabled: boolean,
+): UseQueryResult<number> {
+  return useQuery({
+    queryKey: [key, "onboarding-count"],
+    queryFn: async ({ signal }) => {
+      const { data } = await api.get(endpoint, {
+        signal,
+        params: { size: 1, page: 1 },
+      });
+      return (data.total as number) ?? 0;
+    },
+    enabled,
+    staleTime: 30_000,
+  });
+}
 
 /**
  * Lightweight counts used by the assistant sidebar to understand
@@ -41,44 +60,23 @@ export default function useProjectOnboardingStats(
     staleTime: 30_000,
   });
 
-  const { data: experimentTotal } = useQuery({
-    queryKey: ["experiments", "onboarding-count", projectId],
-    queryFn: async ({ signal }) => {
-      const { data } = await api.get(
-        `${PROJECTS_REST_ENDPOINT}${projectId}/experiments`,
-        { signal, params: { size: 1, page: 1 } },
-      );
-      return (data.total as number) ?? 0;
-    },
+  const { data: experimentTotal } = useOnboardingCountQuery(
+    "experiments",
+    `${PROJECTS_REST_ENDPOINT}${projectId}/experiments`,
     enabled,
-    staleTime: 30_000,
-  });
+  );
 
-  const { data: optimizationTotal } = useQuery({
-    queryKey: [OPTIMIZATIONS_KEY, "onboarding-count", projectId],
-    queryFn: async ({ signal }) => {
-      const { data } = await api.get(
-        `${PROJECTS_REST_ENDPOINT}${projectId}/optimizations`,
-        { signal, params: { size: 1, page: 1 } },
-      );
-      return (data.total as number) ?? 0;
-    },
+  const { data: optimizationTotal } = useOnboardingCountQuery(
+    OPTIMIZATIONS_KEY,
+    `${PROJECTS_REST_ENDPOINT}${projectId}/optimizations`,
     enabled,
-    staleTime: 30_000,
-  });
+  );
 
-  const { data: blueprintTotal } = useQuery({
-    queryKey: [AGENT_CONFIGS_KEY, "onboarding-count", projectId],
-    queryFn: async ({ signal }) => {
-      const { data } = await api.get(
-        `/v1/private/agent-configs/blueprints/history/projects/${projectId}`,
-        { signal, params: { size: 1, page: 1 } },
-      );
-      return (data.total as number) ?? 0;
-    },
+  const { data: blueprintTotal } = useOnboardingCountQuery(
+    AGENT_CONFIGS_KEY,
+    `/v1/private/agent-configs/blueprints/history/projects/${projectId}`,
     enabled,
-    staleTime: 30_000,
-  });
+  );
 
   if (!enabled) return undefined;
 
