@@ -111,6 +111,7 @@ export type PlaygroundStore = {
   datasetSize: number;
   progressTotal: number;
   progressCompleted: number;
+  progressPhase: "running" | "evaluating" | null;
   experimentNamePrefix: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
@@ -152,6 +153,7 @@ export type PlaygroundStore = {
   setDatasetSize: (size: number) => void;
   resetDatasetFilters: () => void;
   setProgress: (completed: number, total: number) => void;
+  setProgressPhase: (phase: "running" | "evaluating" | null) => void;
   resetProgress: () => void;
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
@@ -177,6 +179,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       datasetSize: 100,
       progressTotal: 0,
       progressCompleted: 0,
+      progressPhase: null,
       experimentNamePrefix: null,
       datasetType: null,
       experimentByPromptId: {},
@@ -410,12 +413,16 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setProgressPhase: (phase) => {
+        set((state) => ({ ...state, progressPhase: phase }));
+      },
       resetProgress: () => {
         set((state) => {
           return {
             ...state,
             progressCompleted: 0,
             progressTotal: 0,
+            progressPhase: null,
           };
         });
       },
@@ -636,6 +643,12 @@ export const useProgressCompleted = () =>
 
 export const useSetProgress = () =>
   usePlaygroundStore((state) => state.setProgress);
+
+export const useProgressPhase = () =>
+  usePlaygroundStore((state) => state.progressPhase);
+
+export const useSetProgressPhase = () =>
+  usePlaygroundStore((state) => state.setProgressPhase);
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);

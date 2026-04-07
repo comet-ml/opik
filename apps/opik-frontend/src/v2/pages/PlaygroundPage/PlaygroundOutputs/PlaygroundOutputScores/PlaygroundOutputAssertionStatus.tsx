@@ -46,14 +46,25 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
         if (elapsed > MAX_REFETCH_TIME) return false;
 
         const items = query.state.data?.content ?? [];
-        const matchingItem = items.find(
+        const matchingRow = items.find(
           (item) =>
             item.experiment_items?.some(
-              (ei) => ei.dataset_item_id === datasetItemId && ei.status != null,
+              (ei) => ei.dataset_item_id === datasetItemId,
             ),
         );
 
-        if (matchingItem) return false;
+        if (!matchingRow) return REFETCH_INTERVAL;
+
+        // Stop polling only when ALL experiment items for this dataset item are scored
+        const relatedItems =
+          matchingRow.experiment_items?.filter(
+            (ei) => ei.dataset_item_id === datasetItemId,
+          ) ?? [];
+        const allScored =
+          relatedItems.length > 0 &&
+          relatedItems.every((ei) => ei.status != null);
+
+        if (allScored) return false;
 
         return REFETCH_INTERVAL;
       },
@@ -70,6 +81,18 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     );
 
     if (!matchingRow) {
+      return undefined;
+    }
+
+    // Only show status when all experiment items for this dataset item are scored
+    const relatedItems =
+      matchingRow.experiment_items?.filter(
+        (ei) => ei.dataset_item_id === datasetItemId,
+      ) ?? [];
+    const allScored =
+      relatedItems.length > 0 && relatedItems.every((ei) => ei.status != null);
+
+    if (!allScored) {
       return undefined;
     }
 

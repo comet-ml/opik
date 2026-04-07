@@ -324,6 +324,7 @@ public class ExperimentItemProcessor {
                 .model(resolvedModelInfo.actualModel())
                 .provider(resolvedModelInfo.provider())
                 .usage(usage)
+                .source(Source.EXPERIMENT)
                 .build();
 
         spanService.create(span)

@@ -57,6 +57,27 @@ interface RunOnDatasetDialogProps {
   initialFilters?: Filters;
 }
 
+const getRunDisabledTooltip = ({
+  isRunning,
+  isDatasetEmpty,
+  hasFilters,
+  isEvaluationSuite,
+}: {
+  isRunning: boolean;
+  isDatasetEmpty: boolean;
+  hasFilters: boolean;
+  isEvaluationSuite: boolean;
+}): string | undefined => {
+  if (isRunning) return "An experiment is already running";
+  if (isDatasetEmpty && hasFilters) return "No items match the current filters";
+  if (isDatasetEmpty) {
+    return `Selected ${
+      isEvaluationSuite ? "evaluation suite" : "dataset"
+    } is empty`;
+  }
+  return undefined;
+};
+
 const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   open,
   onClose,
@@ -268,17 +289,12 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               <Button variant="outline">Cancel</Button>
             </DialogClose>
             <TooltipWrapper
-              content={
-                isRunning
-                  ? "An experiment is already running"
-                  : isDatasetEmpty && filters.length > 0
-                    ? "No items match the current filters"
-                    : isDatasetEmpty
-                      ? `Selected ${
-                          isEvaluationSuite ? "evaluation suite" : "dataset"
-                        } is empty`
-                      : undefined
-              }
+              content={getRunDisabledTooltip({
+                isRunning,
+                isDatasetEmpty,
+                hasFilters: filters.length > 0,
+                isEvaluationSuite,
+              })}
             >
               <Button
                 onClick={handleRun}

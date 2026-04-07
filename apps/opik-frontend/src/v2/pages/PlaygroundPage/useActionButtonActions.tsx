@@ -3,8 +3,17 @@ import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 
-import { PROJECTS_KEY } from "@/api/api";
-import { DatasetItem, DATASET_TYPE } from "@/types/datasets";
+import api, {
+  COMPARE_EXPERIMENTS_KEY,
+  DATASETS_REST_ENDPOINT,
+  PROJECTS_KEY,
+} from "@/api/api";
+import {
+  DatasetItem,
+  DATASET_TYPE,
+  EXPERIMENT_STATUS,
+  ExperimentsCompare,
+} from "@/types/datasets";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
 import usePlaygroundStore, {
@@ -19,6 +28,7 @@ import usePlaygroundStore, {
   useClearRunningMap,
   useSetPromptRunning,
   useSetProgress,
+  useSetProgressPhase,
   useResetProgress,
   useUpdateOutputTraceId,
   useDatasetType,
@@ -109,6 +119,7 @@ const useActionButtonActions = ({
   const resetOutputMap = useResetOutputMap();
   const updateOutputTraceId = useUpdateOutputTraceId();
   const setProgress = useSetProgress();
+  const setProgressPhase = useSetProgressPhase();
   const resetProgress = useResetProgress();
 
   const resetState = useCallback(() => {
@@ -219,8 +230,83 @@ const useActionButtonActions = ({
       throttlingSeconds,
     });
 
+  const pollAssertionEvaluation = useCallback(
+    async (experimentIds: string[], curDatasetId: string) => {
+      const POLL_INTERVAL = 3000;
+
+      const poll = async () => {
+        if (isToStopRef.current) return;
+
+        try {
+          const { data } = await api.get(
+            `${DATASETS_REST_ENDPOINT}${curDatasetId}/items/experiments/items`,
+            {
+              signal: new AbortController().signal,
+              params: {
+                workspace_name: workspaceName,
+                experiment_ids: JSON.stringify(experimentIds),
+                truncate: true,
+                size: 1000,
+                page: 1,
+              },
+            },
+          );
+
+          const rows: ExperimentsCompare[] = data?.content ?? [];
+
+          // Count dataset items that have all their experiment items scored
+          let scoredItems = 0;
+          let totalItems = 0;
+
+          for (const row of rows) {
+            const experimentItems = row.experiment_items ?? [];
+            if (experimentItems.length === 0) continue;
+
+            totalItems++;
+            const allScored = experimentItems.every((ei) => ei.status != null);
+            if (allScored) {
+              scoredItems++;
+            }
+          }
+
+          if (totalItems > 0) {
+            setProgress(scoredItems, totalItems);
+          }
+
+          if (totalItems > 0 && scoredItems >= totalItems) {
+            setProgress(totalItems, totalItems);
+            clearRunningMap();
+            isToStopRef.current = false;
+            queryClient.invalidateQueries({ queryKey: ["experiments"] });
+            queryClient.invalidateQueries({
+              queryKey: [COMPARE_EXPERIMENTS_KEY],
+            });
+            setTimeout(() => resetProgress(), 3000);
+            return;
+          }
+
+          queryClient.invalidateQueries({
+            queryKey: [COMPARE_EXPERIMENTS_KEY],
+          });
+          setTimeout(poll, POLL_INTERVAL);
+        } catch {
+          clearRunningMap();
+          isToStopRef.current = false;
+          resetProgress();
+        }
+      };
+
+      setTimeout(poll, POLL_INTERVAL);
+    },
+    [workspaceName, setProgress, resetProgress, clearRunningMap, queryClient],
+  );
+
   const pollExperimentCompletion = useCallback(
-    async (experimentIds: string[], totalItems: number) => {
+    async (
+      experimentIds: string[],
+      totalItems: number,
+      curDatasetId: string,
+    ) => {
       const POLL_INTERVAL = 2000;
 
       const poll = async () => {
@@ -243,16 +329,19 @@ const useActionButtonActions = ({
           setProgress(Math.min(totalTraces, totalItems), totalItems);
 
           const allDone = results.every(
-            (exp) => exp?.status === "completed" || exp?.status === "cancelled",
+            (exp) =>
+              exp?.status === EXPERIMENT_STATUS.COMPLETED ||
+              exp?.status === EXPERIMENT_STATUS.CANCELLED,
           );
 
           if (allDone) {
             setProgress(totalItems, totalItems);
-            clearRunningMap();
-            isToStopRef.current = false;
             queryClient.invalidateQueries({ queryKey: ["experiments"] });
-            // Hide progress bar after a brief delay so the user sees 100%
-            setTimeout(() => resetProgress(), 3000);
+
+            // Transition to evaluation phase
+            setProgressPhase("evaluating");
+            setProgress(0, totalItems);
+            pollAssertionEvaluation(experimentIds, curDatasetId);
             return;
           }
 
@@ -266,7 +355,13 @@ const useActionButtonActions = ({
 
       setTimeout(poll, POLL_INTERVAL);
     },
-    [setProgress, resetProgress, clearRunningMap, queryClient],
+    [
+      setProgress,
+      setProgressPhase,
+      clearRunningMap,
+      queryClient,
+      pollAssertionEvaluation,
+    ],
   );
 
   const runAllViaBackend = useCallback(async () => {
@@ -303,13 +398,14 @@ const useActionButtonActions = ({
 
       storeExperiments(experiments);
       setExperimentByPromptId(experimentPromptMap);
+      setProgressPhase("running");
       setProgress(0, response.total_items);
 
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
 
       // Poll for completion instead of immediately finishing
       const experimentIds = response.experiments.map((e) => e.experiment_id);
-      pollExperimentCompletion(experimentIds, response.total_items);
+      pollExperimentCompletion(experimentIds, response.total_items, datasetId);
     } catch (e) {
       toast({
         title: "Error",
@@ -335,6 +431,7 @@ const useActionButtonActions = ({
     storeExperiments,
     setExperimentByPromptId,
     setProgress,
+    setProgressPhase,
     queryClient,
     toast,
     projectName,

@@ -81,6 +81,8 @@ public class EvalSuiteAssertionSampler {
             return;
         }
 
+        // All traces in a batch share the same dataset version since they originate from
+        // the same experiment execution, so extracting versionHash from the first trace is safe.
         var evalSuiteVersionHash = getMetadataString(firstTrace, "eval_suite_dataset_version_hash");
 
         log.info("Eval suite assertion evaluation triggered for dataset '{}', version hash '{}', '{}' traces",
@@ -104,7 +106,14 @@ public class EvalSuiteAssertionSampler {
                 continue;
             }
 
-            UUID itemId = UUID.fromString(datasetItemId.get());
+            UUID itemId;
+            try {
+                itemId = UUID.fromString(datasetItemId.get());
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid UUID for eval_suite_dataset_item_id '{}' in trace '{}'",
+                        datasetItemId.get(), trace.id());
+                continue;
+            }
             List<PreparedEvaluator> allEvaluators = new ArrayList<>(preparedDatasetEvaluators);
             allEvaluators.addAll(preparedItemEvaluatorsByItemId.getOrDefault(itemId, List.of()));
 
