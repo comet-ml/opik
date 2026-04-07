@@ -24,6 +24,7 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -261,13 +262,13 @@ public class EvalSuiteAssertionSampler {
     }
 
     private LlmAsJudgeCode resolveModelName(LlmAsJudgeCode code) {
-        if (code.model() == null || code.model().name() == null || code.model().name().isBlank()) {
-            var existingModel = code.model();
+        var existingModel = Optional.ofNullable(code.model());
+        if (existingModel.map(LlmAsJudgeModelParameters::name).filter(StringUtils::isNotBlank).isEmpty()) {
             var resolvedModel = LlmAsJudgeModelParameters.builder()
                     .name(evalSuiteConfig.getDefaultModelName())
-                    .temperature(existingModel != null ? existingModel.temperature() : null)
-                    .seed(existingModel != null ? existingModel.seed() : null)
-                    .customParameters(existingModel != null ? existingModel.customParameters() : null)
+                    .temperature(existingModel.map(LlmAsJudgeModelParameters::temperature).orElse(null))
+                    .seed(existingModel.map(LlmAsJudgeModelParameters::seed).orElse(null))
+                    .customParameters(existingModel.map(LlmAsJudgeModelParameters::customParameters).orElse(null))
                     .build();
             return new LlmAsJudgeCode(resolvedModel, code.messages(), code.variables(), code.schema());
         }

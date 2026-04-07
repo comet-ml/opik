@@ -8,6 +8,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -22,14 +23,8 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Singleton
 @Slf4j
@@ -38,33 +33,31 @@ public class ExperimentExecutionService {
     private final ExperimentService experimentService;
     private final DatasetItemService datasetItemService;
     private final DatasetVersionService datasetVersionService;
-    private final ExperimentItemProcessor itemProcessor;
+    private final ExperimentItemPublisher itemPublisher;
     private final IdGenerator idGenerator;
     private final EvalSuiteConfig evalSuiteConfig;
     private final ExperimentExecutionConfig experimentExecutionConfig;
-    private final ExecutorService executorService;
 
     @Inject
     public ExperimentExecutionService(
             @NonNull ExperimentService experimentService,
             @NonNull DatasetItemService datasetItemService,
             @NonNull DatasetVersionService datasetVersionService,
-            @NonNull ExperimentItemProcessor itemProcessor,
+            @NonNull ExperimentItemPublisher itemPublisher,
             @NonNull IdGenerator idGenerator,
             @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig) {
         this.experimentService = experimentService;
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
-        this.itemProcessor = itemProcessor;
+        this.itemPublisher = itemPublisher;
         this.idGenerator = idGenerator;
         this.evalSuiteConfig = evalSuiteConfig;
         this.experimentExecutionConfig = experimentExecutionConfig;
-        this.executorService = Executors.newFixedThreadPool(experimentExecutionConfig.getMaxConcurrentItems());
     }
 
     /**
-     * Creates experiments and dispatches async processing.
+     * Creates experiments and publishes item processing messages to Redis Streams.
      * Returns immediately with experiment IDs so the caller can start polling.
      * Dataset items are streamed rather than collected into memory to support large datasets.
      */
@@ -90,36 +83,30 @@ public class ExperimentExecutionService {
                         List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries.stream()
                                 .map(ExperimentEntry::info).toList();
 
-                        var totalItems = new AtomicInteger(0);
-                        var futures = Collections.synchronizedList(new ArrayList<CompletableFuture<Void>>());
+                        UUID batchId = idGenerator.generateId();
+                        List<ExperimentItemToProcess> messages = new ArrayList<>();
 
                         return streamDatasetItems(request)
-                                .doOnNext(item -> dispatchItemProcessing(
+                                .doOnNext(item -> collectMessages(
                                         item, request, experimentIds, datasetExecutionPolicy,
-                                        projectName, workspaceId, userName, totalItems, futures))
+                                        projectName, workspaceId, userName, batchId, messages))
                                 .count()
                                 .map(itemCount -> {
-                                    if (itemCount == 0) {
+                                    if (messages.isEmpty()) {
                                         log.warn("No dataset items found for dataset '{}', workspaceId '{}'",
                                                 request.datasetName(), workspaceId);
                                     } else {
-                                        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                                                .whenComplete((v, ex) -> {
-                                                    if (ex != null) {
-                                                        log.error("Unexpected error during experiment processing", ex);
-                                                    }
-                                                    finishExperiments(experimentIds, workspaceId, userName);
-                                                });
+                                        itemPublisher.publish(batchId, messages);
 
                                         log.info(
                                                 "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
-                                                experimentIds.size(), totalItems.get(), request.datasetName(),
+                                                experimentIds.size(), messages.size(), request.datasetName(),
                                                 workspaceId);
                                     }
 
                                     return ExperimentExecutionResponse.builder()
                                             .experiments(experimentInfos)
-                                            .totalItems(totalItems.get())
+                                            .totalItems(messages.size())
                                             .build();
                                 });
                     });
@@ -130,8 +117,8 @@ public class ExperimentExecutionService {
     }
 
     private Flux<ExperimentEntry> createExperiments(ExperimentExecutionRequest request, String projectName) {
-        return Flux.range(0, request.prompts().size())
-                .concatMap(i -> {
+        var monos = java.util.stream.IntStream.range(0, request.prompts().size())
+                .mapToObj(i -> {
                     var prompt = request.prompts().get(i);
                     UUID experimentId = idGenerator.generateId();
 
@@ -162,7 +149,9 @@ public class ExperimentExecutionService {
                                             .experimentId(experimentId)
                                             .promptIndex(i)
                                             .build()));
-                });
+                })
+                .toList();
+        return Flux.merge(monos);
     }
 
     private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request) {
@@ -202,7 +191,7 @@ public class ExperimentExecutionService {
         return evalSuiteConfig.getDefaultRunsPerItem();
     }
 
-    private void dispatchItemProcessing(
+    private void collectMessages(
             DatasetItem item,
             ExperimentExecutionRequest request,
             List<UUID> experimentIds,
@@ -210,53 +199,29 @@ public class ExperimentExecutionService {
             String projectName,
             String workspaceId,
             String userName,
-            AtomicInteger totalItems,
-            List<CompletableFuture<Void>> futures) {
+            UUID batchId,
+            List<ExperimentItemToProcess> messages) {
 
         int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
-        totalItems.addAndGet(runsPerItem * request.prompts().size());
 
         for (int run = 0; run < runsPerItem; run++) {
             for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
                 var prompt = request.prompts().get(promptIdx);
                 UUID experimentId = experimentIds.get(promptIdx);
 
-                futures.add(CompletableFuture.runAsync(() -> {
-                    try {
-                        itemProcessor.process(
-                                prompt, item, experimentId,
-                                request.datasetId(), request.versionHash(),
-                                projectName, workspaceId, userName);
-                    } catch (Exception e) {
-                        log.error("Failed to process item '{}' for experiment '{}'",
-                                item.id(), experimentId, e);
-                    }
-                }, executorService));
+                messages.add(ExperimentItemToProcess.builder()
+                        .batchId(batchId)
+                        .prompt(prompt)
+                        .datasetItem(item)
+                        .experimentId(experimentId)
+                        .datasetId(request.datasetId())
+                        .versionHash(request.versionHash())
+                        .projectName(projectName)
+                        .workspaceId(workspaceId)
+                        .userName(userName)
+                        .allExperimentIds(experimentIds)
+                        .build());
             }
-        }
-    }
-
-    private void finishExperiments(List<UUID> experimentIds, String workspaceId, String userName) {
-        try {
-            var reactorContext = reactor.util.context.Context.of(
-                    RequestContext.WORKSPACE_ID, workspaceId,
-                    RequestContext.USER_NAME, userName,
-                    RequestContext.WORKSPACE_NAME, workspaceId,
-                    RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
-
-            var statusUpdate = com.comet.opik.api.ExperimentUpdate.builder()
-                    .status(ExperimentStatus.COMPLETED)
-                    .build();
-
-            Flux.fromIterable(experimentIds)
-                    .concatMap(experimentId -> experimentService.update(experimentId, statusUpdate))
-                    .then(experimentService.finishExperiments(Set.copyOf(experimentIds)))
-                    .contextWrite(reactorContext)
-                    .block();
-
-            log.info("Finished '{}' experiments", experimentIds.size());
-        } catch (Exception e) {
-            log.error("Failed to finish experiments", e);
         }
     }
 }
