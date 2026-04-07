@@ -20,7 +20,7 @@ export interface HostEventMap {
 
 /** Sidebar → Host events */
 export interface SidebarEventMap {
-  navigate: { path: string };
+  navigate: { path: string; search?: Record<string, string> };
   notification: { message: string; type: NotificationType };
   "sidebar:resized": { width: number };
   "sidebar:request-close": Record<string, never>;
