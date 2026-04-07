@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -17,8 +18,16 @@ import Loader from "@/shared/Loader/Loader";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
 import BlueprintValuePrompt from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
-import { useAgentConfigurationSave } from "./useAgentConfigurationSave";
+import {
+  useAgentConfigurationSave,
+  AgentConfigPayload,
+} from "./useAgentConfigurationSave";
 import SaveVersionDialog from "./SaveVersionDialog";
+
+export type AgentConfigurationEditViewHandle = {
+  hasChanges: () => boolean;
+  buildMaskPayload: () => Promise<AgentConfigPayload | null>;
+};
 
 type AgentConfigurationEditViewProps = {
   item: ConfigHistoryItem;
@@ -27,12 +36,10 @@ type AgentConfigurationEditViewProps = {
   headerLeft?: React.ReactNode;
 };
 
-const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
-  item,
-  projectId,
-  onSaved,
-  headerLeft,
-}) => {
+const AgentConfigurationEditView = React.forwardRef<
+  AgentConfigurationEditViewHandle,
+  AgentConfigurationEditViewProps
+>(({ item, projectId, onSaved, headerLeft }, ref) => {
   const { data: agentConfig, isPending } = useAgentConfigById({
     blueprintId: item.id,
   });
@@ -52,15 +59,28 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
     onSaved();
   }, [draftValues, onSaved]);
 
-  const { handleSave, isSaving, errors, clearError, promptRefs } =
-    useAgentConfigurationSave({
-      agentConfig,
-      draftValues,
-      originalValues,
-      description,
-      projectId,
-      onSaved: handleSaveComplete,
-    });
+  const {
+    handleSave,
+    buildMaskPayload,
+    hasChanges,
+    isSaving,
+    errors,
+    clearError,
+    promptRefs,
+  } = useAgentConfigurationSave({
+    agentConfig,
+    draftValues,
+    originalValues,
+    description,
+    projectId,
+    onSaved: handleSaveComplete,
+    dirtyPromptKeys,
+  });
+
+  useImperativeHandle(ref, () => ({
+    hasChanges,
+    buildMaskPayload,
+  }));
 
   useEffect(() => {
     if (agentConfig && !initialized.current) {
@@ -111,10 +131,7 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
 
   const hasErrors = Object.values(errors).some(Boolean);
 
-  const hasChanges =
-    Object.keys(draftValues).some(
-      (key) => draftValues[key] !== originalValues.current[key],
-    ) || Object.values(dirtyPromptKeys).some(Boolean);
+  const isDirty = hasChanges();
 
   if (isPending) {
     return <Loader />;
@@ -125,7 +142,7 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
       <div className="mb-2 flex items-center justify-between">
         {headerLeft}
         <div className="ml-auto flex items-center gap-2">
-          {hasChanges && (
+          {isDirty && (
             <Tag variant="orange" size="sm">
               Unsaved changes
             </Tag>
@@ -134,7 +151,7 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
             variant="outline"
             size="2xs"
             onClick={handleOpenSaveDialog}
-            disabled={isSaving || hasErrors || !hasChanges}
+            disabled={isSaving || hasErrors || !isDirty}
           >
             <Save className="mr-1 size-3.5" />
             Save as new version
@@ -247,6 +264,8 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
       />
     </div>
   );
-};
+});
+
+AgentConfigurationEditView.displayName = "AgentConfigurationEditView";
 
 export default AgentConfigurationEditView;
