@@ -3861,6 +3861,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/bridge/commands:
+    post:
+      tags:
+      - Runners
+      summary: Submit bridge command
+      description: Submit a bridge command for execution by the local daemon
+      operationId: createBridgeCommand
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BridgeCommandSubmitRequest"
+      responses:
+        "201":
+          description: Command submitted
+          headers:
+            Location:
+              description: URI of the command
+              style: simple
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeCommandSubmitResponse"
+        "404":
+          description: Runner not found or not connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Runner does not support bridge
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/local-runners/jobs:
     post:
       tags:
@@ -4302,7 +4350,7 @@ paths:
             schema:
               $ref: "#/components/schemas/BridgeCommandResultRequest"
       responses:
-        "200":
+        "204":
           description: Result accepted
         "404":
           description: Command not found
@@ -4346,54 +4394,6 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/{runnerId}/bridge/commands:
-    post:
-      tags:
-      - Runners
-      summary: Submit bridge command
-      description: Submit a bridge command for execution by the local daemon
-      operationId: submitBridgeCommand
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BridgeCommandSubmitRequest"
-      responses:
-        "201":
-          description: Command submitted
-          headers:
-            Location:
-              description: URI of the command
-              style: simple
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BridgeCommandSubmitResponse"
-        "404":
-          description: Runner not found or not connected
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "409":
-          description: Runner does not support bridge
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "429":
-          description: Too many requests
           content:
             application/json:
               schema:
@@ -9596,9 +9596,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -10041,9 +10041,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10496,9 +10496,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -15759,6 +15759,32 @@ components:
         runner_name:
           minLength: 1
           type: string
+    BridgeCommandSubmitResponse:
+      type: object
+      properties:
+        command_id:
+          type: string
+          format: uuid
+    BridgeCommandSubmitRequest:
+      required:
+      - args
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
+          - Exec
+        args:
+          $ref: "#/components/schemas/JsonNode"
+        timeout_seconds:
+          type: integer
+          format: int32
     CreateLocalRunnerJobRequest:
       required:
       - agent_name
@@ -16092,32 +16118,6 @@ components:
         trace_id:
           type: string
           format: uuid
-    BridgeCommandSubmitResponse:
-      type: object
-      properties:
-        command_id:
-          type: string
-          format: uuid
-    BridgeCommandSubmitRequest:
-      required:
-      - args
-      - type
-      type: object
-      properties:
-        type:
-          type: string
-          enum:
-          - ReadFile
-          - WriteFile
-          - EditFile
-          - ListFiles
-          - SearchFiles
-          - Exec
-        args:
-          $ref: "#/components/schemas/JsonNode"
-        timeout_seconds:
-          type: integer
-          format: int32
     ManualEvaluationResponse:
       type: object
       properties:

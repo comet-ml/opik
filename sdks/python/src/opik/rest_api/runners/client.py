@@ -163,6 +163,48 @@ class RunnersClient:
         )
         return _response.data
 
+    def create_bridge_command(
+        self,
+        runner_id: str,
+        *,
+        type: BridgeCommandSubmitRequestType,
+        args: JsonNode,
+        timeout_seconds: typing.Optional[int] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> BridgeCommandSubmitResponse:
+        """
+        Submit a bridge command for execution by the local daemon
+
+        Parameters
+        ----------
+        runner_id : str
+
+        type : BridgeCommandSubmitRequestType
+
+        args : JsonNode
+
+        timeout_seconds : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BridgeCommandSubmitResponse
+            Command submitted
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.runners.create_bridge_command(runner_id='runnerId', type="ReadFile", args={'key': 'value'
+        }, )
+        """
+        _response = self._raw_client.create_bridge_command(
+            runner_id, type=type, args=args, timeout_seconds=timeout_seconds, request_options=request_options
+        )
+        return _response.data
+
     def create_job(
         self,
         *,
@@ -667,48 +709,6 @@ class RunnersClient:
         )
         return _response.data
 
-    def submit_bridge_command(
-        self,
-        runner_id: str,
-        *,
-        type: BridgeCommandSubmitRequestType,
-        args: JsonNode,
-        timeout_seconds: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> BridgeCommandSubmitResponse:
-        """
-        Submit a bridge command for execution by the local daemon
-
-        Parameters
-        ----------
-        runner_id : str
-
-        type : BridgeCommandSubmitRequestType
-
-        args : JsonNode
-
-        timeout_seconds : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        BridgeCommandSubmitResponse
-            Command submitted
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.submit_bridge_command(runner_id='runnerId', type="ReadFile", args={'key': 'value'
-        }, )
-        """
-        _response = self._raw_client.submit_bridge_command(
-            runner_id, type=type, args=args, timeout_seconds=timeout_seconds, request_options=request_options
-        )
-        return _response.data
-
 
 class AsyncRunnersClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -855,6 +855,51 @@ class AsyncRunnersClient:
         """
         _response = await self._raw_client.connect_runner(
             pairing_code=pairing_code, runner_name=runner_name, request_options=request_options
+        )
+        return _response.data
+
+    async def create_bridge_command(
+        self,
+        runner_id: str,
+        *,
+        type: BridgeCommandSubmitRequestType,
+        args: JsonNode,
+        timeout_seconds: typing.Optional[int] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> BridgeCommandSubmitResponse:
+        """
+        Submit a bridge command for execution by the local daemon
+
+        Parameters
+        ----------
+        runner_id : str
+
+        type : BridgeCommandSubmitRequestType
+
+        args : JsonNode
+
+        timeout_seconds : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BridgeCommandSubmitResponse
+            Command submitted
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.runners.create_bridge_command(runner_id='runnerId', type="ReadFile", args={'key': 'value'
+            }, )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_bridge_command(
+            runner_id, type=type, args=args, timeout_seconds=timeout_seconds, request_options=request_options
         )
         return _response.data
 
@@ -1405,50 +1450,5 @@ class AsyncRunnersClient:
         """
         _response = await self._raw_client.report_job_result(
             job_id, status=status, result=result, error=error, trace_id=trace_id, request_options=request_options
-        )
-        return _response.data
-
-    async def submit_bridge_command(
-        self,
-        runner_id: str,
-        *,
-        type: BridgeCommandSubmitRequestType,
-        args: JsonNode,
-        timeout_seconds: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> BridgeCommandSubmitResponse:
-        """
-        Submit a bridge command for execution by the local daemon
-
-        Parameters
-        ----------
-        runner_id : str
-
-        type : BridgeCommandSubmitRequestType
-
-        args : JsonNode
-
-        timeout_seconds : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        BridgeCommandSubmitResponse
-            Command submitted
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.runners.submit_bridge_command(runner_id='runnerId', type="ReadFile", args={'key': 'value'
-            }, )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.submit_bridge_command(
-            runner_id, type=type, args=args, timeout_seconds=timeout_seconds, request_options=request_options
         )
         return _response.data
