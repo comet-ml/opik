@@ -72,7 +72,7 @@ def extract_params(fn: Callable) -> List[Param]:
         params.append(Param(name=param_name, type=type_name))
     if unresolved:
         logger.warning(
-            "Could not resolve backend type for parameter(s) %s in %r. "
+            "Could not resolve type for parameter(s) %s in %r. "
             "These parameters will default to 'string' and cannot be modified via the UI. "
             "Consider using a supported type (str, int, float, bool) or choosing a different entrypoint.",
             unresolved,
