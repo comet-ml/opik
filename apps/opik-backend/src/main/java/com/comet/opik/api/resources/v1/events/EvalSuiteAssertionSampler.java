@@ -215,6 +215,7 @@ public class EvalSuiteAssertionSampler {
                     try {
                         LlmAsJudgeCode code = deserializeEvaluatorConfig(evaluator.config());
                         code = resolveModelName(code);
+                        code = renameSchemaToAssertionKeys(code);
                         code = injectAssertionsVariable(code);
 
                         Map<String, String> scoreNameMapping = code.schema() != null
@@ -242,6 +243,29 @@ public class EvalSuiteAssertionSampler {
 
     private LlmAsJudgeCode deserializeEvaluatorConfig(JsonNode config) {
         return JsonUtils.treeToValue(config, LlmAsJudgeCode.class);
+    }
+
+    /**
+     * Renames schema field names to stable identifiers (assertion_1, assertion_2, ...).
+     * The original name is preserved in the description field so that scoreNameMapping
+     * maps assertion_N → original assertion text. This ensures the LLM structured output
+     * uses clean JSON property keys instead of full-sentence assertion descriptions.
+     */
+    private LlmAsJudgeCode renameSchemaToAssertionKeys(LlmAsJudgeCode code) {
+        if (code.schema() == null || code.schema().isEmpty()) {
+            return code;
+        }
+
+        var renamedSchema = new ArrayList<LlmAsJudgeOutputSchema>(code.schema().size());
+        for (int i = 0; i < code.schema().size(); i++) {
+            var original = code.schema().get(i);
+            renamedSchema.add(original.toBuilder()
+                    .name("assertion_%d".formatted(i + 1))
+                    .description(original.name())
+                    .build());
+        }
+
+        return new LlmAsJudgeCode(code.model(), code.messages(), code.variables(), renamedSchema);
     }
 
     /**
