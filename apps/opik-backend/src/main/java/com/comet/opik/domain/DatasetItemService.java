@@ -275,12 +275,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         // For evaluation suites, use only the input value as top-level data
         var inputNode = data.get("input");
-        if (inputNode == null || !inputNode.isObject()) {
+        if (inputNode == null || inputNode.isNull()) {
             return Map.of();
         }
 
-        return JsonUtils.convertValue(inputNode, new TypeReference<Map<String, JsonNode>>() {
-        });
+        // Object inputs: unwrap fields as top-level keys (existing behavior)
+        if (inputNode.isObject()) {
+            return JsonUtils.convertValue(inputNode, new TypeReference<Map<String, JsonNode>>() {
+            });
+        }
+
+        // Non-object inputs (array, string, number, boolean): wrap under "input" key
+        return Map.of("input", inputNode);
     }
 
     private Mono<UUID> resolveProjectId(DatasetItemBatch batch) {
