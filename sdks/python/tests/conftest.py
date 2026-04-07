@@ -38,6 +38,15 @@ def shutdown_cached_client_after_test():
         opik_client.get_client_cached.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def skip_local_configuration_file(tmp_path):
+    # Point config path to a non-existent file so the global config is never read
+    # We need to do this because there are a lot of tests that compare the logged project name
+    # in saved traces/spans using "Default Project" as value. But the global config
+    # can already have the project name saved, so the comparison will fail.
+    os.environ["OPIK_CONFIG_PATH"] = str(tmp_path / "nonexistent_opik.config")
+
+
 @pytest.fixture
 def fake_file_upload_manager():
     upload_manager_emulator = noop_file_upload_manager.FileUploadManagerEmulator()
@@ -224,6 +233,7 @@ def configure_opik_not_configured():
             "OPIK_URL_OVERRIDE",
             "OPIK_API_KEY",
             "OPIK_WORKSPACE",
+            "OPIK_PROJECT_NAME",
         ],
     ):
         yield
