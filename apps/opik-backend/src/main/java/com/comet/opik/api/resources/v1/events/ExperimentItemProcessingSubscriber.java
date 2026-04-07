@@ -69,29 +69,46 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     @Override
     protected Mono<Void> processEvent(ExperimentItemToProcess message) {
-        return Mono.fromRunnable(() -> {
+        return Mono.fromCallable(() -> {
             try {
                 itemProcessor.process(
                         message.prompt(), message.datasetItem(), message.experimentId(),
                         message.datasetId(), message.versionHash(),
                         message.projectName(), message.workspaceId(), message.userName());
+                return true;
             } catch (Exception e) {
                 log.error("Failed to process experiment item for experiment '{}', dataset item '{}'",
                         message.experimentId(), message.datasetItem().id(), e);
+                return false;
             }
-        }).then(Mono.defer(() -> decrementAndFinishIfComplete(message)));
+        }).flatMap(success -> decrementAndFinishIfComplete(message, success));
     }
 
-    private Mono<Void> decrementAndFinishIfComplete(ExperimentItemToProcess message) {
+    private Mono<Void> decrementAndFinishIfComplete(ExperimentItemToProcess message, boolean success) {
         var counterKey = ExperimentExecutionConfig.BATCH_COUNTER_KEY_PREFIX + message.batchId();
+        var failureKey = ExperimentExecutionConfig.BATCH_COUNTER_KEY_PREFIX + message.batchId() + ":failures";
         RAtomicLongReactive counter = redisClient.getAtomicLong(counterKey);
 
-        return counter.decrementAndGet()
+        Mono<Void> trackFailure = success
+                ? Mono.empty()
+                : redisClient.getAtomicLong(failureKey).incrementAndGet().then();
+
+        return trackFailure.then(counter.decrementAndGet())
                 .flatMap(remaining -> {
                     if (remaining <= 0) {
-                        log.info("Batch '{}' complete, finishing '{}' experiments",
-                                message.batchId(), message.allExperimentIds().size());
-                        return finishExperiments(message);
+                        return redisClient.getAtomicLong(failureKey).get()
+                                .flatMap(failures -> {
+                                    if (failures > 0) {
+                                        log.warn(
+                                                "Batch '{}' complete with '{}' failures, marking '{}' experiments as FAILED",
+                                                message.batchId(), failures, message.allExperimentIds().size());
+                                        return markExperimentsFailed(message,
+                                                buildReactorContext(message));
+                                    }
+                                    log.info("Batch '{}' complete, finishing '{}' experiments",
+                                            message.batchId(), message.allExperimentIds().size());
+                                    return finishExperiments(message);
+                                });
                     }
                     log.debug("Batch '{}' has '{}' remaining items", message.batchId(), remaining);
                     return Mono.empty();
@@ -99,12 +116,16 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 .then();
     }
 
-    private Mono<Void> finishExperiments(ExperimentItemToProcess message) {
-        var reactorContext = Context.of(
+    private Context buildReactorContext(ExperimentItemToProcess message) {
+        return Context.of(
                 RequestContext.WORKSPACE_ID, message.workspaceId(),
                 RequestContext.USER_NAME, message.userName(),
                 RequestContext.WORKSPACE_NAME, message.workspaceId(),
                 RequestContext.VISIBILITY, Visibility.PRIVATE);
+    }
+
+    private Mono<Void> finishExperiments(ExperimentItemToProcess message) {
+        var reactorContext = buildReactorContext(message);
 
         var statusUpdate = ExperimentUpdate.builder()
                 .status(ExperimentStatus.COMPLETED)

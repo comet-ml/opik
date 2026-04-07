@@ -14,4 +14,7 @@ public class EvalSuiteConfig {
 
     @Valid @Min(1) @JsonProperty
     private int defaultRunsPerItem = 1;
+
+    @Valid @Min(1) @JsonProperty
+    private int fetchTimeoutSeconds = 10;
 }

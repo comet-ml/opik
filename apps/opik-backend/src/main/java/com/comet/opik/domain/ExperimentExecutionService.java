@@ -8,6 +8,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
@@ -24,6 +25,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -92,23 +94,28 @@ public class ExperimentExecutionService {
                                         item, request, experimentIds, datasetExecutionPolicy,
                                         projectName, workspaceId, userName, batchId, messages))
                                 .count()
-                                .map(itemCount -> {
+                                .flatMap(itemCount -> {
                                     if (messages.isEmpty()) {
                                         log.warn("No dataset items found for dataset '{}', workspaceId '{}'",
                                                 request.datasetName(), workspaceId);
-                                    } else {
-                                        itemPublisher.publish(batchId, messages);
-
-                                        log.info(
-                                                "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
-                                                experimentIds.size(), messages.size(), request.datasetName(),
-                                                workspaceId);
+                                        return markExperimentsCompleted(experimentIds)
+                                                .thenReturn(ExperimentExecutionResponse.builder()
+                                                        .experiments(experimentInfos)
+                                                        .totalItems(0)
+                                                        .build());
                                     }
 
-                                    return ExperimentExecutionResponse.builder()
+                                    itemPublisher.publish(batchId, messages);
+
+                                    log.info(
+                                            "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
+                                            experimentIds.size(), messages.size(), request.datasetName(),
+                                            workspaceId);
+
+                                    return Mono.just(ExperimentExecutionResponse.builder()
                                             .experiments(experimentInfos)
                                             .totalItems(messages.size())
-                                            .build();
+                                            .build());
                                 });
                     });
         });
@@ -180,6 +187,16 @@ public class ExperimentExecutionService {
             log.warn("Failed to fetch dataset execution policy for dataset '{}'", datasetId, e);
             return null;
         }
+    }
+
+    private Mono<Void> markExperimentsCompleted(List<UUID> experimentIds) {
+        var statusUpdate = ExperimentUpdate.builder()
+                .status(ExperimentStatus.COMPLETED)
+                .build();
+        return Flux.fromIterable(experimentIds)
+                .concatMap(id -> experimentService.update(id, statusUpdate))
+                .then(experimentService.finishExperiments(Set.copyOf(experimentIds)))
+                .then();
     }
 
     private int getEffectiveRunsPerItem(ExecutionPolicy itemPolicy, ExecutionPolicy versionPolicy) {

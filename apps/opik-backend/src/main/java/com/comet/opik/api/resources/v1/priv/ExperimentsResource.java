@@ -583,6 +583,7 @@ public class ExperimentsResource {
     @Operation(operationId = "executeExperiment", summary = "Create and execute experiment", description = "Creates experiments for each prompt variant and asynchronously processes all dataset items", responses = {
             @ApiResponse(responseCode = "202", description = "Experiments created and processing started", content = @Content(schema = @Schema(implementation = ExperimentExecutionResponse.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     public Response execute(@NotNull @Valid ExperimentExecutionRequest request) {
         var context = requestContext.get();
         var workspaceId = context.getWorkspaceId();

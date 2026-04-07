@@ -69,11 +69,10 @@ export default function useRunExperimentExecution() {
   return useMutation({
     mutationFn: runExperimentExecution,
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "message"]) ||
+        error.message ||
+        "An unexpected error occurred while running the experiment";
 
       toast({
         title: "Error",

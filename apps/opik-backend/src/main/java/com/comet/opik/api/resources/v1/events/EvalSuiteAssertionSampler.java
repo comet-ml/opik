@@ -100,10 +100,12 @@ public class EvalSuiteAssertionSampler {
                 RequestContext.USER_NAME, tracesBatch.userName(),
                 RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
 
+        Duration fetchTimeout = Duration.ofSeconds(evalSuiteConfig.getFetchTimeoutSeconds());
+
         DatasetEvaluatorsResult datasetEvaluators = fetchDatasetEvaluators(
                 datasetId, evalSuiteVersionHash.orElse(null))
                 .contextWrite(reactiveContext)
-                .timeout(Duration.ofSeconds(10))
+                .timeout(fetchTimeout)
                 .block();
 
         List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators.evaluators());
@@ -178,7 +180,7 @@ public class EvalSuiteAssertionSampler {
         try {
             var item = datasetItemService.get(itemId)
                     .contextWrite(reactiveContext)
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(evalSuiteConfig.getFetchTimeoutSeconds()))
                     .block();
 
             if (item == null || item.evaluators() == null || item.evaluators().isEmpty()) {
