@@ -1,44 +1,16 @@
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
+from opik.rest_api.core.api_error import ApiError
+from opik.rest_api.types.local_runner_heartbeat_response import (
+    LocalRunnerHeartbeatResponse,
+)
 from opik.runner.in_process_loop import InProcessRunnerLoop
 
 
-class TestHeartbeatSupervised:
-    @patch.dict("os.environ", {"OPIK_SUPERVISED": "true"})
-    def test_supervised__skips_heartbeat_thread(self) -> None:
-        api = MagicMock()
-        shutdown = threading.Event()
-        shutdown.set()
-
-        loop = InProcessRunnerLoop(api, "runner-1", shutdown)
-
-        started_threads: list[str] = []
-        original_thread = threading.Thread
-
-        def tracking_thread(*args, **kwargs):
-            t = original_thread(*args, **kwargs)
-            target = kwargs.get("target") or (args[0] if args else None)
-            if target and hasattr(target, "__name__"):
-                started_threads.append(target.__name__)
-            elif target and hasattr(target, "__func__"):
-                started_threads.append(target.__func__.__name__)
-            return t
-
-        with patch(
-            "opik.runner.in_process_loop.threading.Thread",
-            side_effect=tracking_thread,
-        ):
-            loop.run()
-
-        assert "_heartbeat_loop" not in started_threads
-
-    @patch.dict("os.environ", {}, clear=False)
-    def test_unsupervised__starts_heartbeat_thread(self) -> None:
-        import os
-
-        os.environ.pop("OPIK_SUPERVISED", None)
-
+class TestInProcessHeartbeat:
+    def test_run__always_starts_heartbeat_thread(self) -> None:
         api = MagicMock()
         shutdown = threading.Event()
         shutdown.set()
@@ -64,3 +36,33 @@ class TestHeartbeatSupervised:
             for t in started_targets
         ]
         assert "_heartbeat_loop" in target_names
+
+    def test_heartbeat__sends_capabilities(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+        shutdown = threading.Event()
+
+        loop = InProcessRunnerLoop(api, "runner-1", shutdown)
+
+        t = threading.Thread(target=loop._heartbeat_loop, daemon=True)
+        t.start()
+        time.sleep(0.3)
+        shutdown.set()
+        t.join(timeout=5)
+
+        api.runners.heartbeat.assert_called()
+        call_kwargs = api.runners.heartbeat.call_args.kwargs
+        assert call_kwargs["capabilities"] == ["jobs", "bridge"]
+
+    def test_heartbeat__410__shuts_down(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.side_effect = ApiError(status_code=410, body=None)
+        shutdown = threading.Event()
+
+        loop = InProcessRunnerLoop(api, "runner-1", shutdown)
+
+        t = threading.Thread(target=loop._heartbeat_loop, daemon=True)
+        t.start()
+        t.join(timeout=5)
+
+        assert shutdown.is_set()

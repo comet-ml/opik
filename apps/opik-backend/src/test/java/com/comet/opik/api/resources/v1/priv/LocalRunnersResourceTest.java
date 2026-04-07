@@ -1298,7 +1298,7 @@ class LocalRunnersResourceTest {
                     .args(MAPPER.createObjectNode().put("path", "src/main.py"))
                     .timeoutSeconds(30)
                     .build();
-            BridgeCommandSubmitResponse submitResp = runnersClient.submitBridgeCommand(runnerId, submitReq,
+            BridgeCommandSubmitResponse submitResp = runnersClient.createBridgeCommand(runnerId, submitReq,
                     ctx.apiKey, ctx.workspace);
             UUID commandId = submitResp.commandId();
             assertThat(commandId).isNotNull();
@@ -1316,7 +1316,7 @@ class LocalRunnersResourceTest {
                     .build();
             try (var response = runnersClient.callReportBridgeResult(runnerId, commandId, resultReq,
                     ctx.apiKey, ctx.workspace)) {
-                assertThat(response.getStatus()).isEqualTo(200);
+                assertThat(response.getStatus()).isEqualTo(204);
             }
 
             BridgeCommand cmd = runnersClient.getBridgeCommand(runnerId, commandId, false, 0,
@@ -1334,7 +1334,7 @@ class LocalRunnersResourceTest {
             UUID runnerId = connectRunnerWithBridge("bridge-batch", projectId, ctx.apiKey, ctx.workspace);
 
             for (int i = 0; i < 3; i++) {
-                runnersClient.submitBridgeCommand(runnerId,
+                runnersClient.createBridgeCommand(runnerId,
                         BridgeCommandSubmitRequest.builder()
                                 .type(BridgeCommandType.READ_FILE)
                                 .args(MAPPER.createObjectNode().put("path", "file" + i + ".py"))
@@ -1354,7 +1354,7 @@ class LocalRunnersResourceTest {
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             UUID runnerId = connectRunnerWithBridge("bridge-no-interference", projectId, ctx.apiKey, ctx.workspace);
 
-            runnersClient.submitBridgeCommand(runnerId,
+            runnersClient.createBridgeCommand(runnerId,
                     BridgeCommandSubmitRequest.builder()
                             .type(BridgeCommandType.READ_FILE)
                             .args(MAPPER.createObjectNode().put("path", "f.py"))
@@ -1403,7 +1403,7 @@ class LocalRunnersResourceTest {
                     .build();
 
             for (int i = 0; i < 3; i++) {
-                runnersClient.submitBridgeCommand(runnerId, req, ctx.apiKey, ctx.workspace);
+                runnersClient.createBridgeCommand(runnerId, req, ctx.apiKey, ctx.workspace);
             }
 
             try (var response = runnersClient.callSubmitBridgeCommand(runnerId, req, ctx.apiKey, ctx.workspace)) {
@@ -1438,7 +1438,7 @@ class LocalRunnersResourceTest {
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             UUID runnerId = connectRunnerWithBridge("bridge-await", projectId, ctx.apiKey, ctx.workspace);
 
-            BridgeCommandSubmitResponse submitResp = runnersClient.submitBridgeCommand(runnerId,
+            BridgeCommandSubmitResponse submitResp = runnersClient.createBridgeCommand(runnerId,
                     BridgeCommandSubmitRequest.builder()
                             .type(BridgeCommandType.READ_FILE)
                             .args(MAPPER.createObjectNode().put("path", "f.py"))
@@ -1474,7 +1474,7 @@ class LocalRunnersResourceTest {
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             UUID runnerId = connectRunnerWithBridge("bridge-no-wait", projectId, ctx.apiKey, ctx.workspace);
 
-            BridgeCommandSubmitResponse submitResp = runnersClient.submitBridgeCommand(runnerId,
+            BridgeCommandSubmitResponse submitResp = runnersClient.createBridgeCommand(runnerId,
                     BridgeCommandSubmitRequest.builder()
                             .type(BridgeCommandType.READ_FILE)
                             .args(MAPPER.createObjectNode().put("path", "f.py"))

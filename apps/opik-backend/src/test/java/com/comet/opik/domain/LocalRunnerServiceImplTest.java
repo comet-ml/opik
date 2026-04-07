@@ -861,7 +861,7 @@ class LocalRunnerServiceImplTest {
                 .args(MAPPER.createObjectNode().put("path", "src/main.py"))
                 .timeoutSeconds(10)
                 .build();
-        return runnerService.submitBridgeCommand(runnerId, workspaceId, userName, req);
+        return runnerService.createBridgeCommand(runnerId, workspaceId, userName, req);
     }
 
     @Nested
@@ -958,11 +958,11 @@ class LocalRunnerServiceImplTest {
                         .type(BridgeCommandType.WRITE_FILE)
                         .args(MAPPER.createObjectNode().put("path", "f.py").put("content", "x"))
                         .build();
-                runnerService.submitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq);
+                runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq);
 
                 stubNextId();
                 assertThatThrownBy(
-                        () -> runnerService.submitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq))
+                        () -> runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq))
                         .isExactlyInstanceOf(ClientErrorException.class)
                         .hasMessageContaining("429");
             } finally {
@@ -979,7 +979,7 @@ class LocalRunnerServiceImplTest {
                     .args(MAPPER.createObjectNode().put("path", "f.py"))
                     .timeoutSeconds(9999)
                     .build();
-            UUID commandId = runnerService.submitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
+            UUID commandId = runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
 
             RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             assertThat(cmdMap.get("timeout_seconds")).isEqualTo("120");
@@ -1000,7 +1000,7 @@ class LocalRunnerServiceImplTest {
                         .args(MAPPER.createObjectNode().put("data", largeValue.toString()))
                         .build();
 
-                assertThatThrownBy(() -> runnerService.submitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req))
+                assertThatThrownBy(() -> runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req))
                         .isExactlyInstanceOf(ClientErrorException.class)
                         .hasMessageContaining("400");
             } finally {
@@ -1133,10 +1133,12 @@ class LocalRunnerServiceImplTest {
             runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
-                    BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build());
+                    BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                            .result(MAPPER.createObjectNode()).build());
 
             assertThatThrownBy(() -> runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
-                    commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build()))
+                    commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                            .result(MAPPER.createObjectNode()).build()))
                     .isExactlyInstanceOf(ClientErrorException.class)
                     .hasMessageContaining("409");
         }
@@ -1149,7 +1151,8 @@ class LocalRunnerServiceImplTest {
 
             UUID otherRunner = UUID.randomUUID();
             assertThatThrownBy(() -> runnerService.reportBridgeCommandResult(otherRunner, WORKSPACE_ID, USER_NAME,
-                    commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build()))
+                    commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                            .result(MAPPER.createObjectNode()).build()))
                     .isExactlyInstanceOf(NotFoundException.class);
         }
 
@@ -1160,7 +1163,8 @@ class LocalRunnerServiceImplTest {
             runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
-                    BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build());
+                    BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                            .result(MAPPER.createObjectNode()).build());
 
             RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:command:" + commandId + ":done");
             assertThat(doneQueue.size()).isGreaterThan(0);
@@ -1250,7 +1254,8 @@ class LocalRunnerServiceImplTest {
                 try {
                     Thread.sleep(500);
                     runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
-                            BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build());
+                            BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                                    .result(MAPPER.createObjectNode()).build());
                 } catch (InterruptedException ignored) {
                 }
             });
@@ -1304,7 +1309,8 @@ class LocalRunnerServiceImplTest {
             runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
-                    BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build());
+                    BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                            .result(MAPPER.createObjectNode()).build());
 
             RList<String> doneQueue = stringRedis.getList("opik:runners:bridge:command:" + commandId + ":done");
             long ttlMs = doneQueue.remainTimeToLive();
@@ -1331,7 +1337,8 @@ class LocalRunnerServiceImplTest {
                 try {
                     latch.await();
                     runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
-                            BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).build());
+                            BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                                    .result(MAPPER.createObjectNode()).build());
                     successes.incrementAndGet();
                 } catch (ClientErrorException e) {
                     if (e.getResponse().getStatus() == 409) {
@@ -1503,7 +1510,7 @@ class LocalRunnerServiceImplTest {
                     .args(MAPPER.createObjectNode().put("path", "f.py"))
                     .timeoutSeconds(1)
                     .build();
-            UUID commandId = runnerService.submitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
+            UUID commandId = runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
             runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);

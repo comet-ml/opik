@@ -14,14 +14,17 @@ from opik.rest_api.types.local_runner_heartbeat_response import (
 from opik.runner.supervisor import Supervisor
 
 
+_SENTINEL = object()
+
+
 def _make_supervisor(
-    command=None,
+    command=_SENTINEL,
     env=None,
     repo_root=None,
     runner_id="runner-1",
     api=None,
 ) -> Supervisor:
-    if command is None:
+    if command is _SENTINEL:
         command = [sys.executable, "-c", "import time; time.sleep(60)"]
     if env is None:
         env = dict(os.environ)
@@ -30,6 +33,7 @@ def _make_supervisor(
     if api is None:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+        api.runners.next_bridge_commands.return_value = MagicMock(commands=[])
     return Supervisor(
         command=command,
         env=env,
@@ -49,31 +53,6 @@ class TestStartChild:
         child = sup._start_child()
         child.wait(timeout=5)
         assert marker.read_text() == "ok"
-
-    def test_env_includes_supervised_flag(self) -> None:
-        sup = _make_supervisor()
-        child = sup._start_child()
-        # The Popen env should include OPIK_SUPERVISED
-        # We can't inspect env directly, but we can test via a child that checks
-        try:
-            child.terminate()
-            child.wait(timeout=5)
-        except Exception:
-            pass
-
-    def test_env_supervised_flag_via_child(self, tmp_path: Path) -> None:
-        marker = tmp_path / "env_check"
-        sup = _make_supervisor(
-            command=[
-                sys.executable,
-                "-c",
-                f"import os; open('{marker}', 'w').write(os.environ.get('OPIK_SUPERVISED', ''))",
-            ],
-            repo_root=tmp_path,
-        )
-        child = sup._start_child()
-        child.wait(timeout=5)
-        assert marker.read_text() == "true"
 
     def test_captures_output_via_pipe(self) -> None:
         sup = _make_supervisor()
@@ -276,6 +255,43 @@ class TestHeartbeat:
         t.join(timeout=5)
 
         assert sup._shutdown_event.is_set()
+
+
+class TestStandaloneMode:
+    def test_no_command__runs_without_child(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+
+        sup = _make_supervisor(command=None, api=api)
+
+        t = threading.Thread(target=sup.run, daemon=True)
+        t.start()
+
+        time.sleep(1)
+
+        assert sup._child is None
+
+        sup._shutdown_event.set()
+        t.join(timeout=10)
+
+    def test_no_command__sends_checklist_with_null_command(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+
+        sup = _make_supervisor(command=None, api=api)
+
+        t = threading.Thread(target=sup.run, daemon=True)
+        t.start()
+
+        time.sleep(1)
+        sup._shutdown_event.set()
+        t.join(timeout=10)
+
+        api.runners.patch_checklist.assert_called()
+        checklist = api.runners.patch_checklist.call_args.kwargs.get(
+            "request"
+        ) or api.runners.patch_checklist.call_args[1].get("request")
+        assert checklist["command"] is None
 
 
 class TestBridgeIntegration:

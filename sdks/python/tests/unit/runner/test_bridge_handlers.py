@@ -227,6 +227,7 @@ class TestExecHandler:
             "curl --version",
             "wget --version",
             "cat nohup.out",
+            "echo substitute",
         ],
     )
     def test_blocklist__safe_commands__allowed(

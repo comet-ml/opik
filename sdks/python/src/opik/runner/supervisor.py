@@ -25,9 +25,9 @@ from .stability_guard import StabilityGuard
 
 LOGGER = logging.getLogger(__name__)
 
-_HEARTBEAT_INTERVAL = 5.0
-_GRACEFUL_TIMEOUT = 10
-_RESTART_DEBOUNCE = 1.0
+_HEARTBEAT_INTERVAL_SECONDS = 5.0
+_GRACEFUL_TIMEOUT_SECONDS = 10
+_RESTART_DEBOUNCE_SECONDS = 1.0
 _STDERR_MAX_LINES = 500
 
 _RELOAD_INDICATORS = frozenset(
@@ -63,8 +63,8 @@ class Supervisor:
         api: Any,
         on_child_output: Optional[Callable[[str, str], None]] = None,
         on_child_restart: Optional[Callable[[str], None]] = None,
-        on_command_start: Optional[Callable] = None,
-        on_command_end: Optional[Callable] = None,
+        on_command_start: Optional[Callable[[str, str, str], None]] = None,
+        on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
     ) -> None:
         self._command = command
@@ -198,7 +198,7 @@ class Supervisor:
         assert self._command is not None
         with self._stderr_lock:
             self._stderr_buffer.clear()
-        env = {**self._env, "OPIK_SUPERVISED": "true"}
+        env = {**self._env}
         LOGGER.info("Starting child: %s", shlex.join(self._command))
         child = subprocess.Popen(
             self._command,
@@ -248,7 +248,9 @@ class Supervisor:
         with self._stderr_lock:
             return "\n".join(self._stderr_buffer)
 
-    def _stop_child(self, graceful_timeout: int = _GRACEFUL_TIMEOUT) -> Optional[int]:
+    def _stop_child(
+        self, graceful_timeout: int = _GRACEFUL_TIMEOUT_SECONDS
+    ) -> Optional[int]:
         with self._child_lock:
             child = self._child
             if child is None:
@@ -285,7 +287,7 @@ class Supervisor:
     def _restart_child(self, reason: str) -> None:
         with self._child_lock:
             now = time.monotonic()
-            if now - self._last_restart_time < _RESTART_DEBOUNCE:
+            if now - self._last_restart_time < _RESTART_DEBOUNCE_SECONDS:
                 LOGGER.debug("Restart debounced (reason: %s)", reason)
                 return
             self._last_restart_time = now
@@ -301,7 +303,7 @@ class Supervisor:
             if old_child.poll() is None:
                 try:
                     old_child.send_signal(signal.SIGTERM)
-                    old_child.wait(timeout=_GRACEFUL_TIMEOUT)
+                    old_child.wait(timeout=_GRACEFUL_TIMEOUT_SECONDS)
                 except (OSError, subprocess.TimeoutExpired):
                     try:
                         old_child.kill()
@@ -366,7 +368,7 @@ class Supervisor:
             except Exception:
                 LOGGER.debug("Heartbeat error", exc_info=True)
 
-            self._shutdown_event.wait(_HEARTBEAT_INTERVAL)
+            self._shutdown_event.wait(_HEARTBEAT_INTERVAL_SECONDS)
 
     def _install_signal_handlers(self) -> None:
         def handler(signum: int, frame: object) -> None:

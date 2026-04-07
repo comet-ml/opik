@@ -30,18 +30,21 @@ _TRACING_PATTERNS = [
 
 _ENTRYPOINT_PATTERNS = [
     re.compile(r"entrypoint\s*=\s*True"),
+    re.compile(r"entrypoint:\s*true"),
 ]
 
 _CONFIGURATION_PATTERNS = [
-    re.compile(r"AgentConfig"),
+    re.compile(r"get_agent_config_version\("),
+    re.compile(r"getAgentConfigVersion\("),
 ]
 
 _ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTERNS
 
 
 def build_checklist(repo_root: Path, command: Optional[List[str]]) -> Dict[str, Any]:
-    file_tree = _build_file_tree(repo_root)
-    matches = _find_instrumentation(repo_root)
+    git_files = common.git_ls_files(repo_root)
+    file_tree = _build_file_tree(repo_root, git_files)
+    matches = _find_instrumentation(repo_root, git_files)
 
     has_tracing = any(_matches_any(line, _TRACING_PATTERNS) for line in matches)
     has_entrypoint = any(_matches_any(line, _ENTRYPOINT_PATTERNS) for line in matches)
@@ -67,9 +70,7 @@ def _matches_any(match_line: str, patterns: list) -> bool:
     return any(p.search(content) for p in patterns)
 
 
-def _build_file_tree(repo_root: Path) -> str:
-    git_files = common.git_ls_files(repo_root)
-
+def _build_file_tree(repo_root: Path, git_files: Optional[Set[str]]) -> str:
     entries: List[str] = []
     dirs_seen: Set[str] = set()
 
@@ -109,8 +110,7 @@ def _build_file_tree(repo_root: Path) -> str:
     return "\n".join(entries)
 
 
-def _find_instrumentation(repo_root: Path) -> List[str]:
-    git_files = common.git_ls_files(repo_root)
+def _find_instrumentation(repo_root: Path, git_files: Optional[Set[str]]) -> List[str]:
     matches: List[str] = []
 
     if git_files is not None:

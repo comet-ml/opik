@@ -6,7 +6,6 @@ import contextvars
 import inspect
 import json
 import logging
-import os
 import random
 import threading
 import time
@@ -26,7 +25,7 @@ from .log_streamer import LogStreamer
 
 LOGGER = logging.getLogger(__name__)
 
-POLL_IDLE_INTERVAL_SECONDS = 0.5
+_POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
@@ -101,12 +100,11 @@ class InProcessRunnerLoop:
         self._log_streamer: Optional[LogStreamer] = None
 
     def run(self) -> None:
-        if os.environ.get("OPIK_SUPERVISED") != "true":
-            heartbeat_thread = threading.Thread(
-                target=self._heartbeat_loop,
-                daemon=True,
-            )
-            heartbeat_thread.start()
+        heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            daemon=True,
+        )
+        heartbeat_thread.start()
 
         poll_thread = threading.Thread(
             target=self._poll_loop,
@@ -150,7 +148,7 @@ class InProcessRunnerLoop:
 
             if job is None:
                 backoff = 1.0
-                self._shutdown_event.wait(POLL_IDLE_INTERVAL_SECONDS)
+                self._shutdown_event.wait(_POLL_IDLE_INTERVAL_SECONDS)
                 continue
 
             backoff = 1.0
@@ -160,7 +158,9 @@ class InProcessRunnerLoop:
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                resp = self._api.runners.heartbeat(self._runner_id)
+                resp = self._api.runners.heartbeat(
+                    self._runner_id, capabilities=["jobs", "bridge"]
+                )
 
                 cancelled_job_ids = resp.cancelled_job_ids or []
                 now = time.monotonic()

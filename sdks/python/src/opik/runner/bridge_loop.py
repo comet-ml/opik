@@ -3,8 +3,8 @@
 import logging
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Dict, List, Optional, Set, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.core.request_options import RequestOptions
@@ -18,10 +18,11 @@ _POLL_TIMEOUT_SECONDS = 45
 _MAX_WORKERS = 10
 _REPORT_MAX_RETRIES = 3
 _REPORT_BACKOFF_BASE = 1.0
-_DEFAULT_COMMAND_TIMEOUT = 30.0
-_MIN_COMMAND_TIMEOUT = 1.0
-_MAX_COMMAND_TIMEOUT = 300.0
+_DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
+_MIN_COMMAND_TIMEOUT_SECONDS = 1.0
+_MAX_COMMAND_TIMEOUT_SECONDS = 300.0
 _MAX_BATCH_SIZE = 20
+_MAX_POLL_COMMANDS = 10
 
 
 def _build_op_summary(cmd: BridgeCommandItem) -> str:
@@ -55,8 +56,8 @@ class BridgePollLoop:
         runner_id: str,
         handlers: Dict[str, BaseHandler],
         shutdown_event: threading.Event,
-        on_command_start: Optional[Any] = None,
-        on_command_end: Optional[Any] = None,
+        on_command_start: Optional[Callable[[str, str, str], None]] = None,
+        on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
     ) -> None:
         self._api = api
         self._runner_id = runner_id
@@ -69,8 +70,6 @@ class BridgePollLoop:
         backoff = 1.0
         poll_failures = 0
         inflight_sem = threading.Semaphore(_MAX_WORKERS)
-        inflight: Set[Future] = set()
-        inflight_lock = threading.Lock()
 
         pool = ThreadPoolExecutor(
             max_workers=_MAX_WORKERS, thread_name_prefix="bridge-exec"
@@ -117,22 +116,20 @@ class BridgePollLoop:
                     if not inflight_sem.acquire(timeout=1.0):
                         continue
 
-                    def _on_done(f: Future) -> None:
-                        with inflight_lock:
-                            inflight.discard(f)
-                        inflight_sem.release()
+                    def _on_done(
+                        _f: Any, _sem: threading.Semaphore = inflight_sem
+                    ) -> None:
+                        _sem.release()
 
                     future = pool.submit(self._execute_and_report, cmd)
-                    with inflight_lock:
-                        inflight.add(future)
                     future.add_done_callback(_on_done)
         finally:
-            pool.shutdown(wait=True, cancel_futures=True)
+            pool.shutdown(wait=True)
 
     def _poll(self) -> List[BridgeCommandItem]:
         resp = self._api.runners.next_bridge_commands(
             self._runner_id,
-            max_commands=10,
+            max_commands=_MAX_POLL_COMMANDS,
             request_options=RequestOptions(timeout_in_seconds=_POLL_TIMEOUT_SECONDS),
         )
         return (resp.commands or [])[:_MAX_BATCH_SIZE]
@@ -161,10 +158,11 @@ class BridgePollLoop:
         raw_timeout = (
             cmd.timeout_seconds
             if cmd.timeout_seconds is not None
-            else _DEFAULT_COMMAND_TIMEOUT
+            else _DEFAULT_COMMAND_TIMEOUT_SECONDS
         )
         timeout = max(
-            _MIN_COMMAND_TIMEOUT, min(float(raw_timeout), _MAX_COMMAND_TIMEOUT)
+            _MIN_COMMAND_TIMEOUT_SECONDS,
+            min(float(raw_timeout), _MAX_COMMAND_TIMEOUT_SECONDS),
         )
 
         handler = self._handlers.get(command_type)
@@ -203,9 +201,9 @@ class BridgePollLoop:
         self,
         command_id: str,
         status: str,
-        result: Any,
-        error: Any,
-        duration_ms: Any,
+        result: Optional[Dict],
+        error: Optional[Dict],
+        duration_ms: Optional[int],
     ) -> None:
         for attempt in range(_REPORT_MAX_RETRIES):
             try:

@@ -25,6 +25,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -35,12 +36,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
+import org.redisson.api.BatchResult;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RBatch;
 import org.redisson.api.RBlockingDeque;
 import org.redisson.api.RBlockingQueue;
 import org.redisson.api.RBucket;
-import org.redisson.api.RFuture;
 import org.redisson.api.RList;
 import org.redisson.api.RMap;
 import org.redisson.api.RMapReactive;
@@ -50,6 +51,7 @@ import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.queue.DequeMoveArgs;
 import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.UncheckedIOException;
 import java.time.Duration;
@@ -60,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @ImplementedBy(LocalRunnerServiceImpl.class)
 public interface LocalRunnerService {
@@ -95,7 +98,7 @@ public interface LocalRunnerService {
     LocalRunnerHeartbeatResponse heartbeat(UUID runnerId, String workspaceId, String userName,
             List<String> capabilities);
 
-    UUID submitBridgeCommand(UUID runnerId, String workspaceId, String userName, BridgeCommandSubmitRequest request);
+    UUID createBridgeCommand(UUID runnerId, String workspaceId, String userName, BridgeCommandSubmitRequest request);
 
     Mono<BridgeCommandBatchResponse> nextBridgeCommands(UUID runnerId, String workspaceId, String userName,
             int maxCommands);
@@ -1318,7 +1321,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     @Override
-    public UUID submitBridgeCommand(@NonNull UUID runnerId, @NonNull String workspaceId, @NonNull String userName,
+    public UUID createBridgeCommand(@NonNull UUID runnerId, @NonNull String workspaceId, @NonNull String userName,
             @NonNull BridgeCommandSubmitRequest request) {
         validateRunnerOwnership(runnerId, workspaceId, userName);
 
@@ -1399,19 +1402,20 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     String now = Instant.now().toString();
 
                     RBatch readBatch = redisClient.createBatch();
-                    List<RFuture<Map<String, String>>> readFutures = new ArrayList<>(commandIds.size());
                     for (String cmdIdStr : commandIds) {
                         UUID commandId = UUID.fromString(cmdIdStr);
-                        readFutures.add(readBatch.<String, String>getMap(
-                                bridgeCommandKey(commandId), StringCodec.INSTANCE).readAllMapAsync());
+                        readBatch.<String, String>getMap(
+                                bridgeCommandKey(commandId), StringCodec.INSTANCE).readAllMapAsync();
                     }
-                    readBatch.execute();
+                    BatchResult<?> batchResult = readBatch.execute();
+                    List<?> responses = batchResult.getResponses();
 
                     List<String> liveCommandIds = new ArrayList<>();
                     List<Map<String, String>> liveFields = new ArrayList<>();
-                    RList<String> activeList = redisClient.getList(activeKey, StringCodec.INSTANCE);
+                    RList<String> activeList = redisClient.getList(activeKey);
                     for (int i = 0; i < commandIds.size(); i++) {
-                        Map<String, String> fields = readFutures.get(i).toCompletableFuture().join();
+                        @SuppressWarnings("unchecked")
+                        Map<String, String> fields = (Map<String, String>) responses.get(i);
                         if (fields.isEmpty() || fields.containsKey(BRIDGE_FIELD_COMPLETED_FLAG)) {
                             activeList.remove(commandIds.get(i));
                             continue;
@@ -1445,7 +1449,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                     }
 
                     return BridgeCommandBatchResponse.builder().commands(items).build();
-                }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()))
+                }).subscribeOn(Schedulers.boundedElastic()))
                 .defaultIfEmpty(BridgeCommandBatchResponse.builder().commands(List.of()).build());
     }
 
@@ -1456,6 +1460,11 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of(
                             "Invalid result status. Must be one of: " + REPORTABLE_BRIDGE_STATUSES)))
+                    .build());
+        }
+        if (request.result() == null && request.error() == null) {
+            throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(List.of("Either result or error must be provided")))
                     .build());
         }
         String resultJson = validateAndSerializePayload(request.result(), "result");
@@ -1558,7 +1567,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         if (depth > DEEP_MERGE_MAX_DEPTH || !base.isObject() || !override.isObject()) {
             return override;
         }
-        com.fasterxml.jackson.databind.node.ObjectNode result = base.deepCopy();
+        ObjectNode result = base.deepCopy();
         var fieldIterator = override.fields();
         while (fieldIterator.hasNext()) {
             var entry = fieldIterator.next();
@@ -1590,15 +1599,16 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         RBlockingQueue<String> doneQueue = redisClient.getBlockingQueue(bridgeCommandDoneKey(commandId));
 
         return Mono.fromCompletionStage(
-                doneQueue.pollAsync(effectiveTimeout, java.util.concurrent.TimeUnit.SECONDS))
-                .then(Mono.fromCallable(() -> {
+                doneQueue.pollAsync(effectiveTimeout, TimeUnit.SECONDS))
+                .flatMap(signal -> Mono.fromCallable(() -> {
                     Map<String, String> updatedFields = redisClient
                             .<String, String>getMap(bridgeCommandKey(commandId)).readAllMap();
                     if (updatedFields.isEmpty()) {
                         return buildBridgeCommand(fields);
                     }
                     return buildBridgeCommand(updatedFields);
-                }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()));
+                }).subscribeOn(Schedulers.boundedElastic()))
+                .defaultIfEmpty(buildBridgeCommand(fields));
     }
 
     void failOrphanedBridgeCommands(UUID runnerId) {

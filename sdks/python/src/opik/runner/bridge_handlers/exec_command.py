@@ -18,10 +18,10 @@ from . import BaseHandler, CommandError
 LOGGER = logging.getLogger(__name__)
 
 _MAX_OUTPUT_BYTES = 512 * 1024
-_DEFAULT_TIMEOUT = 30
-_MAX_TIMEOUT = 120
+_DEFAULT_TIMEOUT_SECONDS = 30
+_MAX_TIMEOUT_SECONDS = 120
 _DEFAULT_MAX_BACKGROUND = 5
-_GRACEFUL_KILL_TIMEOUT = 5
+_GRACEFUL_KILL_TIMEOUT_SECONDS = 5
 
 _BLOCKLIST = [
     re.compile(r"\bsudo\b"),
@@ -49,7 +49,7 @@ _BLOCKLIST = [
 
 class ExecArgs(BaseModel):
     command: str
-    timeout: Optional[int] = Field(default=None, ge=1, le=_MAX_TIMEOUT)
+    timeout: Optional[int] = Field(default=None, ge=1, le=_MAX_TIMEOUT_SECONDS)
     background: bool = False
 
 
@@ -92,7 +92,7 @@ class BackgroundProcessTracker:
         if not alive:
             return
 
-        deadline = time.monotonic() + _GRACEFUL_KILL_TIMEOUT
+        deadline = time.monotonic() + _GRACEFUL_KILL_TIMEOUT_SECONDS
         still_alive: List[subprocess.Popen] = []
         for proc in alive:
             remaining = max(0, deadline - time.monotonic())
@@ -167,7 +167,7 @@ class ExecHandler(BaseHandler):
     def _execute_foreground(
         self, shell_args: list, parsed: ExecArgs, timeout: float
     ) -> Dict[str, Any]:
-        cmd_timeout = min(parsed.timeout or _DEFAULT_TIMEOUT, timeout)
+        cmd_timeout = min(parsed.timeout or _DEFAULT_TIMEOUT_SECONDS, timeout)
 
         proc = subprocess.Popen(
             shell_args,

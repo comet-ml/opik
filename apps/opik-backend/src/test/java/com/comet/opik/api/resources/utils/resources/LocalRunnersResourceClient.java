@@ -381,7 +381,7 @@ public class LocalRunnersResourceClient {
         }
     }
 
-    public BridgeCommandSubmitResponse submitBridgeCommand(UUID runnerId, BridgeCommandSubmitRequest request,
+    public BridgeCommandSubmitResponse createBridgeCommand(UUID runnerId, BridgeCommandSubmitRequest request,
             String apiKey, String workspaceName) {
         try (var response = callSubmitBridgeCommand(runnerId, request, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
