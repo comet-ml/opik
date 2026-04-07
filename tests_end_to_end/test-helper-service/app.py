@@ -31,6 +31,8 @@ def authenticate_if_needed():
     # Skip authentication for local environment
     if base_url.startswith("http://localhost"):
         print("🏠 Local environment detected, skipping authentication")
+        os.environ["OPIK_URL_OVERRIDE"] = f"{base_url}/api"
+        os.environ.setdefault("OPIK_WORKSPACE", "default")
         return
 
     # Check if API key already exists

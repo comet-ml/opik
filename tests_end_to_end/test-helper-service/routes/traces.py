@@ -2,6 +2,7 @@
 
 from flask import Blueprint, request, abort
 from werkzeug.exceptions import HTTPException
+import datetime
 import io
 import logging
 import os
@@ -83,10 +84,12 @@ def create_traces_client():
             project_name=project_name,
             input={"input": "test input"},
             output={"output": "test output"},
+            end_time=datetime.datetime.now(datetime.timezone.utc),
         )
-        _ = client_trace.span(
+        span = client_trace.span(
             name="span", input={"input": "test input"}, output={"output": "test output"}
         )
+        span.end()
 
     return success_response({"traces_created": traces_number})
 
@@ -110,11 +113,12 @@ def create_traces_and_get_url():
     try:
         client = get_opik_client()
         for i in range(traces_number):
-            client.trace(
+            trace = client.trace(
                 name=f"{prefix}{i}",
                 project_name=project_name,
                 input={"input": "test input"},
                 output={"output": "test output"},
+                end_time=datetime.datetime.now(datetime.timezone.utc),
             )
         capture_handler.flush()
         terminal_output = log_capture.getvalue()
@@ -155,6 +159,7 @@ def create_traces_with_spans_client():
             metadata=trace_config.get("metadata", {}),
             feedback_scores=trace_config.get("feedback_scores", []),
             project_name=project_name,
+            end_time=datetime.datetime.now(datetime.timezone.utc),
         )
 
         for span_index in range(span_config["count"]):
@@ -168,6 +173,8 @@ def create_traces_with_spans_client():
 
             for score in span_config.get("feedback_scores", []):
                 client_span.log_feedback_score(name=score["name"], value=score["value"])
+
+            client_span.end()
 
     return success_response({"traces_created": trace_config["count"]})
 
@@ -226,6 +233,7 @@ def create_trace_with_attachment_client():
         input={"instruction": "Analyze the document, ..."},
         project_name=project_name,
         attachments=[Attachment(data=attachment_path)],
+        end_time=datetime.datetime.now(datetime.timezone.utc),
     )
 
     return success_response({"attachment_name": os.path.basename(attachment_path)})
@@ -264,10 +272,11 @@ def create_trace_with_span_attachment():
         project_name=project_name,
         input={"user_question": "Hello, how are you?"},
         output={"response": "Comment ça va?"},
+        end_time=datetime.datetime.now(datetime.timezone.utc),
     )
 
     span_name = "Add prompt template"
-    trace.span(
+    span = trace.span(
         name=span_name,
         input={
             "text": "Hello, how are you?",
@@ -276,6 +285,7 @@ def create_trace_with_span_attachment():
         output={"text": "Translate the following text to French: hello, how are you?"},
         attachments=[Attachment(data=attachment_path)],
     )
+    span.end()
 
     return success_response(
         {"attachment_name": os.path.basename(attachment_path), "span_name": span_name}
