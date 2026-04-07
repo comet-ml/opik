@@ -60,6 +60,7 @@ export * from "./spans/types/index.js";
 export * as systemUsage from "./systemUsage/index.js";
 export * from "./traces/client/requests/index.js";
 export * as traces from "./traces/index.js";
+export * from "./traces/types/index.js";
 export * from "./welcomeWizard/client/requests/index.js";
 export * as welcomeWizard from "./welcomeWizard/index.js";
 export * as workspacePermissions from "./workspacePermissions/index.js";

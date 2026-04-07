@@ -9223,6 +9223,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9232,10 +9236,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9755,6 +9755,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9764,10 +9768,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10105,6 +10105,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10114,10 +10118,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10551,6 +10551,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10560,10 +10564,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10645,6 +10645,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10654,10 +10658,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -16447,10 +16447,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17057,10 +17057,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17189,10 +17189,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17284,10 +17284,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         exclude_blueprint_update_for_projects:
           uniqueItems: true
           type: array
@@ -17333,10 +17333,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -18956,6 +18956,41 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        exclude:
+          uniqueItems: true
+          type: array
+          description: Fields to exclude from the response
+          items:
+            type: string
+            description: Fields to exclude from the response
+            enum:
+            - name
+            - start_time
+            - end_time
+            - input
+            - output
+            - metadata
+            - tags
+            - error_info
+            - usage
+            - created_at
+            - created_by
+            - last_updated_by
+            - feedback_scores
+            - span_feedback_scores
+            - comments
+            - guardrails_validations
+            - total_estimated_cost
+            - span_count
+            - llm_span_count
+            - has_tool_spans
+            - duration
+            - ttft
+            - thread_id
+            - visibility_mode
+            - providers
+            - experiment
+            - source
         from_time:
           type: string
           description: Filter traces created from this time (ISO-8601 format).

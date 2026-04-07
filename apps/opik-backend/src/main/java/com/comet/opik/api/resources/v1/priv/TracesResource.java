@@ -220,6 +220,7 @@ public class TracesResource {
                 .filters(filtersFactory.validateFilter(request.filters()))
                 .truncate(request.truncate())
                 .stripAttachments(request.stripAttachments())
+                .exclude(request.exclude())
                 .sortingFields(List.of())
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
