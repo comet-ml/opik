@@ -12,8 +12,8 @@ class LlmAsJudgeMessage(UniversalBaseModel):
     role: LlmAsJudgeMessageRole
     content: typing.Optional[str] = None
     content_array: typing.Optional[typing.List[LlmAsJudgeMessageContent]] = None
-    structured_content: typing.Optional[bool] = None
     string_content: typing.Optional[bool] = None
+    structured_content: typing.Optional[bool] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
