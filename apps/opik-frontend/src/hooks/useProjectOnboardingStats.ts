@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api, {
   PROJECTS_REST_ENDPOINT,
@@ -6,29 +5,20 @@ import api, {
   AGENT_CONFIGS_KEY,
   PROJECT_STATISTICS_KEY,
 } from "@/api/api";
+import { ProjectStats } from "@/types/assistant-sidebar";
+import { generateProjectFilters, processFilters } from "@/lib/filters";
 
 /**
  * Lightweight counts used by the assistant sidebar to understand
  * where the user is in their onboarding journey. Each query fetches
  * size=1 and reads the `total` field, minimizing data transfer.
+ *
+ * Returns `undefined` when no projectId is provided so the caller
+ * can distinguish "no project" from "zero activity".
  */
-export interface ProjectOnboardingStats {
-  traceCount: number;
-  experimentCount: number;
-  optimizationCount: number;
-  blueprintVersionCount: number;
-}
-
-const EMPTY_STATS: ProjectOnboardingStats = {
-  traceCount: 0,
-  experimentCount: 0,
-  optimizationCount: 0,
-  blueprintVersionCount: 0,
-};
-
 export default function useProjectOnboardingStats(
   projectId: string | null | undefined,
-): ProjectOnboardingStats {
+): ProjectStats | undefined {
   const enabled = !!projectId;
 
   const { data: statsData } = useQuery({
@@ -36,7 +26,11 @@ export default function useProjectOnboardingStats(
     queryFn: async ({ signal }) => {
       const { data } = await api.get(`${PROJECTS_REST_ENDPOINT}stats`, {
         signal,
-        params: { size: 1, page: 1, project_id: projectId },
+        params: {
+          size: 1,
+          page: 1,
+          ...processFilters(generateProjectFilters(projectId!)),
+        },
       });
       const match = (data.content ?? []).find(
         (s: { project_id?: string }) => s.project_id === projectId,
@@ -86,13 +80,12 @@ export default function useProjectOnboardingStats(
     staleTime: 30_000,
   });
 
-  return useMemo<ProjectOnboardingStats>(() => {
-    if (!enabled) return EMPTY_STATS;
-    return {
-      traceCount: statsData ?? 0,
-      experimentCount: experimentTotal ?? 0,
-      optimizationCount: optimizationTotal ?? 0,
-      blueprintVersionCount: blueprintTotal ?? 0,
-    };
-  }, [enabled, statsData, experimentTotal, optimizationTotal, blueprintTotal]);
+  if (!enabled) return undefined;
+
+  return {
+    traceCount: statsData ?? 0,
+    experimentCount: experimentTotal ?? 0,
+    optimizationCount: optimizationTotal ?? 0,
+    blueprintVersionCount: blueprintTotal ?? 0,
+  };
 }
