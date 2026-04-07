@@ -10,7 +10,7 @@ from .conftest import RunnerInfo
 
 
 def _submit_and_wait(api_client, runner_id, cmd_type, args):
-    resp = api_client.runners.submit_bridge_command(
+    resp = api_client.runners.create_bridge_command(
         runner_id,
         type=cmd_type,
         args=args,
