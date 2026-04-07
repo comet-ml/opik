@@ -308,6 +308,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/trinity-large-preview:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING,
+      label: "arcee-ai/trinity-large-thinking",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_MINI,
       label: "arcee-ai/trinity-mini",
     },
@@ -615,6 +619,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3N_E4B_IT_FREE,
       label: "google/gemma-3n-e4b-it:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_26B_A4B_IT,
+      label: "google/gemma-4-26b-a4b-it",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT,
+      label: "google/gemma-4-31b-it",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_LYRIA_3_CLIP_PREVIEW,
@@ -1677,6 +1689,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.6-plus-preview:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS_FREE,
+      label: "qwen/qwen3.6-plus:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
       label: "qwen/qwq-32b",
     },
@@ -1687,6 +1703,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.REKA_REKA_EDGE,
       label: "reka/reka-edge",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REKAAI_REKA_EDGE,
+      label: "rekaai/reka-edge",
     },
     {
       value: PROVIDER_MODEL_TYPE.REKAAI_REKA_FLASH_3,
@@ -1903,6 +1923,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_TURBO,
       label: "z-ai/glm-5-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
+      label: "z-ai/glm-5v-turbo",
     },
   ],
 

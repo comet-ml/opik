@@ -623,25 +623,58 @@ class TestBuildSuiteResult:
 
 
 class TestValidateTaskResult:
-    def test_non_dict__raises_type_error(self):
-        with pytest.raises(
-            TypeError, match="must return a dict with 'input' and 'output'"
-        ):
-            evaluation_suite.validate_task_result("just a string")
+    # --- dict results ---
 
-    def test_missing_keys__raises_value_error(self):
-        with pytest.raises(ValueError, match="missing.*output"):
-            evaluation_suite.validate_task_result({"input": "hello"})
-
-    def test_missing_both_keys__raises_value_error(self):
-        with pytest.raises(ValueError, match="missing"):
-            evaluation_suite.validate_task_result({"response": "hello"})
-
-    def test_valid_result__returns_dict(self):
+    def test_validate_task_result__valid_dict__returns_as_is(self):
         result = evaluation_suite.validate_task_result(
             {"input": "hello", "output": "world"}
         )
         assert result == {"input": "hello", "output": "world"}
+
+    def test_validate_task_result__dict_missing_output__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing.*output"):
+            evaluation_suite.validate_task_result({"input": "hello"})
+
+    def test_validate_task_result__dict_missing_both_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing"):
+            evaluation_suite.validate_task_result({"response": "hello"})
+
+    def test_validate_task_result__dict_missing_input__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing.*input"):
+            evaluation_suite.validate_task_result({"output": "world"})
+
+    # --- non-dict results: auto-wrapping ---
+
+    def test_validate_task_result__string_result__wrapped_as_output(self):
+        result = evaluation_suite.validate_task_result("just a string")
+        assert result == {"output": "just a string"}
+
+    def test_validate_task_result__string_result_with_input_data__wrapped_with_input(
+        self,
+    ):
+        result = evaluation_suite.validate_task_result(
+            "just a string", input_data={"question": "hi"}
+        )
+        assert result == {"input": {"question": "hi"}, "output": "just a string"}
+
+    def test_validate_task_result__int_result__wrapped_as_output(self):
+        result = evaluation_suite.validate_task_result(42)
+        assert result == {"output": 42}
+
+    def test_validate_task_result__none_result__wrapped_as_output(self):
+        result = evaluation_suite.validate_task_result(None)
+        assert result == {"output": None}
+
+    def test_validate_task_result__none_input_data__not_included_in_wrapper(self):
+        result = evaluation_suite.validate_task_result("response", input_data=None)
+        assert result == {"output": "response"}
+        assert "input" not in result
+
+    def test_validate_task_result__list_result_with_input_data__wrapped_correctly(self):
+        result = evaluation_suite.validate_task_result(
+            ["a", "b"], input_data={"prompt": "list me things"}
+        )
+        assert result == {"input": {"prompt": "list me things"}, "output": ["a", "b"]}
 
 
 class TestInternalRunOptimizationSuite:

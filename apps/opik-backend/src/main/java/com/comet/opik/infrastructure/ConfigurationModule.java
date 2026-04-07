@@ -18,5 +18,8 @@ public class ConfigurationModule extends DropwizardAwareModule<OpikConfiguration
 
         var localRunnerConfig = configuration(LocalRunnerConfig.class);
         bind(LocalRunnerConfig.class).toInstance(localRunnerConfig);
+
+        var agentConfigConfiguration = configuration(AgentConfigConfiguration.class);
+        bind(AgentConfigConfiguration.class).toInstance(agentConfigConfiguration);
     }
 }

@@ -13,6 +13,7 @@ import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
+import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import { BASE_API_URL } from "@/api/api";
 import { Spinner } from "@/ui/spinner";
 
@@ -129,7 +130,9 @@ function createHostListeners(): HostListeners {
 }
 
 interface BridgeRefs {
-  navigate: React.MutableRefObject<(path: string) => void>;
+  navigate: React.MutableRefObject<
+    (path: string, search?: Record<string, string>) => void
+  >;
   onWidthChange: React.MutableRefObject<(width: number) => void>;
   onNotification: React.MutableRefObject<
     (data: SidebarEventMap["notification"]) => void
@@ -154,9 +157,11 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
   emit: (event, data) => {
     switch (event) {
-      case "navigate":
-        refs.navigate.current((data as SidebarEventMap["navigate"]).path);
+      case "navigate": {
+        const { path, search } = data as SidebarEventMap["navigate"];
+        refs.navigate.current(path, search);
         break;
+      }
       case "sidebar:resized":
         refs.onWidthChange.current(
           (data as SidebarEventMap["sidebar:resized"]).width,
@@ -210,6 +215,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
   const resolvedProjectId = projectId ?? null;
 
   const organizationId = workspace?.organizationId ?? null;
+  const projectStats = useProjectOnboardingStats(resolvedProjectId);
 
   return useMemo<BridgeContext>(
     () => ({
@@ -221,6 +227,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
       theme: "light",
+      projectStats,
     }),
     [
       workspaceId,
@@ -229,6 +236,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      projectStats,
     ],
   );
 }
@@ -313,11 +321,13 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     emitHostEvent(listenersRef, "visibility:changed", { isOpen: open });
   });
 
-  const navigateRef = useLatestRef((path: string) => {
-    const ws = contextRef.current.workspaceName;
-    const fullPath = ws ? `/${ws}${path}` : path;
-    router.navigate({ to: fullPath });
-  });
+  const navigateRef = useLatestRef(
+    (path: string, search?: Record<string, string>) => {
+      const ws = contextRef.current.workspaceName;
+      const fullPath = ws ? `/${ws}${path}` : path;
+      router.navigate({ to: fullPath, search });
+    },
+  );
 
   const bridgeRef = useRef(
     createBridge({

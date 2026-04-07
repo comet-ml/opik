@@ -1492,14 +1492,17 @@ export class OpikClient {
     filterString?: string;
     maxResults?: number;
     truncate?: boolean;
+    exclude?: string[];
     waitForAtLeast?: number;
     waitForTimeout?: number;
   }): Promise<OpikApi.TracePublic[]> => {
+    const { exclude, ...rest } = options ?? {};
     return this.executeSearch<OpikApi.TracePublic, OpikApi.TraceFilterPublic>(
       "traces",
-      options ?? {},
+      rest,
       parseFilterString,
-      searchTracesWithFilters
+      (api, projectName, filters, maxResults, truncate) =>
+        searchTracesWithFilters(api, projectName, filters, maxResults, truncate, exclude)
     );
   };
 

@@ -703,6 +703,7 @@ from .spans import (
     GetSpansByProjectRequestType,
     SpanSearchStreamRequestPublicType,
 )
+from .traces import TraceSearchStreamRequestPublicExcludeItem
 
 __all__ = [
     "Agent",
@@ -1308,6 +1309,7 @@ __all__ = [
     "TracePublic",
     "TracePublicSource",
     "TracePublicVisibilityMode",
+    "TraceSearchStreamRequestPublicExcludeItem",
     "TraceSource",
     "TraceThread",
     "TraceThreadFilter",
