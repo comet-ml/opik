@@ -1409,7 +1409,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
                     List<String> liveCommandIds = new ArrayList<>();
                     List<Map<String, String>> liveFields = new ArrayList<>();
-                    RList<String> activeList = redisClient.getList(activeKey, StringCodec.INSTANCE);
+                    RList<String> activeList = redisClient.getList(activeKey);
                     for (int i = 0; i < commandIds.size(); i++) {
                         Map<String, String> fields = readFutures.get(i).toCompletableFuture().join();
                         if (fields.isEmpty() || fields.containsKey(BRIDGE_FIELD_COMPLETED_FLAG)) {
