@@ -100,8 +100,9 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
         {"pattern": f"**/{filename}"},
     )
     assert cmd.status == "completed"
-    found = [e["path"] for e in cmd.result["entries"] if not e.get("is_dir")]
-    assert any(filename in p for p in found), f"{filename} not in {found}"
+    assert any(filename in f for f in cmd.result["files"]), (
+        f"{filename} not in {cmd.result['files']}"
+    )
 
     # 3. SearchFiles — search for content inside the file
     cmd = _submit_and_wait(
@@ -111,8 +112,8 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
         {"pattern": "hello from e2e"},
     )
     assert cmd.status == "completed"
-    match_files = [m["path"] for m in cmd.result["matches"]]
-    assert any(filename in p for p in match_files), (
+    match_files = [m["file"] for m in cmd.result["matches"]]
+    assert any(filename in f for f in match_files), (
         f"{filename} not in search results: {match_files}"
     )
 
@@ -127,7 +128,7 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
         },
     )
     assert cmd.status == "completed"
-    assert cmd.result["applied"] == 1
+    assert cmd.result["edits_applied"] == 1
 
     # 5. ReadFile — verify the edit took effect
     cmd = _submit_and_wait(
