@@ -720,3 +720,9 @@ webhook:
     # Default: 2s
     # Description: Fixed delay between metrics alert job executions (waits this duration after completion)
     fixedDelay: 2s
+
+# Agent configuration settings
+agentConfig:
+  # Default: 5000ms
+  # Description: Duration of the distributed lock held during blueprint create/update operations
+  blueprintLockDuration: 5000ms
