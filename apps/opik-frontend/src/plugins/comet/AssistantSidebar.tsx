@@ -254,6 +254,13 @@ function resolveManifestUrl(backendUrl: string | null): string | null {
   return null;
 }
 
+const DEV_META: AssistantMeta = {
+  scriptUrl: "/assistant/assistant.js",
+  cssUrl: "/assistant/assistant.css",
+  shellUrl: "/assistant/shell",
+  version: "dev",
+};
+
 function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
   const manifestUrl = resolveManifestUrl(backendUrl);
 
@@ -270,16 +277,16 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: IS_DEV
-          ? "/assistant/shell"
-          : `${manifestBase}/${manifest.shell}`,
+        shellUrl: `${manifestBase}/${manifest.shell}`,
         version: manifest.ver,
       };
     },
-    enabled: !!manifestUrl,
+    enabled: !(IS_DEV && DEV_BASE_URL) && !!manifestUrl,
     staleTime: Infinity,
     retry: 1,
   });
+
+  if (IS_DEV && DEV_BASE_URL) return DEV_META;
 
   return data ?? null;
 }
