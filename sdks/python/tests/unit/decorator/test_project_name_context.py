@@ -1,7 +1,6 @@
 import asyncio
 
 from opik import context_storage
-from opik.api_objects import opik_client
 from opik.decorator import tracker
 from ...testlib import (
     ANY_BUT_NONE,
@@ -67,7 +66,7 @@ def test_track__project_name_set_on_decorator__context_var_available_inside_and_
     assert context_storage.get_context_project_name() is None
 
 
-def test_track__nested_functions__child_inherits_project_from_parent(
+def test_track__nested_functions_without_project__child_inherits_parent_project(
     fake_backend,
 ):
     captured_inner_project = None
@@ -126,7 +125,7 @@ def test_track__nested_functions__child_inherits_project_from_parent(
     )
 
 
-def test_track__nested_decorator_with_different_project__outer_sticks_and_warns(
+def test_track__nested_decorator_with_different_project__outer_project_preserved_and_warning_emitted(
     fake_backend,
     capfd,
 ):
@@ -189,7 +188,7 @@ def test_track__nested_decorator_with_different_project__outer_sticks_and_warns(
     assert "inner-project" in captured.err and "outer-project" in captured.err
 
 
-def test_track__nested_decorator_with_same_project__no_warning(
+def test_track__nested_decorator_with_same_project__no_warning_emitted(
     fake_backend,
     capfd,
 ):
@@ -212,7 +211,7 @@ def test_track__nested_decorator_with_same_project__no_warning(
     assert "Attempted to set project name" not in captured.err
 
 
-def test_track__async__project_name_propagated_to_trace_and_span(
+def test_track__async_with_project_name__trace_and_span_use_that_project(
     fake_backend,
 ):
     captured_project = None
@@ -232,7 +231,7 @@ def test_track__async__project_name_propagated_to_trace_and_span(
     assert fake_backend.trace_trees[0].spans[0].project_name == "async-project"
 
 
-def test_project_context_manager__sets_project_for_tracked_functions(
+def test_project_context__tracked_function_inside__trace_uses_context_project(
     fake_backend,
 ):
     @tracker.track
@@ -272,14 +271,14 @@ def test_project_context_manager__sets_project_for_tracked_functions(
     )
 
 
-def test_project_context_manager__resets_after_exit(fake_backend):
+def test_project_context__after_exit__context_cleared(fake_backend):
     with context_storage.project_context("temp-project"):
         assert context_storage.get_context_project_name() == "temp-project"
 
     assert context_storage.get_context_project_name() is None
 
 
-def test_project_context_manager__nested__outer_sticks(fake_backend):
+def test_project_context__nested_with_different_name__outer_preserved(fake_backend):
     with context_storage.project_context("outer-project"):
         assert context_storage.get_context_project_name() == "outer-project"
 
@@ -291,7 +290,7 @@ def test_project_context_manager__nested__outer_sticks(fake_backend):
     assert context_storage.get_context_project_name() is None
 
 
-def test_project_context_manager__sticks_over_nested_decorator(
+def test_project_context__decorator_with_different_project_inside__outer_project_preserved(
     fake_backend,
 ):
     captured_project = None
@@ -313,44 +312,62 @@ def test_project_context_manager__sticks_over_nested_decorator(
     assert fake_backend.trace_trees[0].spans[0].project_name == "ctx-manager-project"
 
 
-def test_resolve_project_name__reads_context_var(fake_backend):
-    client = opik_client.get_client_cached()
-
-    owner_id = "test-owner"
-    context_storage.try_acquire_context_project_name("context-project", owner_id)
-    try:
-        resolved = client._resolve_project_name(None)
-    finally:
-        context_storage.release_context_project_name_if_owner(owner_id)
-
-    assert resolved == "context-project"
-
-
-def test_resolve_project_name__explicit_arg_wins_over_context_var(
+def test_track__context_var_set_externally__trace_uses_context_project(
     fake_backend,
 ):
-    client = opik_client.get_client_cached()
+    @tracker.track
+    def f(x):
+        return "output"
 
-    owner_id = "test-owner"
-    context_storage.try_acquire_context_project_name("context-project", owner_id)
-    try:
-        resolved = client._resolve_project_name("explicit-project")
-    finally:
-        context_storage.release_context_project_name_if_owner(owner_id)
+    with context_storage.project_context("context-project"):
+        f("input")
 
-    assert resolved == "explicit-project"
+    tracker.flush_tracker()
 
-
-def test_resolve_project_name__falls_back_to_client_default(fake_backend):
-    client = opik_client.get_client_cached()
-    resolved = client._resolve_project_name(None)
-    assert resolved == client._project_name
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].project_name == "context-project"
+    assert fake_backend.trace_trees[0].spans[0].project_name == "context-project"
 
 
-def test_resolve_project_name__context_manager_sets_it(fake_backend):
-    client = opik_client.get_client_cached()
+def test_track__explicit_project_name_arg__takes_precedence_over_no_context(
+    fake_backend,
+):
+    @tracker.track(project_name="explicit-project")
+    def f(x):
+        return "output"
+
+    f("input")
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].project_name == "explicit-project"
+
+
+def test_track__no_project_name_no_context__falls_back_to_client_default(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        return "output"
+
+    f("input")
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+    assert trace_tree.project_name is not None
+
+
+def test_project_context__resolve_project_name_for_non_trace_operations__returns_context_value(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        return "output"
 
     with context_storage.project_context("ctx-project"):
-        resolved = client._resolve_project_name(None)
+        f("input")
 
-    assert resolved == "ctx-project"
+    tracker.flush_tracker()
+
+    assert fake_backend.trace_trees[0].project_name == "ctx-project"

@@ -247,6 +247,11 @@ def project_context(project_name: str) -> Generator[None, None, None]:
     Context manager that sets the project name for all Opik operations
     (traces, spans, agent configs, etc.) within the block.
 
+    The first context to set a project name becomes the owner. Nested
+    ``project_context`` or ``@track(project_name=...)`` calls with a
+    different name are ignored (a warning is logged) and the outer
+    project name is preserved.
+
     Usage::
 
         with project_context("customer-support"):
@@ -275,14 +280,17 @@ def temporary_context(
         if trace_data is not None:
             set_trace_data(trace=trace_data)
 
-        project_token = _context_storage._raw_set_context_project_name(
-            span_data.project_name
-        )
+        project_token = None
+        if span_data.project_name is not None:
+            project_token = _context_storage._raw_set_context_project_name(
+                span_data.project_name
+            )
 
         add_span_data(span_data)
 
         yield
     finally:
         set_trace_data(original_trace)
-        _context_storage._raw_reset_context_project_name(project_token)
+        if project_token is not None:
+            _context_storage._raw_reset_context_project_name(project_token)
         pop_span_data()
