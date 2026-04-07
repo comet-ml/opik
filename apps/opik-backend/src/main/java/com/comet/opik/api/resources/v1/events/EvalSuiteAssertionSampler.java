@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
@@ -87,13 +86,13 @@ public class EvalSuiteAssertionSampler {
         log.info("Eval suite assertion evaluation triggered for dataset '{}', version hash '{}', '{}' traces",
                 datasetId, evalSuiteVersionHash.orElse("latest"), completeTraces.size());
 
-        List<EvaluatorItem> datasetEvaluators = fetchDatasetEvaluators(
+        DatasetEvaluatorsResult datasetEvaluators = fetchDatasetEvaluators(
                 datasetId, evalSuiteVersionHash.orElse(null), tracesBatch.workspaceId());
 
-        List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators);
+        List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators.evaluators());
 
         Map<UUID, List<PreparedEvaluator>> preparedItemEvaluatorsByItemId = prefetchItemEvaluators(
-                completeTraces, tracesBatch.workspaceId(), tracesBatch.userName());
+                datasetId, datasetEvaluators.versionId(), tracesBatch.workspaceId());
 
         List<TraceToScoreLlmAsJudge> messages = new ArrayList<>();
 
@@ -136,7 +135,7 @@ public class EvalSuiteAssertionSampler {
         }
     }
 
-    private List<EvaluatorItem> fetchDatasetEvaluators(UUID datasetId, String versionHash, String workspaceId) {
+    private DatasetEvaluatorsResult fetchDatasetEvaluators(UUID datasetId, String versionHash, String workspaceId) {
         try {
             Optional<DatasetVersion> version;
             if (versionHash != null) {
@@ -147,32 +146,44 @@ public class EvalSuiteAssertionSampler {
             }
 
             return version
-                    .map(v -> v.evaluators() != null ? v.evaluators() : List.<EvaluatorItem>of())
-                    .orElse(List.of());
+                    .map(v -> new DatasetEvaluatorsResult(
+                            v.id(),
+                            v.evaluators() != null ? v.evaluators() : List.of()))
+                    .orElse(new DatasetEvaluatorsResult(null, List.of()));
         } catch (Exception e) {
             log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
-            return List.of();
+            return new DatasetEvaluatorsResult(null, List.of());
         }
     }
 
     private Map<UUID, List<PreparedEvaluator>> prefetchItemEvaluators(
-            List<Trace> traces, String workspaceId, String userName) {
+            UUID datasetId, UUID versionId, String workspaceId) {
 
-        var uniqueItemIds = traces.stream()
-                .map(trace -> getMetadataString(trace, "eval_suite_dataset_item_id"))
-                .filter(Optional::isPresent)
-                .map(opt -> UUID.fromString(opt.get()))
-                .collect(Collectors.toSet());
-
-        var result = new HashMap<UUID, List<PreparedEvaluator>>();
-        for (UUID itemId : uniqueItemIds) {
-            List<EvaluatorItem> evaluators = fetchItemEvaluators(itemId, workspaceId, userName);
-            List<PreparedEvaluator> prepared = prepareEvaluators(evaluators);
-            if (!prepared.isEmpty()) {
-                result.put(itemId, prepared);
-            }
+        if (versionId == null) {
+            return Map.of();
         }
-        return result;
+
+        try {
+            Map<UUID, List<EvaluatorItem>> itemEvaluators = datasetItemService
+                    .getItemEvaluatorsByDatasetId(datasetId, versionId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            if (itemEvaluators == null || itemEvaluators.isEmpty()) {
+                return Map.of();
+            }
+
+            return itemEvaluators.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            entry -> prepareEvaluators(entry.getValue())));
+        } catch (Exception e) {
+            log.error("Failed to fetch item evaluators for dataset '{}'", datasetId, e);
+            return Map.of();
+        }
+    }
+
+    private record DatasetEvaluatorsResult(UUID versionId, List<EvaluatorItem> evaluators) {
     }
 
     private record PreparedEvaluator(String name, LlmAsJudgeCode code, Map<String, String> scoreNameMapping) {
@@ -206,25 +217,6 @@ public class EvalSuiteAssertionSampler {
             }
         }
         return result;
-    }
-
-    private List<EvaluatorItem> fetchItemEvaluators(UUID datasetItemId, String workspaceId, String userName) {
-        try {
-            DatasetItem item = datasetItemService.get(datasetItemId)
-                    .contextWrite(ctx -> ctx
-                            .put(RequestContext.WORKSPACE_ID, workspaceId)
-                            .put(RequestContext.USER_NAME, userName)
-                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
-                    .block();
-
-            if (item != null && item.evaluators() != null && !item.evaluators().isEmpty()) {
-                return item.evaluators();
-            }
-            return List.of();
-        } catch (Exception e) {
-            log.error("Failed to fetch item evaluators for dataset item '{}'", datasetItemId, e);
-            return List.of();
-        }
     }
 
     private LlmAsJudgeCode deserializeEvaluatorConfig(JsonNode config) {

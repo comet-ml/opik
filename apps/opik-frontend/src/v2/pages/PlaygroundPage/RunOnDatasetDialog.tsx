@@ -214,16 +214,16 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader className="pb-0">
-            <DialogTitle>Run on dataset</DialogTitle>
+            <DialogTitle>Test on dataset</DialogTitle>
             <DialogDescription>
-              Run your prompt suite against a dataset and score results with
-              selected metrics.
+              Run your prompt suite against a dataset or evaluation suite and
+              score results with selected metrics.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 overflow-y-auto pb-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Dataset</Label>
+              <Label>Dataset / Evaluation suite</Label>
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <DatasetVersionSelectBox
@@ -274,7 +274,9 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                   : isDatasetEmpty && filters.length > 0
                     ? "No items match the current filters"
                     : isDatasetEmpty
-                      ? "Selected dataset is empty"
+                      ? `Selected ${
+                          isEvaluationSuite ? "evaluation suite" : "dataset"
+                        } is empty`
                       : undefined
               }
             >
@@ -283,7 +285,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 disabled={isRunDisabled}
                 style={isRunDisabled ? { pointerEvents: "auto" } : {}}
               >
-                Use dataset
+                {isEvaluationSuite ? "Use evaluation suite" : "Use dataset"}
               </Button>
             </TooltipWrapper>
           </DialogFooter>

@@ -47,6 +47,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -130,6 +131,8 @@ public interface DatasetItemService {
      * @return Mono emitting the DatasetVersion when versioning is enabled, or empty when disabled
      */
     Mono<DatasetVersion> save(DatasetItemBatch batch);
+
+    Mono<Map<UUID, List<EvaluatorItem>>> getItemEvaluatorsByDatasetId(UUID datasetId, UUID versionId);
 }
 
 @Singleton
@@ -2196,6 +2199,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         log.debug("Lazy migration is enabled, ensuring dataset '{}' is migrated", datasetId);
         return migrationService.ensureDatasetMigrated(datasetId, workspaceId);
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, List<EvaluatorItem>>> getItemEvaluatorsByDatasetId(
+            @NonNull UUID datasetId, @NonNull UUID versionId) {
+        return versionDao.getItemEvaluatorsByDatasetId(datasetId, versionId);
     }
 
 }

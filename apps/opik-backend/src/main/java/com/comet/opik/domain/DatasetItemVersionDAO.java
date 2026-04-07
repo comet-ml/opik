@@ -88,6 +88,8 @@ public interface DatasetItemVersionDAO {
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
+    Mono<Map<UUID, List<EvaluatorItem>>> getItemEvaluatorsByDatasetId(UUID datasetId, UUID versionId);
+
     /**
      * Copies items from a source version to a new target version directly within dataset_item_versions.
      * Each copied item gets a new UUIDv7 but retains the same dataset_item_id.
@@ -325,6 +327,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
+            ORDER BY dataset_item_id DESC, last_updated_at DESC
+            LIMIT 1 BY dataset_item_id
+            """;
+
+    private static final String SELECT_ITEM_EVALUATORS_BY_DATASET = """
+            SELECT
+                dataset_item_id,
+                evaluators
+            FROM dataset_item_versions
+            WHERE dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND workspace_id = :workspace_id
+            AND evaluators != '[]'
             ORDER BY dataset_item_id DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
             """;
@@ -2278,6 +2293,30 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnSuccess(items -> log.info("Retrieved '{}' item IDs and hashes for version '{}'", items.size(),
                             versionId))
                     .flatMapMany(Flux::fromIterable);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, List<EvaluatorItem>>> getItemEvaluatorsByDatasetId(
+            @NonNull UUID datasetId, @NonNull UUID versionId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_ITEM_EVALUATORS_BY_DATASET)
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId);
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "get_item_evaluators_by_dataset");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, metadata) -> {
+                        var itemId = UUID.fromString(row.get("dataset_item_id", String.class));
+                        var evaluators = DatasetItemResultMapper.getEvaluators(row, metadata);
+                        return Map.entry(itemId,
+                                evaluators != null ? evaluators : List.<EvaluatorItem>of());
+                    }))
+                    .collectMap(Map.Entry::getKey, Map.Entry::getValue);
         });
     }
 
