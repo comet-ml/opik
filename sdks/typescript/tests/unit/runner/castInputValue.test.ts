@@ -5,7 +5,7 @@ describe("castInputValue", () => {
 
   it.each([null, undefined])("returns %s unchanged for any type", (value) => {
     expect(castInputValue(value, "boolean")).toBe(value);
-    expect(castInputValue(value, "number")).toBe(value);
+    expect(castInputValue(value, "float")).toBe(value);
     expect(castInputValue(value, "string")).toBe(value);
   });
 
@@ -31,21 +31,21 @@ describe("castInputValue", () => {
     expect(castInputValue(input, "boolean")).toBe(expected);
   });
 
-  // --- number type ---
+  // --- float type ---
 
   it.each([
     { input: "42", expected: 42 },
     { input: "3.14", expected: 3.14 },
     { input: "-7", expected: -7 },
     { input: "0", expected: 0 },
-  ])('number: string "$input" → $expected', ({ input, expected }) => {
-    expect(castInputValue(input, "number")).toBe(expected);
+  ])('float: string "$input" → $expected', ({ input, expected }) => {
+    expect(castInputValue(input, "float")).toBe(expected);
   });
 
   it.each(["abc", "not-a-number"])(
-    'number: non-numeric string "%s" → throws TypeError',
+    'float: non-numeric string "%s" → throws TypeError',
     (input) => {
-      expect(() => castInputValue(input, "number")).toThrow(TypeError);
+      expect(() => castInputValue(input, "float")).toThrow(TypeError);
     }
   );
 
@@ -54,8 +54,8 @@ describe("castInputValue", () => {
     { input: 3.14, expected: 3.14 },
     { input: -7, expected: -7 },
     { input: 0, expected: 0 },
-  ])("number: native number $input passes through", ({ input, expected }) => {
-    expect(castInputValue(input, "number")).toBe(expected);
+  ])("float: native number $input passes through", ({ input, expected }) => {
+    expect(castInputValue(input, "float")).toBe(expected);
   });
 
   // --- string type ---
@@ -93,7 +93,7 @@ describe("castInputValue", () => {
   });
 
   // --- multi-param combinations ---
-  // Simulate a function with params (text: string, count: number, flag: boolean)
+  // Simulate a function with params (text: string, count: float, flag: boolean)
   // to verify that mixed-type inputs are each cast correctly.
 
   it.each([
@@ -102,7 +102,7 @@ describe("castInputValue", () => {
       inputs: { text: "hi", count: 5, flag: true },
       params: [
         { name: "text", type: "string" },
-        { name: "count", type: "number" },
+        { name: "count", type: "float" },
         { name: "flag", type: "boolean" },
       ],
       expected: ["hi", 5, true],
@@ -112,7 +112,7 @@ describe("castInputValue", () => {
       inputs: { text: "hi", count: "5", flag: "true" },
       params: [
         { name: "text", type: "string" },
-        { name: "count", type: "number" },
+        { name: "count", type: "float" },
         { name: "flag", type: "boolean" },
       ],
       expected: ["hi", 5, true],
@@ -122,7 +122,7 @@ describe("castInputValue", () => {
       inputs: { text: "hello", count: 3, flag: "false" },
       params: [
         { name: "text", type: "string" },
-        { name: "count", type: "number" },
+        { name: "count", type: "float" },
         { name: "flag", type: "boolean" },
       ],
       expected: ["hello", 3, false],
@@ -142,7 +142,7 @@ describe("castInputValue", () => {
       inputs: { label: 99, score: "7.5" },
       params: [
         { name: "label", type: "string" },
-        { name: "score", type: "number" },
+        { name: "score", type: "float" },
       ],
       expected: ["99", 7.5],
     },

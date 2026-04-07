@@ -319,7 +319,7 @@ export function castInputValue(value: unknown, type: string): unknown {
     case "boolean":
       if (typeof value === "boolean") return value;
       return deserializeValue(String(value), "boolean");
-    case "number": {
+    case "float": {
       if (typeof value === "number") return value;
       const result = deserializeValue(String(value), "float");
       if (typeof result === "number" && Number.isNaN(result)) {
