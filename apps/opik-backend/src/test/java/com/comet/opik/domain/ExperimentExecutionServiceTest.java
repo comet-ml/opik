@@ -127,6 +127,9 @@ class ExperimentExecutionServiceTest {
             stubDatasetItems(List.of());
             when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
             stubExperimentCreate();
+            stubFinishExperiments();
+            lenient().when(experimentService.update(any(UUID.class), any()))
+                    .thenReturn(Mono.empty());
 
             var response = executeRequest(request);
 
