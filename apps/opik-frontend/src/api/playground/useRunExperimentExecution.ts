@@ -1,7 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
+import get from "lodash/get";
 import api, { EXPERIMENT_EXECUTION_REST_ENDPOINT } from "@/api/api";
 import { snakeCaseObj } from "@/lib/utils";
 import { PlaygroundPromptType } from "@/types/playground";
+import { useToast } from "@/ui/use-toast";
+import { AxiosError } from "axios";
 
 interface ExperimentInfo {
   experiment_id: string;
@@ -61,7 +64,22 @@ const runExperimentExecution = async ({
 };
 
 export default function useRunExperimentExecution() {
+  const { toast } = useToast();
+
   return useMutation({
     mutationFn: runExperimentExecution,
+    onError: (error: AxiosError) => {
+      const message = get(
+        error,
+        ["response", "data", "message"],
+        error.message,
+      );
+
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    },
   });
 }

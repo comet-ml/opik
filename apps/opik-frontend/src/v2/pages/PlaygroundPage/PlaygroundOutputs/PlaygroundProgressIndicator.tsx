@@ -23,9 +23,8 @@ const PlaygroundProgressIndicator: React.FC = () => {
     (progressCompleted / progressTotal) * 100,
   );
 
-  const phaseLabel = progressPhase
-    ? PHASE_LABELS[progressPhase] ?? "Progress"
-    : "Progress";
+  const phaseLabel =
+    (progressPhase && PHASE_LABELS[progressPhase]) || "Progress";
 
   return (
     <div className="flex flex-col gap-2">

@@ -438,8 +438,22 @@ const usePlaygroundStore = create<PlaygroundStore>()(
     }),
     {
       name: "PLAYGROUND_STATE",
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      partialize: ({ datasetSampleData, ...rest }) => rest,
+      partialize: (state) => {
+        /* eslint-disable @typescript-eslint/no-unused-vars */
+        const {
+          datasetSampleData,
+          progressPhase,
+          progressTotal,
+          progressCompleted,
+          datasetType,
+          experimentByPromptId,
+          isRunning,
+          isRunningMap,
+          ...rest
+        } = state;
+        /* eslint-enable @typescript-eslint/no-unused-vars */
+        return rest;
+      },
     },
   ),
 );

@@ -1,6 +1,7 @@
-import React, { useRef, useMemo } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
+import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import { ExperimentsCompare } from "@/types/datasets";
 import {
@@ -37,9 +38,11 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const pollingStartTimeRef = useRef<number | null>(null);
 
-  if (pollingStartTimeRef.current === null && experimentId) {
-    pollingStartTimeRef.current = Date.now();
-  }
+  useEffect(() => {
+    if (experimentId && pollingStartTimeRef.current === null) {
+      pollingStartTimeRef.current = Date.now();
+    }
+  }, [experimentId]);
 
   const { data } = useCompareExperimentsList(
     {
@@ -47,7 +50,8 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
       datasetId,
       experimentsIds: experimentId ? [experimentId] : [],
       page: 1,
-      size: 1000,
+      // TODO: OPIK-XXXX — add BE dataset_item_id filter so we can fetch size: 1
+      size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
       truncate: true,
     },
     {

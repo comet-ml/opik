@@ -3,14 +3,17 @@ import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 
-import api, {
-  COMPARE_EXPERIMENTS_KEY,
-  DATASETS_REST_ENDPOINT,
-  PROJECTS_KEY,
-} from "@/api/api";
+import { COMPARE_EXPERIMENTS_KEY, PROJECTS_KEY } from "@/api/api";
+import { getCompareExperimentsList } from "@/api/datasets/useCompareExperimentsList";
+import {
+  ASSERTION_POLL_INTERVAL_MS,
+  COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
+  EXPERIMENT_POLL_INTERVAL_MS,
+} from "@/constants/experiments";
 import {
   DatasetItem,
   DATASET_TYPE,
+  EVALUATION_METHOD,
   EXPERIMENT_STATUS,
   ExperimentsCompare,
 } from "@/types/datasets";
@@ -230,34 +233,30 @@ const useActionButtonActions = ({
       throttlingSeconds,
     });
 
+  // TODO: OPIK-XXXX — for datasets >20k items, replace with a dedicated BE count endpoint
   const pollAssertionEvaluation = useCallback(
     async (experimentIds: string[], curDatasetId: string) => {
-      const POLL_INTERVAL = 3000;
-
       const poll = async () => {
         if (isToStopRef.current) return;
 
         try {
           const controller = new AbortController();
           abortControllersRef.current.set("poll-assertion", controller);
-          const { data } = await api.get(
-            `${DATASETS_REST_ENDPOINT}${curDatasetId}/items/experiments/items`,
+          const data = await getCompareExperimentsList(
+            { signal: controller.signal },
             {
-              signal: controller.signal,
-              params: {
-                workspace_name: workspaceName,
-                experiment_ids: JSON.stringify(experimentIds),
-                truncate: true,
-                size: 1000,
-                page: 1,
-              },
+              workspaceName,
+              datasetId: curDatasetId,
+              experimentsIds: experimentIds,
+              truncate: true,
+              size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
+              page: 1,
             },
           );
 
           const rows: ExperimentsCompare[] = data?.content ?? [];
           const totalItems = data?.total ?? 0;
 
-          // Count dataset items that have all their experiment items scored
           let scoredItems = 0;
 
           for (const row of rows) {
@@ -289,17 +288,29 @@ const useActionButtonActions = ({
           queryClient.invalidateQueries({
             queryKey: [COMPARE_EXPERIMENTS_KEY],
           });
-          setTimeout(poll, POLL_INTERVAL);
+          setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
         } catch {
           clearRunningMap();
           isToStopRef.current = false;
           resetProgress();
+          toast({
+            title: "Error",
+            description: "Failed to poll assertion evaluation status",
+            variant: "destructive",
+          });
         }
       };
 
-      setTimeout(poll, POLL_INTERVAL);
+      setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
     },
-    [workspaceName, setProgress, resetProgress, clearRunningMap, queryClient],
+    [
+      workspaceName,
+      setProgress,
+      resetProgress,
+      clearRunningMap,
+      queryClient,
+      toast,
+    ],
   );
 
   const pollExperimentCompletion = useCallback(
@@ -308,8 +319,6 @@ const useActionButtonActions = ({
       totalItems: number,
       curDatasetId: string,
     ) => {
-      const POLL_INTERVAL = 2000;
-
       const poll = async () => {
         if (isToStopRef.current) return;
 
@@ -318,9 +327,12 @@ const useActionButtonActions = ({
           abortControllersRef.current.set("poll-experiment", controller);
           const results = await Promise.all(
             experimentIds.map((id) =>
-              getExperimentById({ signal: controller.signal } as never, {
-                experimentId: id,
-              }),
+              getExperimentById(
+                { signal: controller.signal },
+                {
+                  experimentId: id,
+                },
+              ),
             ),
           );
 
@@ -348,14 +360,19 @@ const useActionButtonActions = ({
           }
 
           queryClient.invalidateQueries({ queryKey: ["experiments"] });
-          setTimeout(poll, POLL_INTERVAL);
+          setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
         } catch {
           clearRunningMap();
           isToStopRef.current = false;
+          toast({
+            title: "Error",
+            description: "Failed to poll experiment completion status",
+            variant: "destructive",
+          });
         }
       };
 
-      setTimeout(poll, POLL_INTERVAL);
+      setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
     },
     [
       setProgress,
@@ -363,6 +380,7 @@ const useActionButtonActions = ({
       clearRunningMap,
       queryClient,
       pollAssertionEvaluation,
+      toast,
     ],
   );
 
@@ -372,7 +390,6 @@ const useActionButtonActions = ({
     resetState();
     isToStopRef.current = false;
     setAllRunning(true);
-    clearCreatedExperiments();
 
     try {
       const prompts = promptIds.map((id) => promptMap[id]);
@@ -394,7 +411,7 @@ const useActionButtonActions = ({
           id: exp.experiment_id,
           datasetName,
           datasetVersionId,
-          evaluationMethod: "evaluation_suite",
+          evaluationMethod: EVALUATION_METHOD.EVALUATION_SUITE,
         };
       });
 
@@ -408,13 +425,7 @@ const useActionButtonActions = ({
       // Poll for completion instead of immediately finishing
       const experimentIds = response.experiments.map((e) => e.experiment_id);
       pollExperimentCompletion(experimentIds, response.total_items, datasetId);
-    } catch (e) {
-      toast({
-        title: "Error",
-        variant: "destructive",
-        description:
-          e instanceof Error ? e.message : "Failed to run experiment",
-      });
+    } catch {
       clearRunningMap();
       isToStopRef.current = false;
     }
@@ -426,7 +437,6 @@ const useActionButtonActions = ({
     resetState,
     setAllRunning,
     clearRunningMap,
-    clearCreatedExperiments,
     promptIds,
     promptMap,
     runExperimentExecution,
@@ -435,7 +445,6 @@ const useActionButtonActions = ({
     setProgress,
     setProgressPhase,
     queryClient,
-    toast,
     projectName,
     pollExperimentCompletion,
   ]);
@@ -444,7 +453,6 @@ const useActionButtonActions = ({
     resetState();
     isToStopRef.current = false;
     setAllRunning(true);
-    clearCreatedExperiments();
 
     const logProcessor = createLogPlaygroundProcessor({
       ...logProcessorHandlers,
@@ -482,7 +490,6 @@ const useActionButtonActions = ({
     resetState,
     setAllRunning,
     clearRunningMap,
-    clearCreatedExperiments,
     createCombinations,
     processCombination,
     logProcessorHandlers,
