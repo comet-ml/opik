@@ -160,19 +160,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 AND experiment_id IN (SELECT id FROM experiments_final)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ), feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = :entity_type
-                  AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                UNION ALL
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -180,48 +168,42 @@ class OptimizationDAOImpl implements OptimizationDAO {
                        value,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores
-                WHERE entity_type = :entity_type
-                  AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ), feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
-            ), feedback_scores_combined_grouped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    groupArray(value) AS values
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id, name
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = :entity_type
+                      AND workspace_id = :workspace_id
+                      AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = :entity_type
+                      AND workspace_id = :workspace_id
+                      AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
-                FROM feedback_scores_combined_grouped
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+                FROM feedback_scores_deduped
+                GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_agg AS (
                 SELECT
                     experiment_id,

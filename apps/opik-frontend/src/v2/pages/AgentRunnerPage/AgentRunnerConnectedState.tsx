@@ -1,10 +1,14 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
+import useAgentConfigCreateMutation from "@/api/agent-configs/useAgentConfigCreateMutation";
 import { LocalRunner } from "@/types/agent-sandbox";
 import AgentRunnerInputForm from "./AgentRunnerInputForm";
-import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
+import AgentConfigurationEditView, {
+  AgentConfigurationEditViewHandle,
+} from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
 import { LoadableSelectBox } from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import { DropdownOption } from "@/types/shared";
 
@@ -23,6 +27,8 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState("input");
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
+  const configEditRef = useRef<AgentConfigurationEditViewHandle>(null);
+  const { mutateAsync: createConfigAsync } = useAgentConfigCreateMutation();
 
   const { data: configData } = useConfigHistoryListInfinite({ projectId });
 
@@ -55,6 +61,25 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
   const agent = runner.agents?.[0];
   const inputFields = agent?.params ?? [];
 
+  const handleRun = useCallback(
+    async (inputs: Record<string, unknown>) => {
+      const editView = configEditRef.current;
+      if (editView?.hasChanges()) {
+        const payload = await editView.buildMaskPayload();
+        if (!payload) return;
+        try {
+          const { id } = await createConfigAsync({ agentConfig: payload });
+          onRun(inputs, id);
+        } catch {
+          return;
+        }
+      } else {
+        onRun(inputs);
+      }
+    },
+    [onRun, createConfigAsync],
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Tabs
@@ -77,11 +102,18 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           forceMount
           hidden={activeTab !== "input"}
         >
-          <AgentRunnerInputForm
-            fields={inputFields}
-            onSubmit={onRun}
-            isRunning={isRunning}
-          />
+          {agent ? (
+            <AgentRunnerInputForm
+              fields={inputFields}
+              onSubmit={handleRun}
+              isRunning={isRunning}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-8 text-muted-slate">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <p className="comet-body-s">Loading agent...</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent
@@ -93,6 +125,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           {activeVersion ? (
             <AgentConfigurationEditView
               key={activeVersion.id}
+              ref={configEditRef}
               item={activeVersion}
               projectId={projectId}
               onSaved={() => setSelectedVersionId("")}
