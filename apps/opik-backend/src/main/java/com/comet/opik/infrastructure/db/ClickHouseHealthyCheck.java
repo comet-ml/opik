@@ -16,9 +16,9 @@ public class ClickHouseHealthyCheck extends NamedHealthCheck {
 
     @Inject
     public ClickHouseHealthyCheck(@NonNull TransactionTemplateAsync template,
-            @Named("health_check_timeout") Duration healthCheckTimeout) {
+            @Named("clickhouse_health_check_timeout") Duration healthCheckTimeout) {
         this.template = template;
-        this.healthCheckTimeout = java.time.Duration.ofMillis(healthCheckTimeout.toMilliseconds());
+        this.healthCheckTimeout = healthCheckTimeout.toJavaDuration();
     }
 
     @Override

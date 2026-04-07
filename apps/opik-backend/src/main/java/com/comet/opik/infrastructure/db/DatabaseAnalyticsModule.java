@@ -47,7 +47,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    @Named("health_check_timeout")
+    @Named("clickhouse_health_check_timeout")
     public Duration getHealthCheckTimeout() {
         return databaseAnalyticsFactory.getHealthCheckTimeout();
     }
