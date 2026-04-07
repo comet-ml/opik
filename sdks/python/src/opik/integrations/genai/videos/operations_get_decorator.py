@@ -74,7 +74,9 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
         if output is not None and output.done and output.response:
             video_save_decorator.patch_videos_save(
                 output,
-                project_name=context_storage.resolve_project_name(self._project_name, "OperationsGetTrackDecorator"),
+                project_name=context_storage.resolve_project_name(
+                    self._project_name, "OperationsGetTrackDecorator"
+                ),
                 tags=current_span_data.tags,
                 metadata=current_span_data.metadata,
                 upload_video=self._upload_videos,

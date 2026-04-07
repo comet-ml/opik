@@ -88,7 +88,9 @@ class OpikTracer(tracing.Tracer):
             name=final_name,
             type="general",
             metadata=metadata,
-            project_name=context_storage.resolve_project_name(self._project_name, "OpikTracer"),
+            project_name=context_storage.resolve_project_name(
+                self._project_name, "OpikTracer"
+            ),
         )
 
         result = span_creation_handler.create_span_respecting_context(
