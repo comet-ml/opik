@@ -6,7 +6,6 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .agent import Agent
-from .json_node import JsonNode
 from .local_runner_status import LocalRunnerStatus
 
 
@@ -17,8 +16,6 @@ class LocalRunner(UniversalBaseModel):
     status: typing.Optional[LocalRunnerStatus] = None
     connected_at: typing.Optional[dt.datetime] = None
     agents: typing.Optional[typing.List[Agent]] = None
-    capabilities: typing.Optional[typing.List[str]] = None
-    checklist: typing.Optional[JsonNode] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

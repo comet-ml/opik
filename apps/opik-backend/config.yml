@@ -968,33 +968,6 @@ localRunner:
   # Default: 1000
   # Description: Maximum number of log entries a runner can send in a single batch
   maxLogEntriesPerBatch: ${OPIK_RUNNER_MAX_LOG_ENTRIES_PER_BATCH:-1000}
-  # Default: 50
-  # Description: Maximum number of pending bridge commands allowed per runner
-  bridgeMaxPendingPerRunner: ${OPIK_RUNNER_BRIDGE_MAX_PENDING:-50}
-  # Default: 600
-  # Description: Maximum bridge commands per minute per runner
-  bridgeMaxCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_COMMANDS_PER_MIN:-600}
-  # Default: 120
-  # Description: Maximum bridge write commands per minute per runner
-  bridgeMaxWriteCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_WRITE_COMMANDS_PER_MIN:-120}
-  # Default: 30s
-  # Description: How long the bridge nextCommands long-poll blocks before returning empty
-  bridgePollTimeout: ${OPIK_RUNNER_BRIDGE_POLL_TIMEOUT:-30s}
-  # Default: 30s
-  # Description: Default timeout for bridge commands when not specified by caller
-  bridgeDefaultCommandTimeout: ${OPIK_RUNNER_BRIDGE_DEFAULT_CMD_TIMEOUT:-30s}
-  # Default: 120s
-  # Description: Maximum allowed timeout for bridge commands
-  bridgeMaxCommandTimeout: ${OPIK_RUNNER_BRIDGE_MAX_CMD_TIMEOUT:-120s}
-  # Default: 1h
-  # Description: How long completed bridge command metadata is retained in Redis
-  bridgeCompletedCommandTtl: ${OPIK_RUNNER_BRIDGE_COMPLETED_CMD_TTL:-1h}
-  # Default: 5s
-  # Description: Extra buffer added to async response timeout beyond bridge poll/command timeout
-  bridgeAsyncTimeoutBuffer: ${OPIK_RUNNER_BRIDGE_ASYNC_TIMEOUT_BUFFER:-5s}
-  # Default: 1048576 (1MB)
-  # Description: Maximum payload size in bytes for bridge command args and results
-  bridgeMaxPayloadBytes: ${OPIK_RUNNER_BRIDGE_MAX_PAYLOAD_BYTES:-1048576}
 
 # Trace Thread configuration
 traceThreadConfig:

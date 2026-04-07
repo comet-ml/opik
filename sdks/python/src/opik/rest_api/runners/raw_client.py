@@ -14,10 +14,6 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.gone_error import GoneError
 from ..errors.not_found_error import NotFoundError
-from ..errors.too_many_requests_error import TooManyRequestsError
-from ..types.bridge_command import BridgeCommand
-from ..types.bridge_command_batch_response import BridgeCommandBatchResponse
-from ..types.bridge_command_submit_response import BridgeCommandSubmitResponse
 from ..types.error_message import ErrorMessage
 from ..types.json_node import JsonNode
 from ..types.local_runner import LocalRunner
@@ -29,8 +25,6 @@ from ..types.local_runner_job_page import LocalRunnerJobPage
 from ..types.local_runner_log_entry import LocalRunnerLogEntry
 from ..types.local_runner_page import LocalRunnerPage
 from ..types.local_runner_pair_response import LocalRunnerPairResponse
-from .types.bridge_command_result_request_status import BridgeCommandResultRequestStatus
-from .types.bridge_command_submit_request_type import BridgeCommandSubmitRequestType
 from .types.list_runners_request_status import ListRunnersRequestStatus
 from .types.local_runner_job_result_request_status import LocalRunnerJobResultRequestStatus
 
@@ -410,71 +404,6 @@ class RawRunnersClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def get_bridge_command(
-        self,
-        runner_id: str,
-        command_id: str,
-        *,
-        wait: typing.Optional[bool] = None,
-        timeout: typing.Optional[int] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[BridgeCommand]:
-        """
-        Get bridge command status, optionally long-polling for completion
-
-        Parameters
-        ----------
-        runner_id : str
-
-        command_id : str
-
-        wait : typing.Optional[bool]
-
-        timeout : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[BridgeCommand]
-            Command state
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}",
-            method="GET",
-            params={
-                "wait": wait,
-                "timeout": timeout,
-            },
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    BridgeCommand,
-                    parse_obj_as(
-                        type_=BridgeCommand,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
     def get_job(
         self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[LocalRunnerJob]:
@@ -574,11 +503,7 @@ class RawRunnersClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def heartbeat(
-        self,
-        runner_id: str,
-        *,
-        capabilities: typing.Optional[typing.Sequence[str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[LocalRunnerHeartbeatResponse]:
         """
         Refresh local runner heartbeat
@@ -586,8 +511,6 @@ class RawRunnersClient:
         Parameters
         ----------
         runner_id : str
-
-        capabilities : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -600,14 +523,7 @@ class RawRunnersClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/local-runners/{jsonable_encoder(runner_id)}/heartbeats",
             method="POST",
-            json={
-                "capabilities": capabilities,
-            },
-            headers={
-                "content-type": "application/json",
-            },
             request_options=request_options,
-            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -779,68 +695,6 @@ class RawRunnersClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def next_bridge_commands(
-        self,
-        runner_id: str,
-        *,
-        max_commands: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[BridgeCommandBatchResponse]:
-        """
-        Long-poll for pending bridge commands (batch)
-
-        Parameters
-        ----------
-        runner_id : str
-
-        max_commands : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[BridgeCommandBatchResponse]
-            Commands batch
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/next",
-            method="POST",
-            json={
-                "max_commands": max_commands,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    BridgeCommandBatchResponse,
-                    parse_obj_as(
-                        type_=BridgeCommandBatchResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
     def next_job(
         self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[typing.Optional[LocalRunnerJob]]:
@@ -874,58 +728,6 @@ class RawRunnersClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def patch_checklist(
-        self,
-        runner_id: str,
-        *,
-        request: typing.Dict[str, typing.Optional[typing.Any]],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[None]:
-        """
-        Partial update of the runner's checklist (deep merge)
-
-        Parameters
-        ----------
-        runner_id : str
-
-        request : typing.Dict[str, typing.Optional[typing.Any]]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[None]
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/checklist",
-            method="PATCH",
-            json=request,
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -991,86 +793,6 @@ class RawRunnersClient:
                 )
             if _response.status_code == 404:
                 raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def report_bridge_result(
-        self,
-        runner_id: str,
-        command_id: str,
-        *,
-        status: BridgeCommandResultRequestStatus,
-        result: typing.Optional[JsonNode] = OMIT,
-        error: typing.Optional[JsonNode] = OMIT,
-        duration_ms: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[None]:
-        """
-        Report bridge command completion or failure
-
-        Parameters
-        ----------
-        runner_id : str
-
-        command_id : str
-
-        status : BridgeCommandResultRequestStatus
-
-        result : typing.Optional[JsonNode]
-
-        error : typing.Optional[JsonNode]
-
-        duration_ms : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[None]
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}/results",
-            method="POST",
-            json={
-                "status": status,
-                "result": result,
-                "error": error,
-                "duration_ms": duration_ms,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 409:
-                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -1153,98 +875,6 @@ class RawRunnersClient:
                         typing.Optional[typing.Any],
                         parse_obj_as(
                             type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def submit_bridge_command(
-        self,
-        runner_id: str,
-        *,
-        type: BridgeCommandSubmitRequestType,
-        args: JsonNode,
-        timeout_seconds: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[BridgeCommandSubmitResponse]:
-        """
-        Submit a bridge command for execution by the local daemon
-
-        Parameters
-        ----------
-        runner_id : str
-
-        type : BridgeCommandSubmitRequestType
-
-        args : JsonNode
-
-        timeout_seconds : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[BridgeCommandSubmitResponse]
-            Command submitted
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands",
-            method="POST",
-            json={
-                "type": type,
-                "args": args,
-                "timeout_seconds": timeout_seconds,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    BridgeCommandSubmitResponse,
-                    parse_obj_as(
-                        type_=BridgeCommandSubmitResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 409:
-                raise ConflictError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 429:
-                raise TooManyRequestsError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        ErrorMessage,
-                        parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -1629,71 +1259,6 @@ class AsyncRawRunnersClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def get_bridge_command(
-        self,
-        runner_id: str,
-        command_id: str,
-        *,
-        wait: typing.Optional[bool] = None,
-        timeout: typing.Optional[int] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[BridgeCommand]:
-        """
-        Get bridge command status, optionally long-polling for completion
-
-        Parameters
-        ----------
-        runner_id : str
-
-        command_id : str
-
-        wait : typing.Optional[bool]
-
-        timeout : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[BridgeCommand]
-            Command state
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}",
-            method="GET",
-            params={
-                "wait": wait,
-                "timeout": timeout,
-            },
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    BridgeCommand,
-                    parse_obj_as(
-                        type_=BridgeCommand,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
     async def get_job(
         self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[LocalRunnerJob]:
@@ -1793,11 +1358,7 @@ class AsyncRawRunnersClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def heartbeat(
-        self,
-        runner_id: str,
-        *,
-        capabilities: typing.Optional[typing.Sequence[str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[LocalRunnerHeartbeatResponse]:
         """
         Refresh local runner heartbeat
@@ -1805,8 +1366,6 @@ class AsyncRawRunnersClient:
         Parameters
         ----------
         runner_id : str
-
-        capabilities : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1819,14 +1378,7 @@ class AsyncRawRunnersClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/local-runners/{jsonable_encoder(runner_id)}/heartbeats",
             method="POST",
-            json={
-                "capabilities": capabilities,
-            },
-            headers={
-                "content-type": "application/json",
-            },
             request_options=request_options,
-            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -1998,68 +1550,6 @@ class AsyncRawRunnersClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def next_bridge_commands(
-        self,
-        runner_id: str,
-        *,
-        max_commands: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[BridgeCommandBatchResponse]:
-        """
-        Long-poll for pending bridge commands (batch)
-
-        Parameters
-        ----------
-        runner_id : str
-
-        max_commands : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[BridgeCommandBatchResponse]
-            Commands batch
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/next",
-            method="POST",
-            json={
-                "max_commands": max_commands,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    BridgeCommandBatchResponse,
-                    parse_obj_as(
-                        type_=BridgeCommandBatchResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
     async def next_job(
         self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[typing.Optional[LocalRunnerJob]]:
@@ -2093,58 +1583,6 @@ class AsyncRawRunnersClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def patch_checklist(
-        self,
-        runner_id: str,
-        *,
-        request: typing.Dict[str, typing.Optional[typing.Any]],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[None]:
-        """
-        Partial update of the runner's checklist (deep merge)
-
-        Parameters
-        ----------
-        runner_id : str
-
-        request : typing.Dict[str, typing.Optional[typing.Any]]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[None]
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/checklist",
-            method="PATCH",
-            json=request,
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -2210,86 +1648,6 @@ class AsyncRawRunnersClient:
                 )
             if _response.status_code == 404:
                 raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def report_bridge_result(
-        self,
-        runner_id: str,
-        command_id: str,
-        *,
-        status: BridgeCommandResultRequestStatus,
-        result: typing.Optional[JsonNode] = OMIT,
-        error: typing.Optional[JsonNode] = OMIT,
-        duration_ms: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[None]:
-        """
-        Report bridge command completion or failure
-
-        Parameters
-        ----------
-        runner_id : str
-
-        command_id : str
-
-        status : BridgeCommandResultRequestStatus
-
-        result : typing.Optional[JsonNode]
-
-        error : typing.Optional[JsonNode]
-
-        duration_ms : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[None]
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands/{jsonable_encoder(command_id)}/results",
-            method="POST",
-            json={
-                "status": status,
-                "result": result,
-                "error": error,
-                "duration_ms": duration_ms,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 409:
-                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -2372,98 +1730,6 @@ class AsyncRawRunnersClient:
                         typing.Optional[typing.Any],
                         parse_obj_as(
                             type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def submit_bridge_command(
-        self,
-        runner_id: str,
-        *,
-        type: BridgeCommandSubmitRequestType,
-        args: JsonNode,
-        timeout_seconds: typing.Optional[int] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[BridgeCommandSubmitResponse]:
-        """
-        Submit a bridge command for execution by the local daemon
-
-        Parameters
-        ----------
-        runner_id : str
-
-        type : BridgeCommandSubmitRequestType
-
-        args : JsonNode
-
-        timeout_seconds : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[BridgeCommandSubmitResponse]
-            Command submitted
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}/bridge/commands",
-            method="POST",
-            json={
-                "type": type,
-                "args": args,
-                "timeout_seconds": timeout_seconds,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    BridgeCommandSubmitResponse,
-                    parse_obj_as(
-                        type_=BridgeCommandSubmitResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 409:
-                raise ConflictError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 429:
-                raise TooManyRequestsError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        ErrorMessage,
-                        parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
