@@ -25,6 +25,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 @Singleton
 @Slf4j
@@ -117,7 +118,7 @@ public class ExperimentExecutionService {
     }
 
     private Flux<ExperimentEntry> createExperiments(ExperimentExecutionRequest request, String projectName) {
-        var monos = java.util.stream.IntStream.range(0, request.prompts().size())
+        var monos = IntStream.range(0, request.prompts().size())
                 .mapToObj(i -> {
                     var prompt = request.prompts().get(i);
                     UUID experimentId = idGenerator.generateId();

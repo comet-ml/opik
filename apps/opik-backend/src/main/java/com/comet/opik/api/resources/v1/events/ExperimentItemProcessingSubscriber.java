@@ -15,6 +15,7 @@ import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -99,7 +100,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     }
 
     private Mono<Void> finishExperiments(ExperimentItemToProcess message) {
-        var reactorContext = reactor.util.context.Context.of(
+        var reactorContext = Context.of(
                 RequestContext.WORKSPACE_ID, message.workspaceId(),
                 RequestContext.USER_NAME, message.userName(),
                 RequestContext.WORKSPACE_NAME, message.workspaceId(),
@@ -115,7 +116,25 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 .contextWrite(reactorContext)
                 .doOnSuccess(unused -> log.info("Finished '{}' experiments for batch '{}'",
                         message.allExperimentIds().size(), message.batchId()))
-                .doOnError(error -> log.error("Failed to finish experiments for batch '{}'",
-                        message.batchId(), error));
+                .onErrorResume(error -> {
+                    log.error("Failed to finish experiments for batch '{}', marking as FAILED",
+                            message.batchId(), error);
+                    return markExperimentsFailed(message, reactorContext);
+                });
+    }
+
+    private Mono<Void> markExperimentsFailed(ExperimentItemToProcess message, Context reactorContext) {
+        var failedUpdate = ExperimentUpdate.builder()
+                .status(ExperimentStatus.CANCELLED)
+                .build();
+
+        return Flux.fromIterable(message.allExperimentIds())
+                .concatMap(experimentId -> experimentService.update(experimentId, failedUpdate)
+                        .onErrorResume(e -> {
+                            log.error("Failed to mark experiment '{}' as FAILED", experimentId, e);
+                            return Mono.empty();
+                        }))
+                .contextWrite(reactorContext)
+                .then();
     }
 }
