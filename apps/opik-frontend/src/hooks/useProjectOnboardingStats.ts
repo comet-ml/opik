@@ -14,7 +14,7 @@ function useOnboardingCountQuery(
   enabled: boolean,
 ): UseQueryResult<number> {
   return useQuery({
-    queryKey: [key, "onboarding-count"],
+    queryKey: [key, "onboarding-count", endpoint],
     queryFn: async ({ signal }) => {
       const { data } = await api.get(endpoint, {
         signal,
@@ -23,7 +23,7 @@ function useOnboardingCountQuery(
       return (data.total as number) ?? 0;
     },
     enabled,
-    staleTime: 30_000,
+    staleTime: 1_000,
   });
 }
 
@@ -57,7 +57,7 @@ export default function useProjectOnboardingStats(
       return (match?.trace_count as number) ?? 0;
     },
     enabled,
-    staleTime: 30_000,
+    staleTime: 1_000,
   });
 
   const { data: experimentTotal } = useOnboardingCountQuery(
