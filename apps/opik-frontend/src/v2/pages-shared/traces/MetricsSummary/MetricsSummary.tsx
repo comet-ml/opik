@@ -13,6 +13,7 @@ import useProjectKpiCards, {
   KpiMetricType,
 } from "@/api/projects/useProjectKpiCards";
 import { Filters } from "@/types/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
 import MetricContainerChart from "@/v2/pages-shared/dashboards/widgets/ProjectMetricsWidget/MetricChart/MetricChartContainer";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
@@ -181,6 +182,7 @@ export type MetricsSummaryProps = {
   intervalStart?: string;
   intervalEnd?: string;
   dateRange: DateRangeValue;
+  logsSource?: LOGS_SOURCE;
 };
 
 const MetricsSummary: React.FC<MetricsSummaryProps> = ({
@@ -191,6 +193,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
   intervalStart,
   intervalEnd,
   dateRange,
+  logsSource,
 }) => {
   const [selectedMetric, setSelectedMetric] = useState<KpiMetricType>("count");
 
@@ -212,6 +215,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
       filters,
       intervalStart: intervalStart ?? chartIntervalConfig.intervalStart,
       intervalEnd: intervalEnd ?? chartIntervalConfig.intervalEnd,
+      logsSource,
     },
     {
       refetchInterval: REFETCH_INTERVAL,
@@ -316,6 +320,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             colorMap={chartConfig.colorMap}
             filterLineCallback={chartConfig.filterLineCallback}
             labelsMap={chartConfig.labelsMap}
+            logsSource={logsSource}
             {...chartFilters}
           />
         ) : (

@@ -514,6 +514,7 @@ def configure(
     use_local: bool = False,
     force: bool = False,
     automatic_approvals: bool = False,
+    url_override: Optional[str] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -522,7 +523,8 @@ def configure(
     Args:
         api_key: The API key if using an Opik Cloud.
         workspace: The workspace name if using an Opik Cloud.
-        url: The URL of the Opik instance if you are using a local deployment.
+        url: The URL of the Opik instance if you are using a local deployment. [Deprecated: use `url_override` instead]
+        url_override: The URL of the Opik instance if you are using a local deployment.
         use_local: Whether to use a local deployment.
         force: If true, the configuration file will be recreated and existing settings
                will be overwritten with passed parameters.
@@ -531,10 +533,17 @@ def configure(
     Raises:
         ConfigurationError
     """
+    if url is not None:
+        LOGGER.warning(
+            "The `url` parameter is deprecated. Please use `url_override` instead."
+        )
+        if url_override is None:
+            url_override = url
+
     client = OpikConfigurator(
         api_key=api_key,
         workspace=workspace,
-        url=url,
+        url=url_override,
         use_local=use_local,
         force=force,
         automatic_approvals=automatic_approvals,

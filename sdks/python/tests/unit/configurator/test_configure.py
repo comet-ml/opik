@@ -1525,3 +1525,62 @@ class TestLogProjectConfigurationMessage:
 
             # Assert that the log message method was called
             mock_log_message.assert_called_once()
+
+
+class TestConfigure:
+    """Tests for the module-level configure() function, focusing on url / url_override handling."""
+
+    @patch("opik.configurator.configure.LOGGER")
+    @patch("opik.configurator.configure.OpikConfigurator")
+    def test_configure__url_and_url_override_both_provided__url_override_wins(
+        self, mock_configurator_cls, mock_logger
+    ):
+        """When both url and url_override are supplied, url_override is forwarded to OpikConfigurator."""
+        from opik.configurator.configure import configure
+
+        configure(
+            url="http://deprecated.example.com/",
+            url_override="http://override.example.com/",
+        )
+
+        _, kwargs = mock_configurator_cls.call_args
+        assert kwargs["url"] == "http://override.example.com/"
+
+    @patch("opik.configurator.configure.LOGGER")
+    @patch("opik.configurator.configure.OpikConfigurator")
+    def test_configure__url_parameter_used__deprecation_warning_logged(
+        self, mock_configurator_cls, mock_logger
+    ):
+        """Passing url emits a deprecation warning."""
+        from opik.configurator.configure import configure
+
+        configure(url="http://deprecated.example.com/")
+
+        mock_logger.warning.assert_called_once()
+        warning_message = mock_logger.warning.call_args[0][0]
+        assert "deprecated" in warning_message.lower()
+
+    @patch("opik.configurator.configure.LOGGER")
+    @patch("opik.configurator.configure.OpikConfigurator")
+    def test_configure__only_url_override_provided__no_deprecation_warning(
+        self, mock_configurator_cls, mock_logger
+    ):
+        """Passing only url_override must not emit a deprecation warning."""
+        from opik.configurator.configure import configure
+
+        configure(url_override="http://override.example.com/")
+
+        mock_logger.warning.assert_not_called()
+
+    @patch("opik.configurator.configure.LOGGER")
+    @patch("opik.configurator.configure.OpikConfigurator")
+    def test_configure__only_url_provided__url_forwarded_as_effective_url(
+        self, mock_configurator_cls, mock_logger
+    ):
+        """When only url is provided (no url_override), it is forwarded as the effective URL."""
+        from opik.configurator.configure import configure
+
+        configure(url="http://deprecated.example.com/")
+
+        _, kwargs = mock_configurator_cls.call_args
+        assert kwargs["url"] == "http://deprecated.example.com/"

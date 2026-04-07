@@ -58,15 +58,15 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     jobId: activeJobId ?? "",
   });
 
-  // Clear the cached pair code as soon as the runner connects,
-  // since the backend has already consumed it. This way, if the runner
-  // later disconnects the empty state will fetch a fresh code on mount
-  // instead of displaying the stale one.
+  // On connect: drop the consumed pair code so a disconnect fetches a fresh one.
+  // On disconnect: clear job state so results/errors from the previous session don't persist.
   useEffect(() => {
     if (isConnected) {
       queryClient.removeQueries({
         queryKey: [AGENT_SANDBOX_KEY, "pair-code", { projectId }],
       });
+    } else {
+      setActiveJobId(null);
     }
   }, [isConnected, queryClient, projectId]);
 

@@ -9,6 +9,7 @@ import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
@@ -24,7 +25,10 @@ import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -47,6 +51,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -192,7 +197,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .id(idGenerator.generateId())
                                         .source(DatasetItemSource.TRACE)
                                         .traceId(entry.getKey())
-                                        .data(entry.getValue())
+                                        .data(filterDataForDatasetType(entry.getValue(), dataset.type()))
                                         .build())
                                 .toList();
 
@@ -241,7 +246,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .id(idGenerator.generateId())
                                         .source(DatasetItemSource.SPAN)
                                         .spanId(entry.getKey())
-                                        .data(entry.getValue())
+                                        .data(filterDataForDatasetType(entry.getValue(), dataset.type()))
                                         .build())
                                 .toList();
 
@@ -260,6 +265,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         return saveBatch(batch, datasetId);
                     });
         }).then();
+    }
+
+    Map<String, JsonNode> filterDataForDatasetType(
+            Map<String, JsonNode> data, DatasetType datasetType) {
+        if (datasetType != DatasetType.EVALUATION_SUITE) {
+            return data;
+        }
+
+        // For evaluation suites, use only the input value as top-level data
+        var inputNode = data.get("input");
+        if (inputNode == null || !inputNode.isObject()) {
+            return Map.of();
+        }
+
+        return JsonUtils.convertValue(inputNode, new TypeReference<Map<String, JsonNode>>() {
+        });
     }
 
     private Mono<UUID> resolveProjectId(DatasetItemBatch batch) {
@@ -1286,19 +1307,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
             int page, int size, String workspaceId) {
         Optional<UUID> fallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId);
 
-        if (fallbackVersionId.isEmpty()) {
-            log.info("No versions found for dataset '{}', falling back to legacy items for experiment items",
+        // When the dataset no longer exists (e.g. evaluation suite deleted), version records are gone from MySQL.
+        // Use an empty string as a harmless placeholder: evaluation suite experiments always carry their own explicit
+        // dataset_version_id in ClickHouse, so the empty fallback is never used for matching, and assertion_results
+        // are still returned correctly via the versioned query.
+        String resolvedFallbackVersionId = fallbackVersionId.map(UUID::toString).orElseGet(() -> {
+            log.info(
+                    "No versions found for dataset '{}', using empty string as fallback version to query experiment items",
                     criteria.datasetId());
-            return dao.getItems(criteria, page, size)
-                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-        }
+            return "";
+        });
 
         log.info(
                 "Fetching items with experiment items for dataset '{}', using version '{}' as fallback for experiments without explicit version",
-                criteria.datasetId(), fallbackVersionId.get());
+                criteria.datasetId(), resolvedFallbackVersionId);
 
-        // Fetch items using experiment-specific versions, falling back to fallbackVersionId for experiments without a version
-        return versionDao.getItemsWithExperimentItems(criteria, page, size, fallbackVersionId.get())
+        return versionDao.getItemsWithExperimentItems(criteria, page, size, resolvedFallbackVersionId)
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
