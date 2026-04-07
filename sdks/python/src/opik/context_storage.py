@@ -46,9 +46,9 @@ class OpikContextStorage:
         self._spans_data_stack_context: contextvars.ContextVar[
             Tuple[span.SpanData, ...]
         ] = contextvars.ContextVar("spans_data_stack", default=default_span_stack)
-        self._current_project_name_context: contextvars.ContextVar[
-            Optional[str]
-        ] = contextvars.ContextVar("current_project_name", default=None)
+        self._current_project_name_context: contextvars.ContextVar[Optional[str]] = (
+            contextvars.ContextVar("current_project_name", default=None)
+        )
         self._current_project_name_owner_context: contextvars.ContextVar[
             Optional[str]
         ] = contextvars.ContextVar("current_project_name_owner", default=None)
@@ -202,9 +202,7 @@ class OpikContextStorage:
         """Low-level set used by ``temporary_context`` for save/restore."""
         return self._current_project_name_context.set(project_name)
 
-    def _raw_reset_context_project_name(
-        self, token: contextvars.Token
-    ) -> None:
+    def _raw_reset_context_project_name(self, token: contextvars.Token) -> None:
         """Low-level reset used by ``temporary_context`` for save/restore."""
         self._current_project_name_context.reset(token)
 
@@ -229,7 +227,9 @@ pop_trace_data = _context_storage.pop_trace_data
 set_trace_data = _context_storage.set_trace_data
 get_context_project_name = _context_storage.get_context_project_name
 try_acquire_context_project_name = _context_storage.try_acquire_context_project_name
-release_context_project_name_if_owner = _context_storage.release_context_project_name_if_owner
+release_context_project_name_if_owner = (
+    _context_storage.release_context_project_name_if_owner
+)
 clear_all = _context_storage.clear_all
 span_data_stack_size = _context_storage.span_data_stack_size
 trim_span_data_stack_to_certain_span = (

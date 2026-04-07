@@ -682,9 +682,13 @@ def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
         and possible_trace_data_to_end is not None
         and possible_trace_data_to_end.id in TRACES_CREATED_BY_DECORATOR
     ):
-        trace_data_to_end = context_storage.pop_trace_data()
+        trace_data_to_end = context_storage.pop_trace_data(
+            ensure_id=possible_trace_data_to_end.id
+        )
         TRACES_CREATED_BY_DECORATOR.discard(possible_trace_data_to_end.id)
-        context_storage.release_context_project_name_if_owner(trace_data_to_end.id)
+        context_storage.release_context_project_name_if_owner(
+            possible_trace_data_to_end.id
+        )
         return trace_data_to_end
 
     return None

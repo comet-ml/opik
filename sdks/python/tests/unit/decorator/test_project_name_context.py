@@ -1,5 +1,4 @@
 import asyncio
-import logging
 
 from opik import context_storage
 from opik.api_objects import opik_client
