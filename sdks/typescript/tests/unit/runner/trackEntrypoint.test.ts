@@ -124,7 +124,8 @@ describe("track with entrypoint", () => {
   });
 
   it("warns when explicit params use unsupported types", () => {
-    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation((() => undefined) as any);
 
     track(
       {
