@@ -10,7 +10,7 @@ from google.adk.tools import tool_context
 
 import opik
 from opik import context_storage
-from opik.api_objects import opik_client, span, trace
+from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict
 from opik.decorator import span_creation_handler, arguments_helpers
 
@@ -63,14 +63,17 @@ class OpikTracer:
 
         self._init_internal_attributes()
 
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
+
     def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
-        self._opik_client = opik_client.get_client_cached()
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
         patchers.patch_adk(
-            self._opik_client, distributed_headers=self._distributed_headers
+            distributed_headers=self._distributed_headers,
         )
 
     def _has_response_content(self, llm_response: models.LlmResponse) -> bool:

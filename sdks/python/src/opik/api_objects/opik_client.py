@@ -1,4 +1,5 @@
 import atexit
+import contextvars
 import datetime
 import functools
 import logging
@@ -1235,6 +1236,7 @@ class Opik:
         return evaluation_suite.EvaluationSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
     def get_evaluation_suite(
@@ -1271,6 +1273,7 @@ class Opik:
         return evaluation_suite.EvaluationSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
     def get_or_create_evaluation_suite(
@@ -2701,8 +2704,74 @@ class Opik:
         return self._project_name
 
 
-@functools.lru_cache()
-def get_client_cached() -> Opik:
-    client = Opik(_use_batching=True)
+_context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.ContextVar(
+    "_context_client_var", default=None
+)
+_global_singleton: Optional[Opik] = None
 
-    return client
+
+def get_current_client_raw() -> Optional[Opik]:
+    """Return the active Opik client without auto-creating one.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. ``None`` if no client has been set
+    """
+    client = _context_client_var.get()
+    if client is not None:
+        return client
+
+    return _global_singleton
+
+
+def get_global_client() -> Opik:
+    """Get the active Opik client, creating one if needed.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. Auto-created default client (created on first call)
+    """
+    client = get_current_client_raw()
+    if client is not None:
+        return client
+
+    global _global_singleton
+    _global_singleton = Opik(_use_batching=True)
+    return _global_singleton
+
+
+def set_global_client(client: Opik, context_wise: bool = False) -> None:
+    """Set the active Opik client.
+
+    Args:
+        client: The Opik client instance to use.
+        context_wise: If True, sets the client for the current context only
+            (thread-safe, async-safe). If False, replaces the global singleton.
+    """
+    if context_wise:
+        _context_client_var.set(client)
+    else:
+        global _global_singleton
+        _global_singleton = client
+
+
+def reset_global_client(end_client: bool = True) -> None:
+    """Clear the active Opik client.
+
+    Args:
+        end_client: If True (default), calls ``.end()`` on the global singleton
+            before clearing it. Set to False when the caller manages the client
+            lifecycle independently.
+    """
+    global _global_singleton
+    if _global_singleton is not None:
+        if end_client:
+            _global_singleton.end()
+        _global_singleton = None
+    _context_client_var.set(None)
+
+
+def get_client_cached() -> Opik:
+    return get_global_client()

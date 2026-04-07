@@ -40,7 +40,7 @@ def test_evaluate_suite__creates_experiment_with_evaluation_method_evaluation_su
     with (
         mock.patch.object(
             evaluator_module.opik_client,
-            "get_client_cached",
+            "get_global_client",
             return_value=mock_client,
         ),
         mock.patch.object(
@@ -86,7 +86,7 @@ def test_evaluate_suite__passes_evaluation_method_not_dataset():
     with (
         mock.patch.object(
             evaluator_module.opik_client,
-            "get_client_cached",
+            "get_global_client",
             return_value=mock_client,
         ),
         mock.patch.object(

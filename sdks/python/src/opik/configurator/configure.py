@@ -6,8 +6,11 @@ from typing import Final, Optional
 import httpx
 import opik.config
 import urllib.parse
-from opik.api_objects.opik_client import get_client_cached
+from opik.api_objects.opik_client import get_current_client_raw
 from opik import config
+from opik.config import (
+    OPIK_WORKSPACE_DEFAULT_NAME,
+)
 from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
 from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
@@ -65,7 +68,7 @@ class OpikConfigurator:
         """
 
         # if there is already cached Opik client instance
-        if get_client_cached.cache_info().currsize > 0:
+        if get_current_client_raw() is not None:
             LOGGER.info(
                 'Existing Opik clients will not use updated values for "url", "api_key", "workspace".'
             )
