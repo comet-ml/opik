@@ -26,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Listens for TracesCreated events and checks if traces contain eval suite metadata.
@@ -99,47 +101,39 @@ public class EvalSuiteAssertionSampler {
                 datasetId, datasetEvaluators.versionId(), tracesBatch.workspaceId(),
                 tracesBatch.userName());
 
-        List<TraceToScoreLlmAsJudge> messages = new ArrayList<>();
+        List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
+                .flatMap(trace -> {
+                    var datasetItemId = getMetadataString(trace, "eval_suite_dataset_item_id");
+                    if (datasetItemId.isEmpty()) {
+                        log.debug("Skipping trace '{}' — no eval_suite_dataset_item_id in metadata", trace.id());
+                        return Stream.empty();
+                    }
 
-        for (Trace trace : completeTraces) {
-            var datasetItemId = getMetadataString(trace, "eval_suite_dataset_item_id");
-            if (datasetItemId.isEmpty()) {
-                log.debug("Skipping trace '{}' — no eval_suite_dataset_item_id in metadata", trace.id());
-                continue;
-            }
+                    return parseUUID(datasetItemId.get(), trace.id()).stream()
+                            .flatMap(itemId -> {
+                                List<PreparedEvaluator> allEvaluators = new ArrayList<>(preparedDatasetEvaluators);
+                                allEvaluators.addAll(
+                                        preparedItemEvaluatorsByItemId.getOrDefault(itemId, List.of()));
 
-            UUID itemId;
-            try {
-                itemId = UUID.fromString(datasetItemId.get());
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid UUID for eval_suite_dataset_item_id '{}' in trace '{}'",
-                        datasetItemId.get(), trace.id());
-                continue;
-            }
-            List<PreparedEvaluator> allEvaluators = new ArrayList<>(preparedDatasetEvaluators);
-            allEvaluators.addAll(preparedItemEvaluatorsByItemId.getOrDefault(itemId, List.of()));
+                                if (allEvaluators.isEmpty()) {
+                                    log.debug("No evaluators found for trace '{}', dataset item '{}'",
+                                            trace.id(), datasetItemId.get());
+                                    return Stream.empty();
+                                }
 
-            if (allEvaluators.isEmpty()) {
-                log.debug("No evaluators found for trace '{}', dataset item '{}'",
-                        trace.id(), datasetItemId.get());
-                continue;
-            }
-
-            for (PreparedEvaluator prepared : allEvaluators) {
-                var message = TraceToScoreLlmAsJudge.builder()
-                        .trace(trace)
-                        .ruleId(idGenerator.generateId())
-                        .ruleName(prepared.name)
-                        .llmAsJudgeCode(prepared.code)
-                        .workspaceId(tracesBatch.workspaceId())
-                        .userName(tracesBatch.userName())
-                        .categoryName(SUITE_ASSERTION_CATEGORY)
-                        .scoreNameMapping(prepared.scoreNameMapping)
-                        .build();
-
-                messages.add(message);
-            }
-        }
+                                return allEvaluators.stream().map(prepared -> TraceToScoreLlmAsJudge.builder()
+                                        .trace(trace)
+                                        .ruleId(idGenerator.generateId())
+                                        .ruleName(prepared.name)
+                                        .llmAsJudgeCode(prepared.code)
+                                        .workspaceId(tracesBatch.workspaceId())
+                                        .userName(tracesBatch.userName())
+                                        .categoryName(SUITE_ASSERTION_CATEGORY)
+                                        .scoreNameMapping(prepared.scoreNameMapping)
+                                        .build());
+                            });
+                })
+                .toList();
 
         if (!messages.isEmpty()) {
             log.info("Enqueuing '{}' eval suite assertion messages", messages.size());
@@ -182,6 +176,7 @@ public class EvalSuiteAssertionSampler {
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName))
+                    .timeout(Duration.ofSeconds(10))
                     .block();
 
             if (itemEvaluators == null || itemEvaluators.isEmpty()) {
@@ -208,37 +203,43 @@ public class EvalSuiteAssertionSampler {
     }
 
     private List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators) {
-        var result = new ArrayList<PreparedEvaluator>();
-        for (EvaluatorItem evaluator : evaluators) {
-            if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
-                log.debug("Skipping non-LLM evaluator '{}' of type '{}'", evaluator.name(), evaluator.type());
-                continue;
-            }
-            try {
-                LlmAsJudgeCode code = deserializeEvaluatorConfig(evaluator.config());
-                code = resolveModelName(code);
-                code = injectAssertionsVariable(code);
-                code = convertMessagesToMustacheFormat(code);
+        return evaluators.stream()
+                .filter(evaluator -> {
+                    if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
+                        log.debug("Skipping non-LLM evaluator '{}' of type '{}'",
+                                evaluator.name(), evaluator.type());
+                        return false;
+                    }
+                    return true;
+                })
+                .flatMap(evaluator -> {
+                    try {
+                        LlmAsJudgeCode code = deserializeEvaluatorConfig(evaluator.config());
+                        code = resolveModelName(code);
+                        code = injectAssertionsVariable(code);
+                        code = convertMessagesToMustacheFormat(code);
 
-                Map<String, String> scoreNameMapping = code.schema() != null
-                        ? code.schema().stream()
-                                .collect(Collectors.toMap(
-                                        LlmAsJudgeOutputSchema::name,
-                                        LlmAsJudgeOutputSchema::description))
-                        : Map.of();
+                        Map<String, String> scoreNameMapping = code.schema() != null
+                                ? code.schema().stream()
+                                        .collect(Collectors.toMap(
+                                                LlmAsJudgeOutputSchema::name,
+                                                LlmAsJudgeOutputSchema::description))
+                                : Map.of();
 
-                result.add(PreparedEvaluator.builder()
-                        .name(evaluator.name())
-                        .code(code)
-                        .scoreNameMapping(scoreNameMapping)
-                        .build());
-            } catch (java.io.UncheckedIOException e) {
-                log.error("Failed to deserialize evaluator config for '{}'", evaluator.name(), e);
-            } catch (Exception e) {
-                log.error("Failed to process evaluator '{}'", evaluator.name(), e);
-            }
-        }
-        return result;
+                        return Stream.of(PreparedEvaluator.builder()
+                                .name(evaluator.name())
+                                .code(code)
+                                .scoreNameMapping(scoreNameMapping)
+                                .build());
+                    } catch (java.io.UncheckedIOException e) {
+                        log.error("Failed to deserialize evaluator config for '{}'", evaluator.name(), e);
+                        return Stream.<PreparedEvaluator>empty();
+                    } catch (Exception e) {
+                        log.error("Failed to process evaluator '{}'", evaluator.name(), e);
+                        return Stream.<PreparedEvaluator>empty();
+                    }
+                })
+                .toList();
     }
 
     private LlmAsJudgeCode deserializeEvaluatorConfig(JsonNode config) {
@@ -313,6 +314,15 @@ public class EvalSuiteAssertionSampler {
                 .filter(JsonNode::isTextual)
                 .map(JsonNode::asText)
                 .filter(s -> !s.isEmpty());
+    }
+
+    private Optional<UUID> parseUUID(String id, UUID traceId) {
+        try {
+            return Optional.of(UUID.fromString(id));
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid UUID for eval_suite_dataset_item_id '{}' in trace '{}'", id, traceId);
+            return Optional.empty();
+        }
     }
 
 }
