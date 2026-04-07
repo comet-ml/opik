@@ -239,7 +239,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                            created_by,
                            last_updated_at,
                            last_updated_by AS author
-                    FROM feedback_scores FINAL
+                    FROM feedback_scores
                     WHERE workspace_id = :workspace_id
                         AND project_id IN (SELECT project_id FROM queues_final)
                         AND entity_id IN (SELECT item_id FROM queue_items_final)
@@ -253,7 +253,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         created_by,
                         last_updated_at,
                         author
-                    FROM authored_feedback_scores FINAL
+                    FROM authored_feedback_scores
                     WHERE workspace_id = :workspace_id
                        AND project_id IN (SELECT project_id FROM queues_final)
                        AND entity_id IN (SELECT item_id FROM queue_items_final)

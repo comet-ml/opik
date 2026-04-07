@@ -457,7 +457,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                            value,
                            last_updated_at,
                            feedback_scores.last_updated_by AS author
-                    FROM feedback_scores FINAL
+                    FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
@@ -470,7 +470,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                            value,
                            last_updated_at,
                            author
-                    FROM authored_feedback_scores FINAL
+                    FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
@@ -833,7 +833,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         created_at,
                         last_updated_at,
                         feedback_scores.last_updated_by AS author
-                    FROM feedback_scores FINAL
+                    FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
@@ -853,7 +853,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         created_at,
                         last_updated_at,
                         author
-                    FROM authored_feedback_scores FINAL
+                    FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
@@ -1810,7 +1810,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                            value,
                            last_updated_at,
                            feedback_scores.last_updated_by AS author
-                    FROM feedback_scores FINAL
+                    FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     <if(has_target_projects)>
@@ -1826,7 +1826,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         value,
                         last_updated_at,
                         author
-                    FROM authored_feedback_scores FINAL
+                    FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     <if(has_target_projects)>

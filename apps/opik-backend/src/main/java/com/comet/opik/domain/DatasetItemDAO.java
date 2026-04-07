@@ -274,7 +274,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                            value,
                            last_updated_at,
                            feedback_scores.last_updated_by AS author
-                    FROM feedback_scores FINAL
+                    FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                     UNION ALL
@@ -285,7 +285,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                            value,
                            last_updated_at,
                            author
-                     FROM authored_feedback_scores FINAL
+                     FROM authored_feedback_scores
                      WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                 )
@@ -466,7 +466,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         created_at,
                         last_updated_at,
                         feedback_scores.last_updated_by AS author
-                    FROM feedback_scores FINAL
+                    FROM feedback_scores
                     WHERE entity_type = :entityType
                       AND workspace_id = :workspace_id
                       AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
@@ -485,7 +485,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         created_at,
                         last_updated_at,
                         author
-                    FROM authored_feedback_scores FINAL
+                    FROM authored_feedback_scores
                     WHERE entity_type = :entityType
                       AND workspace_id = :workspace_id
                       AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
@@ -855,7 +855,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                        value,
                        last_updated_at,
                        feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
                   AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
@@ -868,7 +868,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     value,
                     last_updated_at,
                     author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
