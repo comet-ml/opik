@@ -281,7 +281,7 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
         version: manifest.ver,
       };
     },
-    enabled: !IS_DEV && !!manifestUrl,
+    enabled: !(IS_DEV && DEV_BASE_URL) && !!manifestUrl,
     staleTime: Infinity,
     retry: 1,
   });
