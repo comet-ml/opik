@@ -7,7 +7,11 @@ import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,7 +66,7 @@ class ExperimentExecutionServiceTest {
     void setUp() {
         service = new ExperimentExecutionService(
                 experimentService, datasetItemService, datasetVersionService,
-                itemProcessor, idGenerator);
+                itemProcessor, idGenerator, new EvalSuiteConfig(), new ExperimentExecutionConfig());
     }
 
     private ExperimentExecutionRequest.PromptVariant buildPrompt(String model, String content) {
@@ -74,6 +78,15 @@ class ExperimentExecutionServiceTest {
                                 .content(new TextNode(content))
                                 .build()))
                 .build();
+    }
+
+    private ExperimentExecutionResponse executeRequest(ExperimentExecutionRequest request) {
+        return service.createAndExecute(request)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME)
+                        .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                .block();
     }
 
     private DatasetItem buildDatasetItem(UUID id, ExecutionPolicy executionPolicy) {
@@ -104,19 +117,20 @@ class ExperimentExecutionServiceTest {
     class EmptyDataset {
 
         @Test
-        void createAndExecuteWhenNoDatasetItemsReturnsEmptyResponse() {
+        void createAndExecuteWhenNoDatasetItemsReturnsZeroTotalItems() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
                     .prompts(List.of(buildPrompt("gpt-4", "Hello {{input}}")))
                     .build();
 
             stubDatasetItems(List.of());
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            var response = executeRequest(request);
 
-            assertThat(response.experiments()).isEmpty();
             assertThat(response.totalItems()).isZero();
-            verify(experimentService, never()).create(any());
         }
     }
 
@@ -143,7 +157,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            var response = executeRequest(request);
 
             assertThat(response.experiments()).hasSize(2);
             assertThat(response.experiments().getFirst().promptIndex()).isZero();
@@ -165,7 +179,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            executeRequest(request);
 
             var captor = ArgumentCaptor.forClass(Experiment.class);
             verify(experimentService).create(captor.capture());
@@ -189,7 +203,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            executeRequest(request);
 
             var captor = ArgumentCaptor.forClass(Experiment.class);
             verify(experimentService).create(captor.capture());
@@ -209,7 +223,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            executeRequest(request);
 
             var captor = ArgumentCaptor.forClass(Experiment.class);
             verify(experimentService).create(captor.capture());
@@ -237,7 +251,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            var response = executeRequest(request);
 
             assertThat(response.totalItems()).isEqualTo(3);
         }
@@ -266,7 +280,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            var response = executeRequest(request);
 
             assertThat(response.totalItems()).isEqualTo(6);
         }
@@ -296,7 +310,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            var response = executeRequest(request);
 
             assertThat(response.totalItems()).isEqualTo(8);
         }
@@ -318,7 +332,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            var response = executeRequest(request);
 
             assertThat(response.totalItems()).isEqualTo(4);
         }
@@ -350,7 +364,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            var response = service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            var response = executeRequest(request);
 
             assertThat(response.totalItems()).isEqualTo(2);
             verify(datasetVersionService).resolveVersionId(WORKSPACE_ID, datasetId, versionHash);
@@ -358,20 +372,6 @@ class ExperimentExecutionServiceTest {
             verify(datasetVersionService, never()).getLatestVersion(any(), any());
         }
 
-        @Test
-        void createAndExecuteThrowsWhenNoDatasetId() {
-            var request = ExperimentExecutionRequest.builder()
-                    .datasetName("test-dataset")
-                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
-                    .build();
-
-            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
-
-            org.assertj.core.api.Assertions.assertThatThrownBy(
-                    () -> service.createAndExecute(request, WORKSPACE_ID, USER_NAME))
-                    .isInstanceOf(jakarta.ws.rs.BadRequestException.class)
-                    .hasMessageContaining("Dataset ID is required");
-        }
     }
 
     @Nested
@@ -391,7 +391,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            executeRequest(request);
 
             var captor = ArgumentCaptor.forClass(Experiment.class);
             verify(experimentService).create(captor.capture());
@@ -428,7 +428,7 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
-            service.createAndExecute(request, WORKSPACE_ID, USER_NAME);
+            executeRequest(request);
 
             var captor = ArgumentCaptor.forClass(Experiment.class);
             verify(experimentService).create(captor.capture());

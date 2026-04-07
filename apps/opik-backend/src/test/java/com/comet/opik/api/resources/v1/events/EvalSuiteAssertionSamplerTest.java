@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
@@ -67,12 +68,12 @@ class EvalSuiteAssertionSamplerTest {
             """;
 
     @Nested
-    @DisplayName("Assertions text generation")
-    class AssertionsTextGeneration {
+    @DisplayName("Assertions JSON injection")
+    class AssertionsJsonInjection {
 
         @Test
-        @DisplayName("builds assertions text from schema matching SDK format")
-        void buildAssertionsTextFromSchema() {
+        @DisplayName("schema is serialized as JSON for the assertions variable")
+        void schemaSerializedAsJson() {
             var schema = List.of(
                     LlmAsJudgeOutputSchema.builder()
                             .name("no_toc")
@@ -85,57 +86,29 @@ class EvalSuiteAssertionSamplerTest {
                             .description("The report must include a summary section.")
                             .build());
 
-            String assertionsText = buildAssertionsText(schema);
+            String assertionsText = JsonUtils.writeValueAsString(schema);
 
-            assertThat(assertionsText).isEqualTo(
-                    "- `assertion_1`: The report must not include a table of contents.\n"
-                            + "- `assertion_2`: The report must include a summary section.");
-        }
-
-        @Test
-        @DisplayName("renames schema items to assertion_N to align with assertions text keys")
-        void schemaItemsRenamedToAssertionKeys() {
-            var schema = List.of(
-                    LlmAsJudgeOutputSchema.builder()
-                            .name("The report must not include a table of contents.")
-                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
-                            .description("The report must not include a table of contents.")
-                            .build(),
-                    LlmAsJudgeOutputSchema.builder()
-                            .name("The report must include a summary section.")
-                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
-                            .description("The report must include a summary section.")
-                            .build());
-
-            var renamedSchema = renameSchemaToAssertionKeys(schema);
-
-            assertThat(renamedSchema).hasSize(2);
-            assertThat(renamedSchema.get(0).name()).isEqualTo("assertion_1");
-            assertThat(renamedSchema.get(0).description())
-                    .isEqualTo("The report must not include a table of contents.");
-            assertThat(renamedSchema.get(1).name()).isEqualTo("assertion_2");
-            assertThat(renamedSchema.get(1).description()).isEqualTo("The report must include a summary section.");
-        }
-
-        @Test
-        @DisplayName("handles single assertion")
-        void singleAssertion() {
-            var schema = List.of(
-                    LlmAsJudgeOutputSchema.builder()
-                            .name("check")
-                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
-                            .description("Output is correct.")
-                            .build());
-
-            String assertionsText = buildAssertionsText(schema);
-
-            assertThat(assertionsText).isEqualTo("- `assertion_1`: Output is correct.");
+            assertThat(assertionsText).contains("no_toc");
+            assertThat(assertionsText).contains("has_summary");
+            assertThat(assertionsText).contains("The report must not include a table of contents.");
+            assertThat(assertionsText).contains("The report must include a summary section.");
         }
     }
 
     @Nested
-    @DisplayName("Template format conversion")
-    class TemplateFormatConversion {
+    @DisplayName("Python template rendering")
+    class PythonTemplateRendering {
+
+        @Test
+        @DisplayName("Python single-brace placeholders are properly substituted")
+        void singleBracePlaceholdersSubstitutedByPython() {
+            String pythonTemplate = "Hello {input}, your output is {output}";
+            Map<String, String> replacements = Map.of("input", "world", "output", "42");
+
+            String rendered = TemplateParseUtils.render(pythonTemplate, replacements, PromptType.PYTHON);
+
+            assertThat(rendered).isEqualTo("Hello world, your output is 42");
+        }
 
         @Test
         @DisplayName("SDK single-brace placeholders are NOT valid Mustache - left as-is")
@@ -145,57 +118,41 @@ class EvalSuiteAssertionSamplerTest {
 
             String rendered = TemplateParseUtils.render(sdkTemplate, replacements, PromptType.MUSTACHE);
 
-            // Single braces are NOT substituted by Mustache
             assertThat(rendered).isEqualTo(sdkTemplate);
-        }
-
-        @Test
-        @DisplayName("Mustache double-brace placeholders ARE properly substituted")
-        void doubleBracePlaceholdersSubstitutedByMustache() {
-            String mustacheTemplate = "Hello {{input}}, your output is {{output}}";
-            Map<String, String> replacements = Map.of("input", "world", "output", "42");
-
-            String rendered = TemplateParseUtils.render(mustacheTemplate, replacements, PromptType.MUSTACHE);
-
-            assertThat(rendered).isEqualTo("Hello world, your output is 42");
-        }
-
-        @Test
-        @DisplayName("converts single braces to triple braces for variable patterns")
-        void convertSingleBracesToTripleBraces() {
-            String converted = convertSdkTemplateToMustache("{input} and {output} and {assertions}");
-
-            assertThat(converted).isEqualTo("{{{input}}} and {{{output}}} and {{{assertions}}}");
-        }
-
-        @Test
-        @DisplayName("does not convert already-mustache double-brace templates")
-        void doesNotConvertDoubleBraces() {
-            String alreadyMustache = "{{input}} and {{output}}";
-            String converted = convertSdkTemplateToMustache(alreadyMustache);
-
-            assertThat(converted).isEqualTo(alreadyMustache);
         }
 
         @Test
         @DisplayName("preserves JSON-like braces that don't match variable pattern")
         void preservesJsonBraces() {
             String template = "{\"key\": \"value\"} and {input}";
-            String converted = convertSdkTemplateToMustache(template);
+            Map<String, String> replacements = Map.of("input", "hello");
 
-            assertThat(converted).contains("{{{input}}}");
-            assertThat(converted).contains("{\"key\"");
+            String rendered = TemplateParseUtils.render(template, replacements, PromptType.PYTHON);
+
+            assertThat(rendered).contains("hello");
+            assertThat(rendered).contains("{\"key\"");
         }
 
         @Test
-        @DisplayName("converted SDK template can be rendered by Mustache")
-        void convertedTemplateRendersCorrectly() {
-            String converted = convertSdkTemplateToMustache("Result: {input} - {output}");
-            Map<String, String> replacements = Map.of("input", "hello", "output", "world");
+        @DisplayName("does not substitute double-brace patterns")
+        void doesNotSubstituteDoubleBraces() {
+            String template = "{{input}} and {output}";
+            Map<String, String> replacements = Map.of("input", "a", "output", "b");
 
-            String rendered = TemplateParseUtils.render(converted, replacements, PromptType.MUSTACHE);
+            String rendered = TemplateParseUtils.render(template, replacements, PromptType.PYTHON);
 
-            assertThat(rendered).isEqualTo("Result: hello - world");
+            assertThat(rendered).isEqualTo("{{input}} and b");
+        }
+
+        @Test
+        @DisplayName("leaves unmatched variables as-is")
+        void leavesUnmatchedVariables() {
+            String template = "Hello {input}, {missing}";
+            Map<String, String> replacements = Map.of("input", "world");
+
+            String rendered = TemplateParseUtils.render(template, replacements, PromptType.PYTHON);
+
+            assertThat(rendered).isEqualTo("Hello world, {missing}");
         }
     }
 
@@ -206,7 +163,7 @@ class EvalSuiteAssertionSamplerTest {
         @Test
         @DisplayName("OnlineScoringEngine.toReplacements resolves literal assertions from variables map")
         void toReplacementsHandlesLiteralAssertions() {
-            String assertionsText = "- `assertion_1`: Check this.";
+            String assertionsText = "[{\"name\":\"check\",\"description\":\"Is correct\"}]";
             var variables = Map.of(
                     "input", "input",
                     "output", "output",
@@ -226,45 +183,25 @@ class EvalSuiteAssertionSamplerTest {
 
             assertThat(replacements).containsKey("input");
             assertThat(replacements).containsKey("output");
-            // assertions is a literal value (not a trace section path)
             assertThat(replacements).containsEntry("assertions", assertionsText);
         }
 
         @Test
-        @DisplayName("full pipeline: convert template + inject assertions + render produces correct output")
+        @DisplayName("full pipeline: Python template + JSON assertions renders correctly")
         void fullPipelineProducesCorrectOutput() {
-            var schema = List.of(
-                    LlmAsJudgeOutputSchema.builder()
-                            .name("no_toc")
-                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
-                            .description("No table of contents.")
-                            .build(),
-                    LlmAsJudgeOutputSchema.builder()
-                            .name("has_tldr")
-                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
-                            .description("Has TL;DR section.")
-                            .build());
+            String pythonTemplate = "Input: {input}, Output: {output}, Assertions: {assertions}";
+            String assertionsJson = "[{\"name\":\"no_toc\",\"description\":\"No TOC\"}]";
 
-            // Step 1: Build assertions text from schema
-            String assertionsText = buildAssertionsText(schema);
-
-            // Step 2: Convert SDK template to Mustache format
-            String mustacheTemplate = convertSdkTemplateToMustache(
-                    "Input: {input}, Output: {output}, Assertions: {assertions}");
-
-            // Step 3: Provide replacements (simulating what toReplacements produces)
             Map<String, String> replacements = Map.of(
                     "input", "user question",
                     "output", "ai answer",
-                    "assertions", assertionsText);
+                    "assertions", assertionsJson);
 
-            // Step 4: Render
-            String rendered = TemplateParseUtils.render(mustacheTemplate, replacements, PromptType.MUSTACHE);
+            String rendered = TemplateParseUtils.render(pythonTemplate, replacements, PromptType.PYTHON);
 
             assertThat(rendered).isEqualTo(
                     "Input: user question, Output: ai answer, Assertions: "
-                            + "- `assertion_1`: No table of contents.\n"
-                            + "- `assertion_2`: Has TL;DR section.");
+                            + "[{\"name\":\"no_toc\",\"description\":\"No TOC\"}]");
         }
     }
 
@@ -315,12 +252,13 @@ class EvalSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.getItemEvaluatorsByDatasetId(any(), any()))
-                    .thenReturn(Mono.just(Map.of()));
+            when(datasetItemService.get(any(UUID.class)))
+                    .thenReturn(Mono.just(DatasetItem.builder().id(UUID.randomUUID()).build()));
 
+            var datasetItemId = Generators.timeBasedEpochGenerator().generate();
             var metadata = JsonUtils.getJsonNodeFromString(
                     "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
-                            .formatted(datasetId, versionHash, UUID.randomUUID()));
+                            .formatted(datasetId, versionHash, datasetItemId));
 
             var trace = Trace.builder()
                     .id(Generators.timeBasedEpochGenerator().generate())
@@ -380,8 +318,11 @@ class EvalSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.getItemEvaluatorsByDatasetId(any(UUID.class), any(UUID.class)))
-                    .thenReturn(Mono.just(Map.of(datasetItemId, List.of(itemEvaluator))));
+            when(datasetItemService.get(datasetItemId))
+                    .thenReturn(Mono.just(DatasetItem.builder()
+                            .id(datasetItemId)
+                            .evaluators(List.of(itemEvaluator))
+                            .build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 
             var metadata = JsonUtils.getJsonNodeFromString(
@@ -463,8 +404,11 @@ class EvalSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.getItemEvaluatorsByDatasetId(datasetId, versionId))
-                    .thenReturn(Mono.just(Map.of(datasetItemId, List.of(itemEvaluator))));
+            when(datasetItemService.get(datasetItemId))
+                    .thenReturn(Mono.just(DatasetItem.builder()
+                            .id(datasetItemId)
+                            .evaluators(List.of(itemEvaluator))
+                            .build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 
             var metadata = JsonUtils.getJsonNodeFromString(
@@ -494,30 +438,4 @@ class EvalSuiteAssertionSamplerTest {
         }
     }
 
-    // Helper methods matching the logic that should be in EvalSuiteAssertionSampler
-
-    private static List<LlmAsJudgeOutputSchema> renameSchemaToAssertionKeys(List<LlmAsJudgeOutputSchema> schema) {
-        return java.util.stream.IntStream.range(0, schema.size())
-                .mapToObj(i -> schema.get(i).toBuilder()
-                        .name("assertion_%d".formatted(i + 1))
-                        .build())
-                .toList();
-    }
-
-    private static String buildAssertionsText(List<LlmAsJudgeOutputSchema> schema) {
-        return java.util.stream.IntStream.range(0, schema.size())
-                .mapToObj(i -> "- `assertion_%d`: %s".formatted(i + 1, schema.get(i).description()))
-                .collect(java.util.stream.Collectors.joining("\n"));
-    }
-
-    /**
-     * Converts SDK-style single-brace templates {var} to Mustache triple-brace {{{var}}}.
-     * Triple braces prevent Mustache from HTML-escaping the substituted values,
-     * which is needed because assertions text contains backticks and newlines.
-     * Only converts patterns matching variable names (word characters), not JSON braces.
-     */
-    static String convertSdkTemplateToMustache(String template) {
-        // Match {word_chars} that are NOT preceded by { and not followed by }
-        return template.replaceAll("(?<!\\{)\\{(\\w+)}(?!})", "{{{$1}}}");
-    }
 }

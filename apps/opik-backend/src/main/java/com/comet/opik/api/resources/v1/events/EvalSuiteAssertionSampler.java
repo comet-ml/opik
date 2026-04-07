@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
@@ -134,6 +135,7 @@ public class EvalSuiteAssertionSampler {
                                         .userName(tracesBatch.userName())
                                         .categoryName(SUITE_ASSERTION_CATEGORY)
                                         .scoreNameMapping(prepared.scoreNameMapping)
+                                        .promptType(PromptType.PYTHON)
                                         .build());
                             });
                 })
@@ -213,7 +215,6 @@ public class EvalSuiteAssertionSampler {
                         LlmAsJudgeCode code = deserializeEvaluatorConfig(evaluator.config());
                         code = resolveModelName(code);
                         code = injectAssertionsVariable(code);
-                        code = convertMessagesToMustacheFormat(code);
 
                         Map<String, String> scoreNameMapping = code.schema() != null
                                 ? code.schema().stream()
@@ -243,51 +244,20 @@ public class EvalSuiteAssertionSampler {
     }
 
     /**
-     * Builds assertions text from the schema fields and adds it as a template variable.
-     * Format:
-     * - `assertion_1`: description text
-     * - `assertion_2`: description text
+     * Serializes the schema fields as a JSON array and adds it as the "assertions" template variable.
+     * Using JSON avoids formatting issues with special characters in name/description.
      */
     private LlmAsJudgeCode injectAssertionsVariable(LlmAsJudgeCode code) {
         if (code.schema() == null || code.schema().isEmpty()) {
             return code;
         }
 
-        String assertionsText = buildAssertionsText(code.schema());
+        String assertionsText = JsonUtils.writeValueAsString(code.schema());
 
         var updatedVariables = new HashMap<>(code.variables());
         updatedVariables.put("assertions", assertionsText);
 
         return new LlmAsJudgeCode(code.model(), code.messages(), updatedVariables, code.schema());
-    }
-
-    private String buildAssertionsText(List<LlmAsJudgeOutputSchema> schema) {
-        return schema.stream()
-                .map(s -> "- `%s`: %s".formatted(s.name(), s.description()))
-                .collect(Collectors.joining("\n"));
-    }
-
-    /**
-     * Converts Python-style format string templates {var} in message content
-     * to Mustache triple-brace format {{{var}}} used by OnlineScoringEngine.
-     * Triple braces prevent Mustache from HTML-escaping substituted values.
-     */
-    private LlmAsJudgeCode convertMessagesToMustacheFormat(LlmAsJudgeCode code) {
-        var convertedMessages = code.messages().stream()
-                .map(msg -> {
-                    if (msg.isStringContent()) {
-                        String converted = convertPythonTemplateToMustache(msg.asString());
-                        return msg.toBuilder().content(converted).build();
-                    }
-                    return msg;
-                })
-                .toList();
-        return new LlmAsJudgeCode(code.model(), convertedMessages, code.variables(), code.schema());
-    }
-
-    private static String convertPythonTemplateToMustache(String template) {
-        // Match {word_chars} not preceded by { and not followed by }
-        return template.replaceAll("(?<!\\{)\\{(\\w+)}(?!})", "{{{$1}}}");
     }
 
     private LlmAsJudgeCode resolveModelName(LlmAsJudgeCode code) {

@@ -1,5 +1,6 @@
 package com.comet.opik.api.events;
 
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Trace;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.validation.constraints.NotNull;
@@ -20,5 +21,10 @@ public record TraceToScoreLlmAsJudge(
         @NotNull String workspaceId,
         @NotNull String userName,
         String categoryName,
-        @NotNull Map<String, String> scoreNameMapping) {
+        @NotNull Map<String, String> scoreNameMapping,
+        PromptType promptType) {
+
+    public PromptType promptType() {
+        return promptType != null ? promptType : PromptType.MUSTACHE;
+    }
 }
