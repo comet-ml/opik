@@ -31,6 +31,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -227,6 +228,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .llmAsJudgeCode(rule.getCode())
                                         .workspaceId(workspaceId)
                                         .userName(userName)
+                                        .scoreNameMapping(Map.of())
                                         .build())
                                 .toList();
 

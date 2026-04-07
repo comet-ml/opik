@@ -22,7 +22,7 @@ public record ExperimentExecutionRequest(
         UUID datasetVersionId,
         @NotEmpty @Valid List<PromptVariant> prompts,
         String projectName,
-        UUID datasetId,
+        @NotNull UUID datasetId,
         String versionHash,
         List<Experiment.PromptVersionLink> promptVersions) {
 

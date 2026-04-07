@@ -13,7 +13,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -76,10 +75,6 @@ public class ExperimentExecutionService {
                     .experiments(List.of())
                     .totalItems(0)
                     .build();
-        }
-
-        if (request.datasetId() == null) {
-            throw new BadRequestException("Dataset ID is required for experiment execution");
         }
 
         ExecutionPolicy datasetExecutionPolicy = fetchDatasetExecutionPolicy(

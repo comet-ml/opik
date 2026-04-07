@@ -20,5 +20,5 @@ public record TraceToScoreLlmAsJudge(
         @NotNull String workspaceId,
         @NotNull String userName,
         String categoryName,
-        Map<String, String> scoreNameMapping) {
+        @NotNull Map<String, String> scoreNameMapping) {
 }

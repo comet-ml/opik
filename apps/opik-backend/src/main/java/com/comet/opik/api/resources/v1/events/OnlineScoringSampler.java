@@ -189,6 +189,7 @@ public class OnlineScoringSampler {
                 .llmAsJudgeCode(evaluator.getCode())
                 .workspaceId(tracesBatch.workspaceId())
                 .userName(tracesBatch.userName())
+                .scoreNameMapping(Map.of())
                 .build();
     }
 
