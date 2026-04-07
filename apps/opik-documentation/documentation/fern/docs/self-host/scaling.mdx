@@ -34,15 +34,13 @@ The following is based on an active, high-volume Opik deployment serving real us
 
 ### Infrastructure
 
-**Opik Backend** — 8–10 pods, autoscaling on memory (80% threshold)
+**Opik Backend** — 10 pods
 - 3 CPU cores, 5 GB memory per pod
-- Horizontal Pod Autoscaler: min 8, max 10
 
-**Opik Python Backend** — 9–12 pods, autoscaling on CPU (85% threshold)
+**Opik Python Backend** — 12 pods
 - 1.5 CPU cores, 2 GB memory per pod
-- Horizontal Pod Autoscaler: min 9, max 12
 
-**Opik Frontend** — 2–5 pods (minimal resources)
+**Opik Frontend** — 3 pods
 - 50 millicores CPU, 32 MB memory per pod
 
 **ClickHouse** — 2 replicas, 1 shard
