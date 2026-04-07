@@ -76,6 +76,8 @@ public interface DatasetService {
 
     Dataset findById(UUID id, String workspaceId, Visibility visibility);
 
+    void verifyVisibilityIfExists(UUID id, String workspaceId, Visibility visibility);
+
     List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
 
     Dataset findByName(String workspaceId, String name, Visibility visibility);
@@ -86,7 +88,7 @@ public interface DatasetService {
 
     Dataset findByName(String workspaceId, DatasetIdentifier identifier, Visibility visibility);
 
-    Mono<Dataset> resolveDatasetByName(DatasetIdentifier identifier, Visibility visibility);
+    Mono<Dataset> resolveDatasetByNameAsync(DatasetIdentifier identifier);
 
     void delete(DatasetIdentifier identifier);
 
@@ -109,6 +111,8 @@ public interface DatasetService {
     long getDailyCreatedCount();
 
     void updateStatus(UUID id, String workspaceId, DatasetStatus status);
+
+    Dataset resolveDatasetByName(DatasetIdentifier identifier);
 }
 
 @Singleton
@@ -289,6 +293,20 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
+    public void verifyVisibilityIfExists(@NonNull UUID id, @NonNull String workspaceId, Visibility visibility) {
+        template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            dao.findById(id, workspaceId).ifPresentOrElse(
+                    dataset -> verifyVisibility(dataset, visibility),
+                    // Dataset not found (e.g. deleted evaluation suite) — intentionally do not fail,
+                    // so callers can still retrieve experiment items after the dataset is gone.
+                    () -> log.debug("Dataset '{}' not found in workspace '{}'; skipping visibility check", id,
+                            workspaceId));
+            return null;
+        });
+    }
+
+    @Override
     public Dataset findById(@NonNull UUID id, @NonNull String workspaceId, Visibility visibility) {
         log.info("Finding dataset with id '{}', workspaceId '{}'", id, workspaceId);
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
@@ -377,15 +395,38 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Mono<Dataset> resolveDatasetByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
+    public Dataset resolveDatasetByName(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        return Mono.fromCallable(() -> {
-            UUID projectId = null;
-            if (StringUtils.isNotBlank(identifier.projectName())) {
-                projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
-            }
-            return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
-        }).subscribeOn(Schedulers.boundedElastic());
+        UUID projectId = null;
+        boolean projectNameProvided = StringUtils.isNotBlank(identifier.projectName());
+
+        if (projectNameProvided) {
+            projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
+        }
+
+        Dataset dataset = findByName(workspaceId, identifier.datasetName(), projectId,
+                requestContext.get().getVisibility());
+
+        if (projectNameProvided && projectId == null) {
+            requestContext.get().setWorkspaceFallbackFor("Dataset", identifier.datasetName());
+        }
+
+        return dataset;
+    }
+
+    @Override
+    public Mono<Dataset> resolveDatasetByNameAsync(@NonNull DatasetIdentifier identifier) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+            return Mono.fromCallable(() -> {
+                UUID projectId = null;
+                if (StringUtils.isNotBlank(identifier.projectName())) {
+                    projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
+                }
+                return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
+            }).subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     /**

@@ -70,7 +70,6 @@ from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
-    dataset_public,
     project_public,
     span_public,
     trace_public,
@@ -1016,23 +1015,15 @@ class Opik:
             dataset.Dataset: dataset object associated with the name passed.
         """
         project_name = self._resolve_project_name(project_name)
-        dataset_fern: dataset_public.DatasetPublic = (
-            self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=name, project_name=project_name
-            )
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name, project_name=project_name
         )
 
-        dataset_ = dataset.Dataset(
-            name=name,
-            description=dataset_fern.description,
+        return dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
-            dataset_items_count=dataset_fern.dataset_items_count,
         )
-
-        dataset_.__internal_api__sync_hashes__()
-
-        return dataset_
 
     def get_datasets(
         self,
@@ -1266,22 +1257,16 @@ class Opik:
             ApiError: If no dataset with the given name exists (404).
         """
         project_name = self._resolve_project_name(project_name)
-        dataset_fern: dataset_public.DatasetPublic = (
-            self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=name,
-                project_name=project_name,
-            )
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name,
+            project_name=project_name,
         )
 
-        suite_dataset = dataset.Dataset(
-            name=name,
-            description=dataset_fern.description,
+        suite_dataset = dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
-            dataset_items_count=dataset_fern.dataset_items_count,
         )
-
-        suite_dataset.__internal_api__sync_hashes__()
 
         return evaluation_suite.EvaluationSuite(
             name=name,

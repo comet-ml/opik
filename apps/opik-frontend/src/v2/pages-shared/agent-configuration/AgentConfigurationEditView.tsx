@@ -1,9 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, Split } from "lucide-react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ArrowUpRight, Info, Save } from "lucide-react";
+import { Tag } from "@/ui/tag";
 
 import { BlueprintValueType, ConfigHistoryItem } from "@/types/agent-configs";
 import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
-import { Card } from "@/ui/card";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Switch } from "@/ui/switch";
@@ -11,22 +17,21 @@ import Loader from "@/shared/Loader/Loader";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
 import BlueprintValuePrompt from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
-import { Separator } from "@/ui/separator";
 import { useAgentConfigurationSave } from "./useAgentConfigurationSave";
-import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
+import SaveVersionDialog from "./SaveVersionDialog";
 
 type AgentConfigurationEditViewProps = {
   item: ConfigHistoryItem;
   projectId: string;
-  onCancel: () => void;
   onSaved: () => void;
+  headerLeft?: React.ReactNode;
 };
 
 const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
   item,
   projectId,
-  onCancel,
   onSaved,
+  headerLeft,
 }) => {
   const { data: agentConfig, isPending } = useAgentConfigById({
     blueprintId: item.id,
@@ -40,6 +45,13 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
   const originalValues = useRef<Record<string, string>>({});
   const initialized = useRef(false);
 
+  const handleSaveComplete = useCallback(() => {
+    originalValues.current = { ...draftValues };
+    setDirtyPromptKeys({});
+    setDescription("");
+    onSaved();
+  }, [draftValues, onSaved]);
+
   const { handleSave, isSaving, errors, clearError, promptRefs } =
     useAgentConfigurationSave({
       agentConfig,
@@ -47,7 +59,7 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
       originalValues,
       description,
       projectId,
-      onSaved,
+      onSaved: handleSaveComplete,
     });
 
   useEffect(() => {
@@ -71,10 +83,22 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
     }
   };
 
-  const [diffOpen, setDiffOpen] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [diffPromptTemplates, setDiffPromptTemplates] = useState<
     Record<string, string>
   >({});
+
+  // Snapshot current prompt templates from editors before opening diff
+  const handleOpenSaveDialog = () => {
+    const templates: Record<string, string> = {};
+    for (const [key, handle] of Object.entries(promptRefs.current)) {
+      if (handle && dirtyPromptKeys[key]) {
+        templates[key] = handle.getCurrentTemplate();
+      }
+    }
+    setDiffPromptTemplates(templates);
+    setSaveDialogOpen(true);
+  };
 
   const currentValues = useMemo(() => {
     if (!agentConfig) return [];
@@ -84,17 +108,6 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
         : { ...v, value: draftValues[v.key] ?? v.value },
     );
   }, [agentConfig, draftValues]);
-
-  const handleShowDiff = () => {
-    const templates: Record<string, string> = {};
-    for (const [key, handle] of Object.entries(promptRefs.current)) {
-      if (handle && dirtyPromptKeys[key]) {
-        templates[key] = handle.getCurrentTemplate();
-      }
-    }
-    setDiffPromptTemplates(templates);
-    setDiffOpen(true);
-  };
 
   const hasErrors = Object.values(errors).some(Boolean);
 
@@ -108,66 +121,29 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
   }
 
   return (
-    <Card className="mx-6 my-4 p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="comet-title-s">Create new version</h2>
-          <div className="comet-body-xs flex items-center gap-1 rounded bg-[var(--edit-badge-bg)] px-2 py-0.5 text-[var(--edit-badge-text)]">
-            <Pencil className="size-2.5" />
-            From {item.name}
-          </div>
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        {headerLeft}
+        <div className="ml-auto flex items-center gap-2">
+          {hasChanges && (
+            <Tag variant="orange" size="sm">
+              Unsaved changes
+            </Tag>
+          )}
           <Button
             variant="outline"
-            size="xs"
-            onClick={handleShowDiff}
-            disabled={!hasChanges}
+            size="2xs"
+            onClick={handleOpenSaveDialog}
+            disabled={isSaving || hasErrors || !hasChanges}
           >
-            <Split className="mr-1 size-3.5" />
-            Show diff
+            <Save className="mr-1 size-3.5" />
+            Save as new version
+            <ArrowUpRight className="ml-1 size-3.5" />
           </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            disabled={isSaving}
-          >
-            Cancel
-          </Button>
-          <TooltipWrapper
-            content={
-              !hasChanges ? "Make changes to save a new version" : undefined
-            }
-          >
-            <span className="inline-flex">
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={isSaving || hasErrors || !hasChanges}
-              >
-                {isSaving ? "Saving…" : "Save as new version"}
-              </Button>
-            </span>
-          </TooltipWrapper>
         </div>
       </div>
 
-      <div className="mb-4">
-        <label className="comet-body-xs-accented mb-1.5 block text-foreground">
-          Description
-        </label>
-        <Input
-          placeholder="Describe what changed in this version…"
-          value={description}
-          dimension="sm"
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-
-      <Separator orientation="horizontal" />
-
-      <div className="flex flex-col divide-y">
+      <div className="flex flex-col">
         {(agentConfig?.values ?? []).map((v) => {
           const isChanged =
             v.type === BlueprintValueType.PROMPT
@@ -175,23 +151,21 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
               : draftValues[v.key] !== undefined &&
                 draftValues[v.key] !== originalValues.current[v.key];
           return (
-            <div key={v.key} className="flex flex-col gap-2 py-4">
+            <div key={v.key} className="flex flex-col gap-2 py-3">
               <div className="flex items-center gap-2">
                 <BlueprintTypeIcon type={v.type} variant="secondary" />
                 <span className="comet-body-s-accented text-foreground">
                   {v.key}
                 </span>
+                {v.description && (
+                  <TooltipWrapper content={v.description}>
+                    <Info className="size-3.5 cursor-help text-light-slate" />
+                  </TooltipWrapper>
+                )}
                 {isChanged && (
                   <span className="size-1.5 rounded-full bg-amber-400" />
                 )}
               </div>
-              {v.description && (
-                <TooltipWrapper content={v.description}>
-                  <span className="comet-body-xs w-fit max-w-full truncate text-light-slate">
-                    {v.description}
-                  </span>
-                </TooltipWrapper>
-              )}
               {v.type === BlueprintValueType.PROMPT ? (
                 <div className="flex flex-col gap-1">
                   <BlueprintValuePrompt
@@ -199,6 +173,7 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
                     value={v}
                     projectId={projectId}
                     isEditing
+                    compact
                     ref={(el) => {
                       promptRefs.current[v.key] = el;
                     }}
@@ -250,22 +225,27 @@ const AgentConfigurationEditView: React.FC<AgentConfigurationEditViewProps> = ({
           );
         })}
       </div>
-      <BlueprintDiffDialog
-        open={diffOpen}
-        setOpen={setDiffOpen}
+
+      <SaveVersionDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        description={description}
+        onDescriptionChange={setDescription}
+        onSave={handleSave}
+        isSaving={isSaving}
         base={{
           label: `${item.name} (original)`,
           blueprintId: item.id,
+          values: agentConfig?.values,
         }}
         diff={{
-          label: "Current edits",
+          label: "Current changes",
           blueprintId: item.id,
           values: currentValues,
-          description,
           promptTemplates: diffPromptTemplates,
         }}
       />
-    </Card>
+    </div>
   );
 };
 

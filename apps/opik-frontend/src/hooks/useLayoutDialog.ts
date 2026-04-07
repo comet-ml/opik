@@ -1,16 +1,12 @@
 import { useQueryParam, BooleanParam } from "use-query-params";
 import { useCallback } from "react";
 
-const QUERY_PARAM_KEY = "quickstart";
+type LayoutDialogKey = "quickstart" | "feedback";
 
-export const useOpenQuickStartDialog = () => {
-  const [isOpen = false, setIsOpen] = useQueryParam(
-    QUERY_PARAM_KEY,
-    BooleanParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+export const useLayoutDialog = (key: LayoutDialogKey) => {
+  const [isOpen = false, setIsOpen] = useQueryParam(key, BooleanParam, {
+    updateType: "replaceIn",
+  });
 
   const open = useCallback(() => {
     setIsOpen(true);

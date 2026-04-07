@@ -24,7 +24,7 @@ type PluginStore = {
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
-  SidebarWorkspaceSelector: React.ComponentType | null;
+  SidebarWorkspaceSelector: React.ComponentType<{ expanded?: boolean }> | null;
   AssistantSidebar: React.ComponentType<{
     onWidthChange: (width: number) => void;
   }> | null;
@@ -33,7 +33,7 @@ type PluginStore = {
   setupPlugins: (folderName: string) => Promise<void>;
 };
 
-const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
+const VALID_PLUGIN_FOLDER_NAMES = ["comet", "development"];
 const PLUGIN_NAMES = [
   "UserMenu",
   "InviteUsersForm",
@@ -88,6 +88,11 @@ const usePluginsStore = create<PluginStore>((set) => ({
       } catch (error) {
         continue;
       }
+    }
+
+    // Ensure WorkspacePreloader is always set (fallback to default)
+    if (!usePluginsStore.getState().WorkspacePreloader) {
+      set({ WorkspacePreloader });
     }
   },
 }));

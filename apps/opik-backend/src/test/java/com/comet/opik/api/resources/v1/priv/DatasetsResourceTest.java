@@ -1272,16 +1272,11 @@ class DatasetsResourceTest {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(buildDataset().toBuilder()
-                    .id(null)
                     .name(name)
                     .visibility(visibility)
                     .build());
 
-            var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
-                    .map(item -> item.toBuilder()
-                            .id(null)
-                            .build())
-                    .toList();
+            var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
             var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
@@ -4577,6 +4572,29 @@ class DatasetsResourceTest {
 
             assertThat(actualItems).hasSize(items.size());
         }
+
+        @Test
+        @DisplayName("when streaming dataset items with non-existing project_name, then return X-Opik-Deprecation header")
+        void streamDataItems__whenNonExistingProjectName__thenReturnDeprecationHeader() {
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build()))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
+                    .build();
+
+            try (var response = datasetResourceClient.callStreamDatasetItems(streamRequest, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                                batch.datasetName()));
+            }
+        }
     }
 
     private DatasetItem getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
@@ -6514,8 +6532,16 @@ class DatasetsResourceTest {
                         }
                     }
 
-                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    if (expectedDatasetItem.createdAt() == null) {
+                        assertThat(actualDatasetItem.createdAt()).isNull();
+                    } else {
+                        assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                    }
+                    if (expectedDatasetItem.lastUpdatedAt() == null) {
+                        assertThat(actualDatasetItem.lastUpdatedAt()).isNull();
+                    } else {
+                        assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    }
                 }
             }
         }
@@ -6670,8 +6696,16 @@ class DatasetsResourceTest {
                             .isEqualTo(USER);
                 }
 
-                assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                if (expectedDatasetItem.createdAt() == null) {
+                    assertThat(actualDatasetItem.createdAt()).isNull();
+                } else {
+                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                }
+                if (expectedDatasetItem.lastUpdatedAt() == null) {
+                    assertThat(actualDatasetItem.lastUpdatedAt()).isNull();
+                } else {
+                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                }
             }
         }
 
@@ -7596,6 +7630,170 @@ class DatasetsResourceTest {
                     Arguments.of("trace_output"),
                     Arguments.of("dataset_item_data"));
         }
+
+        @Test
+        @DisplayName("when evaluation suite is deleted, then experiment items should still be retrievable")
+        void find__whenEvaluationSuiteIsDeleted__thenExperimentItemsShouldStillBeRetrievable() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create evaluation suite
+            var evaluationSuite = buildDataset().toBuilder()
+                    .id(null)
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+            var datasetId = createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            // Create dataset item linked to that trace
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                            .datasetId(datasetId)
+                            .build()))
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var datasetItem = datasetItemBatch.items().getFirst();
+
+            // Create experiment linked to the evaluation suite
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(evaluationSuite.name())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create experiment item
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Delete the evaluation suite
+            datasetResourceClient.deleteDatasetItems(DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .build(), workspaceName, apiKey);
+            datasetResourceClient.deleteDataset(datasetId, apiKey, workspaceName);
+
+            // Since the evaluation suite (and its versions) was deleted, the dataset_items data is gone.
+            // The legacy fallback query returns synthetic items from experiment_items with null dataset item fields.
+            var expectedItem = datasetItem.toBuilder()
+                    .traceId(null)
+                    .spanId(null)
+                    .source(null)
+                    .description(null)
+                    .evaluators(null)
+                    .executionPolicy(null)
+                    .data(Map.of())
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .build();
+
+            // The experiment item should still reference the original trace
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .feedbackScores(null)
+                    .comments(null)
+                    .totalEstimatedCost(null)
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), trace.endTime()))
+                    .usage(null)
+                    .traceVisibilityMode(trace.visibilityMode())
+                    .description(null)
+                    .build();
+
+            assertPageAndContent(datasetId, List.of(experimentId), apiKey, workspaceName,
+                    List.of(expectedExperimentItem), Set.of(), List.of(expectedItem));
+        }
+
+        @Test
+        @DisplayName("when evaluation suite is deleted and has assertion scores, then experiment items still return with assertionResults")
+        void find__whenEvaluationSuiteDeletedWithAssertionScores__thenReturnAssertionResults() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var evaluationSuite = buildDataset().toBuilder()
+                    .id(null)
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+            var datasetId = createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                            .datasetId(datasetId)
+                            .build()))
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var datasetItem = datasetItemBatch.items().getFirst();
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(evaluationSuite.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            var assertionScore = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name("Should be accurate")
+                    .categoryName("suite_assertion")
+                    .value(BigDecimal.ONE)
+                    .reason("Accurate")
+                    .source(ScoreSource.SDK)
+                    .build();
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(assertionScore)).build(), apiKey,
+                    workspaceName);
+
+            datasetResourceClient.deleteDataset(datasetId, apiKey, workspaceName);
+
+            var expectedAssertionResult = AssertionResult.builder()
+                    .value("Should be accurate")
+                    .passed(true)
+                    .reason("Accurate")
+                    .build();
+
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .feedbackScores(null)
+                    .comments(null)
+                    .totalEstimatedCost(null)
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), trace.endTime()))
+                    .usage(null)
+                    .traceVisibilityMode(trace.visibilityMode())
+                    .description(null)
+                    .assertionResults(List.of(expectedAssertionResult))
+                    .status(RunStatus.PASSED)
+                    .build();
+
+            assertPageAndContent(datasetId, List.of(experimentId), apiKey, workspaceName,
+                    List.of(expectedExperimentItem), Set.of(), List.of(datasetItem));
+        }
     }
 
     private Dataset buildDataset() {
@@ -8108,6 +8306,7 @@ class DatasetsResourceTest {
             assertThat(summaryB.passedRuns()).isEqualTo(0);
             assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
         }
+
     }
 
     @DisplayName("Find dataset items with experiment items sorting test")

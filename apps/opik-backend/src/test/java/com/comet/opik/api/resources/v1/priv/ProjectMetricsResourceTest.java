@@ -4393,4 +4393,68 @@ class ProjectMetricsResourceTest {
             return traces;
         }
     }
+
+    @Nested
+    @DisplayName("Cross-filter isolation: metrics must ignore filters from other entity types")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CrossFilterIsolationTest {
+
+        @ParameterizedTest
+        @EnumSource(MetricType.class)
+        void shouldNotFailWhenCrossEntityFiltersArePresent(MetricType metricType) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
+
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant traceStart = marker.minus(1, ChronoUnit.HOURS);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(traceStart))
+                    .projectName(projectName)
+                    .startTime(traceStart)
+                    .endTime(traceStart.plusMillis(500))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .startTime(traceStart)
+                    .endTime(traceStart.plusMillis(200))
+                    .build();
+            spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+
+            // OPIK-5678: frontend always sends all three filter arrays via logsSource
+            var request = ProjectMetricRequest.builder()
+                    .metricType(metricType)
+                    .interval(interval)
+                    .intervalStart(marker.minus(2, ChronoUnit.HOURS))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(EQUAL)
+                            .value(trace.name())
+                            .build()))
+                    .threadFilters(List.of(TraceThreadFilter.builder()
+                            .field(TraceThreadField.STATUS)
+                            .operator(EQUAL)
+                            .value(ACTIVE.getValue())
+                            .build()))
+                    .spanFilters(List.of(SpanFilter.builder()
+                            .field(SpanField.NAME)
+                            .operator(EQUAL)
+                            .value(span.name())
+                            .build()))
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(
+                    projectId, request, Number.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(metricType);
+            assertThat(response.interval()).isEqualTo(interval);
+        }
+    }
 }

@@ -1,16 +1,7 @@
 import React, { useCallback, useMemo, useRef } from "react";
 import get from "lodash/get";
-import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
-import {
-  Brain,
-  Calendar,
-  Clock,
-  Coins,
-  Hash,
-  MessageSquareMore,
-  PenLine,
-} from "lucide-react";
+import { Brain, Calendar, MessageSquareMore, PenLine } from "lucide-react";
 
 import { AgentGraphData, Span, Trace } from "@/types/traces";
 import {
@@ -30,9 +21,8 @@ import AgentConfigurationTab, {
   isAgentConfigurationMetadata,
 } from "./AgentConfigurationTab";
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
-import { formatDuration, formatDate } from "@/lib/date";
-import isUndefined from "lodash/isUndefined";
-import { formatCost } from "@/lib/money";
+import { formatDate } from "@/lib/date";
+import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDataViewerActionsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
@@ -181,27 +171,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
 
-  const duration = formatDuration(data.duration);
-  const start_time = data.start_time
-    ? formatDate(data.start_time, { includeSeconds: true })
-    : "";
-  const end_time = data.end_time
-    ? formatDate(data.end_time, { includeSeconds: true })
-    : "";
   const created_at = data.created_at ? formatDate(data.created_at) : "";
-  const estimatedCost = data.total_estimated_cost;
   const model = get(data, "model", null);
   const provider = get(data, "provider", null);
-
-  const durationTooltip = (
-    <div>
-      Duration in seconds: {duration}
-      <p>
-        {start_time}
-        {end_time ? ` - ${end_time}` : ""}
-      </p>
-    </div>
-  );
 
   return (
     <div ref={rootScrollRef} className="size-full max-w-full overflow-auto">
@@ -244,39 +216,13 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               </TooltipWrapper>
             )}
-            <TooltipWrapper content={durationTooltip}>
-              <div
-                className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                data-testid="data-viewer-duration"
-              >
-                <Clock className="size-3 shrink-0" /> {duration}
-              </div>
-            </TooltipWrapper>
-            {isNumber(tokens) && (
-              <TooltipWrapper content={`Total amount of tokens: ${tokens}`}>
-                <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                  data-testid="data-viewer-tokens"
-                >
-                  <Hash className="size-3 shrink-0" /> {tokens}
-                </div>
-              </TooltipWrapper>
-            )}
-            {!isUndefined(estimatedCost) && (
-              <TooltipWrapper
-                content={`Estimated cost ${formatCost(estimatedCost, {
-                  modifier: "full",
-                })}`}
-              >
-                <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                  data-testid="data-viewer-cost"
-                >
-                  <Coins className="size-3 shrink-0" />{" "}
-                  {formatCost(estimatedCost)}
-                </div>
-              </TooltipWrapper>
-            )}
+            <TraceStatsDisplay
+              duration={data.duration}
+              startTime={data.start_time}
+              endTime={data.end_time}
+              totalTokens={tokens}
+              estimatedCost={data.total_estimated_cost}
+            />
             {Boolean(data.feedback_scores?.length) && (
               <FeedbackScoreHoverCard scores={data.feedback_scores!}>
                 <div

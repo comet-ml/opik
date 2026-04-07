@@ -86,7 +86,7 @@ class LocalRunnerServiceImplTest {
         runnerConfig.setHeartbeatTtl(Duration.seconds(2));
         runnerConfig.setNextJobPollTimeout(Duration.seconds(1));
         runnerConfig.setMaxPendingJobsPerRunner(3);
-        runnerConfig.setDeadRunnerPurgeTime(Duration.seconds(0));
+        runnerConfig.setDeadRunnerPurgeTime(Duration.hours(24));
         runnerConfig.setCompletedJobTtl(Duration.days(7));
         runnerConfig.setJobTimeout(Duration.seconds(1800));
         runnerConfig.setReaperLockDuration(Duration.seconds(55));
@@ -663,7 +663,8 @@ class LocalRunnerServiceImplTest {
         LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().build();
         runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agentMeta));
 
-        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, USER_NAME, PROJECT_ID, 0, 25);
+        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, USER_NAME, PROJECT_ID, null, 0,
+                25);
         assertThat(runnerPage.content()).hasSize(1);
         assertThat(runnerPage.content().get(0).agents()).hasSize(1);
 
@@ -720,7 +721,8 @@ class LocalRunnerServiceImplTest {
         void listRunners_excludesOtherUsersRunners() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            LocalRunner.LocalRunnerPage page = runnerService.listRunners(WORKSPACE_ID, OTHER_USER, PROJECT_ID, 0, 25);
+            LocalRunner.LocalRunnerPage page = runnerService.listRunners(WORKSPACE_ID, OTHER_USER, PROJECT_ID, null, 0,
+                    25);
             assertThat(page.content()).isEmpty();
             assertThat(page.total()).isZero();
         }

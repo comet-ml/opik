@@ -280,14 +280,22 @@ public class FilterQueryBuilder {
                             FieldType.ERROR_CONTAINER,
                             "empty(%1$s)",
                             FieldType.LIST,
-                            "empty(%1$s)")))
+                            "empty(%1$s)",
+                            FieldType.DICTIONARY,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
                             FieldType.ERROR_CONTAINER,
                             "notEmpty(%1$s)",
                             FieldType.LIST,
-                            "notEmpty(%1$s)")))
+                            "notEmpty(%1$s)",
+                            FieldType.DICTIONARY,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(

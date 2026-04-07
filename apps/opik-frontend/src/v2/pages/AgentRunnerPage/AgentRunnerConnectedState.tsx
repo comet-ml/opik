@@ -1,17 +1,23 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/select";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import { LocalRunner } from "@/types/agent-sandbox";
 import AgentRunnerInputForm from "./AgentRunnerInputForm";
-import AgentRunnerConfigEditor from "./AgentRunnerConfigEditor";
+import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
 
 type AgentRunnerConnectedStateProps = {
   projectId: string;
   runner: LocalRunner;
   onRun: (inputs: Record<string, unknown>, maskId?: string) => void;
   isRunning: boolean;
-  result: React.ReactNode;
 };
 
 const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
@@ -19,32 +25,53 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
   runner,
   onRun,
   isRunning,
-  result,
 }) => {
   const [activeTab, setActiveTab] = useState("input");
+  const [selectedVersionId, setSelectedVersionId] = useState<string>("");
 
   const { data: configData } = useConfigHistoryListInfinite({ projectId });
-  const latestConfig = configData?.pages?.[0]?.content?.[0];
-  const configVersionLabel = latestConfig?.name;
+
+  const allVersions = useMemo(
+    () => configData?.pages?.flatMap((p) => p.content) ?? [],
+    [configData],
+  );
+
+  const activeVersion = useMemo(() => {
+    if (selectedVersionId) {
+      return (
+        allVersions.find((v) => v.id === selectedVersionId) ??
+        allVersions[0] ??
+        null
+      );
+    }
+    return allVersions[0] ?? null;
+  }, [allVersions, selectedVersionId]);
 
   const agent = runner.agents?.[0];
   const inputFields = agent?.params ?? [];
 
   return (
-    <div className="flex flex-1 flex-col">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="border-b px-6">
-          <TabsList variant="underline">
-            <TabsTrigger value="input" variant="underline">
-              Input
-            </TabsTrigger>
-            <TabsTrigger value="configuration" variant="underline">
-              Configuration
-            </TabsTrigger>
-          </TabsList>
-        </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TabsList variant="underline" className="shrink-0 px-4">
+          <TabsTrigger value="input" variant="underline">
+            Input
+          </TabsTrigger>
+          <TabsTrigger value="configuration" variant="underline">
+            Configuration
+          </TabsTrigger>
+        </TabsList>
 
-        <TabsContent value="input" className="flex-1 p-6">
+        <TabsContent
+          value="input"
+          className="mt-0 min-h-0 flex-1 overflow-y-auto p-4"
+          forceMount
+          hidden={activeTab !== "input"}
+        >
           <AgentRunnerInputForm
             fields={inputFields}
             onSubmit={onRun}
@@ -52,30 +79,51 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           />
         </TabsContent>
 
-        <TabsContent value="configuration" className="flex-1 p-6">
-          {latestConfig ? (
-            <div>
-              <div className="mb-4">
-                <span className="comet-body-xs text-muted-slate">
-                  Configuration: {configVersionLabel} (Prod)
-                </span>
-              </div>
-              <AgentRunnerConfigEditor
-                item={latestConfig}
-                projectId={projectId}
-                onClose={() => setActiveTab("input")}
-              />
-            </div>
+        <TabsContent
+          value="configuration"
+          className="mt-0 min-h-0 flex-1 overflow-y-auto p-4"
+          forceMount
+          hidden={activeTab !== "configuration"}
+        >
+          {activeVersion ? (
+            <AgentConfigurationEditView
+              key={activeVersion.id}
+              item={activeVersion}
+              projectId={projectId}
+              onSaved={() => setSelectedVersionId("")}
+              headerLeft={
+                <Select
+                  value={selectedVersionId || activeVersion.id}
+                  onValueChange={setSelectedVersionId}
+                >
+                  <SelectTrigger className="h-6 w-auto gap-1 px-2 text-xs focus:border-input">
+                    <span>Configuration:</span>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allVersions.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                        {v.tags?.length > 0 && (
+                          <span className="ml-2 text-muted-slate">
+                            ({v.tags.join(" · ")})
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+            />
           ) : (
-            <p className="comet-body-s text-muted-slate">
-              No agent configuration found for this project.
-            </p>
+            <div className="flex flex-col items-center py-8 text-muted-slate">
+              <p className="comet-body-s">
+                No agent configuration found for this project.
+              </p>
+            </div>
           )}
         </TabsContent>
       </Tabs>
-
-      {/* Result section */}
-      <div className="border-t p-6">{result}</div>
     </div>
   );
 };

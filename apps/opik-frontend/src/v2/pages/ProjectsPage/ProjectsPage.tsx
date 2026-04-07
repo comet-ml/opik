@@ -17,7 +17,6 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
-import TextCell from "@/shared/DataTableCells/TextCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
@@ -57,6 +56,7 @@ import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import ProjectNameCell from "@/v2/pages/ProjectsPage/ProjectNameCell";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -129,7 +129,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        cell: TextCell as never,
+        cell: ProjectNameCell as never,
         sortable: true,
       },
       {
@@ -439,7 +439,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Manage projects</h1>
+        <h1 className="comet-title-l truncate break-words">Projects</h1>
       </div>
       <ExplainerDescription
         className="mb-4"

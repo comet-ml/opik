@@ -621,6 +621,7 @@ class ProjectServiceImpl implements ProjectService {
         });
 
         return projects
+                .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
                 .map(project -> {
                     Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                             .nonTransaction(connection -> {

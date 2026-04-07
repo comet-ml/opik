@@ -21,13 +21,15 @@ export type BlueprintVersionInfo = {
 type BlueprintDiffTableProps = {
   base: BlueprintVersionInfo;
   diff: BlueprintVersionInfo;
+  defaultOnlyDiff?: boolean;
 };
 
 const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
   base,
   diff,
+  defaultOnlyDiff = false,
 }) => {
-  const [onlyDiff, setOnlyDiff] = useState(false);
+  const [onlyDiff, setOnlyDiff] = useState(defaultOnlyDiff);
 
   const { data: fetchedBaseConfig, isPending: baseLoading } =
     useAgentConfigById({

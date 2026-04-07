@@ -5,7 +5,7 @@ import typing
 from opik.exceptions import AgentConfigNotFound
 from opik.rest_api import core as rest_api_core
 from .. import type_helpers
-from . import cache as cache_mod
+from . import cache as cache_mod, types
 from .context import get_active_config_mask
 
 logger = logging.getLogger(__name__)
@@ -139,11 +139,13 @@ class AgentConfig:
         self._inject_trace_metadata(attr, value=value)
         return value if value is not _MISSING else object.__getattribute__(self, attr)
 
-    def _extract_fields_with_values(self) -> typing.Dict[str, tuple]:
-        result: typing.Dict[str, tuple] = {}
+    def _extract_fields_with_values(self) -> typing.Dict[str, types.FieldValueSpec]:
+        result: typing.Dict[str, types.FieldValueSpec] = {}
         for f_name, cf in type(self).__field_metadata__.items():
             value = object.__getattribute__(self, f_name)
-            result[cf.prefixed_key] = (cf.py_type, value, cf.description)
+            result[cf.prefixed_key] = types.FieldValueSpec(
+                cf.py_type, value, cf.description
+            )
         return result
 
     @classmethod
@@ -153,7 +155,7 @@ class AgentConfig:
     def _matches_blueprint(
         self,
         blueprint: typing.Any,
-        fields_with_values: typing.Dict[str, tuple],
+        fields_with_values: typing.Dict[str, types.FieldValueSpec],
     ) -> bool:
         # Only consider blueprint keys that belong to this config class (same prefix).
         # The blueprint may contain keys from other config classes in the same project.
@@ -166,13 +168,17 @@ class AgentConfig:
         if missing_locally:
             return False
 
-        for key, (py_type, value, desc) in fields_with_values.items():
+        for key, field_spec in fields_with_values.items():
             bp_value = blueprint.get(key)
-            local_ser = type_helpers.python_value_to_backend_value(value, py_type)
-            bp_ser = type_helpers.python_value_to_backend_value(bp_value, py_type)
+            local_ser = type_helpers.python_value_to_backend_value(
+                field_spec.value, field_spec.python_type
+            )
+            bp_ser = type_helpers.python_value_to_backend_value(
+                bp_value, field_spec.python_type
+            )
             if local_ser != bp_ser:
                 return False
-            if desc != blueprint.get_field_description(key):
+            if field_spec.description != blueprint.get_field_description(key):
                 return False
         return True
 

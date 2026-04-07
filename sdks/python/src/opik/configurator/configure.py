@@ -92,7 +92,7 @@ class OpikConfigurator:
 
         # Update configuration if either API key or workspace has changed
         if update_config_with_api_key or update_config_with_workspace:
-            self._update_config()
+            self._update_config(save_to_file=True)
         else:
             self._update_config(save_to_file=False)
             _set_environment_variables_for_integrations(
@@ -152,7 +152,7 @@ class OpikConfigurator:
 
             if use_url:
                 self.base_url = OPIK_BASE_URL_LOCAL
-                self._update_config()
+                self._update_config(save_to_file=True)
                 self._log_project_configuration_message()
                 return
 
@@ -162,7 +162,7 @@ class OpikConfigurator:
                 "Opik URL is not specified - Please set your Opik instance URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
             )
         self._ask_for_url()
-        self._update_config()
+        self._update_config(save_to_file=True)
         self._log_project_configuration_message()
 
     def _set_api_key(self) -> bool:
@@ -185,6 +185,16 @@ class OpikConfigurator:
                 raise ConfigurationError("API key is incorrect.")
             self._try_set_url_from_api_key()
             config_file_needs_updating = True if self.force else False
+
+            if (
+                not config_file_needs_updating
+                and self.current_config.api_key is not None
+            ):
+                LOGGER.warning(
+                    "You already have an API key set in the configuration file. "
+                    "If you want to change it, please use the --force flag or force=True when calling the configure() method. "
+                    "Otherwise, the configuration file will not be updated but the session will use the new API key."
+                )
 
         elif self.force and self.api_key is None:
             self._ask_for_api_key()
@@ -294,7 +304,7 @@ class OpikConfigurator:
         default_workspace = self._get_default_workspace()
         use_default_workspace = (
             True
-            if self.automatic_approvals
+            if self.automatic_approvals or self.force
             else ask_user_for_approval(
                 f'Do you want to use "{default_workspace}" workspace? (Y/n)'
             )
@@ -379,7 +389,7 @@ class OpikConfigurator:
             "User does not have access to the workspaces provided."
         )
 
-    def _update_config(self, save_to_file: bool = True) -> None:
+    def _update_config(self, save_to_file: bool) -> None:
         """
         Save changes to the config file and update the current session configuration.
 
@@ -504,6 +514,7 @@ def configure(
     use_local: bool = False,
     force: bool = False,
     automatic_approvals: bool = False,
+    url_override: Optional[str] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -512,7 +523,8 @@ def configure(
     Args:
         api_key: The API key if using an Opik Cloud.
         workspace: The workspace name if using an Opik Cloud.
-        url: The URL of the Opik instance if you are using a local deployment.
+        url: The URL of the Opik instance if you are using a local deployment. [Deprecated: use `url_override` instead]
+        url_override: The URL of the Opik instance if you are using a local deployment.
         use_local: Whether to use a local deployment.
         force: If true, the configuration file will be recreated and existing settings
                will be overwritten with passed parameters.
@@ -521,10 +533,17 @@ def configure(
     Raises:
         ConfigurationError
     """
+    if url is not None:
+        LOGGER.warning(
+            "The `url` parameter is deprecated. Please use `url_override` instead."
+        )
+        if url_override is None:
+            url_override = url
+
     client = OpikConfigurator(
         api_key=api_key,
         workspace=workspace,
-        url=url,
+        url=url_override,
         use_local=use_local,
         force=force,
         automatic_approvals=automatic_approvals,

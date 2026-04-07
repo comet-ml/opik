@@ -5,6 +5,7 @@ import { Link, Outlet } from "@tanstack/react-router";
 import Logo from "@/shared/Logo/Logo";
 import AppDebugInfo from "@/v2/layout/AppDebugInfo/AppDebugInfo";
 import SettingsMenu from "@/v2/layout/SettingsMenu/SettingsMenu";
+import LayoutDialogs from "@/v2/layout/LayoutDialogs";
 
 export const PartialPageLayout = ({
   children = <Outlet />,
@@ -34,6 +35,8 @@ export const PartialPageLayout = ({
           {children}
         </section>
       </main>
+
+      <LayoutDialogs />
     </section>
   );
 };

@@ -1,9 +1,11 @@
 import {
   Bell,
   Blocks,
+  Bot,
   ChartLine,
   FileTerminal,
   FlaskConical,
+  LayoutDashboard,
   ListChecks,
   Rows3,
   Settings2,
@@ -181,9 +183,54 @@ export const getWorkspaceMenuItems = ({
 }): MenuItemGroup[] => {
   return [
     {
-      id: "workspace",
-      label: "Workspace",
+      id: "workspace-nav",
       items: [
+        {
+          id: "workspace",
+          path: canViewDashboards
+            ? "/$workspaceName/dashboards"
+            : "/$workspaceName/projects",
+          type: MENU_ITEM_TYPE.router,
+          icon: LayoutDashboard,
+          label: "Workspace",
+          muted: true,
+        },
+        {
+          id: "configuration",
+          path: "/$workspaceName/configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Settings2,
+          label: "Configuration",
+          muted: true,
+        },
+      ],
+    },
+  ];
+};
+
+export const getWorkspaceSidebarMenuItems = ({
+  canViewDashboards,
+}: {
+  canViewDashboards: boolean;
+}): MenuItemGroup[] => {
+  return [
+    {
+      id: "workspace-sidebar",
+      items: [
+        {
+          id: "configuration",
+          path: "/$workspaceName/configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Settings2,
+          label: "Configuration",
+        },
+        {
+          id: "projects",
+          path: "/$workspaceName/projects",
+          type: MENU_ITEM_TYPE.router,
+          icon: Bot,
+          label: "Projects",
+        },
         ...(canViewDashboards
           ? [
               {
@@ -195,13 +242,6 @@ export const getWorkspaceMenuItems = ({
               },
             ]
           : []),
-        {
-          id: "configuration",
-          path: "/$workspaceName/configuration",
-          type: MENU_ITEM_TYPE.router,
-          icon: Settings2,
-          label: "Configuration",
-        },
       ],
     },
   ];

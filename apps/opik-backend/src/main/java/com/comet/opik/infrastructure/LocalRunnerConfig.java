@@ -57,11 +57,11 @@ public class LocalRunnerConfig {
 
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration pairingCodeTtl = Duration.seconds(300);
+    private Duration pairingCodeTtl = Duration.hours(1);
 
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration pairingRunnerTtl = Duration.seconds(600);
+    private Duration pairingRunnerTtl = Duration.hours(1);
 
     @Valid @JsonProperty
     @Min(1) private int reaperMaxRunnersPerCycle = 100;

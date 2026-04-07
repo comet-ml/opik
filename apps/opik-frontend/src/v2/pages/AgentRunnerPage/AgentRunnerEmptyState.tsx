@@ -4,6 +4,7 @@ import { Check, ExternalLink, LoaderCircle } from "lucide-react";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import { buildDocsUrl } from "@/lib/utils";
 import AgentSandboxFlowDiagram from "./AgentSandboxFlowDiagram";
+import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
 
 type AgentRunnerEmptyStateProps = {
   pairCode: string;
@@ -73,7 +74,7 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
   createdAt,
   onRefreshPairCode,
 }) => {
-  const command = `opik connect --pair ${pairCode}`;
+  const command = `opik connect --pair ${pairCode} -- <your app start command>`;
 
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
     createdAt !== undefined && expiresInSeconds !== undefined
@@ -108,7 +109,10 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
   return (
     <div className="flex flex-1 justify-center gap-16 px-10 pt-[15.69rem]">
       <div className="w-full max-w-lg">
-        <h2 className="comet-title-m mb-1">Connect your agent</h2>
+        <div className="mb-1 flex items-center gap-2">
+          <ProjectIcon index={0} variant="owl" />
+          <h2 className="comet-title-m">Connect your agent</h2>
+        </div>
         <p className="comet-body-s mb-8 text-muted-slate">
           Link your agent to Opik to start using the Agent sandbox and improve
           performance.

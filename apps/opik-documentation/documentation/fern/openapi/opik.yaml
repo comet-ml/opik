@@ -4068,6 +4068,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - pairing
+          - connected
+          - disconnected
       - name: page
         in: query
         schema:
@@ -4111,13 +4119,13 @@ paths:
           format: uuid
       responses:
         "200":
-          description: Job available
+          description: "Job available, or null if no pending jobs"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRunnerJob"
-        "204":
-          description: No content
+                nullable: true
+                allOf:
+                - $ref: "#/components/schemas/LocalRunnerJob"
         "404":
           description: Not found
           content:
@@ -16676,7 +16684,6 @@ components:
     KpiCardRequest:
       required:
       - entity_type
-      - interval_end
       - interval_start
       type: object
       properties:
