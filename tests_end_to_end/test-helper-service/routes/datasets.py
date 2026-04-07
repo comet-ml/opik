@@ -4,7 +4,6 @@ from opik import Opik
 from opik.rest_api.core.api_error import ApiError
 import time
 import logging
-from .utils import get_opik_api_client
 
 datasets_bp = Blueprint("datasets", __name__)
 logger = logging.getLogger(__name__)
@@ -161,20 +160,10 @@ def get_dataset_items():
     data = request.json
     dataset_name = data.get("dataset_name")
 
-    api_client = get_opik_api_client()
+    client = get_opik_client()
     try:
-        dataset_info = api_client.datasets.get_dataset_by_identifier(
-            dataset_name=dataset_name
-        )
-        items_response = api_client.datasets.get_dataset_items(
-            id=dataset_info.id, size=1000
-        )
-        items = []
-        for item in (items_response.content or []):
-            flat_item = {"id": item.id}
-            if item.data:
-                flat_item.update(item.data)
-            items.append(flat_item)
+        dataset = client.get_dataset(dataset_name)
+        items = dataset.get_items()
         return jsonify({"items": items})
     except ApiError as e:
         logger.error(f"Error getting dataset items: {type(e).__name__}")
@@ -250,20 +239,15 @@ def wait_for_items_count():
     expected_count = data.get("expected_count")
     timeout = data.get("timeout", 10)
 
-    api_client = get_opik_api_client()
+    client = get_opik_client()
     start_time = time.time()
 
     while time.time() - start_time < timeout:
         try:
-            dataset_info = api_client.datasets.get_dataset_by_identifier(
-                dataset_name=dataset_name
-            )
-            items_response = api_client.datasets.get_dataset_items(
-                id=dataset_info.id, size=max(expected_count, 1)
-            )
-            count = len(items_response.content) if items_response.content else 0
-            if count == expected_count:
-                return jsonify({"success": True, "count": count})
+            dataset = client.get_dataset(dataset_name)
+            items = dataset.get_items()
+            if len(items) == expected_count:
+                return jsonify({"success": True, "count": len(items)})
         except ApiError as e:
             if e.status_code == 404:
                 pass
