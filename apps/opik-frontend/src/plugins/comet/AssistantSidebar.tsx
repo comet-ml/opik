@@ -129,7 +129,9 @@ function createHostListeners(): HostListeners {
 }
 
 interface BridgeRefs {
-  navigate: React.MutableRefObject<(path: string) => void>;
+  navigate: React.MutableRefObject<
+    (path: string, search?: Record<string, string>) => void
+  >;
   onWidthChange: React.MutableRefObject<(width: number) => void>;
   onNotification: React.MutableRefObject<
     (data: SidebarEventMap["notification"]) => void
@@ -154,9 +156,11 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
   emit: (event, data) => {
     switch (event) {
-      case "navigate":
-        refs.navigate.current((data as SidebarEventMap["navigate"]).path);
+      case "navigate": {
+        const { path, search } = data as SidebarEventMap["navigate"];
+        refs.navigate.current(path, search);
         break;
+      }
       case "sidebar:resized":
         refs.onWidthChange.current(
           (data as SidebarEventMap["sidebar:resized"]).width,
@@ -313,11 +317,13 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     emitHostEvent(listenersRef, "visibility:changed", { isOpen: open });
   });
 
-  const navigateRef = useLatestRef((path: string) => {
-    const ws = contextRef.current.workspaceName;
-    const fullPath = ws ? `/${ws}${path}` : path;
-    router.navigate({ to: fullPath });
-  });
+  const navigateRef = useLatestRef(
+    (path: string, search?: Record<string, string>) => {
+      const ws = contextRef.current.workspaceName;
+      const fullPath = ws ? `/${ws}${path}` : path;
+      router.navigate({ to: fullPath, search });
+    },
+  );
 
   const bridgeRef = useRef(
     createBridge({
