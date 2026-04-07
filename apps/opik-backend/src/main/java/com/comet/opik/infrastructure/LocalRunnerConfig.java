@@ -71,4 +71,36 @@ public class LocalRunnerConfig {
 
     @Valid @JsonProperty
     private int maxLogEntriesPerBatch = 1000;
+
+    @Valid @JsonProperty
+    @Min(1) private int bridgeMaxPendingPerRunner = 50;
+
+    @Valid @JsonProperty
+    @Min(1) private int bridgeMaxCommandsPerMinute = 600;
+
+    @Valid @JsonProperty
+    @Min(1) private int bridgeMaxWriteCommandsPerMinute = 120;
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration bridgePollTimeout = Duration.seconds(30);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration bridgeDefaultCommandTimeout = Duration.seconds(30);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration bridgeMaxCommandTimeout = Duration.seconds(120);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration bridgeCompletedCommandTtl = Duration.hours(1);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration bridgeAsyncTimeoutBuffer = Duration.seconds(5);
+
+    @Valid @JsonProperty
+    @Min(1) private int bridgeMaxPayloadBytes = 1_048_576;
 }

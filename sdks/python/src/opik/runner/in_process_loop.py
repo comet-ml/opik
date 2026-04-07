@@ -6,7 +6,6 @@ import contextvars
 import inspect
 import json
 import logging
-import random
 import threading
 import time
 from typing import Any, Callable, Optional
@@ -20,12 +19,13 @@ from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
 from . import registry
+from .bridge_handlers import common as bridge_common
 from .context import reset_job_id, set_job_id
 from .log_streamer import LogStreamer
 
 LOGGER = logging.getLogger(__name__)
 
-POLL_IDLE_INTERVAL_SECONDS = 0.5
+_POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
@@ -131,7 +131,9 @@ class InProcessRunnerLoop:
                     )
                 else:
                     LOGGER.debug("Poll error (API %s)", e.status_code, exc_info=True)
-                self._backoff_wait(backoff)
+                bridge_common.backoff_wait(
+                    self._shutdown_event, backoff, self._backoff_cap_seconds
+                )
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
             except Exception:
@@ -142,13 +144,15 @@ class InProcessRunnerLoop:
                     )
                 else:
                     LOGGER.debug("Error polling for jobs", exc_info=True)
-                self._backoff_wait(backoff)
+                bridge_common.backoff_wait(
+                    self._shutdown_event, backoff, self._backoff_cap_seconds
+                )
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
 
             if job is None:
                 backoff = 1.0
-                self._shutdown_event.wait(POLL_IDLE_INTERVAL_SECONDS)
+                self._shutdown_event.wait(_POLL_IDLE_INTERVAL_SECONDS)
                 continue
 
             backoff = 1.0
@@ -158,7 +162,9 @@ class InProcessRunnerLoop:
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                resp = self._api.runners.heartbeat(self._runner_id)
+                resp = self._api.runners.heartbeat(
+                    self._runner_id, capabilities=["jobs", "bridge"]
+                )
 
                 cancelled_job_ids = resp.cancelled_job_ids or []
                 now = time.monotonic()
@@ -323,7 +329,3 @@ class InProcessRunnerLoop:
             del self._cancelled_jobs[oldest_key]
         while len(self._cancelled_jobs) > _CANCELLED_JOBS_MAX_SIZE:
             self._cancelled_jobs.popitem(last=False)
-
-    def _backoff_wait(self, backoff: float) -> None:
-        wait = min(backoff, self._backoff_cap_seconds) * (0.5 + random.random() * 0.5)
-        self._shutdown_event.wait(wait)

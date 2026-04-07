@@ -2,6 +2,16 @@
 
 # isort: skip_file
 
-from .types import ListRunnersRequestStatus, LocalRunnerJobResultRequestStatus
+from .types import (
+    BridgeCommandResultRequestStatus,
+    BridgeCommandSubmitRequestType,
+    ListRunnersRequestStatus,
+    LocalRunnerJobResultRequestStatus,
+)
 
-__all__ = ["ListRunnersRequestStatus", "LocalRunnerJobResultRequestStatus"]
+__all__ = [
+    "BridgeCommandResultRequestStatus",
+    "BridgeCommandSubmitRequestType",
+    "ListRunnersRequestStatus",
+    "LocalRunnerJobResultRequestStatus",
+]

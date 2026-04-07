@@ -3861,6 +3861,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/bridge/commands:
+    post:
+      tags:
+      - Runners
+      summary: Submit bridge command
+      description: Submit a bridge command for execution by the local daemon
+      operationId: createBridgeCommand
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BridgeCommandSubmitRequest"
+      responses:
+        "201":
+          description: Command submitted
+          headers:
+            Location:
+              description: URI of the command
+              style: simple
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeCommandSubmitResponse"
+        "404":
+          description: Runner not found or not connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Runner does not support bridge
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/local-runners/jobs:
     post:
       tags:
@@ -3917,6 +3965,50 @@ paths:
                 $ref: "#/components/schemas/LocalRunnerPairResponse"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/bridge/commands/{commandId}:
+    get:
+      tags:
+      - Runners
+      summary: Get bridge command
+      description: "Get bridge command status, optionally long-polling for completion"
+      operationId: getBridgeCommand
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: commandId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: wait
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: timeout
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      responses:
+        "200":
+          description: Command state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeCommand"
+        "404":
+          description: Command not found
           content:
             application/json:
               schema:
@@ -3989,6 +4081,11 @@ paths:
         schema:
           type: string
           format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRunnerHeartbeatRequest"
       responses:
         "200":
           description: Heartbeat response
@@ -4103,6 +4200,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/bridge/commands/next:
+    post:
+      tags:
+      - Runners
+      summary: Poll next bridge commands
+      description: Long-poll for pending bridge commands (batch)
+      operationId: nextBridgeCommands
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BridgeCommandNextRequest"
+      responses:
+        "200":
+          description: Commands batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeCommandBatchResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/local-runners/{runnerId}/jobs/next:
     post:
       tags:
@@ -4126,6 +4255,34 @@ paths:
                 nullable: true
                 allOf:
                 - $ref: "#/components/schemas/LocalRunnerJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/checklist:
+    patch:
+      tags:
+      - Runners
+      summary: Patch runner checklist
+      description: Partial update of the runner's checklist (deep merge)
+      operationId: patchChecklist
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "204":
+          description: No content
         "404":
           description: Not found
           content:
@@ -4163,6 +4320,46 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/bridge/commands/{commandId}/results:
+    post:
+      tags:
+      - Runners
+      summary: Report bridge command result
+      description: Report bridge command completion or failure
+      operationId: reportBridgeResult
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: commandId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BridgeCommandResultRequest"
+      responses:
+        "204":
+          description: Result accepted
+        "404":
+          description: Command not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Already completed
           content:
             application/json:
               schema:
@@ -9223,6 +9420,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9232,10 +9433,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9399,9 +9596,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -9755,6 +9952,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9764,10 +9965,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9844,9 +10041,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -10105,6 +10302,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10114,10 +10315,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10299,9 +10496,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        string_content:
-          type: boolean
         structured_content:
+          type: boolean
+        string_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -10551,6 +10748,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10560,10 +10761,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10645,6 +10842,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10654,10 +10855,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -15562,6 +15759,32 @@ components:
         runner_name:
           minLength: 1
           type: string
+    BridgeCommandSubmitResponse:
+      type: object
+      properties:
+        command_id:
+          type: string
+          format: uuid
+    BridgeCommandSubmitRequest:
+      required:
+      - args
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
+          - Exec
+        args:
+          $ref: "#/components/schemas/JsonNode"
+        timeout_seconds:
+          type: integer
+          format: int32
     CreateLocalRunnerJobRequest:
       required:
       - agent_name
@@ -15615,6 +15838,53 @@ components:
         project_id:
           type: string
           format: uuid
+    BridgeCommand:
+      type: object
+      properties:
+        command_id:
+          type: string
+          format: uuid
+        runner_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
+          - Exec
+        status:
+          type: string
+          enum:
+          - pending
+          - picked_up
+          - completed
+          - failed
+          - timed_out
+        args:
+          $ref: "#/components/schemas/JsonNode"
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          $ref: "#/components/schemas/JsonNode"
+        timeout_seconds:
+          type: integer
+          format: int32
+        submitted_at:
+          type: string
+          format: date-time
+        picked_up_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
     LocalRunnerJob:
       type: object
       properties:
@@ -15707,6 +15977,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Agent"
+        capabilities:
+          type: array
+          items:
+            type: string
+        checklist:
+          $ref: "#/components/schemas/JsonNode"
     Param:
       required:
       - name
@@ -15727,6 +16003,13 @@ components:
           items:
             type: string
             format: uuid
+    LocalRunnerHeartbeatRequest:
+      type: object
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
     LocalRunnerJobPage:
       type: object
       properties:
@@ -15759,6 +16042,62 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LocalRunner"
+    BridgeCommandBatchResponse:
+      type: object
+      properties:
+        commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeCommandItem"
+    BridgeCommandItem:
+      type: object
+      properties:
+        command_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
+          - Exec
+        args:
+          $ref: "#/components/schemas/JsonNode"
+        timeout_seconds:
+          type: integer
+          format: int32
+        submitted_at:
+          type: string
+          format: date-time
+    BridgeCommandNextRequest:
+      type: object
+      properties:
+        max_commands:
+          type: integer
+          format: int32
+    BridgeCommandResultRequest:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - pending
+          - picked_up
+          - completed
+          - failed
+          - timed_out
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          $ref: "#/components/schemas/JsonNode"
+        duration_ms:
+          type: integer
+          format: int64
     LocalRunnerJobResultRequest:
       required:
       - status
@@ -16447,10 +16786,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17057,10 +17396,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17189,10 +17528,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17284,10 +17623,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         exclude_blueprint_update_for_projects:
           uniqueItems: true
           type: array
@@ -17333,10 +17672,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
