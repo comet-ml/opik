@@ -1,17 +1,12 @@
 import React, { useMemo, useState } from "react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/ui/select";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import { LocalRunner } from "@/types/agent-sandbox";
 import AgentRunnerInputForm from "./AgentRunnerInputForm";
 import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
+import { LoadableSelectBox } from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import { DropdownOption } from "@/types/shared";
 
 type AgentRunnerConnectedStateProps = {
   projectId: string;
@@ -46,6 +41,16 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
     }
     return allVersions[0] ?? null;
   }, [allVersions, selectedVersionId]);
+
+  const versionOptions: DropdownOption<string>[] = useMemo(
+    () =>
+      allVersions.map((v) => ({
+        value: v.id,
+        label:
+          v.tags?.length > 0 ? `${v.name} (${v.tags.join(" · ")})` : v.name,
+      })),
+    [allVersions],
+  );
 
   const agent = runner.agents?.[0];
   const inputFields = agent?.params ?? [];
@@ -92,27 +97,20 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
               projectId={projectId}
               onSaved={() => setSelectedVersionId("")}
               headerLeft={
-                <Select
+                <LoadableSelectBox
                   value={selectedVersionId || activeVersion.id}
-                  onValueChange={setSelectedVersionId}
-                >
-                  <SelectTrigger className="h-6 w-auto gap-1 px-2 text-xs focus:border-input">
-                    <span>Configuration:</span>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allVersions.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.name}
-                        {v.tags?.length > 0 && (
-                          <span className="ml-2 text-muted-slate">
-                            ({v.tags.join(" · ")})
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={setSelectedVersionId}
+                  options={versionOptions}
+                  buttonClassName="h-6 w-auto px-2 text-xs"
+                  align="start"
+                  minWidth={200}
+                  renderTitle={(option) => (
+                    <div className="flex items-center gap-1 truncate">
+                      <span>Configuration:</span>
+                      <span className="truncate">{option.label}</span>
+                    </div>
+                  )}
+                />
               }
             />
           ) : (
