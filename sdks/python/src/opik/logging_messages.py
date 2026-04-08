@@ -70,7 +70,9 @@ WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream
 
 BATCHING_UPDATE_DATA_LOSS_WARNING = (
     "Calling %s with batching enabled may cause data loss — "
-    "updates can be dropped if they arrive before the create request is flushed."
+    "updates can be dropped if they arrive before the create request is flushed. "
+    "Consider disabling batching via Opik(batching=False), "
+    "or using the @track decorator or start_as_current_span context manager instead."
 )
 
 # Storing all the messages in this module is considered a deprecated practice.
