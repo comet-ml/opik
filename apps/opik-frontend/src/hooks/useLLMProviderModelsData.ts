@@ -276,6 +276,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.6",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST,
+      label: "anthropic/claude-opus-4.6-fast",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
@@ -625,8 +629,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemma-4-26b-a4b-it",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_26B_A4B_IT_FREE,
+      label: "google/gemma-4-26b-a4b-it:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT,
       label: "google/gemma-4-31b-it",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT_FREE,
+      label: "google/gemma-4-31b-it:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_LYRIA_3_CLIP_PREVIEW,
@@ -1685,6 +1697,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.5-plus-02-15",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS,
+      label: "qwen/qwen3.6-plus",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS_PREVIEW_FREE,
       label: "qwen/qwen3.6-plus-preview:free",
     },
@@ -1923,6 +1939,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_TURBO,
       label: "z-ai/glm-5-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_1,
+      label: "z-ai/glm-5.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
