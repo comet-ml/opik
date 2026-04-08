@@ -16,6 +16,7 @@ import com.comet.opik.domain.evaluators.TraceFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -118,6 +119,8 @@ public class OnlineScoringSampler {
         var traces = traceService.getByIds(new ArrayList<>(event.traceIds()))
                 .filter(trace -> trace.endTime() != null)
                 .collectList()
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
                 .block();
 
         if (CollectionUtils.isEmpty(traces)) {

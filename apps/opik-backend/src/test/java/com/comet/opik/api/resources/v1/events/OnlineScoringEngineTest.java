@@ -518,8 +518,8 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @DisplayName("test TracesUpdated with hasEndTimeUpdate triggers scoring for completed traces")
-    void testTracesUpdatedWithEndTimeTriggersScoring(OnlineScoringSampler onlineScoringSampler) throws Exception {
+    @DisplayName("onTracesUpdated when hasEndTimeUpdate=true triggers scoring")
+    void onTracesUpdatedWhenEndTimeUpdateTriggersScoring(OnlineScoringSampler onlineScoringSampler) throws Exception {
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
         var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -569,8 +569,8 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @DisplayName("test TracesUpdated without hasEndTimeUpdate does NOT trigger scoring")
-    void testTracesUpdatedWithoutEndTimeDoesNotTriggerScoring(OnlineScoringSampler onlineScoringSampler)
+    @DisplayName("onTracesUpdated when hasEndTimeUpdate=false does NOT trigger scoring")
+    void onTracesUpdatedWithoutEndTimeUpdateDoesNotTriggerScoring(OnlineScoringSampler onlineScoringSampler)
             throws Exception {
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
