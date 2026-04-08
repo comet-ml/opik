@@ -483,8 +483,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var nonRetryable = failures.stream()
                 .filter(failure -> !isRetryableException(failure.error()))
                 .map(failure -> {
-                    log.error("Non-retryable error for messageId '{}', removing from stream",
-                            failure.messageId(), failure.error());
+                    log.warn("Non-retryable error for messageId '{}', removing from stream: {}",
+                            failure.messageId(), failure.error().getMessage());
                     return failure.messageId();
                 })
                 .toList();
@@ -509,8 +509,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private boolean maxRetriesReached(ProcessingResult failure) {
         // Filter out if max limit not reached, these are claimed and retried, so no ack and remove
         if (failure.deliveryCount() < config.getMaxRetries()) {
-            log.warn("Retryable error for messageId '{}', deliveryCount '{}', will retry",
-                    failure.messageId(), failure.deliveryCount(), failure.error());
+            log.warn("Retryable error for messageId '{}', deliveryCount '{}', will retry: {}",
+                    failure.messageId(), failure.deliveryCount(), failure.error().getMessage());
             return false;
         }
         // Max retries reached, will ack and remove
@@ -519,8 +519,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private StreamMessageId handleMaxRetriesReached(ProcessingResult maxRetriesFailure) {
         // TODO: Send to the dead letter queue (DLQ) for further analysis
-        log.error("Max retries reached for messageId '{}', removing from stream",
-                maxRetriesFailure.messageId(), maxRetriesFailure.error());
+        log.error("Max retries reached for messageId '{}', removing from stream: {}",
+                maxRetriesFailure.messageId(), maxRetriesFailure.error().getMessage());
         return maxRetriesFailure.messageId();
     }
 

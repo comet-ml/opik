@@ -66,7 +66,7 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            log.warn("{}: {}", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException.getMessage());
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
 
@@ -117,13 +117,13 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            log.warn("{}: {}", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException.getMessage());
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
     }
 
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
-        log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+        log.warn("{}: {}", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException.getMessage());
 
         if (familyOf(llmProviderError.getCode()) == Response.Status.Family.CLIENT_ERROR) {
             throw new ClientErrorException(llmProviderError.getMessage(), llmProviderError.getCode());

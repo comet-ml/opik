@@ -13,6 +13,7 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -99,12 +100,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 .subscribe(
                         unused -> log.info("Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",
                                 message.projectId(), message.ruleId(), message.workspaceId()),
-                        error -> {
-                            log.error(
-                                    "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}': {}",
-                                    message.projectId(), message.ruleId(), message.workspaceId(), error.getMessage());
-                            log.error("Error processing trace thread scoring", error);
-                        });
+                        error -> log.error(
+                                "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}': {}",
+                                message.projectId(), message.ruleId(), message.workspaceId(), error.getMessage()));
     }
 
     private Mono<Void> processThreadScores(TraceThreadToScoreLlmAsJudge message, String currentThreadId) {
@@ -165,7 +163,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         ChatRequest scoreRequest;
         try {
             String modelName = message.code().model().name();
-            var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
+            var llmProvider = llmProviderFactory.getLlmProvider(modelName);
+            var strategy = StructuredOutputStrategy.getStrategy(llmProvider, modelName);
             scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy);
         } catch (Exception exception) {
             userFacingLogger.error("Error preparing LLM request for threadId: '{}': \n\n{}",
