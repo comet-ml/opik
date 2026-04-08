@@ -172,7 +172,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
         </div>
       </div>
 
-      {isConnected ? (
+      {isConnected && pairing.runner ? (
         <ResizablePanelGroup
           direction="vertical"
           autoSaveId="agent-sandbox-layout"
@@ -186,7 +186,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           >
             <AgentRunnerConnectedState
               projectId={projectId}
-              runner={pairing.runner!}
+              runner={pairing.runner}
               onRun={handleRun}
               isRunning={createJobMutation.isPending}
             />

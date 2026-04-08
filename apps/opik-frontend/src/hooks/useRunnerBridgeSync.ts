@@ -42,6 +42,7 @@ export default function useRunnerBridgeSync({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleRequestPair = useRef((_data: { projectId: string }) => {
     const current = pairingRef.current;
+    if (!current.projectId) return;
     if (current.status === RunnerConnectionStatus.PAIRING) {
       onStateChangedRef.current(toBridgeState(current));
     } else {
