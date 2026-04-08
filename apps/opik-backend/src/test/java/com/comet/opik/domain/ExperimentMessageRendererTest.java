@@ -2,13 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.domain.template.MustacheParser;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
-import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -170,7 +170,7 @@ class ExperimentMessageRendererTest {
             assertThat(request.model()).isEqualTo("gpt-4o");
             assertThat(request.messages()).hasSize(2);
             assertThat(request.messages().getFirst()).isInstanceOf(SystemMessage.class);
-            assertThat(request.messages().getLast()).isInstanceOf(UserMessage.class);
+            assertThat(request.messages().getLast()).isInstanceOf(OpikUserMessage.class);
             assertThat(request.stream()).isFalse();
         }
 
