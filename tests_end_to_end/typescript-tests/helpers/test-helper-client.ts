@@ -573,6 +573,8 @@ export class TestHelperClient {
       truncate?: boolean;
       exclude?: string[];
       filterString?: string;
+      waitForAtLeast?: number;
+      waitForTimeout?: number;
     }
   ): Promise<Record<string, any>[]> {
     try {
@@ -582,6 +584,8 @@ export class TestHelperClient {
         truncate: options?.truncate,
         exclude: options?.exclude,
         filter_string: options?.filterString,
+        wait_for_at_least: options?.waitForAtLeast,
+        wait_for_timeout: options?.waitForTimeout,
       });
 
       return response.data.spans;

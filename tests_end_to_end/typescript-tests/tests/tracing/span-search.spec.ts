@@ -21,6 +21,8 @@ Steps:
   await test.step('Search spans and verify all expected fields are returned', async () => {
     const spans = await helperClient.searchSpans(projectName, {
       maxResults: totalSpans,
+      waitForAtLeast: totalSpans,
+      waitForTimeout: 30,
     });
 
     expect(spans).toHaveLength(totalSpans);
@@ -49,6 +51,8 @@ Steps:
     const spans = await helperClient.searchSpans(projectName, {
       maxResults: totalSpans,
       exclude: ['feedback_scores'],
+      waitForAtLeast: totalSpans,
+      waitForTimeout: 30,
     });
 
     expect(spans).toHaveLength(totalSpans);
