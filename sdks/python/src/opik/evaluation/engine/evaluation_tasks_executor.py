@@ -212,6 +212,7 @@ def execute(
     if workers == 1:
         from opik.environment import get_tqdm_for_current_environment
 
+        opik_client.set_global_client(client, context_wise=True)
         _tqdm = get_tqdm_for_current_environment()
         test_results = [
             evaluation_task()
