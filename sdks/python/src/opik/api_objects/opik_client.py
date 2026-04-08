@@ -105,7 +105,7 @@ class Opik:
         host: Optional[str] = None,
         api_key: Optional[str] = None,
         batching: bool = True,
-        _use_batching: bool = True,
+        _use_batching: bool = False,
         _show_misconfiguration_message: bool = True,
     ) -> None:
         """
