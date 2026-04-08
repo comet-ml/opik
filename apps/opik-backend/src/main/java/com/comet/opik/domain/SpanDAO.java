@@ -2182,6 +2182,8 @@ public class SpanDAO {
                 template.add("span_id_prefilter", true);
             }
 
+            bindTemplateExcludeFieldVariables(criteria, template);
+
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
