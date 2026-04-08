@@ -1266,3 +1266,75 @@ class TestOpikClientSearchPrompts:
         assert results[0].project_name == "default-project"
         assert isinstance(results[1], prompt_module.ChatPrompt)
         assert results[1].project_name == "default-project"
+
+
+@pytest.mark.parametrize(
+    "exclude,expected",
+    [
+        (["feedback_scores"], ["feedback_scores"]),
+        (
+            ["feedback_scores", "input", "output"],
+            ["feedback_scores", "input", "output"],
+        ),
+    ],
+)
+def test_opik_client__search_spans__exclude_propagated_to_api(exclude, expected):
+    client = opik_client.Opik(project_name="test-project")
+
+    with patch(
+        "opik.api_objects.search_helpers.search_spans_with_filters",
+        return_value=[],
+    ) as mock_search:
+        client.search_spans(project_name="test-project", exclude=exclude)
+
+    mock_search.assert_called_once()
+    assert mock_search.call_args.kwargs["exclude"] == expected
+
+
+def test_opik_client__search_spans__exclude_defaults_to_none():
+    client = opik_client.Opik(project_name="test-project")
+
+    with patch(
+        "opik.api_objects.search_helpers.search_spans_with_filters",
+        return_value=[],
+    ) as mock_search:
+        client.search_spans(project_name="test-project")
+
+    mock_search.assert_called_once()
+    assert mock_search.call_args.kwargs["exclude"] is None
+
+
+@pytest.mark.parametrize(
+    "exclude,expected",
+    [
+        (["feedback_scores"], ["feedback_scores"]),
+        (
+            ["feedback_scores", "input", "output"],
+            ["feedback_scores", "input", "output"],
+        ),
+    ],
+)
+def test_opik_client__search_traces__exclude_propagated_to_api(exclude, expected):
+    client = opik_client.Opik(project_name="test-project")
+
+    with patch(
+        "opik.api_objects.search_helpers.search_traces_with_filters",
+        return_value=[],
+    ) as mock_search:
+        client.search_traces(project_name="test-project", exclude=exclude)
+
+    mock_search.assert_called_once()
+    assert mock_search.call_args.kwargs["exclude"] == expected
+
+
+def test_opik_client__search_traces__exclude_defaults_to_none():
+    client = opik_client.Opik(project_name="test-project")
+
+    with patch(
+        "opik.api_objects.search_helpers.search_traces_with_filters",
+        return_value=[],
+    ) as mock_search:
+        client.search_traces(project_name="test-project")
+
+    mock_search.assert_called_once()
+    assert mock_search.call_args.kwargs["exclude"] is None

@@ -1083,6 +1083,46 @@ class FindSpansResourceTest {
             assertSpan(actualSpans, expectedSpans, USER);
         }
 
+        @Test
+        void searchSpansStream__whenExcludeFeedbackScores__thenReturnSpansWithoutScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    span.startTime(), span.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Span::id).reversed())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans, apiKey, workspaceName);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> feedbackScores = expectedSpans.stream()
+                    .flatMap(span -> PodamFactoryUtils
+                            .manufacturePojoList(podamFactory, FeedbackScoreItem.FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(span.projectName())
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            spanResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            var streamRequest = SpanSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .exclude(Set.of(Span.SpanField.FEEDBACK_SCORES))
+                    .build();
+            var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
+
+            assertSpan(actualSpans, expectedSpans, USER);
+        }
+
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterIdAndNameEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {

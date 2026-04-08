@@ -1502,7 +1502,8 @@ export class OpikClient {
       rest,
       parseFilterString,
       (api, projectName, filters, maxResults, truncate) =>
-        searchTracesWithFilters(api, projectName, filters, maxResults, truncate, exclude)
+        searchTracesWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.TraceSearchStreamRequestPublicExcludeItem[] | undefined)
     );
   };
 
@@ -1619,14 +1620,18 @@ export class OpikClient {
     filterString?: string;
     maxResults?: number;
     truncate?: boolean;
+    exclude?: string[];
     waitForAtLeast?: number;
     waitForTimeout?: number;
   }): Promise<OpikApi.SpanPublic[]> => {
+    const { exclude, ...rest } = options ?? {};
     return this.executeSearch<OpikApi.SpanPublic, OpikApi.SpanFilterPublic>(
       "spans",
-      options ?? {},
+      rest,
       parseSpanFilterString,
-      searchSpansWithFilters
+      (api, projectName, filters, maxResults, truncate) =>
+        searchSpansWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.SpanSearchStreamRequestPublicExcludeItem[] | undefined)
     );
   };
 
