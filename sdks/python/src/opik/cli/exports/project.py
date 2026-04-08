@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional, Set
 
+import random
+
 import click
 import httpx
 import tenacity
@@ -49,22 +51,54 @@ MAX_CONSECUTIVE_PAGE_FAILURES = 5
 _EXPORT_MAX_RETRY_AFTER_SECONDS = 120.0
 
 
+def _parse_rate_limit_reset(headers: httpx.Headers) -> Optional[float]:
+    """Extract seconds-until-reset from non-standard rate-limit headers.
+
+    Checks (in order):
+    1. ``opik-search-spans-remaining-limit-ttl-millis`` — ms until the spans
+       search window resets (Opik-specific).
+    2. ``ratelimit-reset`` — seconds until reset (draft IETF RateLimit header).
+    """
+    ttl_ms = headers.get("opik-search-spans-remaining-limit-ttl-millis")
+    if ttl_ms is not None:
+        try:
+            return max(0.0, float(ttl_ms) / 1000)
+        except (ValueError, TypeError):
+            pass
+
+    ratelimit_reset = headers.get("ratelimit-reset")
+    if ratelimit_reset is not None:
+        try:
+            return max(0.0, float(ratelimit_reset))
+        except (ValueError, TypeError):
+            pass
+
+    return None
+
+
 def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
     """Wait strategy for export retries.
 
-    Honours the server's ``Retry-After`` header for 429 responses (up to
-    ``_EXPORT_MAX_RETRY_AFTER_SECONDS``).  Falls back to a longer exponential
-    backoff than the standard SDK decorator so bulk export jobs can survive
-    sustained rate limiting without aborting.
+    Honours the server's rate-limit headers for 429 responses (up to
+    ``_EXPORT_MAX_RETRY_AFTER_SECONDS``).  Adds random jitter so that
+    multiple concurrent workers don't all restart at the same instant
+    ("thundering herd").  Falls back to a longer exponential backoff than
+    the standard SDK decorator for other transient errors.
     """
     exc = retry_state.outcome.exception() if retry_state.outcome else None
     if isinstance(exc, ApiError) and exc.status_code == 429:
-        headers = getattr(exc, "headers", {}) or {}
-        seconds = _parse_retry_after(httpx.Headers(headers))
-        if seconds is not None and 0 <= seconds <= _EXPORT_MAX_RETRY_AFTER_SECONDS:
-            return seconds
-        # No parseable header — wait 30 s before retrying a rate-limit response.
-        return 30.0
+        headers = httpx.Headers(getattr(exc, "headers", {}) or {})
+        # Prefer the standard Retry-After header, then fall back to
+        # Opik-specific / draft-IETF rate-limit reset headers.
+        seconds = _parse_retry_after(headers)
+        if seconds is None or seconds > _EXPORT_MAX_RETRY_AFTER_SECONDS:
+            seconds = _parse_rate_limit_reset(headers)
+        if seconds is None or seconds > _EXPORT_MAX_RETRY_AFTER_SECONDS:
+            seconds = 30.0
+        # Jitter: spread concurrent workers across a 0-5 s window so they
+        # don't all restart simultaneously and immediately exhaust the limit.
+        jitter = random.uniform(0.0, 5.0)
+        return max(0.0, seconds) + jitter
     # Other transient errors (e.g. connection blips): scale the base wait by
     # MAX_WORKERS so the combined retry pressure from all concurrent workers
     # does not keep the server saturated during recovery.

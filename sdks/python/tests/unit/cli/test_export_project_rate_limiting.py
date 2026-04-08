@@ -134,7 +134,8 @@ class TestExportTracesRetryWaitBehaviour:
     ):
         exc = ApiError(status_code=429, headers={"retry-after": "45"})
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        assert 45.0 in sleep_calls
+        # Jitter adds 0–5 s on top of the header value.
+        assert any(45.0 <= s <= 50.0 for s in sleep_calls)
 
     def test_export_traces__page_fetch_429_retry_after_exceeds_cap__sleep_falls_back_to_30s(
         self, tmp_path
@@ -142,7 +143,8 @@ class TestExportTracesRetryWaitBehaviour:
         # 200 s > _EXPORT_MAX_RETRY_AFTER_SECONDS (120 s) → fall back to 30 s
         exc = ApiError(status_code=429, headers={"retry-after": "200"})
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        assert 30.0 in sleep_calls
+        # Jitter adds 0–5 s on top of the 30 s fallback.
+        assert any(30.0 <= s <= 35.0 for s in sleep_calls)
 
     def test_export_traces__page_fetch_429_retry_after_http_date__sleep_honours_header(
         self, tmp_path
@@ -154,15 +156,16 @@ class TestExportTracesRetryWaitBehaviour:
         future = email.utils.formatdate(timeval=time.time() + 60, usegmt=True)
         exc = ApiError(status_code=429, headers={"retry-after": future})
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        # Should sleep approximately 60 s (allow ±2 s for test execution time).
-        assert any(58.0 <= s <= 62.0 for s in sleep_calls)
+        # Should sleep approximately 60 s (allow ±2 s for execution) plus 0–5 s jitter.
+        assert any(58.0 <= s <= 67.0 for s in sleep_calls)
 
     def test_export_traces__page_fetch_429_no_retry_after_header__sleep_is_30s(
         self, tmp_path
     ):
         exc = ApiError(status_code=429, headers={})
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        assert 30.0 in sleep_calls
+        # Jitter adds 0–5 s on top of the 30 s fallback.
+        assert any(30.0 <= s <= 35.0 for s in sleep_calls)
 
     def test_export_traces__page_fetch_non_429_transient_error__sleep_is_exponential_backoff(
         self, tmp_path
