@@ -1,5 +1,6 @@
 import { maskAPIKey } from "./utils";
 import { BASE_API_URL } from "@/api/api";
+import { PROJECT_NAME_PLACEHOLDER, SNIPPET_PROJECT_NAME } from "@/constants/shared";
 
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
@@ -75,6 +76,12 @@ export const putConfigInCode = ({
   withHighlight = false,
   projectName,
 }: PutConfigInCodeArgs): { code: string; lines: number[] } => {
+  const resolvedProjectName = projectName || SNIPPET_PROJECT_NAME;
+  const codeWithProjectName = code.replaceAll(
+    PROJECT_NAME_PLACEHOLDER,
+    resolvedProjectName,
+  );
+
   const configCode = getConfigCode(
     workspaceName,
     apiKey,
@@ -83,7 +90,10 @@ export const putConfigInCode = ({
     projectName,
   );
 
-  const patchedCode = code.replace(OPIK_API_KEY_TEMPLATE, configCode);
+  const patchedCode = codeWithProjectName.replace(
+    OPIK_API_KEY_TEMPLATE,
+    configCode,
+  );
 
   return {
     code: patchedCode.replaceAll(OPIK_HIGHLIGHT_LINE_TEMPLATE, ""),

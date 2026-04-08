@@ -9,11 +9,7 @@ import {
 } from "@/ui/dialog";
 import { Separator } from "@/ui/separator";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
-import {
-  INSTALL_OPIK_SECTION_TITLE,
-  PROJECT_NAME_PLACEHOLDER,
-  SNIPPET_PROJECT_NAME,
-} from "@/constants/shared";
+import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
 import { useUserApiKey } from "@/store/AppStore";
 import useActiveProjectName from "@/hooks/useActiveProjectName";
@@ -43,13 +39,8 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     return null;
   }
 
-  const resolvedCode = selectedIntegration.code.replaceAll(
-    PROJECT_NAME_PLACEHOLDER,
-    projectName || SNIPPET_PROJECT_NAME,
-  );
-
   const { code: codeWithConfig, lines } = putConfigInCode({
-    code: resolvedCode,
+    code: selectedIntegration.code,
     workspaceName,
     apiKey,
     shouldMaskApiKey: true,
@@ -58,7 +49,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
   });
 
   const { code: codeWithConfigToCopy } = putConfigInCode({
-    code: resolvedCode,
+    code: selectedIntegration.code,
     workspaceName,
     apiKey,
     withHighlight: true,
