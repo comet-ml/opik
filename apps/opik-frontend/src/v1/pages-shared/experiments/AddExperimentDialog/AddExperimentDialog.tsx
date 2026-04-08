@@ -307,7 +307,7 @@ import opik
 # INJECT_OPIK_CONFIGURATION
 
 client = opik.Opik()
-suite = client.get_evaluation_suite(name="${suiteName}")
+suite = client.get_or_create_evaluation_suite(name="${suiteName}")
 
 ${evaluationTaskCode}
 
@@ -326,7 +326,7 @@ from opik.evaluation import evaluate
 
 ${importString}
 client = Opik()
-dataset = client.get_dataset(name="${datasetDisplayName}")
+dataset = client.get_or_create_dataset(name="${datasetDisplayName}")
 
 ${evaluationTaskCode}
 ${metricsString}

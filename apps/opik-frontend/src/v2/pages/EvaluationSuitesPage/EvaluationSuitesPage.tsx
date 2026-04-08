@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { useNavigate } from "@tanstack/react-router";
@@ -195,7 +195,6 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
     permissions: { canCreateDatasets, canEditDatasets, canDeleteDatasets },
   } = usePermissions();
 
-  const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -334,7 +333,6 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const handleNewSuiteClick = useCallback(() => {
     setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
   const handleRowClick = useCallback(
@@ -450,7 +448,6 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         ></DataTablePagination>
       </div>
       <AddEvaluationSuiteSidebar
-        key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={handleRowClick}
