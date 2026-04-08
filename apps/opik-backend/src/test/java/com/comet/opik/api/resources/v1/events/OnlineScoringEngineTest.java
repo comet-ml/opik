@@ -12,6 +12,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -24,6 +25,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.MessageContentNormalizer;
@@ -276,6 +278,7 @@ class OnlineScoringEngineTest {
 
     private AutomationRuleEvaluatorResourceClient evaluatorsResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -286,6 +289,7 @@ class OnlineScoringEngineTest {
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
 
         Mockito.reset(aiProxyService, feedbackScoreService, eventBus);
     }
@@ -511,6 +515,83 @@ class OnlineScoringEngineTest {
 
         List<FeedbackScoreBatchItem> processed = captor.getValue();
         assertThat(processed).hasSize(3); // 3 scores from one evaluator
+    }
+
+    @Test
+    @DisplayName("test TracesUpdated with hasEndTimeUpdate triggers scoring for completed traces")
+    void testTracesUpdatedWithEndTimeTriggersScoring(OnlineScoringSampler onlineScoringSampler) throws Exception {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluator = createRule(projectId, evaluatorCode);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+        var traceId = generator.generate();
+
+        // Insert a complete trace into the DB via REST API (simulates SDK POST + PATCH lifecycle)
+        var trace = Trace.builder()
+                .id(traceId)
+                .projectName(projectName)
+                .input(JsonUtils.getJsonNodeFromString(INPUT))
+                .output(JsonUtils.getJsonNodeFromString(OUTPUT))
+                .endTime(java.time.Instant.now())
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
+                + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
+                + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
+        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        // Fire TracesUpdated with hasEndTimeUpdate=true — should trigger scoring
+        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, true);
+        onlineScoringSampler.onTracesUpdated(event);
+
+        Awaitility.await().untilAsserted(() -> {
+            Mockito.verify(feedbackScoreService, Mockito.atLeastOnce()).scoreBatchOfTraces(captor.capture());
+
+            var allScores = captor.getAllValues().stream()
+                    .flatMap(List::stream)
+                    .toList();
+
+            assertThat(allScores).hasSize(3); // 3 scores from one evaluator
+        });
+    }
+
+    @Test
+    @DisplayName("test TracesUpdated without hasEndTimeUpdate does NOT trigger scoring")
+    void testTracesUpdatedWithoutEndTimeDoesNotTriggerScoring(OnlineScoringSampler onlineScoringSampler)
+            throws Exception {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluator = createRule(projectId, evaluatorCode);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+        var traceId = generator.generate();
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        // Fire TracesUpdated with hasEndTimeUpdate=false (e.g., tag addition) — should NOT score
+        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, false);
+        onlineScoringSampler.onTracesUpdated(event);
+
+        Mono.delay(Duration.ofSeconds(1)).block();
+
+        // Verify no scoring happened
+        Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(Mockito.any());
     }
 
     private Trace createTrace(UUID traceId, UUID projectId) throws JsonProcessingException {

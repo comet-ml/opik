@@ -13,11 +13,18 @@ import java.util.UUID;
 public class TracesUpdated extends BaseEvent {
     private final @NonNull Set<UUID> projectIds;
     private final @NonNull Set<UUID> traceIds;
+    private final boolean hasEndTimeUpdate;
 
     public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName) {
+        this(projectIds, traceIds, workspaceId, userName, false);
+    }
+
+    public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
+            @NonNull String userName, boolean hasEndTimeUpdate) {
         super(workspaceId, userName);
         this.projectIds = projectIds;
         this.traceIds = traceIds;
+        this.hasEndTimeUpdate = hasEndTimeUpdate;
     }
 }
