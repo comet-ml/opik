@@ -276,17 +276,16 @@ const useActionButtonActions = ({
           );
 
           const rows: ExperimentsCompare[] = data?.content ?? [];
-          const totalItems = data?.total ?? 0;
+          const totalItems = (data?.total ?? 0) * experimentIds.length;
 
           let scoredItems = 0;
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
-            if (experimentItems.length === 0) continue;
-
-            const allScored = experimentItems.every((ei) => ei.status != null);
-            if (allScored) {
-              scoredItems++;
+            for (const ei of experimentItems) {
+              if (ei.status != null) {
+                scoredItems++;
+              }
             }
           }
 

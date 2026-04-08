@@ -9,6 +9,8 @@ import {
   getStatusFromExperimentItems,
 } from "@/v2/pages-shared/experiments/EvaluationSuiteExperiment/PassedCell";
 
+type StatusInfo = ReturnType<typeof getStatusFromExperimentItems>;
+
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
 
@@ -37,10 +39,12 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
 > = ({ experimentId, datasetItemId, datasetId, stale = false }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const pollingStartTimeRef = useRef<number | null>(null);
+  const lastStatusRef = useRef<StatusInfo | undefined>(undefined);
 
   useEffect(() => {
-    if (experimentId && pollingStartTimeRef.current === null) {
+    if (experimentId) {
       pollingStartTimeRef.current = Date.now();
+      lastStatusRef.current = undefined;
     }
   }, [experimentId]);
 
@@ -90,15 +94,16 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
         ),
     );
 
-    if (!matchingRow) {
-      return undefined;
+    if (
+      !matchingRow ||
+      !areAllExperimentItemsScored(matchingRow, datasetItemId)
+    ) {
+      return lastStatusRef.current;
     }
 
-    if (!areAllExperimentItemsScored(matchingRow, datasetItemId)) {
-      return undefined;
-    }
-
-    return getStatusFromExperimentItems(matchingRow);
+    const result = getStatusFromExperimentItems(matchingRow);
+    lastStatusRef.current = result;
+    return result;
   }, [data?.content, datasetItemId]);
 
   if (!experimentId) {
