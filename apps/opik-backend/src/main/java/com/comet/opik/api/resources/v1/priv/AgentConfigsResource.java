@@ -112,7 +112,6 @@ public class AgentConfigsResource {
                 .build();
 
         return Response.created(location)
-                .entity(blueprint)
                 .build();
     }
 
