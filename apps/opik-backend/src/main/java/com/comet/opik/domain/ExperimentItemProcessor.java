@@ -21,34 +21,40 @@ public class ExperimentItemProcessor {
     private final @NonNull ChatCompletionService chatCompletionService;
     private final @NonNull ExperimentMessageRenderer messageRenderer;
     private final @NonNull ExperimentTracePersistence tracePersistence;
+    private final @NonNull DatasetItemService datasetItemService;
     private final @NonNull IdGenerator idGenerator;
 
     public Mono<Void> process(@NonNull ExperimentItemToProcess message) {
-        var prompt = message.prompt();
-        var datasetItem = message.datasetItem();
+        return datasetItemService.get(message.datasetItemId())
+                .flatMap(datasetItem -> {
+                    var prompt = message.prompt();
 
-        UUID traceId = idGenerator.generateId();
-        Instant startTime = Instant.now();
-        ChatCompletionResponse llmResponse = null;
-        String errorMessage = null;
+                    UUID traceId = idGenerator.generateId();
+                    Instant startTime = Instant.now();
+                    ChatCompletionResponse llmResponse = null;
+                    String errorType = null;
+                    String errorMessage = null;
 
-        var templateContext = messageRenderer.buildTemplateContext(datasetItem);
-        var renderedMessages = messageRenderer.renderMessages(prompt.messages(), templateContext);
+                    var templateContext = messageRenderer.buildTemplateContext(datasetItem);
+                    var renderedMessages = messageRenderer.renderMessages(prompt.messages(), templateContext);
 
-        try {
-            var chatRequest = messageRenderer.buildChatCompletionRequest(prompt, renderedMessages);
-            llmResponse = chatCompletionService.create(chatRequest, message.workspaceId());
-        } catch (Exception e) {
-            log.warn("LLM call failed for experiment '{}', dataset item '{}'",
-                    message.experimentId(), datasetItem.id(), e);
-            errorMessage = e.getMessage();
-        }
+                    try {
+                        var chatRequest = messageRenderer.buildChatCompletionRequest(prompt, renderedMessages);
+                        llmResponse = chatCompletionService.create(chatRequest, message.workspaceId());
+                    } catch (Exception e) {
+                        log.warn("LLM call failed for experiment '{}', dataset item '{}'",
+                                message.experimentId(), datasetItem.id(), e);
+                        errorType = e.getClass().getSimpleName();
+                        errorMessage = e.getMessage();
+                    }
 
-        Instant endTime = Instant.now();
+                    Instant endTime = Instant.now();
 
-        return tracePersistence.persistTraceSpanAndItem(
-                traceId, message.projectName(), prompt, renderedMessages, llmResponse, errorMessage,
-                startTime, endTime, message.experimentId(), message.datasetId(), message.versionHash(),
-                datasetItem.id());
+                    return tracePersistence.persistTraceSpanAndItem(
+                            traceId, message.projectName(), prompt, renderedMessages, llmResponse,
+                            errorType, errorMessage,
+                            startTime, endTime, message.experimentId(), message.datasetId(), message.versionHash(),
+                            datasetItem.id());
+                });
     }
 }

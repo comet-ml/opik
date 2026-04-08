@@ -20,12 +20,15 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -80,28 +83,6 @@ public class EvalSuiteAssertionSampler {
             return;
         }
 
-        var firstTrace = completeTraces.getFirst();
-        var evalSuiteDatasetId = getMetadataString(firstTrace, "eval_suite_dataset_id");
-
-        if (evalSuiteDatasetId.isEmpty()) {
-            return;
-        }
-
-        UUID datasetId;
-        try {
-            datasetId = UUID.fromString(evalSuiteDatasetId.get());
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid eval_suite_dataset_id '{}' in trace metadata", evalSuiteDatasetId.get());
-            return;
-        }
-
-        // All traces in a batch share the same dataset version since they originate from
-        // the same experiment execution, so extracting versionHash from the first trace is safe.
-        var evalSuiteVersionHash = getMetadataString(firstTrace, "eval_suite_dataset_version_hash");
-
-        log.info("Eval suite assertion evaluation triggered for dataset '{}', version hash '{}', '{}' traces",
-                datasetId, evalSuiteVersionHash.orElse("latest"), completeTraces.size());
-
         var reactiveContext = reactor.util.context.Context.of(
                 RequestContext.WORKSPACE_ID, tracesBatch.workspaceId(),
                 RequestContext.USER_NAME, tracesBatch.userName(),
@@ -109,26 +90,50 @@ public class EvalSuiteAssertionSampler {
 
         Duration fetchTimeout = Duration.ofSeconds(evalSuiteConfig.getFetchTimeoutSeconds());
 
-        DatasetEvaluatorsResult datasetEvaluators = fetchDatasetEvaluators(
-                datasetId, evalSuiteVersionHash.orElse(null))
-                .contextWrite(reactiveContext)
-                .timeout(fetchTimeout)
-                .block();
-
-        List<PreparedEvaluator> preparedDatasetEvaluators = evaluatorMapper
-                .prepareEvaluators(datasetEvaluators.evaluators());
+        // Cache dataset evaluators by (datasetId:versionHash) to avoid redundant fetches
+        Map<String, List<PreparedEvaluator>> datasetEvaluatorsCache = new HashMap<>();
 
         List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
                 .flatMap(trace -> {
+                    var evalSuiteDatasetId = getMetadataString(trace, "eval_suite_dataset_id");
+                    if (evalSuiteDatasetId.isEmpty()) {
+                        return Stream.empty();
+                    }
+
+                    UUID datasetId;
+                    try {
+                        datasetId = UUID.fromString(evalSuiteDatasetId.get());
+                    } catch (IllegalArgumentException e) {
+                        log.warn("Invalid eval_suite_dataset_id '{}' in trace metadata",
+                                evalSuiteDatasetId.get());
+                        return Stream.empty();
+                    }
+
+                    var versionHash = getMetadataString(trace, "eval_suite_dataset_version_hash")
+                            .orElse(null);
+
+                    var cacheKey = datasetId + ":" + (versionHash != null ? versionHash : "");
+                    var preparedDatasetEvaluators = datasetEvaluatorsCache.computeIfAbsent(cacheKey, k -> {
+                        log.info("Fetching eval suite evaluators for dataset '{}', version hash '{}'",
+                                datasetId, versionHash != null ? versionHash : "latest");
+                        DatasetEvaluatorsResult result = fetchDatasetEvaluators(datasetId, versionHash)
+                                .contextWrite(reactiveContext)
+                                .timeout(fetchTimeout)
+                                .block();
+                        return evaluatorMapper.prepareEvaluators(result.evaluators());
+                    });
+
                     var datasetItemId = getMetadataString(trace, "eval_suite_dataset_item_id");
                     if (datasetItemId.isEmpty()) {
-                        log.debug("Skipping trace '{}' — no eval_suite_dataset_item_id in metadata", trace.id());
+                        log.debug("Skipping trace '{}' — no eval_suite_dataset_item_id in metadata",
+                                trace.id());
                         return Stream.empty();
                     }
 
                     return parseUUID(datasetItemId.get(), trace.id()).stream()
                             .flatMap(itemId -> {
-                                List<PreparedEvaluator> allEvaluators = new ArrayList<>(preparedDatasetEvaluators);
+                                List<PreparedEvaluator> allEvaluators = new ArrayList<>(
+                                        preparedDatasetEvaluators);
                                 allEvaluators.addAll(fetchItemEvaluators(itemId, reactiveContext));
 
                                 if (allEvaluators.isEmpty()) {
@@ -137,17 +142,18 @@ public class EvalSuiteAssertionSampler {
                                     return Stream.empty();
                                 }
 
-                                return allEvaluators.stream().map(prepared -> TraceToScoreLlmAsJudge.builder()
-                                        .trace(trace)
-                                        .ruleId(idGenerator.generateId())
-                                        .ruleName(prepared.name())
-                                        .llmAsJudgeCode(prepared.code())
-                                        .workspaceId(tracesBatch.workspaceId())
-                                        .userName(tracesBatch.userName())
-                                        .categoryName(SUITE_ASSERTION_CATEGORY)
-                                        .scoreNameMapping(prepared.scoreNameMapping())
-                                        .promptType(PromptType.PYTHON)
-                                        .build());
+                                return allEvaluators.stream()
+                                        .map(prepared -> TraceToScoreLlmAsJudge.builder()
+                                                .trace(trace)
+                                                .ruleId(idGenerator.generateId())
+                                                .ruleName(prepared.name())
+                                                .llmAsJudgeCode(prepared.code())
+                                                .workspaceId(tracesBatch.workspaceId())
+                                                .userName(tracesBatch.userName())
+                                                .categoryName(SUITE_ASSERTION_CATEGORY)
+                                                .scoreNameMapping(prepared.scoreNameMapping())
+                                                .promptType(PromptType.PYTHON)
+                                                .build());
                             });
                 })
                 .toList();
@@ -161,7 +167,7 @@ public class EvalSuiteAssertionSampler {
     private Mono<DatasetEvaluatorsResult> fetchDatasetEvaluators(UUID datasetId, String versionHash) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            try {
+            return Mono.fromCallable(() -> {
                 Optional<DatasetVersion> version;
                 if (versionHash != null) {
                     var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
@@ -170,16 +176,17 @@ public class EvalSuiteAssertionSampler {
                     version = datasetVersionService.getLatestVersion(datasetId, workspaceId);
                 }
 
-                return Mono.just(version
+                return version
                         .map(v -> DatasetEvaluatorsResult.builder()
                                 .versionId(v.id())
                                 .evaluators(v.evaluators() != null ? v.evaluators() : List.of())
                                 .build())
-                        .orElse(DatasetEvaluatorsResult.builder().evaluators(List.of()).build()));
-            } catch (Exception e) {
-                log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
-                return Mono.just(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
-            }
+                        .orElse(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
+            }).subscribeOn(Schedulers.boundedElastic())
+                    .onErrorResume(e -> {
+                        log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
+                        return Mono.just(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
+                    });
         });
     }
 

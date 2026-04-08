@@ -41,6 +41,7 @@ class ExperimentTracePersistence {
             @NonNull ExperimentExecutionRequest.PromptVariant prompt,
             @NonNull List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages,
             ChatCompletionResponse llmResponse,
+            String errorType,
             String errorMessage,
             @NonNull Instant startTime,
             @NonNull Instant endTime,
@@ -52,15 +53,15 @@ class ExperimentTracePersistence {
         ObjectNode input = buildMessagesInput(renderedMessages);
         ObjectNode output = buildLlmOutput(llmResponse);
 
-        return createTrace(traceId, projectName, input, output, errorMessage,
+        return createTrace(traceId, projectName, input, output, errorType, errorMessage,
                 startTime, endTime, datasetId, versionHash, datasetItemId)
-                .then(createSpan(traceId, projectName, prompt, input, output, llmResponse, errorMessage,
+                .then(createSpan(traceId, projectName, prompt, input, output, llmResponse, errorType, errorMessage,
                         startTime, endTime))
                 .then(createExperimentItem(experimentId, datasetItemId, traceId));
     }
 
     private Mono<Void> createTrace(UUID traceId, String projectName,
-            ObjectNode input, ObjectNode output, String errorMessage,
+            ObjectNode input, ObjectNode output, String errorType, String errorMessage,
             Instant startTime, Instant endTime,
             UUID datasetId, String versionHash, UUID datasetItemId) {
 
@@ -85,7 +86,7 @@ class ExperimentTracePersistence {
 
         if (errorMessage != null) {
             traceBuilder.errorInfo(ErrorInfo.builder()
-                    .exceptionType("LlmProviderError")
+                    .exceptionType(errorType)
                     .message(errorMessage)
                     .traceback(errorMessage)
                     .build());
@@ -100,7 +101,7 @@ class ExperimentTracePersistence {
     private Mono<Void> createSpan(UUID traceId, String projectName,
             ExperimentExecutionRequest.PromptVariant prompt,
             ObjectNode input, ObjectNode output,
-            ChatCompletionResponse llmResponse, String errorMessage,
+            ChatCompletionResponse llmResponse, String errorType, String errorMessage,
             Instant startTime, Instant endTime) {
 
         Map<String, Integer> usage = null;
@@ -137,7 +138,7 @@ class ExperimentTracePersistence {
 
         if (errorMessage != null) {
             spanBuilder.errorInfo(ErrorInfo.builder()
-                    .exceptionType("LlmProviderError")
+                    .exceptionType(errorType)
                     .message(errorMessage)
                     .traceback(errorMessage)
                     .build());

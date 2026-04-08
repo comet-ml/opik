@@ -1,6 +1,5 @@
 package com.comet.opik.api.events;
 
-import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Builder;
@@ -14,7 +13,7 @@ import java.util.UUID;
 public record ExperimentItemToProcess(
         @NonNull UUID batchId,
         @NonNull ExperimentExecutionRequest.PromptVariant prompt,
-        @NonNull DatasetItem datasetItem,
+        @NonNull UUID datasetItemId,
         @NonNull UUID experimentId,
         @NonNull UUID datasetId,
         String versionHash,

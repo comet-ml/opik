@@ -64,6 +64,9 @@ class ExperimentItemProcessorTest {
     private ExperimentItemService experimentItemService;
 
     @Mock
+    private DatasetItemService datasetItemService;
+
+    @Mock
     private IdGenerator idGenerator;
 
     @Mock
@@ -77,7 +80,7 @@ class ExperimentItemProcessorTest {
         var tracePersistence = new ExperimentTracePersistence(
                 traceService, spanService, experimentItemService, llmProviderFactory, idGenerator);
         processor = new ExperimentItemProcessor(
-                chatCompletionService, messageRenderer, tracePersistence, idGenerator);
+                chatCompletionService, messageRenderer, tracePersistence, datasetItemService, idGenerator);
     }
 
     private ExperimentExecutionRequest.PromptVariant buildPrompt(String model, String role, String content) {
@@ -130,10 +133,11 @@ class ExperimentItemProcessorTest {
             String projectName,
             String workspaceId,
             String userName) {
+        when(datasetItemService.get(datasetItem.id())).thenReturn(Mono.just(datasetItem));
         return ExperimentItemToProcess.builder()
                 .batchId(UUID.randomUUID())
                 .prompt(prompt)
-                .datasetItem(datasetItem)
+                .datasetItemId(datasetItem.id())
                 .experimentId(experimentId)
                 .datasetId(datasetId)
                 .versionHash(versionHash)

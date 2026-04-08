@@ -91,14 +91,13 @@ public class ExperimentExecutionService {
                                             .map(ExperimentEntry::info).toList();
 
                                     UUID batchId = idGenerator.generateId();
-                                    List<ExperimentItemToProcess> messages = new ArrayList<>();
 
                                     return streamDatasetItems(request)
-                                            .doOnNext(item -> collectMessages(
+                                            .flatMapIterable(item -> buildMessages(
                                                     item, request, experimentIds, datasetExecutionPolicy,
-                                                    projectName, workspaceId, userName, batchId, messages))
-                                            .count()
-                                            .flatMap(itemCount -> {
+                                                    projectName, workspaceId, userName, batchId))
+                                            .collectList()
+                                            .flatMap(messages -> {
                                                 if (messages.isEmpty()) {
                                                     log.warn(
                                                             "No dataset items found for dataset '{}', workspaceId '{}'",
@@ -198,7 +197,8 @@ public class ExperimentExecutionService {
                     .map(v -> v.executionPolicy())
                     .orElse(null);
         } catch (Exception e) {
-            log.warn("Failed to fetch dataset execution policy for dataset '{}'", datasetId, e);
+            log.warn("Failed to fetch dataset execution policy for dataset '{}', versionHash '{}'",
+                    datasetId, versionHash, e);
             return null;
         }
     }
@@ -217,7 +217,7 @@ public class ExperimentExecutionService {
         return evalSuiteEvaluatorMapper.getEffectiveRunsPerItem(itemPolicy, versionPolicy);
     }
 
-    private void collectMessages(
+    private List<ExperimentItemToProcess> buildMessages(
             DatasetItem item,
             ExperimentExecutionRequest request,
             List<UUID> experimentIds,
@@ -225,10 +225,10 @@ public class ExperimentExecutionService {
             String projectName,
             String workspaceId,
             String userName,
-            UUID batchId,
-            List<ExperimentItemToProcess> messages) {
+            UUID batchId) {
 
         int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
+        var messages = new ArrayList<ExperimentItemToProcess>();
 
         for (int run = 0; run < runsPerItem; run++) {
             for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
@@ -238,7 +238,7 @@ public class ExperimentExecutionService {
                 messages.add(ExperimentItemToProcess.builder()
                         .batchId(batchId)
                         .prompt(prompt)
-                        .datasetItem(item)
+                        .datasetItemId(item.id())
                         .experimentId(experimentId)
                         .datasetId(request.datasetId())
                         .versionHash(request.versionHash())
@@ -249,5 +249,7 @@ public class ExperimentExecutionService {
                         .build());
             }
         }
+
+        return messages;
     }
 }

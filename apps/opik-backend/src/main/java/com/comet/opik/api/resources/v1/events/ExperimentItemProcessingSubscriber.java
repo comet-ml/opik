@@ -75,7 +75,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 .thenReturn(true)
                 .onErrorResume(e -> {
                     log.error("Failed to process experiment item for experiment '{}', dataset item '{}'",
-                            message.experimentId(), message.datasetItem().id(), e);
+                            message.experimentId(), message.datasetItemId(), e);
                     return Mono.just(false);
                 })
                 .flatMap(success -> decrementAndFinishIfComplete(message, success))
