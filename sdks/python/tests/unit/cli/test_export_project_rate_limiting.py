@@ -6,7 +6,7 @@ Covers the changes introduced to handle server-side 429 throttling:
     - 429 with Retry-After header → sleep honours header value
     - 429 with Retry-After exceeding cap → sleep falls back to 30 s
     - 429 with no Retry-After → sleep is 30 s
-    - non-429 transient error → sleep is in exponential backoff range [2, 60] s
+    - non-429 transient error → sleep is in exponential backoff range [MAX_WORKERS*2, 60] s
 
   export_traces (page-fetch failures)
     - 429 on page N → page is skipped, remaining pages still fetched, had_errors=True
@@ -167,10 +167,13 @@ class TestExportTracesRetryWaitBehaviour:
     def test_export_traces__page_fetch_non_429_transient_error__sleep_is_exponential_backoff(
         self, tmp_path
     ):
+        from opik.cli.exports.project import MAX_WORKERS
+
         exc = ApiError(status_code=503)
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        # Exponential backoff starts at 2 s and caps at 60 s — at least one call must be in that range
-        assert any(2.0 <= s <= 60.0 for s in sleep_calls)
+        # Backoff is scaled by MAX_WORKERS: base 2s * MAX_WORKERS, capped at 60 s.
+        expected_min = 2.0 * MAX_WORKERS
+        assert any(expected_min <= s <= 60.0 for s in sleep_calls)
 
 
 # ---------------------------------------------------------------------------

@@ -65,10 +65,12 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
             return seconds
         # No parseable header — wait 30 s before retrying a rate-limit response.
         return 30.0
-    # Other transient errors (e.g. connection blips): start fast, ramp up
-    # to 60 s cap.  multiplier=2/min=2 gives ~2s, 4s, 8s, 16s, 32s, 60s…
-    # rather than jumping straight to 10 s on the first retry.
-    return tenacity.wait_exponential(multiplier=2, min=2, max=60)(retry_state)
+    # Other transient errors (e.g. connection blips): scale the base wait by
+    # MAX_WORKERS so the combined retry pressure from all concurrent workers
+    # does not keep the server saturated during recovery.
+    # With MAX_WORKERS=3: ~6s, 12s, 24s, 48s, 60s (capped).
+    base = tenacity.wait_exponential(multiplier=2, min=2, max=60)(retry_state)
+    return min(base * MAX_WORKERS, 60.0)
 
 
 _export_rest_retry = tenacity.retry(
