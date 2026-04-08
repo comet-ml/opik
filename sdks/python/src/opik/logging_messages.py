@@ -68,5 +68,10 @@ LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION = "LLM provider rate
 
 WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream_usage=True` during LLM initialization. Token usage data is not available for .stream() or .astream() methods."
 
+BATCHING_UPDATE_DATA_LOSS_WARNING = (
+    "Calling %s with batching enabled may cause data loss — "
+    "updates can be dropped if they arrive before the create request is flushed."
+)
+
 # Storing all the messages in this module is considered a deprecated practice.
 # Do it only if your message is used in more than one place.
