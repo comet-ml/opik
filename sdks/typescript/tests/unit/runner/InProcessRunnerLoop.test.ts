@@ -328,8 +328,8 @@ describe("InProcessRunnerLoop", () => {
       project: "default",
       params: [
         { name: "query", type: "string" },
-        { name: "count", type: "number" },
-        { name: "score", type: "number" },
+        { name: "count", type: "float" },
+        { name: "score", type: "float" },
         { name: "active", type: "boolean" },
       ],
       docstring: "",

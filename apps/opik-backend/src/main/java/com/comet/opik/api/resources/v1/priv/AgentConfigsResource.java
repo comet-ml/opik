@@ -87,6 +87,35 @@ public class AgentConfigsResource {
     }
 
     @POST
+    @Path("/blueprints/projects/{project_id}/masks/{mask_id}")
+    @JsonView(AgentConfig.View.Write.class)
+    @Operation(operationId = "createBlueprintFromMask", summary = "Create blueprint from mask", description = "Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "404", description = "Not Found (no config or mask not found)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response createBlueprintFromMask(
+            @PathParam("project_id") UUID projectId,
+            @PathParam("mask_id") UUID maskId,
+            @Context UriInfo uriInfo) {
+
+        log.info("Creating blueprint from mask '{}' for project '{}'", maskId, projectId);
+
+        AgentBlueprint blueprint = agentConfigService.createBlueprintFromMask(projectId, maskId).block();
+
+        log.info("Created blueprint '{}' from mask '{}' for project '{}'", blueprint.id(), maskId, projectId);
+
+        URI location = uriInfo.getBaseUriBuilder()
+                .path("v1/private/agent-configs/blueprints")
+                .path(blueprint.id().toString())
+                .build();
+
+        return Response.created(location)
+                .build();
+    }
+
+    @POST
     @Path("/blueprints/remove-keys")
     @Operation(operationId = "removeConfigKeys", summary = "Remove configuration parameters", description = "Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {

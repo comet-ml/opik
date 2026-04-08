@@ -359,7 +359,23 @@ function applyEntrypoint(
   }
   const agentProject =
     options.projectName || getTrackOpikClient().config.projectName;
-  const params = options.params ?? extractParams(originalFn);
+  const rawParams = options.params ?? extractParams(originalFn);
+
+  const supportedTypes = new Set(["string", "number", "float", "integer", "boolean"]);
+  const unsupported = rawParams.filter((p) => !supportedTypes.has(p.type));
+  if (unsupported.length > 0) {
+    const names = unsupported.map((p) => `${p.name} (${p.type})`);
+    logger.warn(
+      `Could not resolve type for parameter(s) [${names.join(", ")}] in "${agentName}". ` +
+        `These parameters will default to 'string' and cannot be modified via the UI. ` +
+        `Consider using a supported type (string, number, boolean) or choosing a different entrypoint.`
+    );
+  }
+
+  const params = rawParams.map((p) => ({
+    ...p,
+    type: p.type === "number" ? "float" : p.type,
+  }));
 
   register({
     func: wrappedFn,

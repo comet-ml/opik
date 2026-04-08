@@ -64,7 +64,9 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             if current_trace is None:
                 current_trace = trace_data.TraceData(
                     name=trace.name,
-                    project_name=self._project_name,
+                    project_name=context_storage.resolve_project_name(
+                        self._project_name, "OpikTracingProcessor"
+                    ),
                     metadata=trace_metadata,
                     thread_id=trace.group_id,
                 )
@@ -80,7 +82,9 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=trace.name,
-                    project_name=self._project_name,
+                    project_name=context_storage.resolve_project_name(
+                        self._project_name, "OpikTracingProcessor"
+                    ),
                     metadata=trace_metadata,
                     type="general",
                 )

@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 from haystack import tracing
 
-from opik import tracing_runtime_config, url_helpers
+from opik import context_storage, tracing_runtime_config, url_helpers
 from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client
 from opik.api_objects import span as opik_span
@@ -88,7 +88,9 @@ class OpikTracer(tracing.Tracer):
             name=final_name,
             type="general",
             metadata=metadata,
-            project_name=self._project_name,
+            project_name=context_storage.resolve_project_name(
+                self._project_name, "OpikTracer"
+            ),
         )
 
         result = span_creation_handler.create_span_respecting_context(

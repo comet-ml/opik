@@ -13,7 +13,6 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -166,8 +165,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         ChatRequest scoreRequest;
         try {
             String modelName = message.code().model().name();
-            var llmProvider = llmProviderFactory.getLlmProvider(modelName);
-            var strategy = StructuredOutputStrategy.getStrategy(llmProvider, modelName);
+            var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
             scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy);
         } catch (Exception exception) {
             userFacingLogger.error("Error preparing LLM request for threadId: '{}': \n\n{}",

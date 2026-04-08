@@ -76,6 +76,9 @@ class AgentConfigsResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    public static final String[] BLUEPRINT_PAYLOAD_IGNORED_FIELDS = {"envs", "createdBy", "createdAt",
+            "lastUpdatedBy", "lastUpdatedAt", "values.id"};
+
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
@@ -2015,6 +2018,117 @@ class AgentConfigsResourceTest {
                             .keys(null)
                             .build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Nested
+    @DisplayName("Create Blueprint From Mask:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreateBlueprintFromMask {
+
+        @Test
+        @DisplayName("Success: should create new blueprint from mask changes")
+        void createBlueprintFromMask() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Initial config")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build(),
+                            AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build()))
+                    .build();
+
+            var initialBlueprintId = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("Override model and add top_p")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING).build(),
+                            AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.FLOAT).build()))
+                    .build();
+
+            var maskId = agentConfigsResourceClient.updateAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var newBlueprintId = agentConfigsResourceClient.createBlueprintFromMask(
+                    projectId, maskId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            assertThat(newBlueprintId).isNotNull();
+
+            var newBlueprint = agentConfigsResourceClient.getBlueprintById(newBlueprintId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().projectId(projectId).validFromBlueprintId(newBlueprintId).key("model")
+                            .value("claude-3").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().projectId(projectId).validFromBlueprintId(initialBlueprintId)
+                            .key("temperature").value("0.7").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().projectId(projectId).validFromBlueprintId(initialBlueprintId)
+                            .key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().projectId(projectId).validFromBlueprintId(newBlueprintId).key("top_p")
+                            .value("0.95").type(ValueType.FLOAT).build());
+
+            var expectedBlueprint = AgentBlueprint.builder()
+                    .id(newBlueprintId)
+                    .type(BlueprintType.BLUEPRINT)
+                    .name("v2")
+                    .description("Override model and add top_p")
+                    .values(expectedValues)
+                    .projectId(projectId)
+                    .build();
+
+            assertThat(newBlueprint)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .ignoringFields(BLUEPRINT_PAYLOAD_IGNORED_FIELDS)
+                    .isEqualTo(expectedBlueprint);
+
+            var latestWithInheritance = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(latestWithInheritance)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .ignoringFields(BLUEPRINT_PAYLOAD_IGNORED_FIELDS)
+                    .isEqualTo(expectedBlueprint);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Error: should return 404 when mask or config not found")
+        void createBlueprintFromMask__whenNotFound__thenReturn404(boolean createConfig) {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            if (createConfig) {
+                agentConfigsResourceClient.createAgentConfig(
+                        AgentConfigCreate.builder()
+                                .projectId(projectId)
+                                .blueprint(AgentBlueprint.builder()
+                                        .type(BlueprintType.BLUEPRINT)
+                                        .description("Test")
+                                        .values(List.of(AgentConfigValue.builder()
+                                                .key("model").value("gpt-4").type(ValueType.STRING).build()))
+                                        .build())
+                                .build(),
+                        API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            }
+
+            agentConfigsResourceClient.createBlueprintFromMask(
+                    projectId, UUID.randomUUID(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+        }
+
+        Stream<Arguments> createBlueprintFromMask__whenNotFound__thenReturn404() {
+            return Stream.of(
+                    arguments(true),
+                    arguments(false));
         }
     }
 }

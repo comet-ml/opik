@@ -7,12 +7,11 @@ import signal
 import threading
 
 from rich.console import Console
-from rich.text import Text
 
 from .. import Opik
 from ..rest_api.types.agent import Agent
 from ..rest_api.types.param import Param
-from . import prefixed_output, registry
+from . import registry
 from .in_process_loop import InProcessRunnerLoop
 
 LOGGER = logging.getLogger(__name__)
@@ -69,7 +68,6 @@ def _warn_if_no_blocking_call() -> None:
 
 def _run(shutdown_event: threading.Event) -> None:
     runner_id = os.environ.get("OPIK_RUNNER_ID", "")
-    project_name = os.environ.get("OPIK_PROJECT_NAME", "")
 
     if not runner_id:
         LOGGER.error(
@@ -78,10 +76,6 @@ def _run(shutdown_event: threading.Event) -> None:
             "opik connect --pair <code> python3 main.py"
         )
         return
-
-    _print_banner(runner_id, project_name)
-
-    prefixed_output.install()
 
     client = Opik(_show_misconfiguration_message=False)
     api = client.rest_client
@@ -94,17 +88,6 @@ def _run(shutdown_event: threading.Event) -> None:
             timeout=0,
         ).dict()
 
-    def _sync_agent(name: str) -> None:
-        entry = registry.get_all().get(name)
-        if entry is None:
-            return
-        try:
-            api.runners.register_agents(runner_id, request={name: _to_payload(entry)})
-        except Exception:
-            LOGGER.warn("Failed to register agent '%s'", name, exc_info=True)
-
-    registry.on_register(_sync_agent)
-
     entrypoints = registry.get_all()
     if entrypoints:
         api.runners.register_agents(
@@ -112,25 +95,9 @@ def _run(shutdown_event: threading.Event) -> None:
             request={name: _to_payload(entry) for name, entry in entrypoints.items()},
         )
 
-    LOGGER.info("Runner activated")
-
     loop = InProcessRunnerLoop(api, runner_id, shutdown_event)
 
     try:
         loop.run()
     finally:
         client.end()
-
-
-def _print_banner(runner_id: str, project_name: str) -> None:
-    console = Console()
-
-    info = Text()
-    info.append("   ")
-    info.append("\u2800\u20dd", style="rgb(224,62,45)")
-    info.append("opik  ", style="bold")
-    info.append(f"runner: {runner_id}", style="dim")
-    if project_name:
-        info.append(f"  project: {project_name}", style="dim")
-    console.print(info)
-    console.print()

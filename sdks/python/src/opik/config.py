@@ -349,6 +349,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         config_file_content["opik"] = {
             "url_override": self.url_override,
             "workspace": self.workspace,
+            "project_name": self.project_name,
         }
 
         if self.api_key is not None:
