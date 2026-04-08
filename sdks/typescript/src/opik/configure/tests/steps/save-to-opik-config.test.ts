@@ -24,13 +24,22 @@ vi.mock('../../src/utils/clack', () => ({
 }));
 
 describe('saveToOpikConfigStep', () => {
+  let originalConfigPath: string | undefined;
+
   beforeEach(() => {
+    originalConfigPath = process.env.OPIK_CONFIG_PATH;
+    delete process.env.OPIK_CONFIG_PATH;
     vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(fs.readFileSync).mockReturnValue('');
     vi.mocked(fs.promises.writeFile).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
+    if (originalConfigPath !== undefined) {
+      process.env.OPIK_CONFIG_PATH = originalConfigPath;
+    } else {
+      delete process.env.OPIK_CONFIG_PATH;
+    }
     vi.clearAllMocks();
   });
 
@@ -116,7 +125,6 @@ describe('saveToOpikConfigStep', () => {
 
     expect(fs.promises.writeFile).toHaveBeenCalledOnce();
     expect(vi.mocked(fs.promises.writeFile).mock.calls[0][0]).toBe(customPath);
-    delete process.env.OPIK_CONFIG_PATH;
   });
 
   it('creates parent directory and writes to OPIK_CONFIG_PATH when parent dir is missing', async () => {
@@ -133,7 +141,6 @@ describe('saveToOpikConfigStep', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith('/nonexistent/dir', { recursive: true });
     expect(fs.promises.writeFile).toHaveBeenCalledOnce();
     expect(vi.mocked(fs.promises.writeFile).mock.calls[0][0]).toBe(customPath);
-    delete process.env.OPIK_CONFIG_PATH;
   });
 
   it('falls back to default path when OPIK_CONFIG_PATH parent dir cannot be created', async () => {
@@ -150,7 +157,6 @@ describe('saveToOpikConfigStep', () => {
     const writtenPath = vi.mocked(fs.promises.writeFile).mock.calls[0][0] as string;
     expect(writtenPath).not.toBe('/nonexistent/dir/.opik.config');
     expect(writtenPath).toMatch(/\.opik\.config$/);
-    delete process.env.OPIK_CONFIG_PATH;
   });
 
   it('does not throw when writeFile fails — logs a warning instead', async () => {
