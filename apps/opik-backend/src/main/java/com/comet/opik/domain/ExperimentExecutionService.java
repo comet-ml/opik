@@ -25,6 +25,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -81,7 +82,7 @@ public class ExperimentExecutionService {
                     .flatMap(optPolicy -> {
                         ExecutionPolicy datasetExecutionPolicy = optPolicy.orElse(null);
                         return createExperiments(request, projectName)
-                                .collectList()
+                                .collectSortedList(Comparator.comparingInt(e -> e.info().promptIndex()))
                                 .flatMap(experimentEntries -> {
                                     List<UUID> experimentIds = experimentEntries.stream()
                                             .map(ExperimentEntry::experimentId).toList();

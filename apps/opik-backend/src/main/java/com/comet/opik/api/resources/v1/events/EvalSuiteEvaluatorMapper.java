@@ -4,11 +4,13 @@ import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.langchain4j.data.message.ChatMessageType;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -89,7 +91,7 @@ public class EvalSuiteEvaluatorMapper {
         LlmAsJudgeCode code = deserializeEvaluatorConfig(config);
         code = resolveModelName(code);
         code = renameSchemaToAssertionKeys(code);
-        code = injectAssertionsVariable(code);
+        code = applyEvalSuitePrompt(code);
         return code;
     }
 
@@ -121,20 +123,44 @@ public class EvalSuiteEvaluatorMapper {
     }
 
     /**
-     * Serializes the schema fields as a JSON array and adds it as the "assertions" template variable.
-     * Using JSON avoids formatting issues with special characters in name/description.
+     * Replaces the evaluator's original messages and variables with the dedicated eval suite
+     * LLM-as-judge prompt (system + user template) and formats assertions in human-readable style.
+     * <p>
+     * The prompt templates are defined in {@link EvalSuitePromptConstants} and mirror the Python SDK's
+     * eval suite LLM judge prompts. Variables use {@code {"input": "input", "output": "output"}}
+     * which map to the full trace input/output via the OnlineScoringEngine variable resolution.
      */
-    private LlmAsJudgeCode injectAssertionsVariable(LlmAsJudgeCode code) {
-        if (code.schema() == null || code.schema().isEmpty()) {
-            return code;
+    private LlmAsJudgeCode applyEvalSuitePrompt(LlmAsJudgeCode code) {
+        var messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.SYSTEM)
+                        .content(EvalSuitePromptConstants.SYSTEM_PROMPT)
+                        .build(),
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content(EvalSuitePromptConstants.USER_MESSAGE_TEMPLATE)
+                        .build());
+
+        var variables = new HashMap<String, String>();
+        variables.put("input", "input");
+        variables.put("output", "output");
+        variables.put("assertions", formatAssertions(code.schema()));
+
+        return new LlmAsJudgeCode(code.model(), messages, variables, code.schema());
+    }
+
+    /**
+     * Formats schema entries as a human-readable assertion list matching the SDK format:
+     * {@code - `assertion_1`: assertion text}
+     */
+    private String formatAssertions(List<LlmAsJudgeOutputSchema> schema) {
+        if (schema == null || schema.isEmpty()) {
+            return "";
         }
 
-        String assertionsText = JsonUtils.writeValueAsString(code.schema());
-
-        var updatedVariables = new HashMap<>(code.variables());
-        updatedVariables.put("assertions", assertionsText);
-
-        return new LlmAsJudgeCode(code.model(), code.messages(), updatedVariables, code.schema());
+        return schema.stream()
+                .map(s -> "- `%s`: %s".formatted(s.name(), s.description()))
+                .collect(Collectors.joining("\n"));
     }
 
     private LlmAsJudgeCode resolveModelName(LlmAsJudgeCode code) {

@@ -78,7 +78,8 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                             message.experimentId(), message.datasetItem().id(), e);
                     return Mono.just(false);
                 })
-                .flatMap(success -> decrementAndFinishIfComplete(message, success));
+                .flatMap(success -> decrementAndFinishIfComplete(message, success))
+                .contextWrite(buildReactorContext(message));
     }
 
     private Mono<Void> decrementAndFinishIfComplete(ExperimentItemToProcess message, boolean success) {
