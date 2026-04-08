@@ -8,7 +8,11 @@ import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { useIsPhone } from "@/hooks/useIsPhone";
-import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
+import {
+  INSTALL_OPIK_SECTION_TITLE,
+  PROJECT_NAME_PLACEHOLDER,
+  SNIPPET_PROJECT_NAME,
+} from "@/constants/shared";
 
 type IntegrationTemplateProps = {
   apiKey?: string;
@@ -31,9 +35,13 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { isPhonePortrait } = useIsPhone();
+  const resolvedCode = code.replaceAll(
+    PROJECT_NAME_PLACEHOLDER,
+    projectName || SNIPPET_PROJECT_NAME,
+  );
 
   const { code: codeWithConfig, lines } = putConfigInCode({
-    code,
+    code: resolvedCode,
     workspaceName,
     apiKey,
     shouldMaskApiKey: true,
@@ -41,7 +49,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     projectName,
   });
   const { code: codeWithConfigToCopy } = putConfigInCode({
-    code,
+    code: resolvedCode,
     workspaceName,
     apiKey,
     withHighlight: withLineHighlights,
