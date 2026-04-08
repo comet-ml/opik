@@ -45,7 +45,6 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._project_name = project_name
         self.log_graph = log_graph
 
-
     @property
     def _opik_client(self) -> opik.Opik:
         return opik.get_global_client()

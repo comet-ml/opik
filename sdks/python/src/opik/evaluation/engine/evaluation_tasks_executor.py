@@ -226,8 +226,11 @@ def execute(
         return test_results
 
     with StreamingExecutor[T](
-        workers=workers, verbose=verbose, client=client,
-        desc=desc, total=len(evaluation_tasks),
+        workers=workers,
+        verbose=verbose,
+        client=client,
+        desc=desc,
+        total=len(evaluation_tasks),
     ) as executor:
         for evaluation_task in evaluation_tasks:
             executor.submit(evaluation_task)

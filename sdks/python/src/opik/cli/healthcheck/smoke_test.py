@@ -8,7 +8,6 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
-from unittest.mock import patch
 
 import click
 from rich.console import Console

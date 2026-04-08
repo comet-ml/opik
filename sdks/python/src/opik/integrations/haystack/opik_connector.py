@@ -104,7 +104,8 @@ class OpikConnector:
     ) -> opik_tracer.OpikTracer:
         """Create and configure the OpikTracer instance."""
         return opik_tracer.OpikTracer(
-            name=name, project_name=project_name,
+            name=name,
+            project_name=project_name,
         )
 
     @haystack.component.output_types(name=str, trace_id=Optional[str], project_url=str)

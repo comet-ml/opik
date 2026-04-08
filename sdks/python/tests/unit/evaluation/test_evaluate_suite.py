@@ -344,9 +344,7 @@ def test_evaluate_suite__explicit_client__propagated_to_worker_threads(
 
     def task_that_captures_client(item):
         client = opik_client.get_global_client()
-        clients_seen_in_threads.append(
-            (threading.current_thread().name, id(client))
-        )
+        clients_seen_in_threads.append((threading.current_thread().name, id(client)))
         return {"output": "response"}
 
     with mock.patch.object(
