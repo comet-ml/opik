@@ -6,7 +6,7 @@ Covers the changes introduced to handle server-side 429 throttling:
     - 429 with Retry-After header → sleep honours header value
     - 429 with Retry-After exceeding cap → sleep falls back to 30 s
     - 429 with no Retry-After → sleep is 30 s
-    - non-429 transient error → sleep is in exponential backoff range [10, 60] s
+    - non-429 transient error → sleep is in exponential backoff range [2, 60] s
 
   export_traces (page-fetch failures)
     - 429 on page N → page is skipped, remaining pages still fetched, had_errors=True
@@ -78,8 +78,8 @@ def _make_page(traces, total=None):
     return page
 
 
-def _make_full_page(n=100, offset=0):
-    """Return a page with exactly *n* mock traces (matches the internal page_size=100).
+def _make_full_page(n=500, offset=0):
+    """Return a page with exactly *n* mock traces (matches the internal page_size=500).
 
     Use *offset* to generate distinct trace IDs across pages.
     """
@@ -169,8 +169,8 @@ class TestExportTracesRetryWaitBehaviour:
     ):
         exc = ApiError(status_code=503)
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        # Exponential backoff is in [10, 60] — at least one call must be in that range
-        assert any(10.0 <= s <= 60.0 for s in sleep_calls)
+        # Exponential backoff starts at 2 s and caps at 60 s — at least one call must be in that range
+        assert any(2.0 <= s <= 60.0 for s in sleep_calls)
 
 
 # ---------------------------------------------------------------------------
@@ -250,20 +250,20 @@ class TestExportTracesPageFetchFailures:
         """A failed page in the middle must not prevent later pages from being fetched."""
         from opik.cli.exports.project import export_traces
 
-        # Pages must be full (100 traces) so the loop doesn't break on the
+        # Pages must be full (500 traces) so the loop doesn't break on the
         # short-page termination check before reaching the failed page.
         # Use distinct offsets so page3 trace IDs don't collide with page1.
-        page1 = _make_full_page(100, offset=0)
-        page3 = _make_full_page(100, offset=100)
+        page1 = _make_full_page(500, offset=0)
+        page3 = _make_full_page(500, offset=500)
         mock_client = MagicMock()
         mock_client.search_spans.return_value = []
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
                 mock_fetch.side_effect = [
-                    page1,  # page 1: OK, 100 traces
+                    page1,  # page 1: OK, 500 traces
                     ApiError(status_code=429),  # page 2: rate limited
-                    page3,  # page 3: OK, 100 traces
+                    page3,  # page 3: OK, 500 traces
                     _make_page([]),  # page 4: end
                 ]
                 with patch(f"{_MODULE}.time.sleep"):
@@ -276,7 +276,7 @@ class TestExportTracesPageFetchFailures:
                     )
 
         assert had_errors is True
-        assert exported == 200  # page 1 and page 3 traces both exported
+        assert exported == 1000  # page 1 and page 3 traces both exported
 
     def test_export_traces__consecutive_failures_reach_cap__export_aborted(self):
         """After MAX_CONSECUTIVE_PAGE_FAILURES pages in a row fail, the loop aborts."""
@@ -378,10 +378,10 @@ class TestExportTracesSpanFetchFailures:
 
 class TestExportTracesInterPageDelay:
     def test_export_traces__multiple_full_pages__sleep_called_between_pages(self):
-        """sleep is called after each full page (page_size=100) to throttle requests."""
+        """sleep is called after each full page (page_size=500) to throttle requests."""
         from opik.cli.exports.project import export_traces, _PAGE_FETCH_DELAY_SECONDS
 
-        # Must use full pages (100 traces) — the loop breaks on short pages before
+        # Must use full pages (500 traces) — the loop breaks on short pages before
         # reaching the sleep call, so partial pages do not trigger a sleep.
         mock_client = MagicMock()
         mock_client.search_spans.return_value = []
@@ -389,8 +389,8 @@ class TestExportTracesInterPageDelay:
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
                 mock_fetch.side_effect = [
-                    _make_full_page(100, offset=0),  # page 1: full, IDs 0–99
-                    _make_full_page(100, offset=100),  # page 2: full, IDs 100–199
+                    _make_full_page(500, offset=0),  # page 1: full, IDs 0–499
+                    _make_full_page(500, offset=500),  # page 2: full, IDs 500–999
                     _make_page([]),  # page 3: empty — end
                 ]
                 with patch(f"{_MODULE}.time.sleep") as mock_sleep:

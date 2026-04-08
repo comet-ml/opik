@@ -258,6 +258,7 @@ def _export_all_projects(
     format: str,
     max_workers: int = 5,
     filter_string: Optional[str] = None,
+    page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
     """Export all projects in the workspace.
 
@@ -302,6 +303,7 @@ def _export_all_projects(
                     debug,
                     format,
                     False,  # show_progress=False — outer bar tracks progress
+                    page_size,
                 ): project
                 for project in all_projects
             }
@@ -446,6 +448,7 @@ def export_all(
     format: str,
     api_key: Optional[str] = None,
     filter_string: Optional[str] = None,
+    page_size: int = 500,
 ) -> None:
     """Export all data from the workspace."""
     try:
@@ -495,6 +498,7 @@ def export_all(
                 debug,
                 format,
                 filter_string=filter_string,
+                page_size=page_size,
             )
             total_stats["projects"] = proj_exp
             # Accumulate traces (experiments may also add traces below)
@@ -606,6 +610,13 @@ def _validate_include(
     default=None,
     help="Maximum number of traces/items to export per entity.",
 )
+@click.option(
+    "--page-size",
+    type=click.IntRange(1, 1000),
+    default=500,
+    show_default=True,
+    help="Number of traces to fetch per API request when exporting projects. Larger values reduce round-trips but increase memory usage.",
+)
 @click.pass_context
 def export_all_command(
     ctx: click.Context,
@@ -616,6 +627,7 @@ def export_all_command(
     debug: bool,
     include: list[str],
     max_results: Optional[int],
+    page_size: int,
 ) -> None:
     """Export all datasets, prompts, projects, and experiments from the workspace.
 
@@ -646,4 +658,5 @@ def export_all_command(
         format,
         api_key,
         filter_string=filter,
+        page_size=page_size,
     )

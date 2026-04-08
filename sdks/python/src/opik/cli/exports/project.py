@@ -65,8 +65,10 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
             return seconds
         # No parseable header — wait 30 s before retrying a rate-limit response.
         return 30.0
-    # Other transient errors: exponential backoff up to 60 s.
-    return tenacity.wait_exponential(multiplier=5, min=10, max=60)(retry_state)
+    # Other transient errors (e.g. connection blips): start fast, ramp up
+    # to 60 s cap.  multiplier=2/min=2 gives ~2s, 4s, 8s, 16s, 32s, 60s…
+    # rather than jumping straight to 10 s on the first retry.
+    return tenacity.wait_exponential(multiplier=2, min=2, max=60)(retry_state)
 
 
 _export_rest_retry = tenacity.retry(
@@ -181,6 +183,7 @@ def export_traces(
     force: bool = False,
     show_progress: bool = True,
     manifest: Optional[ExportManifest] = None,
+    page_size: int = 500,
 ) -> tuple[int, int, bool]:
     """Download traces and their spans with pagination support for large projects."""
     if debug:
@@ -196,7 +199,8 @@ def export_traces(
     exported_count = 0
     skipped_count = 0
     had_errors = False
-    page_size = 100  # Fixed batch size per API request
+    # page_size is passed in; default is 500 (larger pages → fewer round-trips,
+    # which offsets the concurrency reduction introduced to avoid rate limits)
     current_page = 1
     total_processed = 0
     consecutive_page_failures = 0
@@ -488,6 +492,7 @@ def export_project_by_name(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    page_size: int = 500,
 ) -> None:
     """Export a project by exact name."""
     try:
@@ -579,6 +584,7 @@ def export_project_by_name(
                 force,
                 debug,
                 format,
+                page_size=page_size,
             )
         )
 
@@ -617,6 +623,7 @@ def export_single_project(
     debug: bool,
     format: str,
     show_progress: bool = True,
+    page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
     """Export a single project."""
     try:
@@ -736,6 +743,7 @@ def export_single_project(
             force,
             show_progress,
             manifest,
+            page_size,
         )
 
         # Only mark the manifest complete when the export finished without errors.
@@ -781,6 +789,7 @@ def export_project_by_name_or_id(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    page_size: int = 500,
 ) -> None:
     """Export a project by name or ID.
 
@@ -826,6 +835,7 @@ def export_project_by_name_or_id(
                     force,
                     debug,
                     format,
+                    page_size=page_size,
                 )
             )
 
@@ -870,6 +880,7 @@ def export_project_by_name_or_id(
             debug,
             format,
             api_key,
+            page_size,
         )
 
     except Exception as e:
@@ -912,6 +923,13 @@ def export_project_by_name_or_id(
     default="json",
     help="Format for exporting data. Defaults to json.",
 )
+@click.option(
+    "--page-size",
+    type=click.IntRange(1, 1000),
+    default=500,
+    show_default=True,
+    help="Number of traces to fetch per API request. Larger values reduce round-trips but increase memory usage.",
+)
 @click.pass_context
 def export_project_command(
     ctx: click.Context,
@@ -922,6 +940,7 @@ def export_project_command(
     force: bool,
     debug: bool,
     format: str,
+    page_size: int,
 ) -> None:
     """Export a project by name or ID to workspace/projects.
 
@@ -931,5 +950,14 @@ def export_project_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_project_by_name_or_id(
-        name_or_id, workspace, path, filter, max_results, force, debug, format, api_key
+        name_or_id,
+        workspace,
+        path,
+        filter,
+        max_results,
+        force,
+        debug,
+        format,
+        api_key,
+        page_size,
     )
