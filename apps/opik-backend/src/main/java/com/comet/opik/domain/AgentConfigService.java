@@ -674,7 +674,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
     public Mono<AgentBlueprint> createBlueprintFromMask(@NonNull UUID projectId, @NonNull UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating blueprint from mask '{}' for project '{}'", maskId, projectId);
+        log.info("Creating blueprint from mask '{}' for project '{}' in workspace '{}'", maskId, projectId,
+                workspaceId);
 
         AgentBlueprint mask = transactionTemplate.inTransaction(handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
@@ -683,7 +684,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     AgentBlueprint.BlueprintType.MASK);
             if (found == null) {
                 throw new NotFoundException(
-                        "Blueprint mask '%s' not found in project '%s'".formatted(maskId, projectId));
+                        "Blueprint mask '%s' not found in project '%s' in workspace '%s'"
+                                .formatted(maskId, projectId, workspaceId));
             }
 
             List<AgentConfigValue> maskValues = dao.getValuesDeltaByBlueprintId(
