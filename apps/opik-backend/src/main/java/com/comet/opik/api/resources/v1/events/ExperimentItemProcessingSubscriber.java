@@ -120,7 +120,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         return Context.of(
                 RequestContext.WORKSPACE_ID, message.workspaceId(),
                 RequestContext.USER_NAME, message.userName(),
-                RequestContext.WORKSPACE_NAME, message.workspaceId(),
+                RequestContext.WORKSPACE_NAME, "",
                 RequestContext.VISIBILITY, Visibility.PRIVATE);
     }
 

@@ -2,6 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
@@ -229,6 +230,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .workspaceId(workspaceId)
                                         .userName(userName)
                                         .scoreNameMapping(Map.of())
+                                        .promptType(PromptType.MUSTACHE)
                                         .build())
                                 .toList();
 

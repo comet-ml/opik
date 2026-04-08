@@ -22,9 +22,5 @@ public record TraceToScoreLlmAsJudge(
         @NotNull String userName,
         String categoryName,
         @NotNull Map<String, String> scoreNameMapping,
-        PromptType promptType) {
-
-    public PromptType promptType() {
-        return promptType != null ? promptType : PromptType.MUSTACHE;
-    }
+        @NotNull PromptType promptType) {
 }

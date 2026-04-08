@@ -2,41 +2,32 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
-import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
-import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
-import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.resources.v1.events.EvalSuiteEvaluatorMapper.PreparedEvaluator;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -52,16 +43,32 @@ import java.util.stream.Stream;
  */
 @EagerSingleton
 @Slf4j
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class EvalSuiteAssertionSampler {
 
     private static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
 
-    private final @NonNull DatasetItemService datasetItemService;
-    private final @NonNull DatasetVersionService datasetVersionService;
-    private final @NonNull OnlineScorePublisher onlineScorePublisher;
-    private final @NonNull IdGenerator idGenerator;
-    private final @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig;
+    private final DatasetItemService datasetItemService;
+    private final DatasetVersionService datasetVersionService;
+    private final OnlineScorePublisher onlineScorePublisher;
+    private final IdGenerator idGenerator;
+    private final EvalSuiteConfig evalSuiteConfig;
+    private final EvalSuiteEvaluatorMapper evaluatorMapper;
+
+    @Inject
+    public EvalSuiteAssertionSampler(
+            @NonNull DatasetItemService datasetItemService,
+            @NonNull DatasetVersionService datasetVersionService,
+            @NonNull OnlineScorePublisher onlineScorePublisher,
+            @NonNull IdGenerator idGenerator,
+            @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig,
+            @NonNull EvalSuiteEvaluatorMapper evaluatorMapper) {
+        this.datasetItemService = datasetItemService;
+        this.datasetVersionService = datasetVersionService;
+        this.onlineScorePublisher = onlineScorePublisher;
+        this.idGenerator = idGenerator;
+        this.evalSuiteConfig = evalSuiteConfig;
+        this.evaluatorMapper = evaluatorMapper;
+    }
 
     @Subscribe
     public void onTracesCreated(TracesCreated tracesBatch) {
@@ -108,7 +115,8 @@ public class EvalSuiteAssertionSampler {
                 .timeout(fetchTimeout)
                 .block();
 
-        List<PreparedEvaluator> preparedDatasetEvaluators = prepareEvaluators(datasetEvaluators.evaluators());
+        List<PreparedEvaluator> preparedDatasetEvaluators = evaluatorMapper
+                .prepareEvaluators(datasetEvaluators.evaluators());
 
         List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
                 .flatMap(trace -> {
@@ -132,12 +140,12 @@ public class EvalSuiteAssertionSampler {
                                 return allEvaluators.stream().map(prepared -> TraceToScoreLlmAsJudge.builder()
                                         .trace(trace)
                                         .ruleId(idGenerator.generateId())
-                                        .ruleName(prepared.name)
-                                        .llmAsJudgeCode(prepared.code)
+                                        .ruleName(prepared.name())
+                                        .llmAsJudgeCode(prepared.code())
                                         .workspaceId(tracesBatch.workspaceId())
                                         .userName(tracesBatch.userName())
                                         .categoryName(SUITE_ASSERTION_CATEGORY)
-                                        .scoreNameMapping(prepared.scoreNameMapping)
+                                        .scoreNameMapping(prepared.scoreNameMapping())
                                         .promptType(PromptType.PYTHON)
                                         .build());
                             });
@@ -187,7 +195,7 @@ public class EvalSuiteAssertionSampler {
                 return List.of();
             }
 
-            return prepareEvaluators(item.evaluators());
+            return evaluatorMapper.prepareEvaluators(item.evaluators());
         } catch (Exception e) {
             log.error("Failed to fetch evaluators for item '{}'", itemId, e);
             return List.of();
@@ -196,109 +204,6 @@ public class EvalSuiteAssertionSampler {
 
     @lombok.Builder(toBuilder = true)
     private record DatasetEvaluatorsResult(UUID versionId, @NonNull List<EvaluatorItem> evaluators) {
-    }
-
-    @lombok.Builder(toBuilder = true)
-    private record PreparedEvaluator(@NonNull String name, @NonNull LlmAsJudgeCode code,
-            @NonNull Map<String, String> scoreNameMapping) {
-    }
-
-    private List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators) {
-        return evaluators.stream()
-                .filter(evaluator -> {
-                    if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
-                        log.debug("Skipping non-LLM evaluator '{}' of type '{}'",
-                                evaluator.name(), evaluator.type());
-                        return false;
-                    }
-                    return true;
-                })
-                .flatMap(evaluator -> {
-                    try {
-                        LlmAsJudgeCode code = deserializeEvaluatorConfig(evaluator.config());
-                        code = resolveModelName(code);
-                        code = renameSchemaToAssertionKeys(code);
-                        code = injectAssertionsVariable(code);
-
-                        Map<String, String> scoreNameMapping = code.schema() != null
-                                ? code.schema().stream()
-                                        .collect(Collectors.toMap(
-                                                LlmAsJudgeOutputSchema::name,
-                                                LlmAsJudgeOutputSchema::description))
-                                : Map.of();
-
-                        return Stream.of(PreparedEvaluator.builder()
-                                .name(evaluator.name())
-                                .code(code)
-                                .scoreNameMapping(scoreNameMapping)
-                                .build());
-                    } catch (java.io.UncheckedIOException e) {
-                        log.error("Failed to deserialize evaluator config for '{}'", evaluator.name(), e);
-                        return Stream.<PreparedEvaluator>empty();
-                    } catch (Exception e) {
-                        log.error("Failed to process evaluator '{}'", evaluator.name(), e);
-                        return Stream.<PreparedEvaluator>empty();
-                    }
-                })
-                .toList();
-    }
-
-    private LlmAsJudgeCode deserializeEvaluatorConfig(JsonNode config) {
-        return JsonUtils.treeToValue(config, LlmAsJudgeCode.class);
-    }
-
-    /**
-     * Renames schema field names to stable identifiers (assertion_1, assertion_2, ...).
-     * The original name is preserved in the description field so that scoreNameMapping
-     * maps assertion_N → original assertion text. This ensures the LLM structured output
-     * uses clean JSON property keys instead of full-sentence assertion descriptions.
-     */
-    private LlmAsJudgeCode renameSchemaToAssertionKeys(LlmAsJudgeCode code) {
-        if (code.schema() == null || code.schema().isEmpty()) {
-            return code;
-        }
-
-        var renamedSchema = new ArrayList<LlmAsJudgeOutputSchema>(code.schema().size());
-        for (int i = 0; i < code.schema().size(); i++) {
-            var original = code.schema().get(i);
-            renamedSchema.add(original.toBuilder()
-                    .name("assertion_%d".formatted(i + 1))
-                    .description(original.name())
-                    .build());
-        }
-
-        return new LlmAsJudgeCode(code.model(), code.messages(), code.variables(), renamedSchema);
-    }
-
-    /**
-     * Serializes the schema fields as a JSON array and adds it as the "assertions" template variable.
-     * Using JSON avoids formatting issues with special characters in name/description.
-     */
-    private LlmAsJudgeCode injectAssertionsVariable(LlmAsJudgeCode code) {
-        if (code.schema() == null || code.schema().isEmpty()) {
-            return code;
-        }
-
-        String assertionsText = JsonUtils.writeValueAsString(code.schema());
-
-        var updatedVariables = new HashMap<>(code.variables());
-        updatedVariables.put("assertions", assertionsText);
-
-        return new LlmAsJudgeCode(code.model(), code.messages(), updatedVariables, code.schema());
-    }
-
-    private LlmAsJudgeCode resolveModelName(LlmAsJudgeCode code) {
-        var existingModel = Optional.ofNullable(code.model());
-        if (existingModel.map(LlmAsJudgeModelParameters::name).filter(StringUtils::isNotBlank).isEmpty()) {
-            var resolvedModel = LlmAsJudgeModelParameters.builder()
-                    .name(evalSuiteConfig.getDefaultModelName())
-                    .temperature(existingModel.map(LlmAsJudgeModelParameters::temperature).orElse(null))
-                    .seed(existingModel.map(LlmAsJudgeModelParameters::seed).orElse(null))
-                    .customParameters(existingModel.map(LlmAsJudgeModelParameters::customParameters).orElse(null))
-                    .build();
-            return new LlmAsJudgeCode(resolvedModel, code.messages(), code.variables(), code.schema());
-        }
-        return code;
     }
 
     private Optional<String> getMetadataString(Trace trace, String key) {
