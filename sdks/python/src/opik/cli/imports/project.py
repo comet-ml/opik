@@ -8,7 +8,6 @@ from typing import Dict, Optional
 
 import opik
 from opik import id_helpers
-from opik.api_objects.attachment.client import AttachmentClient
 from rich.console import Console
 
 from .._attachment_path import safe_attachment_path
@@ -30,28 +29,28 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _upload_attachments_for_trace(
-    attachment_client: AttachmentClient,
+    client: opik.Opik,
     project_dir: Path,
     attachments: list,
     new_trace_id: str,
     span_id_map: Dict[str, str],
     project_name: str,
-) -> bool:
-    """Upload attachment files for an imported trace and its spans.
+) -> None:
+    """Queue attachment uploads for an imported trace via the background streamer.
 
     *project_dir* is the per-project directory that contains the
     ``attachments/<entity_type>/<original_entity_id>/<file_name>`` tree
     created during export.
 
     ID translation:
-    - trace attachments  → uploaded against *new_trace_id*
+    - trace attachments  → queued against *new_trace_id*
     - span attachments   → looked up in *span_id_map*; skipped with a
                            warning when the mapping is missing.
 
-    Returns True if all uploads succeeded (or were skipped), False if any
-    upload failed. Individual failures are logged as warnings and do not raise.
+    Uploads are non-blocking; call ``client.flush()`` after all traces for a
+    project are processed to wait for completion. The streamer handles retries
+    and monitoring automatically.
     """
-    all_ok = True
     for att in attachments:
         entity_type = att.get("entity_type")
         original_entity_id = att.get("entity_id")
@@ -78,35 +77,29 @@ def _upload_attachments_for_trace(
         # Use the same basename normalisation as the exporter so that files
         # saved as e.g. "img.png" (from "dir/img.png") are found correctly.
         file_path = safe_attachment_path(
-            project_dir, entity_type, original_entity_id, file_name
+            base_dir=project_dir,
+            entity_type=entity_type,
+            entity_id=original_entity_id,
+            file_name=file_name,
         )
         if file_path is None:
             console.print(
                 f"[yellow]Warning: attachment '{file_name}' has an invalid or unsafe "
                 "path; skipping[/yellow]"
             )
-            all_ok = False
             continue
 
         if not file_path.exists():
             continue
 
-        try:
-            attachment_client.upload_attachment(
-                project_name=project_name,
-                entity_type=entity_type,
-                entity_id=new_entity_id,
-                file_path=str(file_path),
-                file_name=file_name,
-                mime_type=mime_type,
-            )
-        except Exception as e:
-            console.print(
-                f"[yellow]Warning: failed to upload attachment '{file_name}' "
-                f"for {entity_type} {new_entity_id}: {e}[/yellow]"
-            )
-            all_ok = False
-    return all_ok
+        client.queue_attachment_upload(
+            entity_type=entity_type,
+            entity_id=new_entity_id,
+            project_name=project_name,
+            file_path=str(file_path),
+            file_name=file_name,
+            mime_type=mime_type,
+        )
 
 
 def import_projects_from_directory(
@@ -146,16 +139,6 @@ def import_projects_from_directory(
         # Seed trace_id_map from the manifest so experiments can cross-reference
         # traces that were imported in a previous (interrupted) run.
         trace_id_map: Dict[str, str] = manifest.get_trace_id_map() if manifest else {}
-
-        att_client: Optional[AttachmentClient] = None
-        if include_attachments and not dry_run:
-            try:
-                att_client = client.get_attachment_client()
-            except Exception as e:
-                LOGGER.warning(
-                    "Could not initialize attachment client; attachments will be skipped: %s",
-                    e,
-                )
 
         for project_dir in project_dirs:
             try:
@@ -319,27 +302,21 @@ def import_projects_from_directory(
                             if original_span_id and span.id:
                                 span_id_map[original_span_id] = span.id
 
-                        # Upload attachments while span_id_map is still populated
-                        attachment_ok = True
-                        if att_client is not None:
+                        # Queue attachment uploads while span_id_map is still
+                        # populated. Uploads run in the background via the
+                        # streamer (retries + parallelism); flush() is called
+                        # after all traces for this project are processed.
+                        if include_attachments and not dry_run:
                             attachments = trace_data.get("attachments", [])
                             if attachments:
-                                attachment_ok = _upload_attachments_for_trace(
-                                    att_client,
-                                    project_dir,
-                                    attachments,
-                                    trace.id,
-                                    span_id_map,
-                                    project_name,
+                                _upload_attachments_for_trace(
+                                    client=client,
+                                    project_dir=project_dir,
+                                    attachments=attachments,
+                                    new_trace_id=trace.id,
+                                    span_id_map=span_id_map,
+                                    project_name=project_name,
                                 )
-
-                        if not attachment_ok:
-                            traces_errors += 1
-                            if manifest:
-                                manifest.mark_file_failed(
-                                    trace_file, "one or more attachment uploads failed"
-                                )
-                            continue
 
                         traces_imported += 1
 
@@ -356,11 +333,12 @@ def import_projects_from_directory(
                         traces_errors += 1
                         continue
 
+                # Flush queued attachment uploads (and any other streamed messages)
+                # before proceeding so all data is persisted before we move on.
+                client.flush()
+
                 # Handle experiment recreation if requested
                 if recreate_experiments_flag:
-                    # Flush client before recreating experiments
-                    client.flush()
-
                     experiment_files = list(project_dir.glob("experiment_*.json"))
                     if experiment_files:
                         debug_print(

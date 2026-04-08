@@ -393,7 +393,7 @@ class TestUploadAttachmentsForTrace:
     """
 
     def test_uploads_trace_attachment_with_new_trace_id(self, tmp_path):
-        att_client = MagicMock()
+        client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(
             project_dir, "trace", "old-trace", "img.png", b"image data"
@@ -408,18 +408,18 @@ class TestUploadAttachmentsForTrace:
             }
         ]
         _upload_attachments_for_trace(
-            att_client,
-            project_dir,
-            attachments,
+            client=client,
+            project_dir=project_dir,
+            attachments=attachments,
             new_trace_id="new-trace",
             span_id_map={},
             project_name="proj",
         )
 
-        att_client.upload_attachment.assert_called_once_with(
-            project_name="proj",
+        client.queue_attachment_upload.assert_called_once_with(
             entity_type="trace",
             entity_id="new-trace",
+            project_name="proj",
             file_path=str(
                 project_dir / "attachments" / "trace" / "old-trace" / "img.png"
             ),
@@ -428,7 +428,7 @@ class TestUploadAttachmentsForTrace:
         )
 
     def test_uploads_span_attachment_with_translated_span_id(self, tmp_path):
-        att_client = MagicMock()
+        client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(project_dir, "span", "old-span", "data.csv", b"csv data")
 
@@ -441,18 +441,18 @@ class TestUploadAttachmentsForTrace:
             }
         ]
         _upload_attachments_for_trace(
-            att_client,
-            project_dir,
-            attachments,
+            client=client,
+            project_dir=project_dir,
+            attachments=attachments,
             new_trace_id="new-trace",
             span_id_map={"old-span": "new-span"},
             project_name="proj",
         )
 
-        att_client.upload_attachment.assert_called_once_with(
-            project_name="proj",
+        client.queue_attachment_upload.assert_called_once_with(
             entity_type="span",
             entity_id="new-span",
+            project_name="proj",
             file_path=str(
                 project_dir / "attachments" / "span" / "old-span" / "data.csv"
             ),
@@ -461,7 +461,7 @@ class TestUploadAttachmentsForTrace:
         )
 
     def test_uploads_both_trace_and_span_attachments(self, tmp_path):
-        att_client = MagicMock()
+        client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(project_dir, "trace", "old-trace", "img.png")
         _write_attachment_file(project_dir, "span", "old-span", "data.csv")
@@ -481,18 +481,18 @@ class TestUploadAttachmentsForTrace:
             },
         ]
         _upload_attachments_for_trace(
-            att_client,
-            project_dir,
-            attachments,
+            client=client,
+            project_dir=project_dir,
+            attachments=attachments,
             new_trace_id="new-trace",
             span_id_map={"old-span": "new-span"},
             project_name="proj",
         )
 
-        assert att_client.upload_attachment.call_count == 2
+        assert client.queue_attachment_upload.call_count == 2
 
     def test_skips_span_not_in_id_map(self, tmp_path):
-        att_client = MagicMock()
+        client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(project_dir, "span", "unknown-span", "file.txt")
 
@@ -505,18 +505,18 @@ class TestUploadAttachmentsForTrace:
             }
         ]
         _upload_attachments_for_trace(
-            att_client,
-            project_dir,
-            attachments,
+            client=client,
+            project_dir=project_dir,
+            attachments=attachments,
             new_trace_id="new-trace",
             span_id_map={},  # unknown-span not in map
             project_name="proj",
         )
 
-        att_client.upload_attachment.assert_not_called()
+        client.queue_attachment_upload.assert_not_called()
 
     def test_skips_attachment_file_missing_on_disk(self, tmp_path):
-        att_client = MagicMock()
+        client = MagicMock()
         project_dir = tmp_path / "my-project"
         # No file written on disk
 
@@ -529,58 +529,33 @@ class TestUploadAttachmentsForTrace:
             }
         ]
         _upload_attachments_for_trace(
-            att_client,
-            project_dir,
-            attachments,
+            client=client,
+            project_dir=project_dir,
+            attachments=attachments,
             new_trace_id="new-trace",
             span_id_map={},
             project_name="proj",
         )
 
-        att_client.upload_attachment.assert_not_called()
-
-    def test_upload_error_does_not_raise__returns_false(self, tmp_path):
-        att_client = MagicMock()
-        att_client.upload_attachment.side_effect = Exception("upload failed")
-        project_dir = tmp_path / "my-project"
-        _write_attachment_file(project_dir, "trace", "old-trace", "img.png")
-
-        attachments = [
-            {
-                "entity_type": "trace",
-                "entity_id": "old-trace",
-                "file_name": "img.png",
-                "mime_type": "image/png",
-            }
-        ]
-        # Should not raise — errors are warnings only; returns False to signal failure
-        result = _upload_attachments_for_trace(
-            att_client,
-            project_dir,
-            attachments,
-            new_trace_id="new-trace",
-            span_id_map={},
-            project_name="proj",
-        )
-        assert result is False
+        client.queue_attachment_upload.assert_not_called()
 
     def test_skips_entries_with_missing_required_keys(self, tmp_path):
-        att_client = MagicMock()
+        client = MagicMock()
         project_dir = tmp_path / "my-project"
 
         attachments = [
             {"entity_type": "trace"},  # missing entity_id and file_name
         ]
         _upload_attachments_for_trace(
-            att_client,
-            project_dir,
-            attachments,
+            client=client,
+            project_dir=project_dir,
+            attachments=attachments,
             new_trace_id="new-trace",
             span_id_map={},
             project_name="proj",
         )
 
-        att_client.upload_attachment.assert_not_called()
+        client.queue_attachment_upload.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -806,12 +781,8 @@ def _make_import_client(new_trace_id="new-trace-id", new_span_id="new-span-id"):
     mock_span.id = new_span_id
     client.span.return_value = mock_span
 
-    mock_att_client = MagicMock()
-    client.get_attachment_client.return_value = mock_att_client
-
-    # flush() must return True so the import doesn't bail early
+    # flush() is called once per project after all traces are processed.
     client.flush.return_value = True
-    client.__internal_api__failed_uploads__ = MagicMock(return_value=0)
     return client
 
 
@@ -838,8 +809,7 @@ class TestImportProjectsUploadsAttachments:
             include_attachments=True,
         )
 
-        att_client = client.get_attachment_client.return_value
-        upload_calls = att_client.upload_attachment.call_args_list
+        upload_calls = client.queue_attachment_upload.call_args_list
 
         # Verify trace attachment uses new trace ID
         trace_call = next(
@@ -865,8 +835,7 @@ class TestImportProjectsUploadsAttachments:
             include_attachments=True,
         )
 
-        att_client = client.get_attachment_client.return_value
-        upload_calls = att_client.upload_attachment.call_args_list
+        upload_calls = client.queue_attachment_upload.call_args_list
 
         span_call = next(
             c for c in upload_calls if c.kwargs.get("entity_type") == "span"
@@ -890,8 +859,7 @@ class TestImportProjectsUploadsAttachments:
             include_attachments=True,
         )
 
-        att_client = client.get_attachment_client.return_value
-        assert att_client.upload_attachment.call_count == 2
+        assert client.queue_attachment_upload.call_count == 2
 
     def test_no_attachments_flag_skips_all_uploads(self, tmp_path):
         client = _make_import_client()
@@ -908,8 +876,8 @@ class TestImportProjectsUploadsAttachments:
             include_attachments=False,
         )
 
-        # AttachmentClient must not be obtained at all
-        client.get_attachment_client.assert_not_called()
+        # queue_attachment_upload must not be called at all
+        client.queue_attachment_upload.assert_not_called()
 
     def test_trace_still_imported_when_attachment_files_missing(self, tmp_path):
         """Missing attachment files emit a warning but don't abort the trace import."""
@@ -931,8 +899,7 @@ class TestImportProjectsUploadsAttachments:
         assert client.trace.call_count == 1
         assert client.span.call_count == 1
         # No uploads because files don't exist
-        att_client = client.get_attachment_client.return_value
-        att_client.upload_attachment.assert_not_called()
+        client.queue_attachment_upload.assert_not_called()
 
     def test_dry_run_does_not_upload_attachments(self, tmp_path):
         client = _make_import_client()
@@ -949,7 +916,7 @@ class TestImportProjectsUploadsAttachments:
             include_attachments=True,
         )
 
-        client.get_attachment_client.assert_not_called()
+        client.queue_attachment_upload.assert_not_called()
 
     def test_trace_without_attachments_key_imports_normally(self, tmp_path):
         """Trace files from before attachment support (no 'attachments' key) import fine."""

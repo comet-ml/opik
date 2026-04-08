@@ -294,16 +294,16 @@ def _export_all_projects(
             future_to_project = {
                 executor.submit(
                     export_single_project,
-                    client,
-                    project,
-                    projects_dir,
-                    filter_string,
-                    max_results,
-                    force,
-                    debug,
-                    format,
-                    False,  # show_progress=False — outer bar tracks progress
-                    include_attachments,
+                    client=client,
+                    project=project,
+                    output_dir=projects_dir,
+                    filter_string=filter_string,
+                    max_results=max_results,
+                    force=force,
+                    debug=debug,
+                    format=format,
+                    show_progress=False,  # outer bar tracks progress
+                    include_attachments=include_attachments,
                 ): project
                 for project in all_projects
             }

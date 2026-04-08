@@ -657,14 +657,14 @@ def export_project_by_name(
 
         # Export the project
         exported_count, traces_exported, traces_skipped = export_single_project(
-            client,
-            matching_project,
-            output_dir,
-            filter_string,
-            max_results,
-            force,
-            debug,
-            format,
+            client=client,
+            project=matching_project,
+            output_dir=output_dir,
+            filter_string=filter_string,
+            max_results=max_results,
+            force=force,
+            debug=debug,
+            format=format,
             include_attachments=include_attachments,
         )
 
@@ -819,18 +819,18 @@ def export_single_project(
 
         # Export related traces for this project
         traces_exported, traces_skipped, traces_had_errors = export_traces(
-            client,
-            project.name,
-            project_traces_dir,
-            max_results,  # None means no limit — fetch all pages
-            effective_filter,
-            None,  # project_name_filter
-            format,
-            debug,
-            force,
-            show_progress,
-            manifest,
-            include_attachments,
+            client=client,
+            project_name=project.name,
+            project_dir=project_traces_dir,
+            max_results=max_results,  # None means no limit — fetch all pages
+            filter_string=effective_filter,
+            project_name_filter=None,
+            format=format,
+            debug=debug,
+            force=force,
+            show_progress=show_progress,
+            manifest=manifest,
+            include_attachments=include_attachments,
         )
 
         # Only mark the manifest complete when the export finished without errors.
@@ -918,14 +918,14 @@ def export_project_by_name_or_id(
 
             # Export the project
             exported_count, traces_exported, traces_skipped = export_single_project(
-                client,
-                project,
-                output_dir,
-                filter_string,
-                max_results,
-                force,
-                debug,
-                format,
+                client=client,
+                project=project,
+                output_dir=output_dir,
+                filter_string=filter_string,
+                max_results=max_results,
+                force=force,
+                debug=debug,
+                format=format,
                 include_attachments=include_attachments,
             )
 
@@ -963,16 +963,16 @@ def export_project_by_name_or_id(
 
         # Try by name (either because ID lookup failed or we're explicitly trying name)
         export_project_by_name(
-            name_or_id,
-            workspace,
-            output_path,
-            filter_string,
-            max_results,
-            force,
-            debug,
-            format,
-            api_key,
-            include_attachments,
+            name=name_or_id,
+            workspace=workspace,
+            output_path=output_path,
+            filter_string=filter_string,
+            max_results=max_results,
+            force=force,
+            debug=debug,
+            format=format,
+            api_key=api_key,
+            include_attachments=include_attachments,
         )
 
     except Exception as e:
@@ -1036,14 +1036,14 @@ def export_project_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_project_by_name_or_id(
-        name_or_id,
-        workspace,
-        path,
-        filter,
-        max_results,
-        force,
-        debug,
-        format,
-        api_key,
+        name_or_id=name_or_id,
+        workspace=workspace,
+        output_path=path,
+        filter_string=filter,
+        max_results=max_results,
+        force=force,
+        debug=debug,
+        format=format,
+        api_key=api_key,
         include_attachments=not no_attachments,
     )
