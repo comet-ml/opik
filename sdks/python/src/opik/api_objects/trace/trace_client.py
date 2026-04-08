@@ -6,6 +6,7 @@ import opik.datetime_helpers as datetime_helpers
 import opik.llm_usage as llm_usage
 import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
+from opik import logging_messages
 from opik.types import ErrorInfoDict, SpanType, LLMProvider, TraceSource
 from .. import constants, span
 
@@ -63,7 +64,13 @@ class Trace:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        self.update(
+        if self._streamer.use_batching:
+            LOGGER.warning(
+                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+                "Trace.end()",
+            )
+
+        self._update(
             end_time=end_time,
             metadata=metadata,
             input=input,
@@ -99,6 +106,32 @@ class Trace:
         Returns:
             None
         """
+        if self._streamer.use_batching:
+            LOGGER.warning(
+                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+                "Trace.update()",
+            )
+
+        self._update(
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            error_info=error_info,
+            thread_id=thread_id,
+        )
+
+    def _update(
+        self,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
+    ) -> None:
         update_trace(
             trace_id=self.id,
             project_name=self._project_name,

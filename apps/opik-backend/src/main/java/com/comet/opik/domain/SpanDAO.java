@@ -825,7 +825,7 @@ public class SpanDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
-            ), feedback_scores_deduped AS (
+            )<if(!exclude_feedback_scores)>, feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -945,7 +945,7 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            , spans_deduped AS (
+            <endif>, spans_deduped AS (
                 SELECT
                       s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       truncated_input,
@@ -1008,7 +1008,7 @@ public class SpanDAO {
                 <if(!exclude_comments)>, c.comments AS comments <endif>
             FROM spans_final s
             LEFT JOIN comments_final c ON s.id = c.entity_id
-            LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id
+            <if(!exclude_feedback_scores)>LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id<endif>
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
@@ -2272,9 +2272,12 @@ public class SpanDAO {
                             .filter(field -> !sortingFields.contains(field))
                             .collect(Collectors.toSet());
 
-                    // check feedback_scores as well because it's a special case
+                    // check feedback_scores as well because it's a special case:
+                    // skip exclusion when sorting or filtering by feedback scores,
+                    // since the feedback score CTEs are needed for those operations
                     if (fields.contains(SpanField.FEEDBACK_SCORES.getValue())
-                            && sortingFields.stream().noneMatch(this::isFeedBackScoresField)) {
+                            && sortingFields.stream().noneMatch(this::isFeedBackScoresField)
+                            && !hasFeedbackScoreFilters(template)) {
 
                         template.add("exclude_feedback_scores", true);
                     }
@@ -2360,8 +2363,7 @@ public class SpanDAO {
      * not a semantic filter.
      */
     private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria, ST template) {
-        boolean hasFeedbackScoreFilters = template.getAttribute("feedback_scores_filters") != null
-                || template.getAttribute("feedback_scores_empty_filters") != null;
+        boolean hasFeedbackScoreFilters = hasFeedbackScoreFilters(template);
 
         boolean hasNarrowingFilters = criteria.traceId() != null
                 || criteria.type() != null
@@ -2369,6 +2371,11 @@ public class SpanDAO {
                 || template.getAttribute("filters") != null;
 
         return !hasFeedbackScoreFilters && hasNarrowingFilters;
+    }
+
+    private boolean hasFeedbackScoreFilters(ST template) {
+        return template.getAttribute("feedback_scores_filters") != null
+                || template.getAttribute("feedback_scores_empty_filters") != null;
     }
 
     private void bindSearchCriteria(Statement statement, SpanSearchCriteria spanSearchCriteria) {

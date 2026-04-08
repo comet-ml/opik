@@ -1,4 +1,5 @@
 import atexit
+import contextvars
 import datetime
 import functools
 import logging
@@ -54,6 +55,7 @@ from .. import (
     httpx_client,
     id_helpers,
     llm_usage,
+    logging_messages,
     rest_client_configurator,
     url_helpers,
 )
@@ -102,6 +104,7 @@ class Opik:
         workspace: Optional[str] = None,
         host: Optional[str] = None,
         api_key: Optional[str] = None,
+        batching: bool = True,
         _use_batching: bool = False,
         _show_misconfiguration_message: bool = True,
     ) -> None:
@@ -114,8 +117,11 @@ class Opik:
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
             api_key: The API key for Opik. This parameter is ignored for local installations.
-            _use_batching: intended for internal usage in specific conditions only.
-                Enabling it is unsafe and can lead to data loss.
+            batching: If True (default), enables request batching for higher throughput.
+                When enabled, update operations (``update_span``, ``update_trace``,
+                ``Span.update``, ``Trace.update``) may cause data loss if the update
+                arrives at the server before the batched create request is flushed.
+            _use_batching: Deprecated. Use ``batching`` instead.
             _show_misconfiguration_message: intended for internal usage in specific conditions only.
                 Print a warning message if the Opik server is not configured properly.
         Returns:
@@ -138,10 +144,10 @@ class Opik:
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
         self._project_name_most_recent_trace: Optional[str] = None
-        self._use_batching = _use_batching
+        self._use_batching = batching or _use_batching
 
         self._initialize_streamer(
-            use_batching=_use_batching,
+            use_batching=self._use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
@@ -436,7 +442,7 @@ class Opik:
 
         if not self._use_batching:
             raise exceptions.OpikException(
-                "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
+                "In order to use this method, you must enable batching using opik.Opik(batching=True)."
             )
 
         traces_public = self.search_traces(project_name=project_name)
@@ -697,6 +703,12 @@ class Opik:
         Returns:
             None
         """
+        if self._use_batching:
+            LOGGER.warning(
+                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+                "Opik.update_span()",
+            )
+
         span_module.span_client.update_span(
             id=id,
             trace_id=trace_id,
@@ -761,6 +773,12 @@ class Opik:
         Returns:
             None
         """
+        if self._use_batching:
+            LOGGER.warning(
+                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+                "Opik.update_trace()",
+            )
+
         if not trace_id or not project_name:
             raise ValueError(
                 "trace_id and project_name must be provided and can not be None or empty, "
@@ -1235,6 +1253,7 @@ class Opik:
         return evaluation_suite.EvaluationSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
     def get_evaluation_suite(
@@ -1271,6 +1290,7 @@ class Opik:
         return evaluation_suite.EvaluationSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
     def get_or_create_evaluation_suite(
@@ -2701,8 +2721,74 @@ class Opik:
         return self._project_name
 
 
-@functools.lru_cache()
-def get_client_cached() -> Opik:
-    client = Opik(_use_batching=True)
+_context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.ContextVar(
+    "_context_client_var", default=None
+)
+_global_singleton: Optional[Opik] = None
 
-    return client
+
+def get_current_client_raw() -> Optional[Opik]:
+    """Return the active Opik client without auto-creating one.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. ``None`` if no client has been set
+    """
+    client = _context_client_var.get()
+    if client is not None:
+        return client
+
+    return _global_singleton
+
+
+def get_global_client() -> Opik:
+    """Get the active Opik client, creating one if needed.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. Auto-created default client (created on first call)
+    """
+    client = get_current_client_raw()
+    if client is not None:
+        return client
+
+    global _global_singleton
+    _global_singleton = Opik()
+    return _global_singleton
+
+
+def set_global_client(client: Opik, context_wise: bool = False) -> None:
+    """Set the active Opik client.
+
+    Args:
+        client: The Opik client instance to use.
+        context_wise: If True, sets the client for the current context only
+            (thread-safe, async-safe). If False, replaces the global singleton.
+    """
+    if context_wise:
+        _context_client_var.set(client)
+    else:
+        global _global_singleton
+        _global_singleton = client
+
+
+def reset_global_client(end_client: bool = True) -> None:
+    """Clear the active Opik client.
+
+    Args:
+        end_client: If True (default), calls ``.end()`` on the global singleton
+            before clearing it. Set to False when the caller manages the client
+            lifecycle independently.
+    """
+    global _global_singleton
+    if _global_singleton is not None:
+        if end_client:
+            _global_singleton.end()
+        _global_singleton = None
+    _context_client_var.set(None)
+
+
+def get_client_cached() -> Opik:
+    return get_global_client()

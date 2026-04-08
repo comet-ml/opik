@@ -1,10 +1,3 @@
-# Setting up a demo project
-#
-# Evaluation traces & spans
-# We start with evaluation so it shows up at the bottom.
-# The evaluation is going to be tracked into a separate project from the demo traces.
-# It was run using a simple context with 3 sentences, and 3 questions asking about it.
-
 import opik
 import json
 import urllib.request
@@ -14,10 +7,9 @@ import datetime
 import time
 import uuid
 import random
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import opik.rest_api
-from opik_backend.demo_data import demo_traces, demo_spans, demo_thread_feedback_scores, demo_projects, demo_prompt, experiment_traces_grouped_by_project, experiment_spans_grouped_by_project, demo_datasets, demo_dataset_items, demo_experiments, demo_experiment_items, demo_optimizations
+from opik_backend.demo_data import demo_traces, demo_spans, demo_thread_feedback_scores
 from opentelemetry import trace
 from dataclasses import dataclass, field
 
@@ -30,10 +22,6 @@ class DemoDataContext:
     This prevents race conditions when multiple users sign up concurrently."""
     uuid_map: dict = field(default_factory=dict)
     trace_time_shift: dict = field(default_factory=dict)
-    dataset_ids: dict = field(default_factory=dict)
-    dataset_item_ids: dict = field(default_factory=dict)
-    prompt_names: dict = field(default_factory=dict)
-    prompt_commits: dict = field(default_factory=dict)
 
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
@@ -328,108 +316,6 @@ def get_new_uuid_by_time(context: DemoDataContext, old_id, datetime):
         context.uuid_map[old_id] = new_id
     return new_id
 
-def create_demo_evaluation_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
-    with tracer.start_as_current_span("create_demo_evaluation_project"):
-        client: opik.Opik = None
-        try:
-
-            project_name = "Opik Demo Assistant"
-
-            # Find project ID by project name
-            project_id = next((pid for pid, pname in demo_projects.items() if pname == "Opik Assistant"), None)
-           
-            if project_id is None:
-                logger.error("Could not find project ID for 'Opik Assistant'")
-                return
-            
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
-
-            client = opik.Opik(
-                project_name=project_name,
-                workspace=workspace_name,
-                host=base_url,
-                api_key=comet_api_key,
-                _use_batching=True,
-            )
-
-            evaluation_traces = experiment_traces_grouped_by_project[project_id]
-            evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            time_shift = process_traces_with_time_shift(evaluation_traces, context, client)
-            process_spans_with_time_shift(evaluation_spans, time_shift, context, client)
-            client.flush()
-            
-            # Prompts
-            # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
-            for version in demo_prompt["versions"]:
-                prompt = client.create_prompt(
-                    name="Demo - " + demo_prompt["name"],
-                    prompt=version["template"],
-                )
-                context.prompt_names[version["id"]] = prompt.name
-                context.prompt_commits[version["id"]] = prompt.commit
-
-            # Dataset
-            dataset_name = "Opik Questions"
-            dataset = next((x for x in demo_datasets if x["name"] == dataset_name), None)
-            opik_dataset = client.get_or_create_dataset(name="Opik Demo Questions", description=dataset["description"])
-            
-            context.dataset_ids[dataset["id"]] = opik_dataset.id
-
-            dataset_item_ids = {}
-            new_items = []
-            for item in demo_dataset_items[dataset["id"]]:
-                new_id = str(uuid6.uuid7())
-                dataset_item_ids[item["id"]] = new_id
-                context.dataset_item_ids[item["id"]] = new_id
-                new_item = {
-                    **item["data"],
-                    "id": new_id,
-                }
-                new_items.append(new_item)
-
-            opik_dataset.insert(new_items)
-
-            # In addition to creating the dataset, we also create a mapping from the dataset items to the traces. This will be handy for creating the experiment.
-            items = opik_dataset.get_items()
-
-            # Experiment
-            # The experiment is constructed by joining the traces with the dataset items.
-            experiments = [x for x in demo_experiments if x["name"] in ["opik-assistant-v1", "opik-assistant-v2"]]
-
-            for item in experiments:
-                commits =  [sub_item.decode() for sublist in item["prompt_versions"].values() for sub_item in sublist]
-                
-                prompts = []
-                for version in commits:
-                    prompt = client.get_prompt(name=context.prompt_names[version], commit=context.prompt_commits[version])
-                    prompts.append(prompt)
-                
-                experiment = client.create_experiment(name="Demo-" + item["name"], dataset_name=opik_dataset.name, prompts=prompts)
-                experiment_items = []
-                
-                for experiment_item in demo_experiment_items[item["id"]]:
-                    trace_id = get_new_uuid(context, experiment_item["trace_id"])
-                    dataset_item_id = dataset_item_ids[experiment_item["dataset_item_id"]]
-                    
-                    if dataset_item_id is not None:
-                        experiment_items.append(
-                            opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
-                                dataset_item_id=dataset_item_id, trace_id=trace_id
-                            )
-                        )
-
-                experiment.insert(experiment_items)
-
-        except Exception as e:
-            logger.error(e)
-        finally:
-            # Close the client
-            if client:
-                client.flush()
-                client.end()
-
 def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
     with tracer.start_as_current_span("create_demo_chatbot_project"):
         client: opik.Opik = None
@@ -517,125 +403,6 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 client.flush()
                 client.end()
 
-def create_demo_optimizer_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
-    with tracer.start_as_current_span("create_demo_optimizer_project"):
-        client: opik.Opik = None
-        try:
-
-            project_name = "Opik Demo Optimizer"
-
-            # Find project ID by project name
-            project_id = next((pid for pid, pname in demo_projects.items() if pname == "Opik Optimizer"), None)
-           
-            if project_id is None:
-                logger.error("Could not find project ID for 'Opik Optimizer'")
-                return
-            
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
-
-            client = opik.Opik(
-                project_name=project_name,
-                workspace=workspace_name,
-                host=base_url,
-                api_key=comet_api_key,
-                _use_batching=True,
-            )
-
-            evaluation_traces = experiment_traces_grouped_by_project[project_id]
-            evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            time_shift = process_traces_with_time_shift(evaluation_traces, context, client)
-            process_spans_with_time_shift(evaluation_spans, time_shift, context, client)
-            client.flush()
-
-            dataset_name = "Opik Demo Questions"
-            
-            for optimization in demo_optimizations:
-
-                new_optimization = client.create_optimization(
-                    name=optimization["name"],
-                    dataset_name=dataset_name,
-                    objective_name=optimization["objective_name"],
-                    metadata=optimization["metadata"],
-                )
-            
-                # Experiment
-                # The experiment is constructed by joining the traces with the dataset items.
-                experiments = [x for x in demo_experiments if x.get("optimization_id") == optimization["id"]]
-
-                for item in experiments:
-                    commits =  [item.decode() for sublist in item.get("prompt_versions", {}).values() for item in sublist]
-                    
-                    prompts = []
-                    for version in commits:
-                        prompt = client.get_prompt(name=context.prompt_names[version], commit=context.prompt_commits[version])
-                        prompts.append(prompt)
-                    
-                    experiment = client.create_experiment(
-                        name="Demo-" + item["name"],
-                        dataset_name=dataset_name,
-                        prompts=prompts,
-                        optimization_id=new_optimization.id,
-                        experiment_config = {
-                            **item.get("metadata", {}),
-                            "dataset": dataset_name,
-                        },
-                        type=item["type"]
-                    )
-
-                    experiment_items = []
-                    
-                    for experiment_item in demo_experiment_items.get(item["id"], []):
-                        trace_id = get_new_uuid(context, experiment_item["trace_id"])
-                        dataset_item_id = context.dataset_item_ids[experiment_item["dataset_item_id"]]
-                        
-                        if dataset_item_id is not None:
-                            experiment_items.append(
-                                opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
-                                    dataset_item_id=dataset_item_id, trace_id=trace_id
-                                )
-                            )
-
-                    experiment.insert(experiment_items)
-                    
-                client.rest_client.optimizations.update_optimizations_by_id(
-                    id=new_optimization.id,
-                    status="completed"
-                )
-
-        except Exception as e:
-            logger.error(e)
-        finally:
-            # Close the client
-            if client:
-                client.flush()
-                client.end()
-
-def create_demo_playground_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
-    with tracer.start_as_current_span("create_demo_playground_project"):
-        try:
-            project_name = "playground"
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
-
-            request = {
-                "url": "/v1/private/projects",
-                "method": "POST",
-                "payload": {
-                    "name": project_name,
-                },
-            }
-
-            _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
-            if status_code in [201, 200]:
-                logger.info("%s project created successfully", project_name)
-            else:
-                logger.error("Failed to create playground project, status code: %s", status_code)
-        except Exception as e:
-            logger.error("Error creating playground project: %s", e)
-
 def create_demo_data(base_url: str, workspace_name, comet_api_key):
     with tracer.start_as_current_span("create_demo_data"):
         # Create a fresh context for this invocation to prevent race conditions
@@ -643,10 +410,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
         context = DemoDataContext()
         
         try:
-            create_demo_evaluation_project(context, base_url, workspace_name, comet_api_key)
-            create_demo_optimizer_project(context, base_url, workspace_name, comet_api_key)
             create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
-            create_demo_playground_project(context, base_url, workspace_name, comet_api_key)
             create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
             logger.info("Demo data created successfully")
         except Exception as e:

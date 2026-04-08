@@ -4263,6 +4263,51 @@ class FindSpansResourceTest {
                     List.of(), exclude);
         }
 
+        @Test
+        void findSpans__whenExcludeFeedbackScoresWithFilter__thenReturnSpansExcludingAndFilteringScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> feedbackScores = spans.stream()
+                    .flatMap(span -> PodamFactoryUtils
+                            .manufacturePojoList(podamFactory, FeedbackScoreItem.FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(span.projectName())
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            spanResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(SpanField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .key(feedbackScores.getFirst().name())
+                            .value(feedbackScores.getFirst().value().toString())
+                            .build());
+
+            // The query still runs feedback score CTEs because feedback_scores_filters is active,
+            // even though exclude_feedback_scores is requested.
+            // However, returned feedback scores are excluded (nulled) from the response.
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = spans.subList(1, spans.size());
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans,
+                    unexpectedSpans, apiKey, List.of(), List.of(Span.SpanField.FEEDBACK_SCORES));
+        }
+
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterErrorIsNotEmpty__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {

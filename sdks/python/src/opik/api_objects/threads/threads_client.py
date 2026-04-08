@@ -30,6 +30,10 @@ class ThreadsClient:
     def __init__(self, client: "opik.Opik"):
         self._opik_client = client
 
+    @property
+    def client(self) -> "opik.Opik":
+        return self._opik_client
+
     def search_threads(
         self,
         project_name: Optional[str] = None,

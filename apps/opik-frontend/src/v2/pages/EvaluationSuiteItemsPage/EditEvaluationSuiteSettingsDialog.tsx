@@ -142,16 +142,42 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
 
             <Separator className="mb-4" />
 
+            <div className="mb-4 flex flex-col gap-1">
+              <div className="mb-1">
+                <Label className="comet-body-s-accented">
+                  Global assertions
+                </Label>
+                <p className="comet-body-xs text-light-slate">
+                  Define the global conditions all items in this evaluation
+                  suite must pass.
+                </p>
+              </div>
+              <div className="pt-1.5">
+                <AssertionsField
+                  editableAssertions={fields.map((f) => f.value)}
+                  onChangeEditable={(index, value) => update(index, { value })}
+                  onRemoveEditable={(index) => remove(index)}
+                  onAdd={() => append({ value: "" })}
+                  placeholder="e.g. Response should be factually accurate and cite sources"
+                />
+              </div>
+            </div>
+
             <div className="mb-4">
-              <h3 className="comet-body-accented">Evaluation criteria</h3>
-              <p className="comet-body-s text-light-slate">
+              <h3 className="comet-body-s-accented">Evaluation criteria</h3>
+              <p className="comet-body-xs text-light-slate">
                 Define the conditions required for the evaluation to pass
               </p>
             </div>
 
             <div className="mb-4 flex gap-4">
               <div className="flex flex-1 flex-col gap-1">
-                <Label htmlFor="runs-per-item">Default runs per item</Label>
+                <Label
+                  htmlFor="runs-per-item"
+                  className="comet-body-xs-accented"
+                >
+                  Default runs per item
+                </Label>
                 <Input
                   id="runs-per-item"
                   dimension="sm"
@@ -169,7 +195,12 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
                 />
               </div>
               <div className="flex flex-1 flex-col gap-1">
-                <Label htmlFor="pass-threshold">Default pass threshold</Label>
+                <Label
+                  htmlFor="pass-threshold"
+                  className="comet-body-xs-accented"
+                >
+                  Default pass threshold
+                </Label>
                 <Input
                   id="pass-threshold"
                   dimension="sm"
@@ -184,25 +215,6 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
                   onFocus={thresholdInput.onFocus}
                   onBlur={thresholdInput.onBlur}
                   onKeyDown={thresholdInput.onKeyDown}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1 pb-4">
-              <div className="mb-1">
-                <Label>Global assertions</Label>
-                <p className="comet-body-s text-light-slate">
-                  Define the global conditions all items in this evaluation
-                  suite must pass.
-                </p>
-              </div>
-              <div className="pt-1.5">
-                <AssertionsField
-                  editableAssertions={fields.map((f) => f.value)}
-                  onChangeEditable={(index, value) => update(index, { value })}
-                  onRemoveEditable={(index) => remove(index)}
-                  onAdd={() => append({ value: "" })}
-                  placeholder="e.g. Response should be factually accurate and cite sources"
                 />
               </div>
             </div>

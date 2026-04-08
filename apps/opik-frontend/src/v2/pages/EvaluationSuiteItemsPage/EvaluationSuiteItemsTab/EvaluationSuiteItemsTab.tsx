@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import get from "lodash/get";
 import {
@@ -42,8 +42,6 @@ import DatasetItemsActionsPanel from "@/v2/pages-shared/datasets/DatasetItemsAct
 import { DatasetItemRowActionsCell } from "@/v2/pages-shared/datasets/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import SelectAllBanner from "@/shared/SelectAllBanner/SelectAllBanner";
-import AddDatasetItemDialog from "@/v2/pages-shared/datasets/AddDatasetItemDialog";
-import AddDatasetItemSidebar from "@/v2/pages-shared/datasets/AddDatasetItemSidebar";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -205,9 +203,6 @@ function EvaluationSuiteItemsTab({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const [openAddSidebar, setOpenAddSidebar] = useState<boolean>(false);
   const [openCreatePanel, setOpenCreatePanel] = useState<boolean>(false);
 
   const transformedFilters = useMemo(
@@ -479,18 +474,8 @@ function EvaluationSuiteItemsTab({
   );
 
   const handleNewDatasetItemClick = useCallback(() => {
-    if (isEvaluationSuite) {
-      setOpenCreatePanel(true);
-      return;
-    }
-
-    if (data?.total && data.total > 0) {
-      setOpenAddSidebar(true);
-    } else {
-      setOpenDialog(true);
-      resetDialogKeyRef.current += 1;
-    }
-  }, [isEvaluationSuite, data?.total]);
+    setOpenCreatePanel(true);
+  }, []);
 
   const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
 
@@ -587,7 +572,7 @@ function EvaluationSuiteItemsTab({
               size="sm"
               onClick={handleNewDatasetItemClick}
             >
-              {isEvaluationSuite ? "Add suite item" : "Add dataset item"}
+              Add suite item
             </Button>
           )}
         </div>
@@ -698,24 +683,12 @@ function EvaluationSuiteItemsTab({
         />
       )}
 
-      <AddDatasetItemDialog
-        key={resetDialogKeyRef.current}
-        datasetId={datasetId}
-        open={openDialog}
-        setOpen={setOpenDialog}
-      />
-
-      <AddDatasetItemSidebar
-        open={openAddSidebar}
-        setOpen={setOpenAddSidebar}
-        columns={datasetColumns}
-      />
-
       <AddEvaluationSuiteItemPanel
         open={openCreatePanel}
         onClose={() => setOpenCreatePanel(false)}
         columns={datasetColumns}
         onOpenSettings={onOpenSettings}
+        showEvaluationCriteria={isEvaluationSuite}
       />
     </>
   );

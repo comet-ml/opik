@@ -8,7 +8,6 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
-from unittest.mock import patch
 
 import click
 from rich.console import Console
@@ -105,10 +104,10 @@ def verify_trace_ingested(
 @contextmanager
 def _temporary_client_context(client: opik.Opik) -> Iterator[None]:
     """
-    Context manager that temporarily replaces the cached client with the provided client.
+    Context manager that temporarily replaces the global client with the provided client.
 
     This ensures that opik.start_as_current_trace and other functions that use
-    get_client_cached() will use the explicitly created client instance.
+    get_global_client() will use the explicitly created client instance.
 
     Args:
         client: The Opik client instance to use temporarily
@@ -118,23 +117,15 @@ def _temporary_client_context(client: opik.Opik) -> Iterator[None]:
     """
     import opik.api_objects.opik_client as opik_client_module
 
-    # Create a function that always returns our client
-    def get_client_cached_replacement() -> opik.Opik:
-        return client
-
-    # Clear the lru_cache to ensure we get a fresh client
-    opik_client_module.get_client_cached.cache_clear()
-
-    # Patch get_client_cached in the opik.api_objects.opik_client module
-    # This will affect all modules that import get_client_cached from there
-    with patch(
-        "opik.api_objects.opik_client.get_client_cached", get_client_cached_replacement
-    ):
-        try:
-            yield
-        finally:
-            # Restore is handled by the patch context manager
-            pass
+    previous = opik_client_module.get_current_client_raw()
+    opik_client_module.set_global_client(client)
+    try:
+        yield
+    finally:
+        if previous is not None:
+            opik_client_module.set_global_client(previous)
+        else:
+            opik_client_module.reset_global_client(end_client=False)
 
 
 def run_smoke_test(

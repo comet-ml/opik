@@ -61,7 +61,7 @@ def start_as_current_trace(
 
     context_storage.set_trace_data(trace_data)
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     if client.config.log_start_trace_span:
         client.__internal_api__trace__(**trace_data.as_start_parameters)
 
@@ -78,7 +78,7 @@ def start_as_current_trace(
         raise
     finally:
         try:
-            client = opik_client.get_client_cached()
+            client = opik_client.get_global_client()
             client.__internal_api__trace__(**trace_data.init_end_time().as_parameters)
 
             if flush:

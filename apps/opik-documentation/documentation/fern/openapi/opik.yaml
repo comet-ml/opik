@@ -259,6 +259,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Write"
+  /v1/private/agent-configs/blueprints/projects/{project_id}/masks/{mask_id}:
+    post:
+      tags:
+      - Agent Configs
+      summary: Create blueprint from mask
+      description: Creates a new blueprint by applying a mask's changes on top of
+        the latest blueprint for the project.
+      operationId: createBlueprintFromMask
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
+        "404":
+          description: Not Found (no config or mask not found)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
   /v1/private/agent-configs/blueprints/environments:
     post:
       tags:

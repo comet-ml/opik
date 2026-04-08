@@ -75,7 +75,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
 
 def flush_tracker(timeout: Optional[int] = None) -> None:
-    opik_ = opik_client.get_client_cached()
+    opik_ = opik_client.get_global_client()
     opik_.flush(timeout)
 
 

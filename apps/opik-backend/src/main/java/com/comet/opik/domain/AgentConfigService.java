@@ -62,6 +62,8 @@ public interface AgentConfigService {
 
     AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size);
 
+    Mono<AgentBlueprint> createBlueprintFromMask(UUID projectId, UUID maskId);
+
     Mono<List<UUID>> updateBlueprintsForNewPromptVersion(
             String workspaceId,
             UUID promptId,
@@ -666,6 +668,42 @@ class AgentConfigServiceImpl implements AgentConfigService {
         }
 
         return new ArrayList<>(valueMap.values());
+    }
+
+    @Override
+    public Mono<AgentBlueprint> createBlueprintFromMask(@NonNull UUID projectId, @NonNull UUID maskId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating blueprint from mask '{}' for project '{}' in workspace '{}'", maskId, projectId,
+                workspaceId);
+
+        AgentBlueprint mask = transactionTemplate.inTransaction(handle -> {
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
+
+            AgentBlueprint found = dao.getBlueprintByIdAndType(workspaceId, maskId, projectId,
+                    AgentBlueprint.BlueprintType.MASK);
+            if (found == null) {
+                throw new NotFoundException(
+                        "Blueprint mask '%s' not found in project '%s' in workspace '%s'"
+                                .formatted(maskId, projectId, workspaceId));
+            }
+
+            List<AgentConfigValue> maskValues = dao.getValuesDeltaByBlueprintId(
+                    workspaceId, projectId, maskId);
+
+            return found.toBuilder().values(maskValues).build();
+        });
+
+        var request = AgentConfigCreate.builder()
+                .projectId(projectId)
+                .blueprint(AgentBlueprint.builder()
+                        .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                        .description(mask.description())
+                        .values(mask.values())
+                        .build())
+                .build();
+
+        return updateConfig(request);
     }
 
     @Override

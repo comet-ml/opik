@@ -98,34 +98,9 @@ const AddEvaluationSuiteItemPanelContent: React.FC<{
 
   return (
     <>
-      <div className="relative size-full overflow-y-auto">
-        <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="comet-body-accented">Add suite item</div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                type="submit"
-                form={ADD_SUITE_ITEM_FORM_ID}
-              >
-                Save changes
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (isDirty) {
-                    requestConfirm(onClose);
-                  } else {
-                    onClose();
-                  }
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
+      <div className="flex size-full flex-col">
+        <div className="shrink-0 border-b bg-background p-6 pb-4">
+          <div className="comet-body-accented">Add suite item</div>
           <TagListRenderer
             tags={tags}
             onAddTag={(tag) => setTags((prev) => [...prev, tag])}
@@ -137,16 +112,42 @@ const AddEvaluationSuiteItemPanelContent: React.FC<{
           />
         </div>
 
-        <EvaluationSuiteItemFormContainer
-          formId={ADD_SUITE_ITEM_FORM_ID}
-          initialValues={initialValues}
-          suiteAssertions={suiteAssertions}
-          suitePolicy={suitePolicy}
-          onOpenSettings={onOpenSettings}
-          onSubmit={onValidSubmit}
-          setHasUnsavedChanges={setHasUnsavedChanges}
-          showDataDescription={isEmptyDataset}
-        />
+        <div className="flex-1 overflow-y-auto">
+          <EvaluationSuiteItemFormContainer
+            formId={ADD_SUITE_ITEM_FORM_ID}
+            initialValues={initialValues}
+            suiteAssertions={suiteAssertions}
+            suitePolicy={suitePolicy}
+            onOpenSettings={onOpenSettings}
+            onSubmit={onValidSubmit}
+            setHasUnsavedChanges={setHasUnsavedChanges}
+            showDataDescription={isEmptyDataset}
+          />
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t px-6 py-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (isDirty) {
+                requestConfirm(onClose);
+              } else {
+                onClose();
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            type="submit"
+            form={ADD_SUITE_ITEM_FORM_ID}
+          >
+            Save changes
+          </Button>
+        </div>
       </div>
 
       <ConfirmDialog

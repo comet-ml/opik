@@ -9,10 +9,12 @@ import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
+import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryRefreshJob;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +55,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setExperimentDenormalizationJob();
                 setLocalRunnerReaperJob();
                 setRetentionJobs();
+                setLlmModelRegistryRefreshJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
 
@@ -246,6 +249,19 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
         guiceJobManager.set(null);
         log.info("Cleared GuiceJobManager instance");
+    }
+
+    private void setLlmModelRegistryRefreshJob() {
+        LlmModelRegistryConfig registryConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getLlmModelRegistry();
+
+        if (!registryConfig.isRemoteEnabled()) {
+            log.info("LLM model registry remote refresh is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(LlmModelRegistryRefreshJob.class,
+                Duration.ofSeconds(registryConfig.getRefreshIntervalSeconds()), null);
     }
 
     /**

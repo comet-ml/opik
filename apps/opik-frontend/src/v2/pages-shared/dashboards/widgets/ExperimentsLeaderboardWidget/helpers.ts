@@ -12,7 +12,6 @@ import { Filters } from "@/types/filters";
 import { createFilter, isFilterValid } from "@/lib/filters";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
-import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
@@ -124,10 +123,6 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
-    cell: TraceCountCell as never,
-    customMeta: {
-      tooltip: "View experiment traces",
-    },
   },
   {
     id: "total_estimated_cost",
