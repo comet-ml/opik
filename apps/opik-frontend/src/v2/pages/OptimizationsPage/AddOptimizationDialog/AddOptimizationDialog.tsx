@@ -10,6 +10,7 @@ import { SheetTitle } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/v2/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/v2/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
+import useProjectById from "@/api/projects/useProjectById";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
@@ -273,6 +274,11 @@ const AddOptimizationDialog: React.FunctionComponent<
   const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(
     OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
   );
+  const { data: projectData } = useProjectById(
+    { projectId: projectId! },
+    { enabled: !!projectId },
+  );
+  const projectName = projectData?.name;
 
   const {
     permissions: { canViewDatasets },
@@ -399,7 +405,10 @@ const AddOptimizationDialog: React.FunctionComponent<
             <div className="comet-body-s mt-4 text-foreground-secondary">
               3. Create an Optimization run
             </div>
-            <ConfiguredCodeHighlighter code={section3} />
+            <ConfiguredCodeHighlighter
+              code={section3}
+              projectName={projectName}
+            />
           </div>
 
           <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">

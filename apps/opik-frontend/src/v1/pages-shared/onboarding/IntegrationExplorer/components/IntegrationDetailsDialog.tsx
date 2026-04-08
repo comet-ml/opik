@@ -9,7 +9,10 @@ import {
 } from "@/ui/dialog";
 import { Separator } from "@/ui/separator";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
-import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
+import {
+  INSTALL_OPIK_SECTION_TITLE,
+  SNIPPET_PROJECT_NAME,
+} from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
 import { useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
@@ -43,6 +46,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     apiKey,
     shouldMaskApiKey: true,
     withHighlight: true,
+    projectName: SNIPPET_PROJECT_NAME,
   });
 
   const { code: codeWithConfigToCopy } = putConfigInCode({
@@ -50,6 +54,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     workspaceName,
     apiKey,
     withHighlight: true,
+    projectName: SNIPPET_PROJECT_NAME,
   });
 
   const canExecuteCode =

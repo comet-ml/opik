@@ -1,7 +1,7 @@
 import ollama
 from opik import configure, opik_context, track  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="my-ai-project")  # HIGHLIGHTED_LINE
 
 
 @track(tags=["ollama"])  # HIGHLIGHTED_LINE

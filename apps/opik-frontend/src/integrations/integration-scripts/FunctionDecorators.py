@@ -3,7 +3,7 @@ import os
 import openai
 from opik import configure, track  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="my-ai-project")  # HIGHLIGHTED_LINE
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 

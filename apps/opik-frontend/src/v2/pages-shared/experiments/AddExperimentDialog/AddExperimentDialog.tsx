@@ -16,6 +16,7 @@ import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/v2/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { buildDocsUrl } from "@/lib/utils";
+import useProjectById from "@/api/projects/useProjectById";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/ui/button";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -191,6 +192,11 @@ const AddExperimentDialog: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
   const { isPhonePortrait } = useIsPhone();
+  const { data: projectData } = useProjectById(
+    { projectId: projectId! },
+    { enabled: !!projectId },
+  );
+  const projectName = projectData?.name;
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState(initialDatasetName);
@@ -348,12 +354,14 @@ eval_results = evaluate(
     apiKey,
     shouldMaskApiKey: true,
     withHighlight: true,
+    projectName,
   });
   const { code: codeWithConfigToCopy } = putConfigInCode({
     code: experimentCode,
     workspaceName,
     apiKey,
     withHighlight: true,
+    projectName,
   });
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);

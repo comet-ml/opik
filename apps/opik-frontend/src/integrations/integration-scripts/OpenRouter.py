@@ -2,7 +2,7 @@ from openai import OpenAI
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.openai import track_openai  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="my-ai-project")  # HIGHLIGHTED_LINE
 
 # Initialize the OpenAI client with OpenRouter base URL
 client = OpenAI(

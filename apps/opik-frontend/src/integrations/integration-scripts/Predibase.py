@@ -4,7 +4,7 @@ from langchain_community.llms import Predibase
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.langchain import OpikTracer  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="my-ai-project")  # HIGHLIGHTED_LINE
 
 # os.environ["PREDIBASE_API_TOKEN"] = "your-api-key-here"
 
