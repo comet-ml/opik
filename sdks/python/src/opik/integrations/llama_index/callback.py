@@ -95,7 +95,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             start_span_arguments=arguments_helpers.StartSpanParameters(
                 name=trace_name,
                 type="general",
-                project_name=self._project_name,
+                project_name=context_storage.resolve_project_name(
+                    self._project_name, "LlamaIndexCallbackHandler"
+                ),
                 metadata=LLAMA_INDEX_METADATA,
             ),
             distributed_trace_headers=None,
@@ -202,7 +204,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                     if event_type == llama_index_schema.CBEventType.LLM
                     else "general"
                 ),
-                project_name=self._project_name,
+                project_name=context_storage.resolve_project_name(
+                    self._project_name, "LlamaIndexCallbackHandler"
+                ),
                 metadata=LLAMA_INDEX_METADATA,
             ),
             distributed_trace_headers=None,
