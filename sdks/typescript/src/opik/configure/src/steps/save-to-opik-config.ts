@@ -1,72 +1,30 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
+import ini from 'ini';
 import * as os from 'os';
 import * as path from 'path';
 import clack from '../utils/clack';
 
-const OPIK_CONFIG_FILE = path.join(os.homedir(), '.opik.config');
+const OPIK_CONFIG_FILE_DEFAULT = path.join(os.homedir(), '.opik.config');
 
-/** Keys we read/write in the [opik] section */
-interface OpikIniSection {
-  api_key?: string;
-  url_override?: string;
-  workspace?: string;
-  project_name?: string;
+function expandPath(filePath: string): string {
+  return filePath.replace(/^~(?=$|\/|\\)/, os.homedir());
 }
 
-/** Parse the [opik] section from a raw INI string (no external deps). */
-export function parseOpikSection(content: string): OpikIniSection {
-  const result: OpikIniSection = {};
-  let inOpikSection = false;
-
-  for (const raw of content.split('\n')) {
-    const line = raw.trim();
-
-    if (line === '[opik]') {
-      inOpikSection = true;
-      continue;
-    }
-
-    if (line.startsWith('[')) {
-      inOpikSection = false;
-      continue;
-    }
-
-    if (!inOpikSection || !line || line.startsWith('#') || line.startsWith(';')) {
-      continue;
-    }
-
-    const eqIdx = line.indexOf('=');
-    if (eqIdx === -1) continue;
-
-    const key = line.slice(0, eqIdx).trim() as keyof OpikIniSection;
-    (result as Record<string, string>)[key] = line.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+function resolveConfigFilePath(): string {
+  if (!process.env.OPIK_CONFIG_PATH) {
+    return OPIK_CONFIG_FILE_DEFAULT;
   }
 
-  return result;
-}
-
-/** Serialise an OpikIniSection back to an INI string with an [opik] section. */
-export function serializeOpikSection(
-  section: OpikIniSection,
-  existingContent: string,
-): string {
-  const opikLines = ['[opik]'];
-  for (const [key, value] of Object.entries(section)) {
-    if (value !== undefined && value !== '') {
-      opikLines.push(`${key} = ${value}`);
-    }
-  }
-  const opikBlock = opikLines.join('\n');
-
-  // Replace existing [opik] block if present, otherwise append
-  const opikSectionRegex = /\[opik][^[]*/s;
-  if (opikSectionRegex.test(existingContent)) {
-    return existingContent.replace(opikSectionRegex, opikBlock + '\n');
+  const customPath = expandPath(process.env.OPIK_CONFIG_PATH);
+  if (!fs.existsSync(path.dirname(customPath))) {
+    clack.log.warning(
+      `OPIK_CONFIG_PATH parent directory does not exist: ${chalk.bold.cyan(path.dirname(customPath))}. Falling back to ${chalk.bold.cyan(OPIK_CONFIG_FILE_DEFAULT)}.`,
+    );
+    return OPIK_CONFIG_FILE_DEFAULT;
   }
 
-  const trimmed = existingContent.trimEnd();
-  return trimmed ? `${trimmed}\n\n${opikBlock}\n` : `${opikBlock}\n`;
+  return customPath;
 }
 
 export interface SaveToOpikConfigOptions {
@@ -86,14 +44,15 @@ export async function saveToOpikConfigStep(
   const { projectName, urlOverride, apiKey, workspace } = options;
 
   try {
-    let existingContent = '';
-    if (fs.existsSync(OPIK_CONFIG_FILE)) {
-      existingContent = fs.readFileSync(OPIK_CONFIG_FILE, 'utf8');
+    const configFilePath = resolveConfigFilePath();
+    let parsed: Record<string, unknown> = {};
+    if (fs.existsSync(configFilePath)) {
+      parsed = ini.parse(fs.readFileSync(configFilePath, 'utf8'));
     }
 
-    const existing = parseOpikSection(existingContent);
+    const existing = (parsed['opik'] as Record<string, string> | undefined) ?? {};
 
-    const merged: OpikIniSection = {
+    parsed['opik'] = {
       ...existing,
       url_override: urlOverride,
       project_name: projectName,
@@ -101,8 +60,7 @@ export async function saveToOpikConfigStep(
       ...(workspace ? { workspace } : {}),
     };
 
-    const newContent = serializeOpikSection(merged, existingContent);
-    await fs.promises.writeFile(OPIK_CONFIG_FILE, newContent, {
+    await fs.promises.writeFile(configFilePath, ini.stringify(parsed), {
       encoding: 'utf8',
       flag: 'w',
     });
