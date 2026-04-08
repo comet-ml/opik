@@ -51,7 +51,7 @@ def test_pytest_sessionfinish__plugin_disabled__no_client_calls(monkeypatch):
     test_runs_storage.LLM_UNIT_TEST_RUNS.add("a")
 
     get_client_mock = mock.Mock()
-    monkeypatch.setattr(hooks.opik_client, "get_client_cached", get_client_mock)
+    monkeypatch.setattr(hooks.opik_client, "get_global_client", get_client_mock)
 
     hooks.pytest_sessionfinish(session=session, exitstatus=0)
 
@@ -63,7 +63,7 @@ def test_pytest_sessionfinish__missing_session_items__returns_without_error(
 ):
     session = _session(opik_option=True)
     get_client_mock = mock.Mock()
-    monkeypatch.setattr(hooks.opik_client, "get_client_cached", get_client_mock)
+    monkeypatch.setattr(hooks.opik_client, "get_global_client", get_client_mock)
 
     hooks.pytest_sessionfinish(session=session, exitstatus=0)
 
@@ -77,7 +77,7 @@ def test_pytest_sessionfinish__item_without_report__is_ignored(monkeypatch):
     test_runs_storage.TEST_RUNS_TO_TRACE_DATA["case-1"] = SimpleNamespace(id="trace-1")
 
     get_client_mock = mock.Mock()
-    monkeypatch.setattr(hooks.opik_client, "get_client_cached", get_client_mock)
+    monkeypatch.setattr(hooks.opik_client, "get_global_client", get_client_mock)
 
     hooks.pytest_sessionfinish(session=session, exitstatus=0)
 
@@ -97,7 +97,7 @@ def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment__happ
 
     client = mock.Mock()
     monkeypatch.setattr(
-        hooks.opik_client, "get_client_cached", mock.Mock(return_value=client)
+        hooks.opik_client, "get_global_client", mock.Mock(return_value=client)
     )
     run_mock = mock.Mock()
     monkeypatch.setattr(hooks.experiment_runner, "run", run_mock)
@@ -126,7 +126,7 @@ def test_pytest_sessionfinish__runner_error__flushes_client(monkeypatch):
 
     client = mock.Mock()
     monkeypatch.setattr(
-        hooks.opik_client, "get_client_cached", mock.Mock(return_value=client)
+        hooks.opik_client, "get_global_client", mock.Mock(return_value=client)
     )
     monkeypatch.setattr(
         hooks.experiment_runner, "run", mock.Mock(side_effect=RuntimeError("boom"))

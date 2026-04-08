@@ -101,7 +101,7 @@ def start_as_current_span(
         raise
     finally:
         # save span/trace data at the end of the context manager
-        client = opik_client.get_client_cached()
+        client = opik_client.get_global_client()
 
         # Don't pass attachments to update() since they're already set on span_data
         # and _update_attachments would duplicate them

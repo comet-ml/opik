@@ -4,9 +4,10 @@ import logging
 import dspy
 from dspy.utils import callback as dspy_callback
 
+import opik
 from opik import context_storage, opik_context, tracing_runtime_config
 from opik import llm_usage
-from opik.api_objects import helpers, span, trace, opik_client
+from opik.api_objects import helpers, span, trace
 from opik.decorator import error_info_collector
 
 from .graph import build_mermaid_graph_from_module
@@ -44,7 +45,9 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._project_name = project_name
         self.log_graph = log_graph
 
-        self._opik_client = opik_client.get_client_cached()
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def _skip_tracking(self) -> bool:
         return not tracing_runtime_config.is_tracing_active()

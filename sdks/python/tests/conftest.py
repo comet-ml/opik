@@ -33,9 +33,7 @@ def clear_context_storage():
 @pytest.fixture(autouse=True)
 def shutdown_cached_client_after_test():
     yield
-    if opik_client.get_client_cached.cache_info().currsize > 0:
-        opik_client.get_client_cached().end()
-        opik_client.get_client_cached.cache_clear()
+    opik_client.reset_global_client(end_client=False)
 
 
 @pytest.fixture(autouse=True)

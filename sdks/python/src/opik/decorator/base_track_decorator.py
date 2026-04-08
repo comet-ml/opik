@@ -551,7 +551,7 @@ class BaseTrackDecorator(abc.ABC):
         else:
             end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
 
-        client = opik_client.get_client_cached()
+        client = opik_client.get_global_client()
 
         if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
@@ -754,7 +754,7 @@ def add_start_candidates(
         context_storage.add_span_data(span_creation_result.span_data)
 
         if tracing_active:
-            client = opik_client.get_client_cached()
+            client = opik_client.get_global_client()
 
             if client.config.log_start_trace_span:
                 client.__internal_api__span__(
@@ -810,7 +810,7 @@ def add_start_trace_candidate(
     if not tracing_active:
         return
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     if client.config.log_start_trace_span:
         client.__internal_api__trace__(**trace_data.as_start_parameters)
 

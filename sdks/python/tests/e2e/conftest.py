@@ -21,7 +21,7 @@ def configure_e2e_tests_env():
 
 @pytest.fixture()
 def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
-    opik_client_ = opik.api_objects.opik_client.Opik(_use_batching=True)
+    opik_client_ = opik.api_objects.opik_client.Opik(batching=True)
 
     yield opik_client_
 

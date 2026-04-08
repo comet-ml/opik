@@ -483,7 +483,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var nonRetryable = failures.stream()
                 .filter(failure -> !isRetryableException(failure.error()))
                 .map(failure -> {
-                    log.error("Non-retryable error for messageId '{}', removing from stream",
+                    log.warn("Non-retryable error for messageId '{}', removing from stream",
                             failure.messageId(), failure.error());
                     return failure.messageId();
                 })

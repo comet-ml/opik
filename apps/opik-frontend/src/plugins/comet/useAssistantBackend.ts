@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import cometApi from "@/plugins/comet/api";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 
 const IS_DEV = import.meta.env.DEV;
 const HEALTH_POLL_INTERVAL_MS = 5000;
 const HEALTH_POLL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+const HEALTH_KEEPALIVE_MS = 30_000; // 30s keepalive after ready
 
 interface ComputeResult {
   baseUrl: string | null;
@@ -26,6 +27,8 @@ interface UseAssistantBackendResult {
   isLoading: boolean;
   error: string | null;
   phase: AssistantBackendPhase;
+  retry: () => void;
+  retryCount: number;
 }
 
 const DEV_RESULT: UseAssistantBackendResult = {
@@ -34,17 +37,23 @@ const DEV_RESULT: UseAssistantBackendResult = {
   isLoading: false,
   error: null,
   phase: "ready",
+  retry: () => {},
+  retryCount: 0,
 };
 
 const notReadyResult = (
   error: string | null,
   phase: AssistantBackendPhase,
+  retry: () => void,
+  retryCount: number,
 ): UseAssistantBackendResult => ({
   backendUrl: null,
   isReady: false,
   isLoading: false,
   error,
   phase,
+  retry,
+  retryCount,
 });
 
 interface UseAssistantBackendOptions {
@@ -120,8 +129,37 @@ export default function useAssistantBackend(
     return () => clearTimeout(id);
   }, [shouldPollHealth, baseUrl]);
 
+  const [retryCount, setRetryCount] = useState(0);
+  const queryClient = useQueryClient();
+
+  // Ref avoids stale closure — retry() stays stable across renders
+  const isComputeLoadingRef = useRef(isComputeLoading);
+  isComputeLoadingRef.current = isComputeLoading;
+
+  // Core reset — used by both auto-retry and manual retry.
+  // Does not touch retryCount so auto-recovery doesn't escalate the UI.
+  const resetBackend = useCallback(() => {
+    if (isComputeLoadingRef.current) return;
+
+    setIsTimedOut(false);
+    healthPollStartRef.current = 0;
+    trackedBaseUrlRef.current = null;
+    // resetQueries (not invalidateQueries): clears data immediately so
+    // dead pod URL doesn't linger while refetch is in-flight.
+    queryClient.resetQueries({ queryKey: ["assistant-health"] });
+    queryClient.resetQueries({ queryKey: ["assistant-compute"] });
+  }, [queryClient]);
+
+  // User-initiated retry — increments retryCount for UI escalation
+  const retry = useCallback(() => {
+    setRetryCount((c) => c + 1);
+    resetBackend();
+  }, [resetBackend]);
+
   // Phase 2: Poll health endpoint until the pod is ready
-  const { data: healthResult } = useQuery<{ ready: boolean }>({
+  const { data: healthResult, error: healthError } = useQuery<{
+    ready: boolean;
+  }>({
     queryKey: ["assistant-health", { baseUrl }],
     queryFn: async ({ signal }) => {
       const res = await fetch(`${baseUrl}/health/ready`, {
@@ -136,29 +174,70 @@ export default function useAssistantBackend(
     staleTime: 0,
     retry: 2,
     refetchInterval: (query) => {
-      if (query.state.data?.ready) return false;
-
-      const startedAt = healthPollStartRef.current;
-      if (startedAt > 0 && Date.now() - startedAt > HEALTH_POLL_TIMEOUT_MS) {
-        return false;
+      // Pod ready and healthy — slow keepalive
+      if (query.state.data?.ready && query.state.status !== "error") {
+        return HEALTH_KEEPALIVE_MS;
       }
 
+      // Timeout only during initial startup (data was never ready)
+      if (!query.state.data?.ready) {
+        const startedAt = healthPollStartRef.current;
+        if (startedAt > 0 && Date.now() - startedAt > HEALTH_POLL_TIMEOUT_MS) {
+          return false;
+        }
+      }
+
+      // Fast poll: initial startup or recovery after keepalive failure
       return HEALTH_POLL_INTERVAL_MS;
     },
   });
+
+  const isReady = healthResult?.ready === true;
+
+  // Pod lifecycle: "never" → "ready" → "down" → "ready" → ...
+  // Combines previous prevReadyRef + wasReadyRef into one state machine.
+  const podStateRef = useRef<"never" | "ready" | "down">("never");
+
+  if (isReady && podStateRef.current !== "ready") {
+    // Pod just became ready — reset retryCount if recovering from failure
+    if (podStateRef.current === "down" && retryCount > 0) {
+      queueMicrotask(() => setRetryCount(0));
+    }
+    podStateRef.current = "ready";
+  }
+
+  // Auto-retry when keepalive detects pod death (ready → error).
+  // Uses resetBackend (not retry) so retryCount stays 0 — the user
+  // gets a fresh "retry now" prompt if auto-recovery fails.
+  if (
+    podStateRef.current === "ready" &&
+    healthError &&
+    !isComputeLoadingRef.current
+  ) {
+    podStateRef.current = "down";
+    queueMicrotask(() => resetBackend());
+  }
 
   // Dev mode — static URL, no network calls (queries are disabled via enabled: !IS_DEV)
   if (IS_DEV) return DEV_RESULT;
 
   if (computeResult && !computeResult.enabled)
-    return notReadyResult(null, "disabled");
+    return notReadyResult(null, "disabled", retry, retryCount);
   if (computeError)
-    return notReadyResult((computeError as Error).message, "error");
+    return notReadyResult(
+      (computeError as Error).message,
+      "error",
+      retry,
+      retryCount,
+    );
   if (isTimedOut && !healthResult?.ready) {
-    return notReadyResult("Assistant pod failed to become ready", "error");
+    return notReadyResult(
+      "Assistant pod failed to become ready",
+      "error",
+      retry,
+      retryCount,
+    );
   }
-
-  const isReady = healthResult?.ready === true;
 
   let phase: AssistantBackendPhase = "idle";
   if (isReady) phase = "ready";
@@ -171,5 +250,7 @@ export default function useAssistantBackend(
     isLoading: isComputeLoading || (shouldPollHealth && !isReady),
     error: null,
     phase,
+    retry,
+    retryCount,
   };
 }

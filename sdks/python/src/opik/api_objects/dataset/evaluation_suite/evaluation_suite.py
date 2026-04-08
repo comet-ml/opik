@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import functools
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opik.api_objects import opik_client as opik_client_module
 
 from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
@@ -106,6 +109,7 @@ class EvaluationSuite:
         self,
         name: str,
         dataset_: dataset.Dataset,
+        client: Optional["opik_client_module.Opik"] = None,
     ):
         """
         Internal constructor — not part of the public API.
@@ -115,6 +119,7 @@ class EvaluationSuite:
         """
         self._name = name
         self._dataset = dataset_
+        self._client = client
 
     @property
     def name(self) -> str:
@@ -488,6 +493,7 @@ class EvaluationSuite:
             model=model,
             generate_report=generate_report,
             report_output_path=report_output_path,
+            client=self._client,
         )
 
     def __internal_api__run_optimization_suite__(

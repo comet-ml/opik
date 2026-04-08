@@ -37,7 +37,8 @@ const PageLayout = () => {
 
   const showAssistantSidebar = !!AssistantSidebar;
 
-  const isMobile = useMediaQuery("(max-width: 1023px)");
+  const assistantWidth = showAssistantSidebar ? assistantSidebarWidth : 0;
+  const isMobile = useMediaQuery(`(max-width: ${1023 + assistantWidth}px)`);
   const expanded = isMobile ? false : storedExpanded;
 
   const handleSidebarWidthChange = useCallback((width: number) => {
@@ -89,7 +90,11 @@ const PageLayout = () => {
               <RetentionBanner onChangeHeight={setBannerHeight} />
             ) : null}
 
-            <SideBar expanded={expanded} setExpanded={setStoredExpanded} />
+            <SideBar
+              expanded={expanded}
+              setExpanded={setStoredExpanded}
+              locked={isMobile}
+            />
             <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
               <TopBar />
               <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">

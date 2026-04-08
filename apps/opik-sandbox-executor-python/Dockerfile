@@ -52,6 +52,12 @@ COPY --from=builder /runtime-python /usr/local/lib/python3.12/site-packages/
 COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc
 COPY --from=builder /prewarm.pyc /tmp/prewarm.pyc
 
+# Prevent litellm from calling load_dotenv() at import time, which uses frame
+# inspection that fails in a .pyc-only context (after .py files are deleted).
+# litellm calls load_dotenv() when LITELLM_MODE == "DEV" (the default), so
+# setting it to any other value suppresses the call.
+ENV LITELLM_MODE=PRODUCTION
+
 # Runtime pre-warming for additional performance boost
 RUN python /tmp/prewarm.pyc
 

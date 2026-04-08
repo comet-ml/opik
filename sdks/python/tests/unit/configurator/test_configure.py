@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import pytest
 
-from opik.api_objects.opik_client import get_client_cached
+from opik.api_objects.opik_client import get_global_client, reset_global_client
 from opik.config import (
     OPIK_PROJECT_DEFAULT_NAME,
     OPIK_WORKSPACE_DEFAULT_NAME,
@@ -1778,7 +1778,7 @@ class TestOpikConfigurator:
         configurator = OpikConfigurator(
             api_key="test_key", workspace="test_workspace", url="http://test.url"
         )
-        _ = get_client_cached()
+        _ = get_global_client()
 
         # Call the method
         configurator.configure()
@@ -1802,7 +1802,7 @@ class TestOpikConfigurator:
         configurator = OpikConfigurator(
             api_key="test_key", workspace="test_workspace", url="http://test.url"
         )
-        get_client_cached.cache_clear()
+        reset_global_client()
 
         # Call the method
         configurator.configure()

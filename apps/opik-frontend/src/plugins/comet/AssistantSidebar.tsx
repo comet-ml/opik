@@ -16,6 +16,7 @@ import useProjectById from "@/api/projects/useProjectById";
 import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import { BASE_API_URL } from "@/api/api";
 import { Spinner } from "@/ui/spinner";
+import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
 
 const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
 const IS_DEV = import.meta.env.DEV;
@@ -58,12 +59,16 @@ interface AssistantSidebarLoaderProps {
   phase: AssistantBackendPhase | "manifest";
   error: string | null;
   onWidthChange: (width: number) => void;
+  onRetry?: () => void;
+  retryCount?: number;
 }
 
 const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   phase,
   error,
   onWidthChange,
+  onRetry,
+  retryCount = 0,
 }) => {
   const isOpen = useRef(getStoredSidebarOpen());
   const initialWidth = useRef(
@@ -78,12 +83,11 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
 
   if (error) {
     return (
-      <div className="flex size-full flex-col items-center justify-center gap-3 border-l bg-background px-6 text-center">
-        <div className="text-sm font-medium text-destructive">
-          Unable to load assistant
-        </div>
-        <p className="text-xs text-muted-foreground">{error}</p>
-      </div>
+      <AssistantErrorState
+        collapsed={collapsed}
+        onRetry={onRetry}
+        retryCount={retryCount}
+      />
     );
   }
 
@@ -303,6 +307,8 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     isReady: isBackendReady,
     error,
     phase,
+    retry,
+    retryCount,
   } = useAssistantBackend();
   const meta = useAssistantMeta(backendUrl);
   const context = useBridgeContext(backendUrl ?? "");
@@ -395,6 +401,8 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
         phase={effectivePhase}
         error={error}
         onWidthChange={onWidthChange}
+        onRetry={retry}
+        retryCount={retryCount}
       />
     );
   }
