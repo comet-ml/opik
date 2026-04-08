@@ -45,6 +45,10 @@ class Streamer:
         self._fallback_replay_manager.set_replay_callback(self.put)
         self._fallback_replay_manager.start()
 
+    @property
+    def use_batching(self) -> bool:
+        return self._batch_preprocessor._batch_manager is not None
+
     def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
             if self._drain:

@@ -40,7 +40,7 @@ def pytest_runtest_makereport(item, call):
 
 @pytest.fixture()
 def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
-    client = opik.api_objects.opik_client.Opik(_use_batching=True)
+    client = opik.api_objects.opik_client.Opik(batching=True)
     yield client
     client.end()
 

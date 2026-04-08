@@ -675,7 +675,7 @@ def test_langgraph__distributed_headers__langgraph_span_is_kept(
     (not skipped) and should be added to the distributed trace/span.
     """
     project_name = "langgraph-integration-test--distributed-headers"
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # PREPARE DISTRIBUTED HEADERS
     trace_data = trace.TraceData(
@@ -874,7 +874,7 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
     graph = builder.compile()
 
     # create external span
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     trace_data = trace.TraceData(
         name="manually-created-trace",
         input={
@@ -1034,7 +1034,7 @@ def test_langgraph__used_when_there_was_already_existing_trace_without_span__lan
     graph = builder.compile()
 
     # create external trace and invoke LangGraph within
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     trace_data = trace.TraceData(
         name="manually-created-trace",
         input={"input": "input-of-manually-created-trace"},

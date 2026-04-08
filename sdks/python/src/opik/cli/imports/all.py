@@ -47,9 +47,9 @@ def import_all(
     """Import all data types from the workspace export directory."""
     try:
         if api_key:
-            client = opik.Opik(api_key=api_key, workspace=workspace, _use_batching=True)
+            client = opik.Opik(api_key=api_key, workspace=workspace)
         else:
-            client = opik.Opik(workspace=workspace, _use_batching=True)
+            client = opik.Opik(workspace=workspace)
 
         base_path = Path(path)
 
