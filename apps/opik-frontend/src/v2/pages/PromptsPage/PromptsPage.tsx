@@ -1,6 +1,14 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
+import { PlusIcon } from "lucide-react";
+import useLocalStorageState from "use-local-storage-state";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -22,7 +30,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
@@ -35,15 +42,8 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
-import {
-  ColumnPinningState,
-  ColumnSort,
-  RowSelectionState,
-} from "@tanstack/react-table";
-import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { PlusIcon } from "lucide-react";
 
 export const getRowId = (p: Prompt) => p.id;
 
