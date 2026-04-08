@@ -170,13 +170,15 @@ export async function searchSpansWithFilters(
   projectName: string,
   filters: OpikApi.SpanFilterPublic[] | null,
   maxResults: number,
-  truncate: boolean
+  truncate: boolean,
+  exclude?: string[]
 ): Promise<OpikApi.SpanPublic[]> {
   const streamResponse = await apiClient.spans.searchSpans({
     projectName,
     filters: filters ?? undefined,
     limit: maxResults,
     truncate,
+    exclude: exclude as OpikApi.SpanSearchStreamRequestPublicExcludeItem[] | undefined,
   });
 
   const spans = await parseNdjsonStreamToArray<OpikApi.SpanPublic>(
