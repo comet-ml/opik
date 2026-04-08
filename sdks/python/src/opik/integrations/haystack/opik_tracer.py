@@ -23,19 +23,19 @@ class OpikTracer(tracing.Tracer):
 
     def __init__(
         self,
+        opik_client: Optional["opik.Opik"] = None,
         name: str = "Haystack",
         project_name: Optional[str] = None,
-        opik_client: Optional["opik.Opik"] = None,
     ) -> None:
         """
         Initialize OpikTracer.
 
         Args:
-            name: The name of the pipeline or component.
-            project_name: The name of the project for tracing (optional).
             opik_client: Deprecated. The client is now resolved lazily via
                 ``opik.get_global_client()``. This parameter is accepted
                 for backwards compatibility but ignored.
+            name: The name of the pipeline or component.
+            project_name: The name of the project for tracing (optional).
         """
         if not tracing.tracer.is_content_tracing_enabled:
             LOGGER.warning(
