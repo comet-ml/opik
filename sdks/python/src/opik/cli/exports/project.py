@@ -42,6 +42,8 @@ MAX_CONSECUTIVE_PAGE_FAILURES = 5
 # SDK decorator, to survive aggressive server-side rate limiting during
 # bulk exports without aborting the whole operation.
 _EXPORT_MAX_RETRY_AFTER_SECONDS = 120.0
+_EXPORT_DEFAULT_RETRY_AFTER_SECONDS = 30.0
+_EXPORT_JITTER_MAX_SECONDS = 5.0
 
 
 def _parse_rate_limit_reset(headers: httpx.Headers) -> Optional[float]:
@@ -84,13 +86,16 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
         # Prefer the standard Retry-After header, then fall back to
         # Opik-specific / draft-IETF rate-limit reset headers.
         seconds = _parse_retry_after(headers)
-        if seconds is None or seconds > _EXPORT_MAX_RETRY_AFTER_SECONDS:
+        if seconds is None:
             seconds = _parse_rate_limit_reset(headers)
-        if seconds is None or seconds > _EXPORT_MAX_RETRY_AFTER_SECONDS:
-            seconds = 30.0
+        if seconds is None:
+            seconds = _EXPORT_DEFAULT_RETRY_AFTER_SECONDS
+        # Clamp to our maximum: respect the server's intent but never wait longer
+        # than _EXPORT_MAX_RETRY_AFTER_SECONDS.
+        seconds = min(seconds, _EXPORT_MAX_RETRY_AFTER_SECONDS)
         # Jitter: avoid a thundering-herd if multiple export processes run in parallel.
-        jitter = random.uniform(0.0, 5.0)
-        return max(0.0, seconds) + jitter
+        jitter = random.uniform(0.0, _EXPORT_JITTER_MAX_SECONDS)
+        return seconds + jitter
     # Other transient errors (e.g. connection blips): exponential backoff
     # capped at 60 s — ~2s, 4s, 8s, 16s, 32s, 60s.
     base = tenacity.wait_exponential(multiplier=2, min=2, max=60)(retry_state)
