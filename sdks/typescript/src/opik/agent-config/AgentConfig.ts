@@ -1,7 +1,7 @@
 import { getTrackContext } from "@/decorators/track";
 import { z } from "zod";
-import type { FieldMeta, SupportedValue } from "./typeHelpers";
-import { serializeValue } from "./typeHelpers";
+import type { FieldMeta, SupportedValue } from "@/typeHelpers";
+import { serializeValue } from "@/typeHelpers";
 
 function toMetadataValue(value: unknown, backendType: string): unknown {
   if (value === null || value === undefined) return undefined;

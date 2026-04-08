@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import toLower from "lodash/toLower";
-import difference from "lodash/difference";
 
 import { Checkbox } from "@/ui/checkbox";
 import { Separator } from "@/ui/separator";
@@ -13,6 +12,7 @@ import SortableMenuSection from "./SortableMenuSection";
 import { ColumnData } from "@/types/shared";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import type { ColumnsContentVariant } from "./SortableMenuItem";
+import { useColumnsCount } from "./useColumnsCount";
 
 type ColumnsContentShared<TColumnData> = {
   columns: ColumnData<TColumnData>[];
@@ -46,26 +46,13 @@ const ColumnsContent = <TColumnData,>({
 }: ColumnsContentProps<TColumnData>) => {
   const [search, setSearch] = useState("");
 
-  const allColumnsIds = useMemo(
-    () =>
-      [{ columns: columns }, ...(sections || [])].flatMap(
-        ({ columns: columnGroup = [] }) =>
-          columnGroup.map((column) => column.id),
-      ),
-    [columns, sections],
-  );
-
-  const selectAllColumnsIds = useMemo(
-    () => difference(allColumnsIds, excludeFromSelectAll),
-    [allColumnsIds, excludeFromSelectAll],
-  );
-
-  const allColumnsSelected = useMemo(() => {
-    return (
-      selectAllColumnsIds.length > 0 &&
-      selectAllColumnsIds.every((id) => selectedColumns.includes(id))
-    );
-  }, [selectedColumns, selectAllColumnsIds]);
+  const { selectAllColumnsIds, allColumnsSelected, selectedCount, totalCount } =
+    useColumnsCount({
+      columns,
+      selectedColumns,
+      sections,
+      excludeFromSelectAll,
+    });
 
   const toggleColumns = (value: boolean) => {
     if (value) {
@@ -102,12 +89,6 @@ const ColumnsContent = <TColumnData,>({
       filteredSections.every(({ columns = [] }) => columns.length === 0),
     [filteredColumns, filteredSections],
   );
-
-  const selectedCount = selectedColumns.filter(
-    (id) =>
-      !excludeFromSelectAll.includes(id) && selectAllColumnsIds.includes(id),
-  ).length;
-  const totalCount = selectAllColumnsIds.length;
 
   const isMenu = variant === "menu";
 

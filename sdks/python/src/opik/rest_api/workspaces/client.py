@@ -268,7 +268,7 @@ class WorkspacesClient:
 
         Determination logic (priority order):
         1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        2) Auth one-way V2 gate (authenticated mode only, not yet implemented)
+        2) Auth one-way V2 gate (authenticated mode only)
         3) Version 1 entity check (entities without project_id)
         4) Fallback on failure
 
@@ -613,7 +613,7 @@ class AsyncWorkspacesClient:
 
         Determination logic (priority order):
         1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        2) Auth one-way V2 gate (authenticated mode only, not yet implemented)
+        2) Auth one-way V2 gate (authenticated mode only)
         3) Version 1 entity check (entities without project_id)
         4) Fallback on failure
 

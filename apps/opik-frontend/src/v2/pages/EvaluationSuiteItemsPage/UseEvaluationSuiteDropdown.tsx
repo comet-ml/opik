@@ -9,6 +9,7 @@ import {
 } from "@/ui/dropdown-menu";
 import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -19,6 +20,7 @@ export interface UseEvaluationSuiteDropdownProps {
   disabled?: boolean;
   isEvalSuite?: boolean;
   projectId?: string | null;
+  isSuiteEmpty?: boolean;
 }
 
 function UseEvaluationSuiteDropdown({
@@ -28,6 +30,7 @@ function UseEvaluationSuiteDropdown({
   disabled = false,
   isEvalSuite = true,
   projectId,
+  isSuiteEmpty = false,
 }: UseEvaluationSuiteDropdownProps) {
   const resetKeyRef = useRef(0);
   const resetDialogKeyRef = useRef(0);
@@ -81,48 +84,58 @@ function UseEvaluationSuiteDropdown({
         } into the Playground will replace any unsaved changes. This action cannot be undone.`}
         confirmText={`Load ${isEvalSuite ? "evaluation suite" : "dataset"}`}
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={disabled}>
-            {isEvalSuite ? "Use suite" : "Use dataset"}
-            <ChevronDown className="ml-2 size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80">
-          <DropdownMenuItem
-            onClick={handleOpenPlaygroundClick}
-            disabled={disabled || isPendingProviderKeys}
-          >
-            <Blocks className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
-            <div className="comet-body-s flex flex-col">
-              <span>Open in Playground</span>
-              <span className="text-light-slate">
-                Test prompts over your{" "}
-                {isEvalSuite ? "evaluation suite" : "dataset"} and run
-                evaluations interactively
-              </span>
-            </div>
-          </DropdownMenuItem>
-          {canCreateExperiments && (
-            <DropdownMenuItem
-              onClick={() => {
-                resetDialogKeyRef.current += 1;
-                setOpenExperimentDialog(true);
-              }}
-              disabled={disabled}
-            >
-              <Code2 className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
-              <div className="comet-body-s flex flex-col">
-                <span>Run an experiment</span>
-                <span className="text-light-slate">
-                  Use this {isEvalSuite ? "evaluation suite" : "dataset"} to run
-                  an experiment using the Python SDK
-                </span>
-              </div>
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <TooltipWrapper
+        content={isSuiteEmpty ? "This evaluation suite is empty" : null}
+      >
+        <div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={disabled || isSuiteEmpty}
+              >
+                {isEvalSuite ? "Use suite" : "Use dataset"}
+                <ChevronDown className="ml-2 size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuItem
+                onClick={handleOpenPlaygroundClick}
+                disabled={disabled || isPendingProviderKeys}
+              >
+                <Blocks className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
+                <div className="comet-body-s flex flex-col">
+                  <span>Open in Playground</span>
+                  <span className="text-light-slate">
+                    Test prompts over your{" "}
+                    {isEvalSuite ? "evaluation suite" : "dataset"} and run
+                    evaluations interactively
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              {canCreateExperiments && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    resetDialogKeyRef.current += 1;
+                    setOpenExperimentDialog(true);
+                  }}
+                  disabled={disabled}
+                >
+                  <Code2 className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
+                  <div className="comet-body-s flex flex-col">
+                    <span>Run an experiment</span>
+                    <span className="text-light-slate">
+                      Use this {isEvalSuite ? "evaluation suite" : "dataset"} to
+                      run an experiment using the Python SDK
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </TooltipWrapper>
     </>
   );
 }

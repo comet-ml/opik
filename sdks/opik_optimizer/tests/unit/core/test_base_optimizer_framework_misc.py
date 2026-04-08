@@ -143,6 +143,8 @@ class TestCreateOptimizationRun:
 
         assert result is not None
         assert optimizer.current_optimization_id == "opt-123"
+        _, call_kwargs = mock_client.create_optimization.call_args
+        assert call_kwargs.get("project_name") == optimizer.project_name
 
     def test_returns_none_on_error(
         self, optimizer: ConcreteOptimizer, mock_opik_client

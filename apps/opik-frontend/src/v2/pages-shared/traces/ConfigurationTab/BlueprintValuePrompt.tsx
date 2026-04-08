@@ -32,177 +32,186 @@ type BlueprintValuePromptProps = {
   projectId?: string;
   isEditing?: boolean;
   onDirtyChange?: (isDirty: boolean) => void;
+  compact?: boolean;
 };
 
 const BlueprintValuePrompt = forwardRef<
   BlueprintValuePromptHandle,
   BlueprintValuePromptProps
->(({ value, projectId, isEditing = false, onDirtyChange }, ref) => {
-  const [draftTemplate, setDraftTemplate] = useState("");
-  const [draftMessages, setDraftMessages] = useState<LLMMessage[]>([]);
-  const initialTemplate = useRef("");
-
-  const { data: prompt, isPending } = usePromptByCommit(
-    { commitId: value.value },
-    { enabled: !!value.value },
-  );
-
-  const { mutateAsync: createVersion } = useCreatePromptVersionMutation();
-
-  const promptVersion = prompt?.requested_version;
-  const isChatPrompt =
-    prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
-
-  useEffect(() => {
-    if (promptVersion && !initialTemplate.current) {
-      if (isChatPrompt) {
-        const messages = parseChatTemplateToLLMMessages(promptVersion.template);
-        initialTemplate.current = JSON.stringify(
-          messages.map((m) => ({ role: m.role, content: m.content })),
-          null,
-          2,
-        );
-        setDraftMessages(messages);
-      } else {
-        initialTemplate.current = promptVersion.template;
-        setDraftTemplate(promptVersion.template);
-      }
-    }
-  }, [promptVersion, isChatPrompt]);
-
-  const onDirtyChangeRef = useRef(onDirtyChange);
-  onDirtyChangeRef.current = onDirtyChange;
-
-  useEffect(() => {
-    if (!onDirtyChangeRef.current || !initialTemplate.current) return;
-    const currentTemplate = isChatPrompt
-      ? JSON.stringify(
-          draftMessages.map((m) => ({ role: m.role, content: m.content })),
-          null,
-          2,
-        )
-      : draftTemplate;
-    onDirtyChangeRef.current(currentTemplate !== initialTemplate.current);
-  }, [draftTemplate, draftMessages, isChatPrompt]);
-
-  const handleAddMessage = useCallback(() => {
-    setDraftMessages((prev) => [...prev, generateDefaultLLMPromptMessage()]);
-  }, []);
-
-  useImperativeHandle(
+>(
+  (
+    { value, projectId, isEditing = false, onDirtyChange, compact = false },
     ref,
-    () => ({
-      getCurrentTemplate: () => {
-        return isChatPrompt
-          ? JSON.stringify(
-              draftMessages.map((m) => ({
-                role: m.role,
-                content: m.content,
-              })),
-              null,
-              2,
-            )
-          : draftTemplate;
-      },
-      validate: () => {
+  ) => {
+    const [draftTemplate, setDraftTemplate] = useState("");
+    const [draftMessages, setDraftMessages] = useState<LLMMessage[]>([]);
+    const initialTemplate = useRef("");
+
+    const { data: prompt, isPending } = usePromptByCommit(
+      { commitId: value.value },
+      { enabled: !!value.value },
+    );
+
+    const { mutateAsync: createVersion } = useCreatePromptVersionMutation();
+
+    const promptVersion = prompt?.requested_version;
+    const isChatPrompt =
+      prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
+
+    useEffect(() => {
+      if (promptVersion && !initialTemplate.current) {
         if (isChatPrompt) {
-          const hasEmpty = draftMessages.some((m) => {
-            if (typeof m.content === "string") return !m.content.trim();
-            if (Array.isArray(m.content)) {
-              return m.content.every(
-                (part) => part.type === "text" && !part.text.trim(),
-              );
-            }
-            return true;
-          });
-          if (hasEmpty) return "Messages must not be empty";
+          const messages = parseChatTemplateToLLMMessages(
+            promptVersion.template,
+          );
+          initialTemplate.current = JSON.stringify(
+            messages.map((m) => ({ role: m.role, content: m.content })),
+            null,
+            2,
+          );
+          setDraftMessages(messages);
         } else {
-          if (!draftTemplate.trim()) return "Prompt must not be empty";
+          initialTemplate.current = promptVersion.template;
+          setDraftTemplate(promptVersion.template);
         }
-        return null;
-      },
-      saveVersion: async () => {
-        if (!prompt) return null;
+      }
+    }, [promptVersion, isChatPrompt]);
 
-        const currentTemplate = isChatPrompt
-          ? JSON.stringify(
-              draftMessages.map((m) => ({
-                role: m.role,
-                content: m.content,
-              })),
-              null,
-              2,
-            )
-          : draftTemplate;
+    const onDirtyChangeRef = useRef(onDirtyChange);
+    onDirtyChangeRef.current = onDirtyChange;
 
-        if (currentTemplate === initialTemplate.current) return null;
+    useEffect(() => {
+      if (!onDirtyChangeRef.current || !initialTemplate.current) return;
+      const currentTemplate = isChatPrompt
+        ? JSON.stringify(
+            draftMessages.map((m) => ({ role: m.role, content: m.content })),
+            null,
+            2,
+          )
+        : draftTemplate;
+      onDirtyChangeRef.current(currentTemplate !== initialTemplate.current);
+    }, [draftTemplate, draftMessages, isChatPrompt]);
 
-        const data = await createVersion({
-          name: prompt.name,
-          template: currentTemplate,
-          type: promptVersion?.type,
-          templateStructure: prompt.template_structure,
-          projectId,
-          ...(projectId && {
-            excludeBlueprintUpdateForProjects: [projectId],
-          }),
-          onSuccess: () => {},
-        });
+    const handleAddMessage = useCallback(() => {
+      setDraftMessages((prev) => [...prev, generateDefaultLLMPromptMessage()]);
+    }, []);
 
-        return { key: value.key, commit: data.commit };
-      },
-    }),
-    [
-      createVersion,
-      draftMessages,
-      draftTemplate,
-      isChatPrompt,
-      prompt,
-      promptVersion,
-      projectId,
-      value.key,
-    ],
-  );
+    useImperativeHandle(
+      ref,
+      () => ({
+        getCurrentTemplate: () => {
+          return isChatPrompt
+            ? JSON.stringify(
+                draftMessages.map((m) => ({
+                  role: m.role,
+                  content: m.content,
+                })),
+                null,
+                2,
+              )
+            : draftTemplate;
+        },
+        validate: () => {
+          if (isChatPrompt) {
+            const hasEmpty = draftMessages.some((m) => {
+              if (typeof m.content === "string") return !m.content.trim();
+              if (Array.isArray(m.content)) {
+                return m.content.every(
+                  (part) => part.type === "text" && !part.text.trim(),
+                );
+              }
+              return true;
+            });
+            if (hasEmpty) return "Messages must not be empty";
+          } else {
+            if (!draftTemplate.trim()) return "Prompt must not be empty";
+          }
+          return null;
+        },
+        saveVersion: async () => {
+          if (!prompt) return null;
 
-  if (isPending) return <Loader />;
+          const currentTemplate = isChatPrompt
+            ? JSON.stringify(
+                draftMessages.map((m) => ({
+                  role: m.role,
+                  content: m.content,
+                })),
+                null,
+                2,
+              )
+            : draftTemplate;
 
-  if (isEditing) {
+          if (currentTemplate === initialTemplate.current) return null;
+
+          const data = await createVersion({
+            name: prompt.name,
+            template: currentTemplate,
+            type: promptVersion?.type,
+            templateStructure: prompt.template_structure,
+            projectId,
+            ...(projectId && {
+              excludeBlueprintUpdateForProjects: [projectId],
+            }),
+            onSuccess: () => {},
+          });
+
+          return { key: value.key, commit: data.commit };
+        },
+      }),
+      [
+        createVersion,
+        draftMessages,
+        draftTemplate,
+        isChatPrompt,
+        prompt,
+        promptVersion,
+        projectId,
+        value.key,
+      ],
+    );
+
+    if (isPending) return <Loader />;
+
+    if (isEditing) {
+      return (
+        <div className="flex flex-col gap-2">
+          {isChatPrompt ? (
+            <LLMPromptMessages
+              messages={draftMessages}
+              onChange={setDraftMessages}
+              onAddMessage={handleAddMessage}
+              hidePromptActions
+              disableMedia
+              compact={compact}
+            />
+          ) : (
+            <TextPromptEditor
+              value={draftTemplate}
+              onChange={setDraftTemplate}
+              label="Template"
+              showDescription={false}
+              labelClassName="comet-body-xs-accented mt-auto"
+            />
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col gap-2">
-        {isChatPrompt ? (
-          <LLMPromptMessages
-            messages={draftMessages}
-            onChange={setDraftMessages}
-            onAddMessage={handleAddMessage}
-            hidePromptActions
-            disableMedia
-          />
-        ) : (
-          <TextPromptEditor
-            value={draftTemplate}
-            onChange={setDraftTemplate}
-            label="Template"
-            showDescription={false}
+        {promptVersion && (
+          <PromptTemplateView
+            template={promptVersion.template}
+            templateStructure={prompt?.template_structure}
+            truncate
             labelClassName="comet-body-xs-accented mt-auto"
           />
         )}
       </div>
     );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {promptVersion && (
-        <PromptTemplateView
-          template={promptVersion.template}
-          templateStructure={prompt?.template_structure}
-          truncate
-          labelClassName="comet-body-xs-accented mt-auto"
-        />
-      )}
-    </div>
-  );
-});
+  },
+);
 
 BlueprintValuePrompt.displayName = "BlueprintValuePrompt";
 

@@ -35,6 +35,7 @@ type ResizableSidePanelProps = {
   closeOnClickOutside?: boolean;
   horizontalNavigation?: ArrowNavigationConfig;
   verticalNavigation?: ArrowNavigationConfig;
+  container?: HTMLElement | null;
 };
 
 const UP_HOTKEYS = ["↑"];
@@ -68,8 +69,10 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   closeOnClickOutside = true,
   horizontalNavigation,
   verticalNavigation,
+  container,
 }) => {
-  const portalContainer = usePortalContainer();
+  const externalContainer = usePortalContainer();
+  const portalContainer = container ?? externalContainer;
   const localStorageKey = `${panelId}-side-panel-width`;
 
   const getContainerWidth = useCallback(() => {
@@ -278,7 +281,10 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
 
   return createPortal(
     <div
-      className={cn("absolute inset-0 z-10", !open && "pointer-events-none")}
+      className={cn(
+        "absolute inset-0 z-10",
+        !open && "pointer-events-none w-0",
+      )}
     >
       {open && closeOnClickOutside && (
         <div className="absolute inset-0 bg-black/10" onClick={onClose} />

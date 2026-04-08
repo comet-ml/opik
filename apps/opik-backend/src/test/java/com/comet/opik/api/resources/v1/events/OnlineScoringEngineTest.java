@@ -454,6 +454,65 @@ class OnlineScoringEngineTest {
                 .anyMatch(logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().contains(logMessage));
     }
 
+    @Test
+    @DisplayName("test partial trace without end_time is skipped, complete trace is scored once")
+    void testPartialTraceThenCompleteTraceScoresOnlyOnce(OnlineScoringSampler onlineScoringSampler) throws Exception {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluator = createRule(projectId, evaluatorCode);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+        var traceId = generator.generate();
+
+        // First event: partial trace (no end_time, no output) — simulates SDK "start" call
+        var partialTrace = Trace.builder()
+                .id(traceId)
+                .projectName(projectName)
+                .projectId(projectId)
+                .createdBy(USER_NAME)
+                .input(JsonUtils.getJsonNodeFromString(INPUT))
+                .build();
+        var partialEvent = new TracesCreated(List.of(partialTrace), WORKSPACE_ID, USER_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
+                + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
+                + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
+        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
+
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        // Send partial trace — should be skipped
+        onlineScoringSampler.onTracesCreated(partialEvent);
+
+        Mono.delay(Duration.ofSeconds(2)).block();
+
+        // Verify no scoring happened for the partial trace
+        Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(Mockito.any());
+
+        // Second event: complete trace (with end_time and output) — simulates SDK "end" call
+        var completeTrace = createTrace(traceId, projectId);
+        var completeEvent = new TracesCreated(List.of(completeTrace), WORKSPACE_ID, USER_NAME);
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+
+        onlineScoringSampler.onTracesCreated(completeEvent);
+
+        Mono.delay(Duration.ofMillis(300)).block();
+
+        // Verify scoring happened exactly once
+        Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
+
+        List<FeedbackScoreBatchItem> processed = captor.getValue();
+        assertThat(processed).hasSize(3); // 3 scores from one evaluator
+    }
+
     private Trace createTrace(UUID traceId, UUID projectId) throws JsonProcessingException {
         return Trace.builder()
                 .id(traceId)
@@ -461,7 +520,9 @@ class OnlineScoringEngineTest {
                 .projectId(projectId)
                 .createdBy(USER_NAME)
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
-                .output(JsonUtils.getJsonNodeFromString(OUTPUT)).build();
+                .output(JsonUtils.getJsonNodeFromString(OUTPUT))
+                .endTime(java.time.Instant.now())
+                .build();
     }
 
     private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {

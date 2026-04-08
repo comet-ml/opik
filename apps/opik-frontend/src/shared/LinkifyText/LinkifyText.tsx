@@ -2,6 +2,7 @@ import React from "react";
 import isString from "lodash/isString";
 import Linkify from "linkify-react";
 import type { Opts, IntermediateRepresentation } from "linkifyjs";
+import { ArrowUpRight } from "lucide-react";
 
 const URL_PATTERN = /https?:\/\//;
 
@@ -9,24 +10,20 @@ const LINKIFY_OPTIONS: Opts = {
   defaultProtocol: "https",
   target: "_blank",
   rel: "noopener noreferrer",
-  className: "text-blue-600 underline hover:text-blue-800",
+  className:
+    "text-foreground hover:text-foreground inline-flex items-center gap-0.5 border-b border-current",
   ignoreTags: ["script", "style"],
   validate: {
     url: (value: string) => URL_PATTERN.test(value),
   },
-  render: (ir: IntermediateRepresentation) => {
-    const { class: className, ...attrs } = ir.attributes as Record<
-      string,
-      string
-    >;
-    return React.createElement(
-      ir.tagName,
-      {
-        ...attrs,
-        className,
-        onClick: (e: React.MouseEvent) => e.stopPropagation(),
-      },
-      ir.content,
+  render: ({ attributes, content }: IntermediateRepresentation) => {
+    const { class: className, ...attrs } = attributes as Record<string, string>;
+
+    return (
+      <a {...attrs} className={className} onClick={(e) => e.stopPropagation()}>
+        {content}
+        <ArrowUpRight className="size-3 shrink-0" />
+      </a>
     );
   },
 };

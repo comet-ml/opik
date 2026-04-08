@@ -8,6 +8,9 @@ import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import NavigationTag from "@/shared/NavigationTag";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Tag } from "@/ui/tag";
+import { LOGS_SOURCE } from "@/types/traces";
+import { generateExperimentIdFilter } from "@/lib/filters";
+import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import {
   STATUS_VARIANT_MAP,
@@ -87,6 +90,15 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
               experiment?.dataset_name && `Go to ${experiment.dataset_name}`
             }
             resource={RESOURCE_TYPE.dataset}
+          />
+        )}
+        {experiment?.project_id && (
+          <TraceLogsSidebarButton
+            projectId={experiment.project_id}
+            logsSource={LOGS_SOURCE.optimization}
+            sourceFilters={generateExperimentIdFilter(experiment.id)}
+            title="Optimization logs"
+            backLabel="Back to trial"
           />
         )}
       </div>

@@ -85,7 +85,10 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1}
+  #  Default: 1s
+  #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
+  healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -955,10 +958,10 @@ localRunner:
   nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
   # Default: 300s
   # Description: Time-to-live for pairing codes used during runner registration
-  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-300s}
-  # Default: 600s
+  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-1h}
+  # Default: 1h
   # Description: Time-to-live for runner entries during the pairing process
-  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-600s}
+  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-1h}
   # Default: 100
   # Description: Maximum number of runners the reaper processes per cycle across all workspaces
   reaperMaxRunnersPerCycle: ${OPIK_RUNNER_REAPER_MAX_RUNNERS_PER_CYCLE:-100}
@@ -968,6 +971,33 @@ localRunner:
   # Default: 1000
   # Description: Maximum number of log entries a runner can send in a single batch
   maxLogEntriesPerBatch: ${OPIK_RUNNER_MAX_LOG_ENTRIES_PER_BATCH:-1000}
+  # Default: 50
+  # Description: Maximum number of pending bridge commands allowed per runner
+  bridgeMaxPendingPerRunner: ${OPIK_RUNNER_BRIDGE_MAX_PENDING:-50}
+  # Default: 600
+  # Description: Maximum bridge commands per minute per runner
+  bridgeMaxCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_COMMANDS_PER_MIN:-600}
+  # Default: 120
+  # Description: Maximum bridge write commands per minute per runner
+  bridgeMaxWriteCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_WRITE_COMMANDS_PER_MIN:-120}
+  # Default: 30s
+  # Description: How long the bridge nextCommands long-poll blocks before returning empty
+  bridgePollTimeout: ${OPIK_RUNNER_BRIDGE_POLL_TIMEOUT:-30s}
+  # Default: 30s
+  # Description: Default timeout for bridge commands when not specified by caller
+  bridgeDefaultCommandTimeout: ${OPIK_RUNNER_BRIDGE_DEFAULT_CMD_TIMEOUT:-30s}
+  # Default: 120s
+  # Description: Maximum allowed timeout for bridge commands
+  bridgeMaxCommandTimeout: ${OPIK_RUNNER_BRIDGE_MAX_CMD_TIMEOUT:-120s}
+  # Default: 1h
+  # Description: How long completed bridge command metadata is retained in Redis
+  bridgeCompletedCommandTtl: ${OPIK_RUNNER_BRIDGE_COMPLETED_CMD_TTL:-1h}
+  # Default: 5s
+  # Description: Extra buffer added to async response timeout beyond bridge poll/command timeout
+  bridgeAsyncTimeoutBuffer: ${OPIK_RUNNER_BRIDGE_ASYNC_TIMEOUT_BUFFER:-5s}
+  # Default: 1048576 (1MB)
+  # Description: Maximum payload size in bytes for bridge command args and results
+  bridgeMaxPayloadBytes: ${OPIK_RUNNER_BRIDGE_MAX_PAYLOAD_BYTES:-1048576}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -1197,3 +1227,10 @@ llmModelRegistry:
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
   remoteEnabled: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-false}
   remoteUrl: ${LLM_MODEL_REGISTRY_REMOTE_URL:-}
+  refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}
+
+# Agent Config configuration
+agentConfig:
+  # Default: 5000ms
+  # Description: Duration of the distributed lock held during blueprint create/update operations
+  blueprintLockDuration: ${OPIK_AGENT_CONFIG_BLUEPRINT_LOCK_DURATION:-5000ms}

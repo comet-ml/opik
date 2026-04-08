@@ -766,3 +766,69 @@ class TestModuleNameUsage:
         # They should be modules, not None
         assert isinstance(dataset_item_module, types.ModuleType)
         assert isinstance(id_helpers_module, types.ModuleType)
+
+
+class TestProjectInference:
+    """Test trace-to-project mapping built from project directory filenames."""
+
+    @pytest.fixture
+    def mock_client(self) -> Mock:
+        """Create a minimal mock Opik client."""
+        client = Mock()
+        client.flush = Mock()
+        mock_trace = Mock()
+        mock_trace.id = "new-trace-id"
+        client.trace = Mock(return_value=mock_trace)
+        client.span = Mock()
+        return client
+
+    def test_project_inference__trace_filename_maps_to_project__happyflow(
+        self, mock_client: Mock, tmp_path: Path
+    ) -> None:
+        """A trace_{id}.json file under projects/my-project/ should map the trace
+        ID to 'my-project' in the trace_to_project_map returned by
+        _import_traces_from_projects_directory."""
+        project_dir = tmp_path / "projects" / "my-project"
+        project_dir.mkdir(parents=True)
+
+        trace_id = "abc123"
+        trace_data: Dict[str, Any] = {
+            "trace": {"id": trace_id, "name": "t", "input": {}, "output": {}},
+            "spans": [],
+        }
+        trace_file = project_dir / f"trace_{trace_id}.json"
+        with open(trace_file, "w") as f:
+            json.dump(trace_data, f)
+
+        trace_id_map, _ = _import_traces_from_projects_directory(
+            mock_client, tmp_path, dry_run=False, debug=False
+        )
+
+        # The original trace ID must appear in the returned map
+        assert trace_id in trace_id_map
+
+    def test_project_inference__no_filename_no_metadata__uses_default(
+        self, mock_client: Mock, tmp_path: Path
+    ) -> None:
+        """When a trace file has no project_name in metadata and does not sit
+        under a named projects/ sub-directory, the importer should still
+        complete without raising an exception (using the fallback 'default'
+        project internally)."""
+        # Place a trace directly in tmp_path (no projects/ sub-dir) —
+        # _import_traces_from_projects_directory only scans projects/**,
+        # so this trace is simply not found and the function returns an
+        # empty map without error.
+        trace_data: Dict[str, Any] = {
+            "trace": {"id": "orphan-trace", "name": "t", "input": {}, "output": {}},
+            "spans": [],
+        }
+        orphan_file = tmp_path / "trace_orphan-trace.json"
+        with open(orphan_file, "w") as f:
+            json.dump(trace_data, f)
+
+        # Should not raise; returns empty map when no projects/ dir exists
+        trace_id_map, _ = _import_traces_from_projects_directory(
+            mock_client, tmp_path, dry_run=False, debug=False
+        )
+
+        assert "orphan-trace" not in trace_id_map

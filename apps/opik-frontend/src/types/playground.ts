@@ -85,6 +85,7 @@ export interface LogTrace {
   input: { messages: ProviderMessageType[] };
   output: { output: string | null };
   metadata?: Record<string, unknown>;
+  source?: string;
 }
 
 export interface LogSpan {
@@ -96,6 +97,7 @@ export interface LogSpan {
   startTime: string;
   endTime: string;
   input: { messages: ProviderMessageType[] };
+  source?: string;
   output:
     | { choices: ChatCompletionMessageChoiceType[] }
     | { output: string | null };

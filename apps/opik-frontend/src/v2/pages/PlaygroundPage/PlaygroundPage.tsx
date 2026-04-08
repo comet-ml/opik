@@ -12,7 +12,8 @@ import { Separator } from "@/ui/separator";
 import PlaygroundOutputs from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 import PlaygroundAddVariant from "@/v2/pages/PlaygroundPage/PlaygroundAddVariant";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import useProjectById from "@/api/projects/useProjectById";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import PlaygroundPrompts from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
 import PlaygroundHeader from "@/v2/pages/PlaygroundPage/PlaygroundHeader";
@@ -20,14 +21,22 @@ import SetupProviderDialog from "@/v2/pages-shared/llm/SetupProviderDialog/Setup
 import useActionButtonActions from "@/v2/pages/PlaygroundPage/useActionButtonActions";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
-import useProjectByName from "@/api/projects/useProjectByName";
 import {
   useTriggerProviderValidation,
   useIsRunning,
   usePromptCount,
+  useSetPromptMap,
+  useSetSelectedRuleIds,
+  useClearCreatedExperiments,
+  useClearRunningMap,
+  useResetDatasetFilters,
+  useSetDatasetVariables,
+  useSetExperimentNamePrefix,
   useDatasetFilters,
   useDatasetPage,
   useDatasetSize,
+  useLastActiveProjectId,
+  useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Dataset, DatasetItem } from "@/types/datasets";
@@ -37,13 +46,17 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
-import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 const EMPTY_ITEMS: DatasetItem[] = [];
 const EMPTY_DATASETS: Dataset[] = [];
 
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
+  const { data: activeProject } = useProjectById(
+    { projectId: activeProjectId! },
+    { enabled: !!activeProjectId },
+  );
   const {
     permissions: { canViewDatasets },
   } = usePermissions();
@@ -57,6 +70,48 @@ const PlaygroundPage = () => {
 
   const { datasetId, versionName, versionHash, setDatasetId } =
     usePlaygroundDataset();
+
+  const setPromptMap = useSetPromptMap();
+  const setSelectedRuleIds = useSetSelectedRuleIds();
+  const clearCreatedExperiments = useClearCreatedExperiments();
+  const clearRunningMap = useClearRunningMap();
+  const resetDatasetFilters = useResetDatasetFilters();
+  const setDatasetVariables = useSetDatasetVariables();
+  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const lastActiveProjectId = useLastActiveProjectId();
+  const setLastActiveProjectId = useSetLastActiveProjectId();
+
+  const resetPlayground = useCallback(() => {
+    setPromptMap([], {});
+    setDatasetId(null);
+    setSelectedRuleIds(null);
+    clearCreatedExperiments();
+    clearRunningMap();
+    resetDatasetFilters();
+    setDatasetVariables([]);
+    setExperimentNamePrefix(null);
+  }, [
+    setPromptMap,
+    setDatasetId,
+    setSelectedRuleIds,
+    clearCreatedExperiments,
+    clearRunningMap,
+    resetDatasetFilters,
+    setDatasetVariables,
+    setExperimentNamePrefix,
+  ]);
+
+  useEffect(() => {
+    if (lastActiveProjectId != activeProjectId) {
+      setLastActiveProjectId(activeProjectId);
+      resetPlayground();
+    }
+  }, [
+    lastActiveProjectId,
+    activeProjectId,
+    setLastActiveProjectId,
+    resetPlayground,
+  ]);
 
   const { DialogComponent } = useNavigationBlocker({
     condition: isRunning,
@@ -121,18 +176,13 @@ const PlaygroundPage = () => {
   );
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
 
-  const { data: playgroundProject } = useProjectByName(
-    { projectName: PLAYGROUND_PROJECT_NAME },
-    { enabled: !!workspaceName, retry: false },
-  );
-
   const { data: datasetsData } = useProjectDatasetsList(
     {
-      projectId: playgroundProject?.id ?? "",
+      projectId: activeProjectId ?? "",
       page: 1,
       size: DEFAULT_LOADED_DATASETS,
     },
-    { enabled: canViewDatasets && !!playgroundProject?.id && !!plainDatasetId },
+    { enabled: canViewDatasets && !!activeProjectId && !!plainDatasetId },
   );
   const datasetName =
     (datasetsData?.content || EMPTY_DATASETS).find(
@@ -144,9 +194,10 @@ const PlaygroundPage = () => {
     datasetItems,
     datasetName,
     datasetVersionId: parsedVersionId || undefined,
+    projectName: activeProject?.name,
   });
 
-  const isExperimentMode = !!datasetId;
+  const isExperimentMode = !!datasetId && canViewDatasets;
 
   useEffect(() => {
     return () => stopAll();
@@ -179,6 +230,7 @@ const PlaygroundPage = () => {
             datasetName={datasetName}
             versionName={versionName}
             onChangeDatasetId={setDatasetId}
+            onReset={resetPlayground}
             onRunAll={runAll}
             onStopAll={stopAll}
             maxWidth={headerMaxWidth}

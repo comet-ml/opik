@@ -42,7 +42,6 @@ import {
   ColumnData,
   ColumnsStatistic,
   DynamicColumn,
-  HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
@@ -196,7 +195,6 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
-    iconType: "tags",
     cell: ListCell as never,
   },
   {
@@ -538,12 +536,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const excludeFields = useMemo(() => {
     const exclude: string[] = [];
 
-    // Only exclude experiment field for traces (not spans) when column is not visible
     if (
       type === TRACE_DATA_TYPE.traces &&
       !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
     ) {
       exclude.push("experiment");
+    }
+
+    const hasFeedbackScoreColumn = selectedColumns.some(
+      (col) =>
+        col.startsWith(COLUMN_FEEDBACK_SCORES_ID) ||
+        col.startsWith(COLUMN_SPAN_FEEDBACK_SCORES_ID),
+    );
+    if (!hasFeedbackScoreColumn) {
+      exclude.push("feedback_scores");
     }
 
     return exclude;
@@ -967,7 +973,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               label: "Guardrails",
               statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
               type: COLUMN_TYPE.category,
-              iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
               cell: GuardrailsCell as never,

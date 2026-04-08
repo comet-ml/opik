@@ -16,6 +16,7 @@
 
 // Minimal/Ghost actions
 <Button variant="ghost">Link Action</Button>
+<Button variant="ghostInverted">Action on Dark BG</Button>
 <Button variant="minimal">Subtle Action</Button>
 
 // Link actions

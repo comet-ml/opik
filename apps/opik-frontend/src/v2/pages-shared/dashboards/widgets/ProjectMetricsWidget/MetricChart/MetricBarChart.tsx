@@ -23,6 +23,7 @@ interface MetricBarChartProps {
   isPending: boolean;
   labelActions?: Record<string, LegendLabelAction>;
   isAggregateTotal?: boolean;
+  showLegend?: boolean;
 }
 
 const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
@@ -35,6 +36,7 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
   data,
   labelActions,
   isAggregateTotal = false,
+  showLegend = true,
 }) => {
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -83,7 +85,7 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
       customYTickFormatter={customYTickFormatter}
       renderTooltipValue={renderValue}
       renderTooltipHeader={renderChartTooltipHeader}
-      showLegend
+      showLegend={showLegend}
       labelActions={labelActions}
     />
   );

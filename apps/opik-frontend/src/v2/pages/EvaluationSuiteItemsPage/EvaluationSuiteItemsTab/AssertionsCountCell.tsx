@@ -63,7 +63,10 @@ const AssertionsCountCellInner: React.FC<AssertionsCountCellInnerProps> = ({
             collisionPadding={16}
             className="max-w-fit p-0"
           >
-            <AssertionsListTooltipContent assertions={assertions} />
+            <AssertionsListTooltipContent
+              assertions={assertions}
+              title="Custom assertions"
+            />
           </TooltipContent>
         </TooltipPortal>
       </Tooltip>

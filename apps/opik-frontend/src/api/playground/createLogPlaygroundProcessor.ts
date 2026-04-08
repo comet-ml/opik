@@ -11,7 +11,7 @@ import {
   PromptLibraryMetadata,
 } from "@/types/playground";
 
-import { SPAN_TYPE } from "@/types/traces";
+import { LOGS_SOURCE, SPAN_TYPE } from "@/types/traces";
 import api, {
   EXPERIMENTS_REST_ENDPOINT,
   SPANS_REST_ENDPOINT,
@@ -56,6 +56,7 @@ export interface LogProcessorArgs {
   onError: (error: Error) => void;
   onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
   onExperimentItemsComplete?: () => void;
+  projectName?: string;
 }
 
 export interface LogProcessor {
@@ -104,10 +105,14 @@ const USAGE_FIELDS_TO_SEND = [
   "total_tokens",
 ];
 
-const getTraceFromRun = (run: LogQueueParams): LogTrace => {
+const getTraceFromRun = (
+  run: LogQueueParams,
+  projectName: string,
+  source: LOGS_SOURCE,
+): LogTrace => {
   const trace: LogTrace = {
     id: v7(),
-    projectName: PLAYGROUND_PROJECT_NAME,
+    projectName,
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
@@ -118,6 +123,7 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     metadata: {
       created_from: "playground",
     },
+    source,
   };
 
   // Add selected_rule_ids to trace metadata if provided
@@ -152,7 +158,12 @@ const hasChoicesContent = (run: LogQueueParams): boolean => {
   return !!run?.choices?.some((choice) => choice.delta.content);
 };
 
-const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
+const getSpanFromRun = (
+  run: LogQueueParams,
+  traceId: string,
+  projectName: string,
+  source: LOGS_SOURCE,
+): LogSpan => {
   const spanOutput =
     run.choices && hasChoicesContent(run)
       ? { choices: run.choices }
@@ -166,7 +177,7 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
   return {
     id: v7(),
     traceId,
-    projectName: PLAYGROUND_PROJECT_NAME,
+    projectName,
     type: SPAN_TYPE.llm,
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
@@ -178,6 +189,7 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: spanModel,
     provider: spanProvider,
+    source,
     metadata: {
       created_from: spanProvider,
       usage: run.usage,
@@ -238,6 +250,7 @@ const createLogPlaygroundProcessor = ({
   onError,
   onCreateTraces,
   onExperimentItemsComplete,
+  projectName = PLAYGROUND_PROJECT_NAME,
 }: LogProcessorArgs): LogProcessor => {
   const experimentPromptMap: Record<string, string> = {};
   const experimentRegistry: LogExperiment[] = [];
@@ -315,9 +328,12 @@ const createLogPlaygroundProcessor = ({
       const { promptId, datasetName, datasetItemId } = run;
 
       const isWithExperiments = !!datasetName;
+      const source = isWithExperiments
+        ? LOGS_SOURCE.experiment
+        : LOGS_SOURCE.playground;
 
-      const trace = getTraceFromRun(run);
-      const span = getSpanFromRun(run, trace.id);
+      const trace = getTraceFromRun(run, projectName, source);
+      const span = getSpanFromRun(run, trace.id, projectName, source);
 
       // Store the trace mapping
       traceMappings.push({

@@ -11,12 +11,96 @@ import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
+import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
+import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import { BASE_API_URL } from "@/api/api";
+import { Spinner } from "@/ui/spinner";
 
 const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
 const IS_DEV = import.meta.env.DEV;
 const BRIDGE_PROTOCOL_VERSION = 1;
+
+const LOADER_DEFAULT_WIDTH = 400;
+const LOADER_COLLAPSED_WIDTH = 33;
+
+function getStoredSidebarWidth(): number {
+  try {
+    const parsed = parseInt(
+      localStorage.getItem("assistant-sidebar-width") ?? "",
+      10,
+    );
+    if (parsed > 0) return parsed;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return LOADER_DEFAULT_WIDTH;
+}
+
+function getStoredSidebarOpen(): boolean {
+  try {
+    const stored = localStorage.getItem("assistant-sidebar-open");
+    return stored === null ? true : stored === "true";
+  } catch {
+    return true;
+  }
+}
+
+const PHASE_MESSAGES: Partial<
+  Record<AssistantBackendPhase | "manifest", string>
+> = {
+  compute: "Starting assistant\u2026",
+  health: "Connecting\u2026",
+  manifest: "Loading interface\u2026",
+};
+
+interface AssistantSidebarLoaderProps {
+  phase: AssistantBackendPhase | "manifest";
+  error: string | null;
+  onWidthChange: (width: number) => void;
+}
+
+const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
+  phase,
+  error,
+  onWidthChange,
+}) => {
+  const isOpen = useRef(getStoredSidebarOpen());
+  const initialWidth = useRef(
+    isOpen.current ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+  );
+
+  useEffect(() => {
+    onWidthChange(initialWidth.current);
+  }, [onWidthChange]);
+
+  const collapsed = !isOpen.current;
+
+  if (error) {
+    return (
+      <div className="flex size-full flex-col items-center justify-center gap-3 border-l bg-background px-6 text-center">
+        <div className="text-sm font-medium text-destructive">
+          Unable to load assistant
+        </div>
+        <p className="text-xs text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  const message = PHASE_MESSAGES[phase] ?? "Loading\u2026";
+
+  return (
+    <div className="relative size-full border-l">
+      <div className="absolute inset-0 animate-pulse bg-muted" />
+      <div className="relative flex size-full items-center justify-center">
+        <Spinner size={collapsed ? "xs" : "small"} />
+        {!collapsed && (
+          <span className="ml-2 text-sm text-light-slate">{message}</span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const stopPropagation = (e: Event) => e.stopPropagation();
 
@@ -46,7 +130,9 @@ function createHostListeners(): HostListeners {
 }
 
 interface BridgeRefs {
-  navigate: React.MutableRefObject<(path: string) => void>;
+  navigate: React.MutableRefObject<
+    (path: string, search?: Record<string, string>) => void
+  >;
   onWidthChange: React.MutableRefObject<(width: number) => void>;
   onNotification: React.MutableRefObject<
     (data: SidebarEventMap["notification"]) => void
@@ -71,9 +157,11 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
   emit: (event, data) => {
     switch (event) {
-      case "navigate":
-        refs.navigate.current((data as SidebarEventMap["navigate"]).path);
+      case "navigate": {
+        const { path, search } = data as SidebarEventMap["navigate"];
+        refs.navigate.current(path, search);
         break;
+      }
       case "sidebar:resized":
         refs.onWidthChange.current(
           (data as SidebarEventMap["sidebar:resized"]).width,
@@ -126,22 +214,29 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
   const projectName = project?.name ?? null;
   const resolvedProjectId = projectId ?? null;
 
+  const organizationId = workspace?.organizationId ?? null;
+  const projectStats = useProjectOnboardingStats(resolvedProjectId);
+
   return useMemo<BridgeContext>(
     () => ({
       workspaceId,
       workspaceName,
+      organizationId,
       projectId: resolvedProjectId,
       projectName,
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
       theme: "light",
+      projectStats,
     }),
     [
       workspaceId,
       workspaceName,
+      organizationId,
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      projectStats,
     ],
   );
 }
@@ -153,12 +248,21 @@ interface AssistantMeta {
   version: string;
 }
 
+function resolveManifestUrl(backendUrl: string | null): string | null {
+  if (DEV_BASE_URL) return `${DEV_BASE_URL}/manifest.json`;
+  if (backendUrl) return `${backendUrl}/console/manifest.json`;
+  return null;
+}
+
+const DEV_META: AssistantMeta = {
+  scriptUrl: "/assistant/assistant.js",
+  cssUrl: "/assistant/assistant.css",
+  shellUrl: "/assistant/shell",
+  version: "dev",
+};
+
 function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
-  const manifestUrl = DEV_BASE_URL
-    ? `${DEV_BASE_URL}/manifest.json`
-    : backendUrl
-      ? `${backendUrl}/console/manifest.json`
-      : null;
+  const manifestUrl = resolveManifestUrl(backendUrl);
 
   const manifestBase = manifestUrl
     ? manifestUrl.substring(0, manifestUrl.lastIndexOf("/"))
@@ -173,16 +277,16 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: IS_DEV
-          ? "/assistant/shell"
-          : `${manifestBase}/${manifest.shell}`,
+        shellUrl: `${manifestBase}/${manifest.shell}`,
         version: manifest.ver,
       };
     },
-    enabled: !!manifestUrl,
+    enabled: !(IS_DEV && DEV_BASE_URL) && !!manifestUrl,
     staleTime: Infinity,
     retry: 1,
   });
+
+  if (IS_DEV && DEV_BASE_URL) return DEV_META;
 
   return data ?? null;
 }
@@ -194,7 +298,12 @@ interface AssistantSidebarProps {
 const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   onWidthChange,
 }) => {
-  const { backendUrl, isReady: isBackendReady } = useAssistantBackend();
+  const {
+    backendUrl,
+    isReady: isBackendReady,
+    error,
+    phase,
+  } = useAssistantBackend();
   const meta = useAssistantMeta(backendUrl);
   const context = useBridgeContext(backendUrl ?? "");
   const router = useRouter();
@@ -219,11 +328,13 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     emitHostEvent(listenersRef, "visibility:changed", { isOpen: open });
   });
 
-  const navigateRef = useLatestRef((path: string) => {
-    const ws = contextRef.current.workspaceName;
-    const fullPath = ws ? `/${ws}${path}` : path;
-    router.navigate({ to: fullPath });
-  });
+  const navigateRef = useLatestRef(
+    (path: string, search?: Record<string, string>) => {
+      const ws = contextRef.current.workspaceName;
+      const fullPath = ws ? `/${ws}${path}` : path;
+      router.navigate({ to: fullPath, search });
+    },
+  );
 
   const bridgeRef = useRef(
     createBridge({
@@ -276,7 +387,17 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     }
   }, []);
 
-  if (!meta || !isBackendReady) return null;
+  if (!meta || !isBackendReady) {
+    if (phase === "disabled") return null;
+    const effectivePhase = isBackendReady && !meta ? "manifest" : phase;
+    return (
+      <AssistantSidebarLoader
+        phase={effectivePhase}
+        error={error}
+        onWidthChange={onWidthChange}
+      />
+    );
+  }
 
   return (
     <iframe

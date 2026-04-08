@@ -173,6 +173,74 @@ def clean_feedback_scores(
     return cleaned_scores if cleaned_scores else None
 
 
+# TODO(2026-05-10): Remove _import_* metadata fallback once the backend has been
+# updated to accept these fields directly on the write path. At that point:
+#   1. Pass the fields directly to client.trace(), client.span(), and
+#      client.create_experiment() instead of (or in addition to) storing them
+#      in metadata.
+#   2. Remove the build_import_metadata() calls in project.py and experiment.py.
+#   3. Remove build_import_metadata(), _TRACE_IMPORT_FIELDS, _SPAN_IMPORT_FIELDS,
+#      and _EXPERIMENT_IMPORT_FIELDS from this file.
+#
+# Background: these fields are read-only on the current backend (created_by /
+# created_at are hardcoded to the authenticated user / now() in TraceDAO and
+# SpanDAO). They are stored in metadata so the information survives import
+# against an old backend. New backends that accept the fields directly will
+# ignore unknown body fields (JsonIgnoreProperties + JsonView exclusion), so
+# the SDK can send both simultaneously during a transition period.
+#
+# Fields from exported traces/spans/experiments that cannot yet be set directly
+# via the backend API. These are preserved in metadata under _import_* keys so
+# the information is not lost, and can be migrated to the actual fields once the
+# backend is updated to accept them.
+_TRACE_IMPORT_FIELDS = [
+    "created_at",
+    "created_by",
+    "last_updated_at",
+    "last_updated_by",
+    "visibility_mode",
+    "ttft",
+]
+
+_SPAN_IMPORT_FIELDS = [
+    "created_at",
+    "created_by",
+    "last_updated_at",
+    "last_updated_by",
+    "ttft",
+]
+
+_EXPERIMENT_IMPORT_FIELDS = [
+    "created_at",
+    "created_by",
+    "last_updated_at",
+    "last_updated_by",
+]
+
+
+def build_import_metadata(
+    source: Dict[str, Any],
+    fields: List[str],
+    existing_metadata: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Return a metadata dict that includes import-preserved fields under _import_* keys.
+
+    Only fields with non-None values are added. If there is nothing to add and
+    existing_metadata is None, returns None so callers that had no metadata
+    continue to send no metadata.
+    """
+    import_fields = {
+        f"_import_{field}": source[field]
+        for field in fields
+        if source.get(field) is not None
+    }
+    if not import_fields:
+        return existing_metadata
+    merged: Dict[str, Any] = dict(existing_metadata) if existing_metadata else {}
+    merged.update(import_fields)
+    return merged
+
+
 def sort_spans_topologically(spans_info: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Sort spans in topological order to ensure parents are processed before children.
 

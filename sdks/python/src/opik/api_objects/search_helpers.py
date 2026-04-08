@@ -38,6 +38,7 @@ def search_traces_with_filters(
     filters: Optional[OptionalFilterParsedItemList],
     max_results: int,
     truncate: bool,
+    exclude: Optional[List[str]] = None,
 ) -> List[trace_public.TracePublic]:
     traces = rest_stream_parser.read_and_parse_full_stream(
         read_source=lambda current_batch_size,
@@ -47,6 +48,7 @@ def search_traces_with_filters(
             limit=current_batch_size,
             truncate=truncate,
             last_retrieved_id=last_retrieved_id,
+            exclude=exclude,
         ),
         max_results=max_results,
         parsed_item_class=trace_public.TracePublic,

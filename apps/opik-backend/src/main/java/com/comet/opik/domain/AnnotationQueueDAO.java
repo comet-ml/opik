@@ -221,7 +221,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 SELECT queue_id, count(1) AS items_count
                 FROM queue_items_final
                 GROUP BY queue_id
-            ), feedback_scores_combined_raw AS (
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -229,47 +229,44 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                        value,
                        created_by,
                        last_updated_at,
-                       last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM queues_final)
-                    AND entity_id IN (SELECT item_id FROM queue_items_final)
-                UNION ALL
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    value,
-                    created_by,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores FINAL
-                WHERE workspace_id = :workspace_id
-                   AND project_id IN (SELECT project_id FROM queues_final)
-                   AND entity_id IN (SELECT item_id FROM queue_items_final)
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       created_by,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
+                       author
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           created_by,
+                           last_updated_at,
+                           last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE workspace_id = :workspace_id
+                        AND project_id IN (SELECT project_id FROM queues_final)
+                        AND entity_id IN (SELECT item_id FROM queue_items_final)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        created_by,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                       AND project_id IN (SELECT project_id FROM queues_final)
+                       AND entity_id IN (SELECT item_id FROM queue_items_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_combined AS (
                 SELECT entity_id,
                        name,
                        value,
                        created_by
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
-            ), feedback_scores_combined_grouped AS (
+                FROM feedback_scores_deduped
+            ), feedback_scores_grouped AS (
                 SELECT
                     entity_id,
                     name,
@@ -281,7 +278,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     entity_id,
                     name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
-                FROM feedback_scores_combined_grouped
+                FROM feedback_scores_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     fs_avg.queue_id,

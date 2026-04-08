@@ -434,6 +434,45 @@ class AgentConfigsClient:
         _response = self._raw_client.get_latest_blueprint(project_id, mask_id=mask_id, request_options=request_options)
         return _response.data
 
+    def remove_config_keys(
+        self,
+        *,
+        keys: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+
+        Parameters
+        ----------
+        keys : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.remove_config_keys(keys=['keys'], )
+        """
+        _response = self._raw_client.remove_config_keys(
+            keys=keys, project_id=project_id, project_name=project_name, request_options=request_options
+        )
+        return _response.data
+
 
 class AsyncAgentConfigsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -889,5 +928,47 @@ class AsyncAgentConfigsClient:
         """
         _response = await self._raw_client.get_latest_blueprint(
             project_id, mask_id=mask_id, request_options=request_options
+        )
+        return _response.data
+
+    async def remove_config_keys(
+        self,
+        *,
+        keys: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+
+        Parameters
+        ----------
+        keys : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.remove_config_keys(keys=['keys'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.remove_config_keys(
+            keys=keys, project_id=project_id, project_name=project_name, request_options=request_options
         )
         return _response.data

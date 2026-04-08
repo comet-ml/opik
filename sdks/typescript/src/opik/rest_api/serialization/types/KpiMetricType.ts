@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const KpiMetricType: core.serialization.Schema<serializers.KpiMetricType.Raw, OpikApi.KpiMetricType> =
-    core.serialization.enum_(["count", "errors", "avg_duration", "avg_cost"]);
+    core.serialization.enum_(["count", "errors", "avg_duration", "total_cost"]);
 
 export declare namespace KpiMetricType {
-    export type Raw = "count" | "errors" | "avg_duration" | "avg_cost";
+    export type Raw = "count" | "errors" | "avg_duration" | "total_cost";
 }

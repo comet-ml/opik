@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { trackStorage } from "@/decorators/track";
 import { createTypedAgentConfig } from "@/agent-config/AgentConfig";
-import { extractFieldMetadata } from "@/agent-config/typeHelpers";
+import { extractFieldMetadata } from "@/typeHelpers";
 import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 

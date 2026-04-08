@@ -24,6 +24,7 @@ from opik.rest_api.types.experiment_item import ExperimentItem
 from rich.console import Console
 
 from ..migration_manifest import MigrationManifest
+from ..exports.utils import extract_trace_id_from_filename
 from .utils import (
     handle_trace_reference,
     translate_trace_id,
@@ -32,6 +33,8 @@ from .utils import (
     clean_usage_for_import,
     debug_print,
     sort_spans_topologically,
+    build_import_metadata,
+    _EXPERIMENT_IMPORT_FIELDS,
 )
 from .prompt import import_prompts_from_directory
 from .dataset import import_datasets_from_directory
@@ -201,7 +204,9 @@ def _build_dataset_item_id_map(
     dataset_stats["datasets_skipped"] = dataset_import_stats.get("datasets_skipped", 0)
     dataset_stats["datasets_errors"] = dataset_import_stats.get("datasets_errors", 0)
 
-    if dataset_import_stats.get("datasets", 0) == 0:
+    skipped = dataset_import_stats.get("datasets_skipped", 0)
+    imported = dataset_import_stats.get("datasets", 0)
+    if imported == 0 and skipped == 0:
         console.print(
             f"[yellow]Warning: No datasets were imported from {datasets_dir}[/yellow]"
         )
@@ -216,9 +221,12 @@ def _build_dataset_item_id_map(
     # Flush to ensure datasets are persisted
     if not dry_run:
         client.flush()
-        console.print(
-            f"[green]Imported {dataset_import_stats.get('datasets', 0)} dataset(s)[/green]"
-        )
+        if imported > 0:
+            console.print(f"[green]Imported {imported} dataset(s)[/green]")
+        elif skipped > 0:
+            console.print(
+                f"[green]{skipped} dataset(s) already imported (skipped)[/green]"
+            )
 
     # Step 3: Get all imported dataset items and match by content
     dataset_files = list(datasets_dir.glob("dataset_*.json"))
@@ -432,6 +440,16 @@ def recreate_experiment(
                 f"Adding project_name '{project_name}' to experiment metadata",
                 debug,
             )
+
+        # Preserve read-only fields that cannot yet be set via the API
+        experiment_metadata = (
+            build_import_metadata(
+                experiment_info,
+                _EXPERIMENT_IMPORT_FIELDS,
+                experiment_metadata,
+            )
+            or {}
+        )
 
         # Create the experiment
         experiment = client.create_experiment(
@@ -1084,7 +1102,9 @@ def import_experiments_from_directory(
                 f"Sample original trace IDs in map: {sample_original_ids}", debug
             )
 
-        # Build a map of trace_id -> project_name from trace files for project inference
+        # Build a map of trace_id -> project_name from trace filenames for project inference.
+        # The original trace ID is encoded in the filename (trace_{id}.json), so there is
+        # no need to open the files.
         trace_to_project_map: Dict[str, str] = {}
         projects_dir = workspace_root / "projects"
         if projects_dir.exists():
@@ -1093,14 +1113,9 @@ def import_experiments_from_directory(
                     continue
                 project_name = project_dir.name
                 for trace_file in project_dir.glob("trace_*.json"):
-                    try:
-                        with open(trace_file, "r", encoding="utf-8") as f:
-                            trace_data = json.load(f)
-                        original_trace_id = trace_data.get("trace", {}).get("id")
-                        if original_trace_id:
-                            trace_to_project_map[original_trace_id] = project_name
-                    except Exception:
-                        continue
+                    original_trace_id = extract_trace_id_from_filename(trace_file)
+                    if original_trace_id:
+                        trace_to_project_map[original_trace_id] = project_name
 
         imported_count = 0
         skipped_count = 0

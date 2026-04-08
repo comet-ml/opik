@@ -1,15 +1,18 @@
 import {
   Bell,
   Blocks,
+  Bot,
   ChartLine,
   FileTerminal,
   FlaskConical,
+  LayoutDashboard,
   ListChecks,
   Rows3,
   Settings2,
   Sparkles,
   UserPen,
   Brain,
+  GitBranch,
   Workflow,
 } from "lucide-react";
 import {
@@ -137,6 +140,14 @@ const getMenuItems = ({
           label: "Agent configuration",
           disabled: !projectPrefix,
         },
+        {
+          id: "agent_runner",
+          path: projectPath("/agent-runner"),
+          type: MENU_ITEM_TYPE.router,
+          icon: GitBranch,
+          label: "Agent sandbox",
+          disabled: !projectPrefix,
+        },
       ],
     },
     {
@@ -172,9 +183,54 @@ export const getWorkspaceMenuItems = ({
 }): MenuItemGroup[] => {
   return [
     {
-      id: "workspace",
-      label: "Workspace",
+      id: "workspace-nav",
       items: [
+        {
+          id: "workspace",
+          path: canViewDashboards
+            ? "/$workspaceName/dashboards"
+            : "/$workspaceName/projects",
+          type: MENU_ITEM_TYPE.router,
+          icon: LayoutDashboard,
+          label: "Workspace",
+          muted: true,
+        },
+        {
+          id: "configuration",
+          path: "/$workspaceName/configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Settings2,
+          label: "Configuration",
+          muted: true,
+        },
+      ],
+    },
+  ];
+};
+
+export const getWorkspaceSidebarMenuItems = ({
+  canViewDashboards,
+}: {
+  canViewDashboards: boolean;
+}): MenuItemGroup[] => {
+  return [
+    {
+      id: "workspace-sidebar",
+      items: [
+        {
+          id: "configuration",
+          path: "/$workspaceName/configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Settings2,
+          label: "Configuration",
+        },
+        {
+          id: "projects",
+          path: "/$workspaceName/projects",
+          type: MENU_ITEM_TYPE.router,
+          icon: Bot,
+          label: "Projects",
+        },
         ...(canViewDashboards
           ? [
               {
@@ -186,13 +242,6 @@ export const getWorkspaceMenuItems = ({
               },
             ]
           : []),
-        {
-          id: "configuration",
-          path: "/$workspaceName/configuration",
-          type: MENU_ITEM_TYPE.router,
-          icon: Settings2,
-          label: "Configuration",
-        },
       ],
     },
   ];

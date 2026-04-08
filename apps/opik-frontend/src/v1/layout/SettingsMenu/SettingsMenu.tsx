@@ -1,4 +1,3 @@
-import React from "react";
 import { Check, Settings } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -14,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
+import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
 
 const SettingsMenu = () => {
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
@@ -29,6 +29,7 @@ const SettingsMenu = () => {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuGroup>
+          <SupportHubSubMenu />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
               <CurrentIcon className="mr-2 size-4" />

@@ -2,8 +2,11 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigRemoveValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.validation.HasProjectIdentifier;
+import com.comet.opik.infrastructure.AgentConfigConfiguration;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
@@ -38,6 +41,8 @@ public interface AgentConfigService {
     Mono<AgentBlueprint> createConfig(AgentConfigCreate request);
 
     Mono<AgentBlueprint> updateConfig(AgentConfigCreate request);
+
+    Mono<AgentBlueprint> removeConfigKeys(AgentConfigRemoveValues request);
 
     AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId);
 
@@ -78,6 +83,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull ProjectService projectService;
     private final @NonNull LockService lockService;
+    private final @NonNull AgentConfigConfiguration agentConfigConfiguration;
 
     @Override
     public Mono<AgentBlueprint> createConfig(@NonNull AgentConfigCreate request) {
@@ -94,7 +100,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
         }
 
         return resolveProjectId(request, workspaceId, userName)
-                .flatMap(projectId -> lockService.executeWithLock(
+                .flatMap(projectId -> lockService.executeWithLockCustomExpire(
                         new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
                         Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
                             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
@@ -122,7 +128,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                             .build()));
 
                             return blueprint;
-                        })).subscribeOn(Schedulers.boundedElastic())));
+                        })).subscribeOn(Schedulers.boundedElastic()),
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
     }
 
     @Override
@@ -132,8 +139,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         log.info("Updating optimizer config for workspace '{}'", workspaceId);
 
-        return resolveProjectId(request, workspaceId, userName)
-                .flatMap(projectId -> lockService.executeWithLock(
+        return resolveExistingProjectId(request, workspaceId)
+                .flatMap(projectId -> lockService.executeWithLockCustomExpire(
                         new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
                         Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
                             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
@@ -149,10 +156,65 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             return createBlueprint(dao, request, existingConfig.id(), projectId, workspaceId,
                                     userName);
-                        })).subscribeOn(Schedulers.boundedElastic())));
+                        })).subscribeOn(Schedulers.boundedElastic()),
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
     }
 
-    private Mono<UUID> resolveProjectId(AgentConfigCreate request, String workspaceId, String userName) {
+    @Override
+    public Mono<AgentBlueprint> removeConfigKeys(@NonNull AgentConfigRemoveValues request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Deleting config values for workspace '{}'", workspaceId);
+
+        return resolveExistingProjectId(request, workspaceId)
+                .flatMap(projectId -> lockService.executeWithLockCustomExpire(
+                        new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
+                        Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
+                            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
+
+                            AgentConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
+                            if (existingConfig == null) {
+                                return null;
+                            }
+
+                            UUID blueprintId = idGenerator.generateId();
+
+                            int closed = dao.closeValuesForKeys(workspaceId, projectId, blueprintId,
+                                    List.copyOf(request.keys()));
+
+                            if (closed == 0) {
+                                return null;
+                            }
+
+                            String name = generateNextBlueprintName(dao, workspaceId, projectId);
+                            String description = "Deleted configuration parameters: %s"
+                                    .formatted(request.keys().stream().sorted().toList());
+
+                            dao.insertBlueprint(
+                                    blueprintId,
+                                    workspaceId,
+                                    projectId,
+                                    existingConfig.id(),
+                                    AgentBlueprint.BlueprintType.BLUEPRINT,
+                                    name,
+                                    description,
+                                    userName,
+                                    userName);
+
+                            return AgentBlueprint.builder()
+                                    .id(blueprintId)
+                                    .name(name)
+                                    .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                                    .description(description)
+                                    .createdBy(userName)
+                                    .lastUpdatedBy(userName)
+                                    .build();
+                        })).subscribeOn(Schedulers.boundedElastic()),
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
+    }
+
+    private Mono<UUID> resolveProjectId(HasProjectIdentifier request, String workspaceId, String userName) {
         if (request.projectId() != null) {
             return Mono.fromCallable(() -> {
                 projectService.get(request.projectId(), workspaceId);
@@ -165,6 +227,21 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return projectService.getOrCreate(projectName)
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .map(Project::id);
+    }
+
+    private Mono<UUID> resolveExistingProjectId(HasProjectIdentifier request, String workspaceId) {
+        if (request.projectId() != null) {
+            return Mono.fromCallable(() -> {
+                projectService.get(request.projectId(), workspaceId);
+                return request.projectId();
+            }).subscribeOn(Schedulers.boundedElastic());
+        }
+
+        String projectName = WorkspaceUtils.getProjectName(request.projectName());
+
+        return Mono.fromCallable(() -> projectService.findProjectIdByName(workspaceId, projectName)
+                .orElseThrow(() -> new NotFoundException("Project '%s' not found".formatted(projectName))))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private AgentBlueprint createBlueprint(
@@ -603,7 +680,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 "Updating blueprints for new prompt version: promptId='{}', commit='{}', workspace='{}', excludeProjects='{}'",
                 promptId, newCommit, workspaceId, excludeProjectIds);
 
-        return lockService.executeWithLock(
+        return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
                 Mono.fromCallable(() -> transactionTemplate.<List<UUID>>inTransaction(WRITE, handle -> {
                     AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
@@ -669,6 +746,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 })).subscribeOn(Schedulers.boundedElastic())
                         .doOnSuccess(ids -> log.info(
                                 "Completed blueprint updates for prompt '{}' with commit '{}': updated {} blueprints",
-                                promptId, newCommit, ids.size())));
+                                promptId, newCommit, ids.size())),
+                agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration());
     }
 }

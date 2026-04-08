@@ -18,10 +18,8 @@ import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
-import {
-  useMetricDateRangeWithQueryAndStorage,
-  MetricDateRangeSelect,
-} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
@@ -42,7 +40,6 @@ import {
   ColumnData,
   ColumnsStatistic,
   DynamicColumn,
-  HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
@@ -57,13 +54,13 @@ import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import NoTracesPage from "@/v2/pages/LogsPage/NoTracesPage";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import TracesActionsPanel from "@/v2/pages/LogsPage/TracesSpansTab/TracesActionsPanel";
-import { Separator } from "@/ui/separator";
+import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Button } from "@/ui/button";
+import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
@@ -90,7 +87,6 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
-import ExperimentsSelectBox from "@/v2/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -111,10 +107,12 @@ import {
 import { GuardrailResult } from "@/types/guardrails";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import SpanTypeCell from "@/shared/DataTableCells/SpanTypeCell";
-import { Filter, FilterOperator } from "@/types/filters";
+import { Filter } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
+import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
+import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -170,6 +168,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "input",
+      colorIndicator: true,
     },
   },
   {
@@ -180,6 +179,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "output",
+      colorIndicator: true,
     },
   },
   {
@@ -201,7 +201,6 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
-    iconType: "tags",
     cell: ListCell as never,
   },
   {
@@ -492,15 +491,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
-              [COLUMN_EXPERIMENT_ID]: {
-                keyComponent: ExperimentsSelectBox,
-                keyComponentProps: {
-                  className: "w-full min-w-72",
-                  projectId,
-                },
-                defaultOperator: "=" as FilterOperator,
-                operators: [{ label: "=", value: "=" as FilterOperator }],
-              },
             }
           : {}),
         error_type: {
@@ -525,6 +515,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
   // Declare selectedColumns early so it can be used in excludeFields computation
@@ -545,12 +536,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const excludeFields = useMemo(() => {
     const exclude: string[] = [];
 
-    // Only exclude experiment field for traces (not spans) when column is not visible
     if (
       type === TRACE_DATA_TYPE.traces &&
       !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
     ) {
       exclude.push("experiment");
+    }
+
+    const hasFeedbackScoreColumn = selectedColumns.some(
+      (col) =>
+        col.startsWith(COLUMN_FEEDBACK_SCORES_ID) ||
+        col.startsWith(COLUMN_SPAN_FEEDBACK_SCORES_ID),
+    );
+    if (!hasFeedbackScoreColumn) {
+      exclude.push("feedback_scores");
     }
 
     return exclude;
@@ -649,13 +648,28 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const { data: existenceData } = useTracesOrSpansList(
+    {
+      projectId,
+      type: type as TRACE_DATA_TYPE,
+      page: 1,
+      size: 1,
+      logsSource: LOGS_SOURCE.sdk,
+    },
+    {
+      enabled: isTableDataEnabled,
+    },
+  );
+  const hasProjectData = (existenceData?.total ?? 0) > 0;
+
   const isTableLoading =
     isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending;
 
-  const noData = !search && filters.length === 0;
-  const noDataText = noData
-    ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
-    : "No search results";
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setFilters([]);
+    setPage(1);
+  }, [setSearch, setFilters, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
     () => data?.content ?? [],
@@ -663,7 +677,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const showEmptyState =
-    !isTableLoading && noData && rows.length === 0 && page === 1;
+    !isTableLoading && !hasProjectData && rows.length === 0 && page === 1;
 
   // Extract metadata paths directly from loaded traces/spans data
   const metadataPaths = useMemo(() => {
@@ -977,7 +991,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               label: "Guardrails",
               statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
               type: COLUMN_TYPE.category,
-              iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
               cell: GuardrailsCell as never,
@@ -1033,11 +1046,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: "thread_id",
               label: "Thread ID",
-              type: COLUMN_TYPE.string,
-            },
-            {
-              id: COLUMN_EXPERIMENT_ID,
-              label: "Experiment",
               type: COLUMN_TYPE.string,
             },
             {
@@ -1231,28 +1239,43 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
-        direction="bidirectional"
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4 pb-0"
+        direction="horizontal"
         limitWidth
       >
         <div className="flex items-center gap-2">
           <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
-          <SearchInput
-            searchText={search as string}
-            setSearchText={setSearch}
-            placeholder={`Search ${type}...`}
-            className="w-[320px]"
-            dimension="sm"
-          />
-          <FiltersButton
-            columns={filtersColumnData}
-            config={filtersConfig as never}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
         </div>
         <div className="flex items-center gap-2">
+          <MetricDateRangeSelect
+            value={dateRange}
+            onChangeValue={handleDateRangeChange}
+            minDate={minDate}
+            maxDate={maxDate}
+          />
+        </div>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pt-3"
+        direction="horizontal"
+        limitWidth
+      >
+        <MetricsSummary
+          projectId={projectId}
+          entityType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+          countLabel={type === TRACE_DATA_TYPE.traces ? "Traces" : "Spans"}
+          filters={filters}
+          intervalStart={intervalStart}
+          intervalEnd={intervalEnd}
+          dateRange={dateRange}
+          logsSource={LOGS_SOURCE.sdk}
+        />
+      </PageBodyStickyContainer>
+      {selectedRows.length > 0 ? (
+        <SelectionActionBar
+          selectedCount={selectedRows.length}
+          onDeselectAll={() => setRowSelection({})}
+        >
           <TracesActionsPanel
             projectId={projectId}
             projectName={projectName}
@@ -1260,55 +1283,81 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
+            buttonVariant="ghostInverted"
           />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <MetricDateRangeSelect
-            value={dateRange}
-            onChangeValue={handleDateRangeChange}
-            minDate={minDate}
-            maxDate={maxDate}
-          />
-          <TooltipWrapper
-            content={`Refresh ${
-              type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
-            } list`}
-          >
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => {
-                refetch();
-                refetchStatistic();
-              }}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
-          <DataTableRowHeightSelector
-            type={height as ROW_HEIGHT}
-            setType={setHeight}
-          />
-          <ColumnsButton
-            columns={columnData}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-            sections={columnSections}
-            excludeFromSelectAll={
-              metadataColumnsData.length > 0
-                ? metadataColumnsData.map((col) => col.id)
-                : []
-            }
-          ></ColumnsButton>
-        </div>
-      </PageBodyStickyContainer>
+        </SelectionActionBar>
+      ) : (
+        <PageBodyStickyContainer
+          className="py-2"
+          direction="bidirectional"
+          limitWidth
+        >
+          <div className="flex h-10 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search as string}
+                setSearchText={setSearch}
+                placeholder={`Search ${type}...`}
+                className="w-[320px]"
+                dimension="sm"
+              />
+              <FiltersButton
+                columns={filtersColumnData}
+                config={filtersConfig as never}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <DataTableRowHeightSelector
+                type={height as ROW_HEIGHT}
+                setType={setHeight}
+                layout="labeled"
+              />
+              <ColumnsButton
+                columns={columnData}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+                sections={columnSections}
+                layout="labeled"
+                excludeFromSelectAll={
+                  metadataColumnsData.length > 0
+                    ? metadataColumnsData.map((col) => col.id)
+                    : []
+                }
+              />
+              <Separator orientation="vertical" className="mx-1 h-6" />
+              <TooltipWrapper
+                content={`Refresh ${
+                  type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
+                } list`}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    refetch();
+                    refetchStatistic();
+                  }}
+                >
+                  <RotateCw className="mr-1.5 size-3.5" />
+                  Refresh
+                </Button>
+              </TooltipWrapper>
+            </div>
+          </div>
+        </PageBodyStickyContainer>
+      )}
 
       <DataTableStateHandler
         isLoading={isTableLoading}
         isEmpty={showEmptyState}
         emptyState={<NoTracesPage type={type} />}
+        skeleton
       >
         <DataTable
           columns={columns}
@@ -1318,6 +1367,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           activeRowId={activeRowId ?? ""}
           sortConfig={sortConfig}
           resizeConfig={resizeConfig}
+          showSkeleton={isTableLoading}
           selectionConfig={{
             rowSelection,
             setRowSelection,
@@ -1325,14 +1375,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           getRowId={getRowId}
           rowHeight={height as ROW_HEIGHT}
           columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-          noData={<DataTableNoData title={noDataText} />}
+          noData={
+            <DataTableNoMatchingData
+              onClearFilters={
+                search || filters.length > 0 ? handleClearFilters : undefined
+              }
+            />
+          }
           TableWrapper={PageBodyStickyTableWrapper}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}
         />
         <PageBodyStickyContainer
-          className="py-4"
+          className="bottom-0 -mt-px border-t border-border py-2 pb-4"
           direction="horizontal"
           limitWidth
         >

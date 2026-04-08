@@ -35,14 +35,14 @@ class TestExtractParams:
             pass
 
         params = extract_params(fn)
-        assert [(p.name, p.type) for p in params] == [("x", "int"), ("y", "str")]
+        assert [(p.name, p.type) for p in params] == [("x", "integer"), ("y", "string")]
 
     def test_extract_params__untyped__defaults_to_str(self):
         def fn(x):
             pass
 
         params = extract_params(fn)
-        assert params[0].type == "str"
+        assert params[0].type == "string"
 
     def test_extract_params__no_params(self):
         def fn():
