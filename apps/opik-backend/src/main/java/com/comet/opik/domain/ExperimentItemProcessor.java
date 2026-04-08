@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import jakarta.inject.Inject;
@@ -9,6 +8,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -23,15 +23,9 @@ public class ExperimentItemProcessor {
     private final @NonNull ExperimentTracePersistence tracePersistence;
     private final @NonNull IdGenerator idGenerator;
 
-    public void process(
-            @NonNull ExperimentExecutionRequest.PromptVariant prompt,
-            @NonNull DatasetItem datasetItem,
-            @NonNull UUID experimentId,
-            @NonNull UUID datasetId,
-            String versionHash,
-            @NonNull String projectName,
-            @NonNull String workspaceId,
-            @NonNull String userName) {
+    public Mono<Void> process(@NonNull ExperimentItemToProcess message) {
+        var prompt = message.prompt();
+        var datasetItem = message.datasetItem();
 
         UUID traceId = idGenerator.generateId();
         Instant startTime = Instant.now();
@@ -43,18 +37,18 @@ public class ExperimentItemProcessor {
 
         try {
             var chatRequest = messageRenderer.buildChatCompletionRequest(prompt, renderedMessages);
-            llmResponse = chatCompletionService.create(chatRequest, workspaceId);
+            llmResponse = chatCompletionService.create(chatRequest, message.workspaceId());
         } catch (Exception e) {
             log.warn("LLM call failed for experiment '{}', dataset item '{}'",
-                    experimentId, datasetItem.id(), e);
+                    message.experimentId(), datasetItem.id(), e);
             errorMessage = e.getMessage();
         }
 
         Instant endTime = Instant.now();
 
-        tracePersistence.persistTraceSpanAndItem(
-                traceId, projectName, prompt, renderedMessages, llmResponse, errorMessage,
-                startTime, endTime, experimentId, datasetId, versionHash, datasetItem.id(),
-                workspaceId, userName);
+        return tracePersistence.persistTraceSpanAndItem(
+                traceId, message.projectName(), prompt, renderedMessages, llmResponse, errorMessage,
+                startTime, endTime, message.experimentId(), message.datasetId(), message.versionHash(),
+                datasetItem.id());
     }
 }

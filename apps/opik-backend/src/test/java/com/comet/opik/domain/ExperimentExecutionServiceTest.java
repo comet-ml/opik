@@ -9,6 +9,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.resources.v1.events.EvalSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -32,7 +33,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -64,9 +64,13 @@ class ExperimentExecutionServiceTest {
 
     @BeforeEach
     void setUp() {
+        var evalSuiteConfig = new EvalSuiteConfig();
+        var evaluatorMapper = new EvalSuiteEvaluatorMapper(evalSuiteConfig);
         service = new ExperimentExecutionService(
                 experimentService, datasetItemService, datasetVersionService,
-                itemPublisher, idGenerator, new EvalSuiteConfig(), new ExperimentExecutionConfig());
+                itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig());
+
+        lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
     }
 
     private ExperimentExecutionRequest.PromptVariant buildPrompt(String model, String content) {
@@ -98,7 +102,7 @@ class ExperimentExecutionServiceTest {
     }
 
     private void stubDatasetItems(List<DatasetItem> items) {
-        when(datasetItemService.getItems(eq(WORKSPACE_ID), any(DatasetItemStreamRequest.class), any()))
+        when(datasetItemService.getItems(any(DatasetItemStreamRequest.class), any()))
                 .thenReturn(Flux.fromIterable(items));
     }
 

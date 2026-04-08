@@ -15,6 +15,7 @@ import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -69,19 +70,15 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     @Override
     protected Mono<Void> processEvent(ExperimentItemToProcess message) {
-        return Mono.fromCallable(() -> {
-            try {
-                itemProcessor.process(
-                        message.prompt(), message.datasetItem(), message.experimentId(),
-                        message.datasetId(), message.versionHash(),
-                        message.projectName(), message.workspaceId(), message.userName());
-                return true;
-            } catch (Exception e) {
-                log.error("Failed to process experiment item for experiment '{}', dataset item '{}'",
-                        message.experimentId(), message.datasetItem().id(), e);
-                return false;
-            }
-        }).flatMap(success -> decrementAndFinishIfComplete(message, success));
+        return Mono.defer(() -> itemProcessor.process(message))
+                .subscribeOn(Schedulers.boundedElastic())
+                .thenReturn(true)
+                .onErrorResume(e -> {
+                    log.error("Failed to process experiment item for experiment '{}', dataset item '{}'",
+                            message.experimentId(), message.datasetItem().id(), e);
+                    return Mono.just(false);
+                })
+                .flatMap(success -> decrementAndFinishIfComplete(message, success));
     }
 
     private Mono<Void> decrementAndFinishIfComplete(ExperimentItemToProcess message, boolean success) {

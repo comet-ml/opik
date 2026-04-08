@@ -10,7 +10,7 @@ import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.events.ExperimentItemToProcess;
-import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.api.resources.v1.events.EvalSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -21,10 +21,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -38,7 +40,7 @@ public class ExperimentExecutionService {
     private final DatasetVersionService datasetVersionService;
     private final ExperimentItemPublisher itemPublisher;
     private final IdGenerator idGenerator;
-    private final EvalSuiteConfig evalSuiteConfig;
+    private final EvalSuiteEvaluatorMapper evalSuiteEvaluatorMapper;
     private final ExperimentExecutionConfig experimentExecutionConfig;
 
     @Inject
@@ -48,14 +50,14 @@ public class ExperimentExecutionService {
             @NonNull DatasetVersionService datasetVersionService,
             @NonNull ExperimentItemPublisher itemPublisher,
             @NonNull IdGenerator idGenerator,
-            @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig,
+            @NonNull EvalSuiteEvaluatorMapper evalSuiteEvaluatorMapper,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig) {
         this.experimentService = experimentService;
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.itemPublisher = itemPublisher;
         this.idGenerator = idGenerator;
-        this.evalSuiteConfig = evalSuiteConfig;
+        this.evalSuiteEvaluatorMapper = evalSuiteEvaluatorMapper;
         this.experimentExecutionConfig = experimentExecutionConfig;
     }
 
@@ -75,47 +77,52 @@ public class ExperimentExecutionService {
                     ? request.projectName()
                     : experimentExecutionConfig.getDefaultProjectName();
 
-            ExecutionPolicy datasetExecutionPolicy = fetchDatasetExecutionPolicy(
-                    request.datasetId(), request.versionHash(), workspaceId);
+            return fetchDatasetExecutionPolicyReactive(request.datasetId(), request.versionHash())
+                    .flatMap(optPolicy -> {
+                        ExecutionPolicy datasetExecutionPolicy = optPolicy.orElse(null);
+                        return createExperiments(request, projectName)
+                                .collectList()
+                                .flatMap(experimentEntries -> {
+                                    List<UUID> experimentIds = experimentEntries.stream()
+                                            .map(ExperimentEntry::experimentId).toList();
+                                    List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries
+                                            .stream()
+                                            .map(ExperimentEntry::info).toList();
 
-            return createExperiments(request, projectName)
-                    .collectList()
-                    .flatMap(experimentEntries -> {
-                        List<UUID> experimentIds = experimentEntries.stream()
-                                .map(ExperimentEntry::experimentId).toList();
-                        List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries.stream()
-                                .map(ExperimentEntry::info).toList();
+                                    UUID batchId = idGenerator.generateId();
+                                    List<ExperimentItemToProcess> messages = new ArrayList<>();
 
-                        UUID batchId = idGenerator.generateId();
-                        List<ExperimentItemToProcess> messages = new ArrayList<>();
+                                    return streamDatasetItems(request)
+                                            .doOnNext(item -> collectMessages(
+                                                    item, request, experimentIds, datasetExecutionPolicy,
+                                                    projectName, workspaceId, userName, batchId, messages))
+                                            .count()
+                                            .flatMap(itemCount -> {
+                                                if (messages.isEmpty()) {
+                                                    log.warn(
+                                                            "No dataset items found for dataset '{}', workspaceId '{}'",
+                                                            request.datasetName(), workspaceId);
+                                                    return markExperimentsCompleted(experimentIds)
+                                                            .thenReturn(ExperimentExecutionResponse.builder()
+                                                                    .experiments(experimentInfos)
+                                                                    .totalItems(0)
+                                                                    .build());
+                                                }
 
-                        return streamDatasetItems(request)
-                                .doOnNext(item -> collectMessages(
-                                        item, request, experimentIds, datasetExecutionPolicy,
-                                        projectName, workspaceId, userName, batchId, messages))
-                                .count()
-                                .flatMap(itemCount -> {
-                                    if (messages.isEmpty()) {
-                                        log.warn("No dataset items found for dataset '{}', workspaceId '{}'",
-                                                request.datasetName(), workspaceId);
-                                        return markExperimentsCompleted(experimentIds)
-                                                .thenReturn(ExperimentExecutionResponse.builder()
-                                                        .experiments(experimentInfos)
-                                                        .totalItems(0)
-                                                        .build());
-                                    }
+                                                return itemPublisher.publish(batchId, messages)
+                                                        .then(Mono.fromCallable(() -> {
+                                                            log.info(
+                                                                    "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
+                                                                    experimentIds.size(), messages.size(),
+                                                                    request.datasetName(),
+                                                                    workspaceId);
 
-                                    itemPublisher.publish(batchId, messages);
-
-                                    log.info(
-                                            "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
-                                            experimentIds.size(), messages.size(), request.datasetName(),
-                                            workspaceId);
-
-                                    return Mono.just(ExperimentExecutionResponse.builder()
-                                            .experiments(experimentInfos)
-                                            .totalItems(messages.size())
-                                            .build());
+                                                            return ExperimentExecutionResponse.builder()
+                                                                    .experiments(experimentInfos)
+                                                                    .totalItems(messages.size())
+                                                                    .build();
+                                                        }));
+                                            });
                                 });
                     });
         });
@@ -163,13 +170,19 @@ public class ExperimentExecutionService {
     }
 
     private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request) {
-        return Flux.deferContextual(ctx -> {
+        var streamRequest = DatasetItemStreamRequest.builder()
+                .datasetName(request.datasetName())
+                .datasetVersion(request.versionHash())
+                .build();
+        return datasetItemService.getItems(streamRequest, List.of());
+    }
+
+    private Mono<Optional<ExecutionPolicy>> fetchDatasetExecutionPolicyReactive(UUID datasetId, String versionHash) {
+        return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            var streamRequest = DatasetItemStreamRequest.builder()
-                    .datasetName(request.datasetName())
-                    .datasetVersion(request.versionHash())
-                    .build();
-            return datasetItemService.getItems(workspaceId, streamRequest, List.of());
+            return Mono.fromCallable(
+                    () -> Optional.ofNullable(fetchDatasetExecutionPolicy(datasetId, versionHash, workspaceId)))
+                    .subscribeOn(Schedulers.boundedElastic());
         });
     }
 
@@ -200,13 +213,7 @@ public class ExperimentExecutionService {
     }
 
     private int getEffectiveRunsPerItem(ExecutionPolicy itemPolicy, ExecutionPolicy versionPolicy) {
-        if (itemPolicy != null && itemPolicy.runsPerItem() > 0) {
-            return itemPolicy.runsPerItem();
-        }
-        if (versionPolicy != null && versionPolicy.runsPerItem() > 0) {
-            return versionPolicy.runsPerItem();
-        }
-        return evalSuiteConfig.getDefaultRunsPerItem();
+        return evalSuiteEvaluatorMapper.getEffectiveRunsPerItem(itemPolicy, versionPolicy);
     }
 
     private void collectMessages(

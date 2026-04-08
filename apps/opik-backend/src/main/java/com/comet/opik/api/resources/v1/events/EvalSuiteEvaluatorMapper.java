@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
@@ -39,6 +40,16 @@ public class EvalSuiteEvaluatorMapper {
 
     public record PreparedEvaluator(@NonNull String name, @NonNull LlmAsJudgeCode code,
             @NonNull Map<String, String> scoreNameMapping) {
+    }
+
+    public int getEffectiveRunsPerItem(ExecutionPolicy itemPolicy, ExecutionPolicy versionPolicy) {
+        if (itemPolicy != null && itemPolicy.runsPerItem() > 0) {
+            return itemPolicy.runsPerItem();
+        }
+        if (versionPolicy != null && versionPolicy.runsPerItem() > 0) {
+            return versionPolicy.runsPerItem();
+        }
+        return evalSuiteConfig.getDefaultRunsPerItem();
     }
 
     public List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators) {

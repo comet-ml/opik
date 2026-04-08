@@ -68,9 +68,10 @@ class EvalSuiteAssertionSamplerTest {
         @org.junit.jupiter.api.BeforeEach
         void setUp() {
             var evalSuiteConfig = new EvalSuiteConfig();
+            var evaluatorMapper = new EvalSuiteEvaluatorMapper(evalSuiteConfig);
             sampler = new EvalSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    evalSuiteConfig);
+                    evalSuiteConfig, evaluatorMapper);
         }
 
         @Test

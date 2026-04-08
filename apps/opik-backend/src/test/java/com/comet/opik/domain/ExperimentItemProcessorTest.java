@@ -6,6 +6,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.template.MustacheParser;
@@ -120,6 +121,29 @@ class ExperimentItemProcessorTest {
         when(mustacheParser.renderUnescaped(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
+    private ExperimentItemToProcess buildMessage(
+            ExperimentExecutionRequest.PromptVariant prompt,
+            DatasetItem datasetItem,
+            UUID experimentId,
+            UUID datasetId,
+            String versionHash,
+            String projectName,
+            String workspaceId,
+            String userName) {
+        return ExperimentItemToProcess.builder()
+                .batchId(UUID.randomUUID())
+                .prompt(prompt)
+                .datasetItem(datasetItem)
+                .experimentId(experimentId)
+                .datasetId(datasetId)
+                .versionHash(versionHash)
+                .projectName(projectName)
+                .workspaceId(workspaceId)
+                .userName(userName)
+                .allExperimentIds(List.of(experimentId))
+                .build();
+    }
+
     @Nested
     @DisplayName("Template rendering")
     class TemplateRendering {
@@ -138,8 +162,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("Hi Alice!"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             @SuppressWarnings("unchecked")
             var contextCaptor = ArgumentCaptor.forClass(Map.class);
@@ -164,8 +188,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var traceCaptor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(traceCaptor.capture());
@@ -195,8 +219,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, versionHash,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, versionHash,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());
@@ -221,8 +245,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());
@@ -241,8 +265,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());
@@ -261,8 +285,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("The answer is 42"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());
@@ -287,8 +311,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Span.class);
             verify(spanService).create(captor.capture());
@@ -311,8 +335,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Span.class);
             verify(spanService).create(captor.capture());
@@ -342,8 +366,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Span.class);
             verify(spanService).create(captor.capture());
@@ -379,8 +403,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Set.class);
             verify(experimentItemService).create(captor.capture());
@@ -409,8 +433,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenThrow(new RuntimeException("LLM service unavailable"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             verify(traceService).create(any(Trace.class));
             verify(spanService).create(any(Span.class));
@@ -428,8 +452,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenThrow(new RuntimeException("timeout"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());
@@ -454,8 +478,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             verify(chatCompletionService).create(captor.capture(), eq(WORKSPACE_ID));
@@ -474,8 +498,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             verify(chatCompletionService).create(captor.capture(), eq(WORKSPACE_ID));
@@ -515,8 +539,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             verify(chatCompletionService).create(captor.capture(), eq(WORKSPACE_ID));
@@ -540,8 +564,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             verify(chatCompletionService).create(captor.capture(), eq(WORKSPACE_ID));
@@ -565,8 +589,8 @@ class ExperimentItemProcessorTest {
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
-            processor.process(prompt, datasetItem, experimentId, datasetId, null,
-                    PROJECT_NAME, WORKSPACE_ID, USER_NAME);
+            processor.process(buildMessage(prompt, datasetItem, experimentId, datasetId, null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
 
             var captor = ArgumentCaptor.forClass(Trace.class);
             verify(traceService).create(captor.capture());

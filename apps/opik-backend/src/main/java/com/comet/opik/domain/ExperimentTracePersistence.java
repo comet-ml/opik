@@ -6,9 +6,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
@@ -16,6 +14,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -36,7 +35,7 @@ class ExperimentTracePersistence {
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull IdGenerator idGenerator;
 
-    void persistTraceSpanAndItem(
+    Mono<Void> persistTraceSpanAndItem(
             @NonNull UUID traceId,
             @NonNull String projectName,
             @NonNull ExperimentExecutionRequest.PromptVariant prompt,
@@ -48,27 +47,22 @@ class ExperimentTracePersistence {
             @NonNull UUID experimentId,
             @NonNull UUID datasetId,
             String versionHash,
-            @NonNull UUID datasetItemId,
-            @NonNull String workspaceId,
-            @NonNull String userName) {
+            @NonNull UUID datasetItemId) {
 
         ObjectNode input = buildMessagesInput(renderedMessages);
         ObjectNode output = buildLlmOutput(llmResponse);
 
-        createTrace(traceId, projectName, input, output, errorMessage,
-                startTime, endTime, datasetId, versionHash, datasetItemId, workspaceId, userName);
-
-        createSpan(traceId, projectName, prompt, input, output, llmResponse, errorMessage,
-                startTime, endTime, workspaceId, userName);
-
-        createExperimentItem(experimentId, datasetItemId, traceId, workspaceId, userName);
+        return createTrace(traceId, projectName, input, output, errorMessage,
+                startTime, endTime, datasetId, versionHash, datasetItemId)
+                .then(createSpan(traceId, projectName, prompt, input, output, llmResponse, errorMessage,
+                        startTime, endTime))
+                .then(createExperimentItem(experimentId, datasetItemId, traceId));
     }
 
-    private void createTrace(UUID traceId, String projectName,
+    private Mono<Void> createTrace(UUID traceId, String projectName,
             ObjectNode input, ObjectNode output, String errorMessage,
             Instant startTime, Instant endTime,
-            UUID datasetId, String versionHash, UUID datasetItemId,
-            String workspaceId, String userName) {
+            UUID datasetId, String versionHash, UUID datasetItemId) {
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
@@ -99,20 +93,15 @@ class ExperimentTracePersistence {
 
         var trace = traceBuilder.build();
 
-        traceService.create(trace)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                .block();
+        return traceService.create(trace)
+                .then();
     }
 
-    private void createSpan(UUID traceId, String projectName,
+    private Mono<Void> createSpan(UUID traceId, String projectName,
             ExperimentExecutionRequest.PromptVariant prompt,
             ObjectNode input, ObjectNode output,
             ChatCompletionResponse llmResponse, String errorMessage,
-            Instant startTime, Instant endTime,
-            String workspaceId, String userName) {
+            Instant startTime, Instant endTime) {
 
         Map<String, Integer> usage = null;
         if (llmResponse != null && llmResponse.usage() != null) {
@@ -156,16 +145,11 @@ class ExperimentTracePersistence {
 
         var span = spanBuilder.build();
 
-        spanService.create(span)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                .block();
+        return spanService.create(span)
+                .then();
     }
 
-    private void createExperimentItem(UUID experimentId, UUID datasetItemId, UUID traceId,
-            String workspaceId, String userName) {
+    private Mono<Void> createExperimentItem(UUID experimentId, UUID datasetItemId, UUID traceId) {
 
         var item = ExperimentItem.builder()
                 .id(idGenerator.generateId())
@@ -174,18 +158,14 @@ class ExperimentTracePersistence {
                 .traceId(traceId)
                 .build();
 
-        experimentItemService.create(Set.of(item))
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                .block();
+        return experimentItemService.create(Set.of(item))
+                .then();
     }
 
     private ObjectNode buildMessagesInput(
             List<ExperimentExecutionRequest.PromptVariant.Message> renderedMessages) {
         ObjectNode input = JsonUtils.createObjectNode();
-        var messagesArray = JsonUtils.getMapper().createArrayNode();
+        var messagesArray = JsonUtils.createArrayNode();
         for (var msg : renderedMessages) {
             var msgNode = JsonUtils.createObjectNode();
             msgNode.put("role", msg.role());
