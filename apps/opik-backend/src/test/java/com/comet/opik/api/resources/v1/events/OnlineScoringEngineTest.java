@@ -535,6 +535,7 @@ class OnlineScoringEngineTest {
         var trace = Trace.builder()
                 .id(traceId)
                 .projectName(projectName)
+                .startTime(java.time.Instant.now())
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
                 .output(JsonUtils.getJsonNodeFromString(OUTPUT))
                 .endTime(java.time.Instant.now())
