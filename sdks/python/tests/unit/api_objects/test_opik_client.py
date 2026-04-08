@@ -961,7 +961,7 @@ class TestOpikClientCreateChatPrompt:
         self.opik_client_ = opik_client.Opik(project_name="default-project")
         self.messages = [{"role": "user", "content": "Hello"}]
 
-        with patch.object(prompt_module.ChatPrompt, "_sync_with_backend"):
+        with patch.object(prompt_module.ChatPrompt, "sync_with_backend"):
             yield
 
     def test_create_chat_prompt__no_project_name__uses_default_project(self):
