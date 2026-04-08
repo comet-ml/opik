@@ -100,8 +100,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                         unused -> log.info("Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",
                                 message.projectId(), message.ruleId(), message.workspaceId()),
                         error -> log.error(
-                                "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}': {}",
-                                message.projectId(), message.ruleId(), message.workspaceId(), error.getMessage()));
+                                "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}'",
+                                message.projectId(), message.ruleId(), message.workspaceId(), error));
     }
 
     private Mono<Void> processThreadScores(TraceThreadToScoreLlmAsJudge message, String currentThreadId) {
