@@ -1,8 +1,10 @@
 """Download command for Opik CLI."""
 
+import logging
 from typing import Optional
 
 import click
+from rich.logging import RichHandler
 
 from .all import export_all_command
 from .dataset import export_dataset_command
@@ -76,6 +78,30 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
     ctx.obj["api_key"] = api_key or (
         ctx.parent.obj.get("api_key") if ctx.parent and ctx.parent.obj else None
     )
+
+    # During bulk export the opik SDK emits deprecation warnings via its own
+    # StreamHandler (format "OPIK: <message>"), which writes to stderr and
+    # corrupts the Rich progress bar display.  Replace that handler with a
+    # RichHandler so any SDK log output is routed through the shared console
+    # (and therefore properly interleaved with the progress bars).
+    # Only ERROR and above are shown; WARNING-level deprecation notices are
+    # noise during export and the export code reports real errors itself.
+    from .utils import console as _console
+
+    _opik_logger = logging.getLogger("opik")
+    # Remove existing StreamHandlers (SDK installs one with "OPIK: " prefix)
+    for _h in list(_opik_logger.handlers):
+        if isinstance(_h, logging.StreamHandler) and not isinstance(_h, RichHandler):
+            _opik_logger.removeHandler(_h)
+    if not any(isinstance(h, RichHandler) for h in _opik_logger.handlers):
+        _rich_handler = RichHandler(
+            console=_console,
+            show_time=False,
+            show_path=False,
+            markup=False,
+        )
+        _rich_handler.setLevel(logging.ERROR)
+        _opik_logger.addHandler(_rich_handler)
 
     # If no subcommand was invoked, show helpful error
     if ctx.invoked_subcommand is None:

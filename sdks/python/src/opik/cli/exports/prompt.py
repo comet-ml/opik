@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any, List, Optional, Union
 
 import click
-from rich.console import Console
 
 import opik
 from opik.api_objects.prompt import Prompt, ChatPrompt
 from .utils import (
+    console,
     debug_print,
     prompt_to_csv_rows,
     should_skip_file,
@@ -19,8 +19,6 @@ from .utils import (
     write_json_data,
     print_export_summary,
 )
-
-console = Console()
 
 
 def _get_prompt_content(prompt: Any) -> Any:

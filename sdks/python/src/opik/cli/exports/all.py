@@ -10,7 +10,6 @@ from typing import Any, Iterator, Optional, TypeVar, Union
 import httpx
 import pydantic
 import click
-from rich.console import Console
 from rich.progress import (
     BarColumn,
     Progress,
@@ -28,10 +27,8 @@ from .experiment import (
 )
 from .project import export_single_project
 from .prompt import export_single_prompt
-from .utils import debug_print, print_export_summary
+from .utils import console, debug_print, print_export_summary
 from ..include_validation import validate_include
-
-console = Console()
 
 PAGE_SIZE = 500
 

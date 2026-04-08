@@ -13,7 +13,6 @@ import random
 import click
 import httpx
 import tenacity
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
@@ -23,6 +22,7 @@ from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
 from ..export_manifest import ExportManifest
 from .utils import (
+    console,
     debug_print,
     extract_trace_id_from_filename,
     matches_name_pattern,
@@ -31,8 +31,6 @@ from .utils import (
     write_csv_data,
     write_json_data,
 )
-
-console = Console()
 
 # Maximum number of concurrent workers for parallel span fetching.
 # Keep low to avoid hitting server-side rate limits.
