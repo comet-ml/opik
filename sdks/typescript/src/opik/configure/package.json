@@ -67,6 +67,7 @@
     "@types/yargs": "^17.0.35",
     "dotenv": "^17.2.3",
     "eslint": "^9.39.2",
+    "vitest": "^3.0.5",
     "globals": "^17.3.0",
     "prettier": "^3.8.1",
     "tsup": "^8.3.6",
@@ -90,7 +91,9 @@
     "fix:eslint": "eslint '**/*.{ts,tsx}' --fix",
     "fmt:check": "prettier --check \"src/**/*.ts\"",
     "try": "tsx bin.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "Opik",
   "license": "Apache-2.0",

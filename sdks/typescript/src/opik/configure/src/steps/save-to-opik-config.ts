@@ -15,7 +15,7 @@ interface OpikIniSection {
 }
 
 /** Parse the [opik] section from a raw INI string (no external deps). */
-function parseOpikSection(content: string): OpikIniSection {
+export function parseOpikSection(content: string): OpikIniSection {
   const result: OpikIniSection = {};
   let inOpikSection = false;
 
@@ -47,7 +47,7 @@ function parseOpikSection(content: string): OpikIniSection {
 }
 
 /** Serialise an OpikIniSection back to an INI string with an [opik] section. */
-function serializeOpikSection(
+export function serializeOpikSection(
   section: OpikIniSection,
   existingContent: string,
 ): string {
