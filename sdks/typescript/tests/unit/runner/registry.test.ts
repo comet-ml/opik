@@ -140,5 +140,6 @@ describe("runner registry", () => {
       expect(params[0].name).toBe("a");
       expect(params[1].name).toBe("b");
     });
+
   });
 });

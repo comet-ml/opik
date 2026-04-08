@@ -319,13 +319,14 @@ export function castInputValue(value: unknown, type: string): unknown {
     case "boolean":
       if (typeof value === "boolean") return value;
       return deserializeValue(String(value), "boolean");
-    case "number": {
+    case "float":
+    case "integer": {
       if (typeof value === "number") return value;
       const result = deserializeValue(String(value), "float");
       if (typeof result === "number" && Number.isNaN(result)) {
         throw new TypeError(`Cannot cast "${value}" to number`);
       }
-      return result;
+      return type === "integer" ? Math.trunc(result as number) : result;
     }
     case "string":
     default:
