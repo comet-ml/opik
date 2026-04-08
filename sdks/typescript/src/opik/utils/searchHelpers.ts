@@ -13,14 +13,14 @@ export async function searchTracesWithFilters(
   filters: OpikApi.TraceFilterPublic[] | null,
   maxResults: number,
   truncate: boolean,
-  exclude?: string[]
+  exclude?: OpikApi.TraceSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.TracePublic[]> {
   const streamResponse = await apiClient.traces.searchTraces({
     projectName,
     filters: filters ?? undefined,
     limit: maxResults,
     truncate,
-    exclude: exclude as OpikApi.TraceSearchStreamRequestPublicExcludeItem[] | undefined,
+    exclude,
   });
 
   const traces = await parseNdjsonStreamToArray<OpikApi.TracePublic>(
@@ -171,14 +171,14 @@ export async function searchSpansWithFilters(
   filters: OpikApi.SpanFilterPublic[] | null,
   maxResults: number,
   truncate: boolean,
-  exclude?: string[]
+  exclude?: OpikApi.SpanSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.SpanPublic[]> {
   const streamResponse = await apiClient.spans.searchSpans({
     projectName,
     filters: filters ?? undefined,
     limit: maxResults,
     truncate,
-    exclude: exclude as OpikApi.SpanSearchStreamRequestPublicExcludeItem[] | undefined,
+    exclude,
   });
 
   const spans = await parseNdjsonStreamToArray<OpikApi.SpanPublic>(

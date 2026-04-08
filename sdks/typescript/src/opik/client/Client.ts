@@ -1502,7 +1502,8 @@ export class OpikClient {
       rest,
       parseFilterString,
       (api, projectName, filters, maxResults, truncate) =>
-        searchTracesWithFilters(api, projectName, filters, maxResults, truncate, exclude)
+        searchTracesWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.TraceSearchStreamRequestPublicExcludeItem[] | undefined)
     );
   };
 
@@ -1629,7 +1630,8 @@ export class OpikClient {
       rest,
       parseSpanFilterString,
       (api, projectName, filters, maxResults, truncate) =>
-        searchSpansWithFilters(api, projectName, filters, maxResults, truncate, exclude)
+        searchSpansWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.SpanSearchStreamRequestPublicExcludeItem[] | undefined)
     );
   };
 
