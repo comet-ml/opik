@@ -11,6 +11,7 @@ import type * as OpikApi from "@/rest_api/api";
 import { ChatPromptTemplate } from "./chat/ChatPromptTemplate";
 import { BasePrompt, type BasePromptData } from "./BasePrompt";
 import { PromptVersion } from "./PromptVersion";
+import { logger } from "@/utils/logger";
 
 export interface ChatPromptData extends BasePromptData {
   messages: ChatMessage[];
@@ -170,6 +171,7 @@ export class ChatPrompt extends BasePrompt {
         changeDescription: apiResponse.changeDescription,
         description: promptData.description,
         tags: promptData.tags,
+        synced: true,
       },
       opik,
     );
@@ -234,6 +236,35 @@ export class ChatPrompt extends BasePrompt {
    * }
    * ```
    */
+  /**
+   * Synchronize the chat prompt with the backend.
+   *
+   * Creates or updates the chat prompt on the Opik server. If the sync fails,
+   * a warning is logged and the same (unsynced) instance is returned.
+   *
+   * @returns Promise resolving to a new synced ChatPrompt instance, or this instance if sync fails
+   */
+  async syncWithBackend(): Promise<ChatPrompt> {
+    try {
+      return await this.opik.createChatPrompt({
+        name: this.name,
+        messages: structuredClone(this.messages),
+        metadata: this.metadata,
+        type: this.type,
+        description: this.description,
+        tags: this.tags ? Array.from(this.tags) : undefined,
+      });
+    } catch (error) {
+      logger.warn(
+        `Failed to sync chat prompt '${this.name}' with the backend. ` +
+          "The prompt will work locally but is not persisted on the server. " +
+          "You can retry by calling .syncWithBackend().",
+        { error },
+      );
+      return this;
+    }
+  }
+
   async getVersion(commit: string): Promise<ChatPrompt | null> {
     const response = await this.retrieveVersionByCommit(commit);
     if (!response) {

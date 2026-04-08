@@ -65,7 +65,7 @@ describe.skipIf(!shouldRunApiTests)(
         type: PromptType.MUSTACHE,
       });
 
-      createdPromptIds.push(chatPrompt.id);
+      createdPromptIds.push(chatPrompt.id!);
 
       expect(chatPrompt).toBeInstanceOf(ChatPrompt);
       expect(chatPrompt.name).toBe(testPromptName);
@@ -96,7 +96,7 @@ describe.skipIf(!shouldRunApiTests)(
         ],
         type: PromptType.MUSTACHE,
       });
-      createdPromptIds.push(chatPrompt.id);
+      createdPromptIds.push(chatPrompt.id!);
 
       const formatted = chatPrompt.format({
         name: "Alice",
@@ -125,7 +125,7 @@ describe.skipIf(!shouldRunApiTests)(
         ],
         type: PromptType.MUSTACHE,
       });
-      createdPromptIds.push(promptV1.id);
+      createdPromptIds.push(promptV1.id!);
 
       const promptV2 = await client.createChatPrompt({
         name: testPromptName,
@@ -158,7 +158,7 @@ describe.skipIf(!shouldRunApiTests)(
         ],
         type: PromptType.MUSTACHE,
       });
-      createdPromptIds.push(promptV1.id);
+      createdPromptIds.push(promptV1.id!);
 
       const promptV2 = await client.createChatPrompt({
         name: testPromptName,

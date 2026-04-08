@@ -1,5 +1,5 @@
 import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiError, serialization } from "@/rest_api";
+import { OpikApiError, OpikApiTimeoutError, serialization } from "@/rest_api";
 import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import * as OpikApi from "@/rest_api/api";
 import { FeedbackScoreBatchItemSource } from "@/rest_api/api/types/FeedbackScoreBatchItemSource";
@@ -922,6 +922,7 @@ export class OpikClient {
       promptData: OpikApi.PromptPublic,
       versionData: OpikApi.PromptVersionDetail
     ) => T,
+    createUnsyncedInstance: () => T,
     logContext: string,
     projectName?: string
   ): Promise<T> => {
@@ -994,6 +995,18 @@ export class OpikClient {
 
       return promptInstance;
     } catch (error) {
+      if (
+        error instanceof OpikApiError ||
+        error instanceof OpikApiTimeoutError
+      ) {
+        logger.warn(
+          `Failed to sync ${logContext} '${name}' with the backend. ` +
+            "The prompt will work locally but is not persisted on the server. " +
+            "You can retry by calling .syncWithBackend().",
+          { error }
+        );
+        return createUnsyncedInstance();
+      }
       logger.error(`Failed to create ${logContext}`, { name, error });
       throw error;
     }
@@ -1027,6 +1040,19 @@ export class OpikClient {
       },
       (promptData, versionData) =>
         Prompt.fromApiResponse(promptData, versionData, this),
+      () =>
+        new Prompt(
+          {
+            name: options.name,
+            prompt: options.prompt,
+            metadata: options.metadata,
+            type: options.type ?? PromptType.MUSTACHE,
+            description: options.description,
+            tags: options.tags,
+            synced: false,
+          },
+          this
+        ),
       "prompt",
       resolvedProjectName
     );
@@ -1081,6 +1107,19 @@ export class OpikClient {
       },
       (promptData, versionData) =>
         ChatPrompt.fromApiResponse(promptData, versionData, this),
+      () =>
+        new ChatPrompt(
+          {
+            name: options.name,
+            messages: structuredClone(options.messages),
+            metadata: options.metadata,
+            type: options.type ?? PromptType.MUSTACHE,
+            description: options.description,
+            tags: options.tags,
+            synced: false,
+          },
+          this
+        ),
       "chat prompt",
       resolvedProjectName
     );
