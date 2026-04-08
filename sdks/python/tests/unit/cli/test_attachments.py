@@ -392,7 +392,7 @@ class TestUploadAttachmentsForTrace:
     the full import flow) is covered by TestImportProjectsUploadsAttachments.
     """
 
-    def test_uploads_trace_attachment_with_new_trace_id(self, tmp_path):
+    def test_uploads_trace_attachment__with_new_trace_id__happyflow(self, tmp_path):
         client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(
@@ -427,7 +427,9 @@ class TestUploadAttachmentsForTrace:
             mime_type="image/png",
         )
 
-    def test_uploads_span_attachment_with_translated_span_id(self, tmp_path):
+    def test_uploads_span_attachment__with_translated_span_id__happyflow(
+        self, tmp_path
+    ):
         client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(project_dir, "span", "old-span", "data.csv", b"csv data")
@@ -460,7 +462,7 @@ class TestUploadAttachmentsForTrace:
             mime_type="text/csv",
         )
 
-    def test_uploads_both_trace_and_span_attachments(self, tmp_path):
+    def test_uploads_attachments__trace_and_span__both_uploaded(self, tmp_path):
         client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(project_dir, "trace", "old-trace", "img.png")
@@ -491,7 +493,7 @@ class TestUploadAttachmentsForTrace:
 
         assert client.queue_attachment_upload.call_count == 2
 
-    def test_skips_span_not_in_id_map(self, tmp_path):
+    def test_upload_attachment__span_not_in_id_map__skips(self, tmp_path):
         client = MagicMock()
         project_dir = tmp_path / "my-project"
         _write_attachment_file(project_dir, "span", "unknown-span", "file.txt")
@@ -515,7 +517,7 @@ class TestUploadAttachmentsForTrace:
 
         client.queue_attachment_upload.assert_not_called()
 
-    def test_skips_attachment_file_missing_on_disk(self, tmp_path):
+    def test_upload_attachment__file_missing_on_disk__skips(self, tmp_path):
         client = MagicMock()
         project_dir = tmp_path / "my-project"
         # No file written on disk
@@ -539,7 +541,7 @@ class TestUploadAttachmentsForTrace:
 
         client.queue_attachment_upload.assert_not_called()
 
-    def test_skips_entries_with_missing_required_keys(self, tmp_path):
+    def test_upload_attachment__missing_required_keys__skips(self, tmp_path):
         client = MagicMock()
         project_dir = tmp_path / "my-project"
 
@@ -584,7 +586,7 @@ class TestExportTracesWritesAttachmentMetadata:
             include_attachments=include_attachments,
         )
 
-    def test_attachments_key_present_in_exported_json(self, tmp_path):
+    def test_export_traces__with_attachment__key_present_in_json(self, tmp_path):
         trace = _make_trace(TRACE_ID)
         span = _make_span(SPAN_ID, TRACE_ID)
         att_client = _make_attachment_client(
@@ -611,7 +613,7 @@ class TestExportTracesWritesAttachmentMetadata:
         assert att["file_name"] == "img.png"
         assert att["mime_type"] == "image/png"
 
-    def test_attachments_list_is_empty_when_no_attachments_exist(self, tmp_path):
+    def test_export_traces__no_attachments__list_is_empty(self, tmp_path):
         trace = _make_trace(TRACE_ID)
         att_client = _make_attachment_client()  # no attachments
         client = _make_opik_client(
@@ -625,7 +627,7 @@ class TestExportTracesWritesAttachmentMetadata:
         data = json.loads((tmp_path / f"trace_{TRACE_ID}.json").read_text())
         assert data["attachments"] == []
 
-    def test_no_attachments_flag_omits_attachment_metadata(self, tmp_path):
+    def test_export_traces__no_attachments_flag__omits_metadata(self, tmp_path):
         trace = _make_trace(TRACE_ID)
         att_client = _make_attachment_client(
             trace_attachments=[{"file_name": "img.png"}]
@@ -644,7 +646,7 @@ class TestExportTracesWritesAttachmentMetadata:
         # And get_attachment_client was never called
         client.get_attachment_client.assert_not_called()
 
-    def test_attachment_binary_downloaded_to_correct_path(self, tmp_path):
+    def test_export_traces__attachment_download__writes_to_correct_path(self, tmp_path):
         trace = _make_trace(TRACE_ID)
         att_client = _make_attachment_client(
             trace_attachments=[
@@ -664,7 +666,7 @@ class TestExportTracesWritesAttachmentMetadata:
         assert dest.exists()
         assert dest.read_bytes() == b"jpeg bytes"
 
-    def test_span_attachment_binary_downloaded(self, tmp_path):
+    def test_export_traces__span_attachment__binary_downloaded(self, tmp_path):
         trace = _make_trace(TRACE_ID)
         span = _make_span(SPAN_ID, TRACE_ID)
         att_client = _make_attachment_client(
@@ -691,7 +693,9 @@ class TestExportTracesWritesAttachmentMetadata:
         assert dest.exists()
         assert dest.read_bytes() == b"span text"
 
-    def test_existing_attachment_file_not_redownloaded(self, tmp_path):
+    def test_export_traces__existing_attachment_file_no_force__skips_download(
+        self, tmp_path
+    ):
         trace = _make_trace(TRACE_ID)
         att_client = _make_attachment_client(
             trace_attachments=[{"file_name": "img.png"}]
@@ -789,7 +793,9 @@ def _make_import_client(new_trace_id="new-trace-id", new_span_id="new-span-id"):
 class TestImportProjectsUploadsAttachments:
     """Integration tests verifying attachment uploads during project import."""
 
-    def test_trace_attachment_uploaded_with_new_trace_id(self, tmp_path):
+    def test_import_projects__trace_attachment__uploaded_with_new_trace_id(
+        self, tmp_path
+    ):
         client = _make_import_client(new_trace_id="new-trace", new_span_id="new-span")
         project_dir = tmp_path / "test-project"
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
@@ -819,7 +825,9 @@ class TestImportProjectsUploadsAttachments:
         assert trace_call.kwargs["file_name"] == "trace_img.png"
         assert trace_call.kwargs["mime_type"] == "image/png"
 
-    def test_span_attachment_uploaded_with_new_span_id(self, tmp_path):
+    def test_import_projects__span_attachment__uploaded_with_new_span_id(
+        self, tmp_path
+    ):
         client = _make_import_client(new_trace_id="new-trace", new_span_id="new-span")
         project_dir = tmp_path / "test-project"
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
@@ -843,7 +851,7 @@ class TestImportProjectsUploadsAttachments:
         assert span_call.kwargs["entity_id"] == "new-span"
         assert span_call.kwargs["file_name"] == "span_data.csv"
 
-    def test_total_upload_count_matches_attachments(self, tmp_path):
+    def test_import_projects__multiple_attachments__all_uploaded(self, tmp_path):
         client = _make_import_client()
         project_dir = tmp_path / "test-project"
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
@@ -861,7 +869,7 @@ class TestImportProjectsUploadsAttachments:
 
         assert client.queue_attachment_upload.call_count == 2
 
-    def test_no_attachments_flag_skips_all_uploads(self, tmp_path):
+    def test_import_projects__no_attachments_flag__skips_all_uploads(self, tmp_path):
         client = _make_import_client()
         project_dir = tmp_path / "test-project"
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
@@ -879,7 +887,9 @@ class TestImportProjectsUploadsAttachments:
         # queue_attachment_upload must not be called at all
         client.queue_attachment_upload.assert_not_called()
 
-    def test_trace_still_imported_when_attachment_files_missing(self, tmp_path):
+    def test_import_projects__attachment_files_missing__trace_still_imported(
+        self, tmp_path
+    ):
         """Missing attachment files emit a warning but don't abort the trace import."""
         client = _make_import_client()
         project_dir = tmp_path / "test-project"
@@ -901,7 +911,7 @@ class TestImportProjectsUploadsAttachments:
         # No uploads because files don't exist
         client.queue_attachment_upload.assert_not_called()
 
-    def test_dry_run_does_not_upload_attachments(self, tmp_path):
+    def test_import_projects__dry_run__skips_uploads(self, tmp_path):
         client = _make_import_client()
         project_dir = tmp_path / "test-project"
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
@@ -918,7 +928,7 @@ class TestImportProjectsUploadsAttachments:
 
         client.queue_attachment_upload.assert_not_called()
 
-    def test_trace_without_attachments_key_imports_normally(self, tmp_path):
+    def test_import_projects__no_attachments_key__imports_normally(self, tmp_path):
         """Trace files from before attachment support (no 'attachments' key) import fine."""
         trace_data = {
             "trace": {
@@ -965,7 +975,7 @@ class TestImportProjectsUploadsAttachments:
 class TestNoAttachmentsCliFlag:
     """Verify --no-attachments is wired through the CLI commands."""
 
-    def test_export_project_accepts_no_attachments_flag(self):
+    def test_export_project__no_attachments_flag__accepted(self):
         from click.testing import CliRunner
         from opik.cli.exports.project import export_project_command
 
@@ -984,7 +994,7 @@ class TestNoAttachmentsCliFlag:
         _, kwargs = mock_export.call_args
         assert kwargs.get("include_attachments") is False
 
-    def test_export_project_includes_attachments_by_default(self):
+    def test_export_project__default__includes_attachments(self):
         from click.testing import CliRunner
         from opik.cli.exports.project import export_project_command
 
@@ -1003,7 +1013,7 @@ class TestNoAttachmentsCliFlag:
         _, kwargs = mock_export.call_args
         assert kwargs.get("include_attachments") is True
 
-    def test_import_project_accepts_no_attachments_flag(self):
+    def test_import_project__no_attachments_flag__accepted(self):
         from click.testing import CliRunner
         from opik.cli.imports import import_group
 
@@ -1022,7 +1032,7 @@ class TestNoAttachmentsCliFlag:
         _, kwargs = mock_import.call_args
         assert kwargs.get("include_attachments") is False
 
-    def test_import_project_includes_attachments_by_default(self):
+    def test_import_project__default__includes_attachments(self):
         from click.testing import CliRunner
         from opik.cli.imports import import_group
 
