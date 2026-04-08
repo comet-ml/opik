@@ -2,7 +2,6 @@
 
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -32,11 +31,7 @@ from .utils import (
     write_json_data,
 )
 
-# Maximum number of concurrent workers for parallel span fetching.
-# Keep low to avoid hitting server-side rate limits.
-MAX_WORKERS = 3
-
-# Delay (seconds) between fetching successive pages of traces.
+# Delay (seconds) between fetching successive pages of traces/spans.
 _PAGE_FETCH_DELAY_SECONDS = 1.0
 
 # If this many consecutive page fetches fail (after all per-request retries),
@@ -93,16 +88,13 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
             seconds = _parse_rate_limit_reset(headers)
         if seconds is None or seconds > _EXPORT_MAX_RETRY_AFTER_SECONDS:
             seconds = 30.0
-        # Jitter: spread concurrent workers across a 0-5 s window so they
-        # don't all restart simultaneously and immediately exhaust the limit.
+        # Jitter: avoid a thundering-herd if multiple export processes run in parallel.
         jitter = random.uniform(0.0, 5.0)
         return max(0.0, seconds) + jitter
-    # Other transient errors (e.g. connection blips): scale the base wait by
-    # MAX_WORKERS so the combined retry pressure from all concurrent workers
-    # does not keep the server saturated during recovery.
-    # With MAX_WORKERS=3: ~6s, 12s, 24s, 48s, 60s (capped).
+    # Other transient errors (e.g. connection blips): exponential backoff
+    # capped at 60 s — ~2s, 4s, 8s, 16s, 32s, 60s.
     base = tenacity.wait_exponential(multiplier=2, min=2, max=60)(retry_state)
-    return min(base * MAX_WORKERS, 60.0)
+    return min(base, 60.0)
 
 
 _export_rest_retry = tenacity.retry(
@@ -187,20 +179,22 @@ def _fetch_traces_page(
 
 
 @_export_rest_retry
-def _fetch_spans(
+def _fetch_spans_page(
     client: opik.Opik,
-    trace: Any,
     project_name: str,
-) -> tuple:
-    """Fetch spans for a single trace. Returns (trace, spans).
+    page: int,
+    page_size: int,
+) -> Any:
+    """Fetch one page of all spans for a project (no trace_id filter).
 
-    Retries on transient errors (429, 5xx, network issues) via
-    _export_rest_retry; re-raises on permanent failures.
+    Using GET /v1/private/spans avoids the much stricter rate limit on
+    POST /v1/private/spans/search.  Each span includes its trace_id so
+    callers can group client-side.
     """
-    return trace, client.search_spans(
+    return client.rest_client.spans.get_spans_by_project(
         project_name=project_name,
-        trace_id=trace.id,
-        max_results=1000,
+        page=page,
+        size=page_size,
         truncate=False,
     )
 
@@ -230,11 +224,8 @@ def export_traces(
     if filter_string and filter_string.strip():
         _validate_filter_syntax(filter_string)
 
-    exported_count = 0
     skipped_count = 0
     had_errors = False
-    # page_size is passed in; default is 500 (larger pages → fewer round-trips,
-    # which offsets the concurrency reduction introduced to avoid rate limits)
     current_page = 1
     total_processed = 0
     consecutive_page_failures = 0
@@ -275,10 +266,14 @@ def export_traces(
     )
     with _progress_cm as progress:
         task = (
-            progress.add_task("Searching for traces...", total=None)
-            if progress
-            else None
+            progress.add_task("Collecting traces...", total=None) if progress else None
         )
+
+        # ── Phase 1: collect all traces that need downloading ──────────────────
+        # We gather every trace_id → trace object here without touching spans,
+        # so the expensive per-trace POST /spans/search calls are replaced by
+        # a single bulk GET /spans pagination in Phase 2.
+        traces_to_fetch: dict[str, Any] = {}  # trace_id → trace
 
         while max_results is None or total_processed < max_results:
             # Calculate how many traces to fetch in this batch
@@ -380,7 +375,7 @@ def export_traces(
             if progress and task is not None:
                 progress.update(
                     task,
-                    description=f"Downloading traces... (page {current_page}, {len(traces)} traces)",
+                    description=f"Collecting traces... (page {current_page}, {len(traces_to_fetch)} queued)",
                 )
 
             # Filter traces by project name if specified
@@ -398,20 +393,12 @@ def export_traces(
 
             if not traces:
                 # No traces match the name pattern, but we might have more to process
-                # Use original_traces for pagination, not the filtered empty list
                 total_processed += current_page_size
                 continue
 
-            if progress and task is not None:
-                progress.update(
-                    task,
-                    description=f"Downloading traces... (batch {total_processed // page_size + 1})",
-                )
-
-            # Step 1: Check the already-downloaded set (O(1) per trace).
-            # Also verify the file still exists on disk — a stale manifest entry
-            # for a deleted file would otherwise skip a trace forever.
-            traces_to_fetch = []
+            # Check already-downloaded set (O(1) per trace).
+            # Also verify the file still exists — a stale manifest entry for a
+            # deleted file would otherwise skip a trace forever.
             for trace in traces:
                 if trace.id in already_downloaded:
                     file_path = project_dir / f"trace_{trace.id}.{ext}"
@@ -430,75 +417,13 @@ def export_traces(
                                 debug,
                             )
                         already_downloaded.discard(trace.id)
-                        traces_to_fetch.append(trace)
+                        traces_to_fetch[trace.id] = trace
+                        total_processed += 1
                 else:
-                    traces_to_fetch.append(trace)
+                    traces_to_fetch[trace.id] = trace
+                    total_processed += 1
 
-            # Step 2: Fetch spans in parallel for traces that need downloading.
-            if traces_to_fetch:
-                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                    future_to_trace = {
-                        executor.submit(
-                            _fetch_spans, client, trace, project_name
-                        ): trace
-                        for trace in traces_to_fetch
-                    }
-                    for future in as_completed(future_to_trace):
-                        trace = future_to_trace[future]
-                        try:
-                            _, spans = future.result()
-                            trace_data = {
-                                "trace": trace.model_dump(),
-                                "spans": [span.model_dump() for span in spans],
-                                "downloaded_at": datetime.now().isoformat(),
-                                "project_name": project_name,
-                            }
-                            file_path = project_dir / f"trace_{trace.id}.{ext}"
-                            try:
-                                if format.lower() == "csv":
-                                    write_csv_data(
-                                        trace_data, file_path, trace_to_csv_rows
-                                    )
-                                    if debug:
-                                        debug_print(
-                                            f"Wrote CSV file: {file_path}", debug
-                                        )
-                                else:
-                                    write_json_data(trace_data, file_path)
-                                    if debug:
-                                        debug_print(
-                                            f"Wrote JSON file: {file_path}", debug
-                                        )
-                                exported_count += 1
-                                total_processed += 1
-                                # Track in manifest and local set so subsequent
-                                # pages don't re-download the same trace.
-                                already_downloaded.add(trace.id)
-                                if manifest is not None:
-                                    manifest.mark_trace_downloaded(trace.id)
-                            except Exception as write_error:
-                                console.print(
-                                    f"[red]Error writing trace {trace.id} to file: {write_error}[/red]"
-                                )
-                                had_errors = True
-                                if debug:
-                                    import traceback
-
-                                    debug_print(
-                                        f"Traceback: {traceback.format_exc()}", debug
-                                    )
-                        except Exception as e:
-                            console.print(
-                                f"[red]Error exporting trace {trace.id}: {e}[/red]"
-                            )
-                            had_errors = True
-
-            # Update pagination for next iteration
-            if traces:
-                current_page += 1
-            else:
-                # No more traces to process
-                break
+            current_page += 1
 
             # If we got fewer traces than requested, we've reached the end
             if len(traces) < current_page_size:
@@ -506,6 +431,124 @@ def export_traces(
 
             # Throttle page fetches to avoid triggering server-side rate limits.
             time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+
+        # ── Phase 2: fetch all spans for the project in bulk ───────────────────
+        # Instead of one POST /spans/search per trace (rate-limited to 30 req/min),
+        # paginate GET /spans once across the whole project.  Each span carries its
+        # trace_id so we can group client-side and discard spans for already-
+        # downloaded traces.
+        spans_by_trace_id: dict[str, list] = {tid: [] for tid in traces_to_fetch}
+
+        if traces_to_fetch:
+            if progress and task is not None:
+                progress.update(task, description="Fetching spans...")
+
+            span_page = 1
+            span_consecutive_failures = 0
+
+            while True:
+                if debug:
+                    debug_print(f"DEBUG: Fetching span page {span_page}", debug)
+                try:
+                    span_result = _fetch_spans_page(
+                        client, project_name, span_page, page_size
+                    )
+                    span_consecutive_failures = 0
+                except (
+                    ApiError,
+                    httpx.RemoteProtocolError,
+                    httpx.ConnectError,
+                    httpx.TimeoutException,
+                ) as e:
+                    if (
+                        isinstance(e, ApiError)
+                        and e.status_code not in retry_decorator.RETRYABLE_STATUS_CODES
+                    ):
+                        raise
+                    span_consecutive_failures += 1
+                    if span_consecutive_failures >= MAX_CONSECUTIVE_PAGE_FAILURES:
+                        console.print(
+                            f"[red]{span_consecutive_failures} consecutive span page failures — "
+                            "stopping span fetch. Traces will be exported with partial spans.[/red]"
+                        )
+                        had_errors = True
+                        break
+                    console.print(
+                        f"[yellow]Error fetching span page {span_page}: {e} — skipping and continuing.[/yellow]"
+                    )
+                    had_errors = True
+                    span_page += 1
+                    time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+                    continue
+
+                spans = span_result.content or []
+                for span in spans:
+                    tid = span.trace_id
+                    if tid and tid in spans_by_trace_id:
+                        spans_by_trace_id[tid].append(span)
+
+                if debug:
+                    total_relevant = sum(len(v) for v in spans_by_trace_id.values())
+                    debug_print(
+                        f"DEBUG: Span page {span_page}: {len(spans)} spans fetched, "
+                        f"{total_relevant} relevant so far",
+                        debug,
+                    )
+
+                if progress and task is not None:
+                    total_relevant = sum(len(v) for v in spans_by_trace_id.values())
+                    progress.update(
+                        task,
+                        description=f"Fetching spans... (page {span_page}, {total_relevant} matched)",
+                    )
+
+                if not spans or len(spans) < page_size:
+                    break
+
+                span_page += 1
+                time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+
+        # ── Phase 3: write trace files ─────────────────────────────────────────
+        exported_count = 0
+
+        if traces_to_fetch:
+            if progress and task is not None:
+                progress.update(
+                    task,
+                    description=f"Writing {len(traces_to_fetch)} trace files...",
+                )
+
+            for trace_id, trace in traces_to_fetch.items():
+                spans = spans_by_trace_id.get(trace_id, [])
+                trace_data = {
+                    "trace": trace.model_dump(),
+                    "spans": [span.model_dump() for span in spans],
+                    "downloaded_at": datetime.now().isoformat(),
+                    "project_name": project_name,
+                }
+                file_path = project_dir / f"trace_{trace_id}.{ext}"
+                try:
+                    if format.lower() == "csv":
+                        write_csv_data(trace_data, file_path, trace_to_csv_rows)
+                        if debug:
+                            debug_print(f"Wrote CSV file: {file_path}", debug)
+                    else:
+                        write_json_data(trace_data, file_path)
+                        if debug:
+                            debug_print(f"Wrote JSON file: {file_path}", debug)
+                    exported_count += 1
+                    already_downloaded.add(trace_id)
+                    if manifest is not None:
+                        manifest.mark_trace_downloaded(trace_id)
+                except Exception as write_error:
+                    console.print(
+                        f"[red]Error writing trace {trace_id} to file: {write_error}[/red]"
+                    )
+                    had_errors = True
+                    if debug:
+                        import traceback
+
+                        debug_print(f"Traceback: {traceback.format_exc()}", debug)
 
         # Final progress update
         if exported_count == 0 and skipped_count == 0:

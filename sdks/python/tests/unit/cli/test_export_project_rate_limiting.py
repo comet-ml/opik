@@ -6,7 +6,7 @@ Covers the changes introduced to handle server-side 429 throttling:
     - 429 with Retry-After header → sleep honours header value
     - 429 with Retry-After exceeding cap → sleep falls back to 30 s
     - 429 with no Retry-After → sleep is 30 s
-    - non-429 transient error → sleep is in exponential backoff range [MAX_WORKERS*2, 60] s
+    - non-429 transient error → sleep is in exponential backoff range [2, 60] s
 
   export_traces (page-fetch failures)
     - 429 on page N → page is skipped, remaining pages still fetched, had_errors=True
@@ -14,7 +14,7 @@ Covers the changes introduced to handle server-side 429 throttling:
     - middle page failure → subsequent pages still exported
 
   export_traces (span-fetch failures)
-    - span fetch raises after retries → that trace skipped, others exported, had_errors=True
+    - bulk span fetch raises repeatedly → traces exported with empty spans, had_errors=True
 
   export_traces (inter-page delay)
     - time.sleep called with _PAGE_FETCH_DELAY_SECONDS between full pages
@@ -23,9 +23,6 @@ Covers the changes introduced to handle server-side 429 throttling:
   export_single_project (had_errors propagation)
     - returns 4-tuple; had_errors=False on clean run, True when errors occurred
     - first element is 0 when no traces exported or skipped, 1 otherwise
-
-  MAX_WORKERS
-    - constant is <= 3 to avoid triggering rate limits
 """
 
 import tempfile
@@ -116,7 +113,6 @@ class TestExportTracesRetryWaitBehaviour:
         mock_client.rest_client.traces.get_traces_by_project.side_effect = (
             get_traces_side_effect
         )
-        mock_client.search_spans.return_value = []
 
         with patch("time.sleep") as mock_sleep:
             export_traces(
@@ -170,28 +166,10 @@ class TestExportTracesRetryWaitBehaviour:
     def test_export_traces__page_fetch_non_429_transient_error__sleep_is_exponential_backoff(
         self, tmp_path
     ):
-        from opik.cli.exports.project import MAX_WORKERS
-
         exc = ApiError(status_code=503)
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        # Backoff is scaled by MAX_WORKERS: base 2s * MAX_WORKERS, capped at 60 s.
-        expected_min = 2.0 * MAX_WORKERS
-        assert any(expected_min <= s <= 60.0 for s in sleep_calls)
-
-
-# ---------------------------------------------------------------------------
-# MAX_WORKERS
-# ---------------------------------------------------------------------------
-
-
-class TestMaxWorkers:
-    def test_max_workers__constant__is_at_most_3(self):
-        from opik.cli.exports.project import MAX_WORKERS
-
-        assert MAX_WORKERS <= 3, (
-            f"MAX_WORKERS={MAX_WORKERS} is too high; keep it ≤ 3 to avoid "
-            "triggering server-side rate limits during bulk exports"
-        )
+        # Backoff is exponential starting at 2 s, capped at 60 s.
+        assert any(2.0 <= s <= 60.0 for s in sleep_calls)
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +183,6 @@ class TestExportTracesPageFetchFailures:
 
         trace_p2 = _make_mock_trace("t-p2")
         mock_client = MagicMock()
-        mock_client.search_spans.return_value = []
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
@@ -232,7 +209,6 @@ class TestExportTracesPageFetchFailures:
 
         traces = [_make_mock_trace("t1"), _make_mock_trace("t2")]
         mock_client = MagicMock()
-        mock_client.search_spans.return_value = []
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
@@ -262,7 +238,6 @@ class TestExportTracesPageFetchFailures:
         page1 = _make_full_page(500, offset=0)
         page3 = _make_full_page(500, offset=500)
         mock_client = MagicMock()
-        mock_client.search_spans.return_value = []
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
@@ -292,7 +267,6 @@ class TestExportTracesPageFetchFailures:
         )
 
         mock_client = MagicMock()
-        mock_client.search_spans.return_value = []
 
         # Every page raises a transient error
         with tempfile.TemporaryDirectory() as tmp:
@@ -342,27 +316,25 @@ class TestExportTracesPageFetchFailures:
 
 
 class TestExportTracesSpanFetchFailures:
-    def test_export_traces__span_fetch_fails_for_one_trace__other_traces_exported(self):
+    def test_export_traces__bulk_span_fetch_fails__traces_exported_with_empty_spans(
+        self,
+    ):
+        """When the bulk span page fetch keeps failing, traces are still written
+        (with empty span lists) and had_errors is set to True."""
         from opik.cli.exports.project import export_traces
 
-        t_ok = _make_mock_trace("t-ok")
-        t_fail = _make_mock_trace("t-fail")
+        t1 = _make_mock_trace("t1")
+        t2 = _make_mock_trace("t2")
         mock_client = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
-                mock_fetch.side_effect = [
-                    _make_page([t_ok, t_fail]),
+            with patch(f"{_MODULE}._fetch_traces_page") as mock_trace_fetch:
+                mock_trace_fetch.side_effect = [
+                    _make_page([t1, t2]),
                     _make_page([]),
                 ]
-                with patch(f"{_MODULE}._fetch_spans") as mock_spans:
-
-                    def fetch_spans_side_effect(client, trace, project_name):
-                        if trace.id == "t-fail":
-                            raise ApiError(status_code=429)
-                        return trace, []
-
-                    mock_spans.side_effect = fetch_spans_side_effect
+                with patch(f"{_MODULE}._fetch_spans_page") as mock_span_fetch:
+                    mock_span_fetch.side_effect = ApiError(status_code=503)
                     with patch(f"{_MODULE}.time.sleep"):
                         exported, skipped, had_errors = export_traces(
                             client=mock_client,
@@ -373,7 +345,7 @@ class TestExportTracesSpanFetchFailures:
                         )
 
         assert had_errors is True
-        assert exported == 1  # only t-ok written
+        assert exported == 2  # both trace files written, just without spans
         assert skipped == 0
 
 
@@ -390,7 +362,6 @@ class TestExportTracesInterPageDelay:
         # Must use full pages (500 traces) — the loop breaks on short pages before
         # reaching the sleep call, so partial pages do not trigger a sleep.
         mock_client = MagicMock()
-        mock_client.search_spans.return_value = []
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
@@ -424,7 +395,6 @@ class TestExportTracesInterPageDelay:
         from opik.cli.exports.project import export_traces, _PAGE_FETCH_DELAY_SECONDS
 
         mock_client = MagicMock()
-        mock_client.search_spans.return_value = []
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
