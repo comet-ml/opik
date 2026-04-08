@@ -317,7 +317,9 @@ class OpikTracer(BaseTracer):
             type=run_parse_helpers.get_span_type(run_dict),
             tags=self._trace_default_tags,
             metadata=root_metadata,
-            project_name=self._project_name,
+            project_name=context_storage.resolve_project_name(
+                self._project_name, "OpikTracer"
+            ),
             thread_id=thread_id,
         )
 
@@ -463,7 +465,7 @@ class OpikTracer(BaseTracer):
 
         project_name = helpers.resolve_child_span_project_name(
             parent_span_data.project_name,
-            self._project_name,
+            context_storage.resolve_project_name(self._project_name, "OpikTracer"),
         )
 
         new_span_data = span.SpanData(
@@ -520,7 +522,7 @@ class OpikTracer(BaseTracer):
             trace_data = self._created_traces_data_map[parent_run_id]
             project_name = helpers.resolve_child_span_project_name(
                 trace_data.project_name,
-                self._project_name,
+                context_storage.resolve_project_name(self._project_name, "OpikTracer"),
             )
 
             new_span_data = span.SpanData(
@@ -544,7 +546,9 @@ class OpikTracer(BaseTracer):
                 input=run_dict["inputs"],
                 metadata=run_parse_helpers.get_run_metadata(run_dict),
                 tags=self._trace_default_tags,
-                project_name=self._project_name,
+                project_name=context_storage.resolve_project_name(
+                    self._project_name, "OpikTracer"
+                ),
                 type=run_parse_helpers.get_span_type(run_dict),
             )
             self._externally_created_traces_ids.add(new_span_data.trace_id)
@@ -555,7 +559,7 @@ class OpikTracer(BaseTracer):
             # LangGraph attached to existing trace - attach children directly to trace
             project_name = helpers.resolve_child_span_project_name(
                 current_trace_data.project_name,
-                self._project_name,
+                context_storage.resolve_project_name(self._project_name, "OpikTracer"),
             )
 
             new_span_data = span.SpanData(

@@ -105,7 +105,9 @@ class OpikCallback(dspy_callback.BaseCallback):
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
             parent_project_name=current_span_data.project_name,
-            child_project_name=self._project_name,
+            child_project_name=context_storage.resolve_project_name(
+                self._project_name, "OpikCallback"
+            ),
         )
         span_type = get_span_type(instance)
 
@@ -129,7 +131,7 @@ class OpikCallback(dspy_callback.BaseCallback):
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
             current_trace_data.project_name,
-            self._project_name,
+            context_storage.resolve_project_name(self._project_name, "OpikCallback"),
         )
         span_type = get_span_type(instance)
 
@@ -164,7 +166,9 @@ class OpikCallback(dspy_callback.BaseCallback):
             name=instance.__class__.__name__,
             input=inputs,
             metadata=self._get_opik_metadata(instance),
-            project_name=self._project_name,
+            project_name=context_storage.resolve_project_name(
+                self._project_name, "OpikCallback"
+            ),
         )
         self._map_call_id_to_trace_data[call_id] = trace_data
         self._set_current_context_data(trace_data)
@@ -263,7 +267,7 @@ class OpikCallback(dspy_callback.BaseCallback):
 
         project_name = helpers.resolve_child_span_project_name(
             current_callback_context_data.project_name,
-            self._project_name,
+            context_storage.resolve_project_name(self._project_name, "OpikCallback"),
         )
 
         if isinstance(current_callback_context_data, span.SpanData):
