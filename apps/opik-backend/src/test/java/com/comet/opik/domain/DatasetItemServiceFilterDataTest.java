@@ -64,9 +64,30 @@ class DatasetItemServiceFilterDataTest {
                                 JsonUtils.getJsonNodeFromString("{\"answer\":\"F1 is a sport\"}")),
                         Map.<String, JsonNode>of()),
                 Arguments.of(
-                        "EVALUATION_SUITE with non-object input returns empty map",
+                        "EVALUATION_SUITE with string input wraps under input key",
                         DatasetType.EVALUATION_SUITE,
                         Map.of("input", JsonUtils.getJsonNodeFromString("\"just a string\"")),
+                        Map.of("input", JsonUtils.getJsonNodeFromString("\"just a string\""))),
+                Arguments.of(
+                        "EVALUATION_SUITE with array input wraps under input key",
+                        DatasetType.EVALUATION_SUITE,
+                        Map.of("input", JsonUtils.getJsonNodeFromString("[{\"role\":\"user\",\"content\":\"hello\"}]")),
+                        Map.of("input",
+                                JsonUtils.getJsonNodeFromString("[{\"role\":\"user\",\"content\":\"hello\"}]"))),
+                Arguments.of(
+                        "EVALUATION_SUITE with numeric input wraps under input key",
+                        DatasetType.EVALUATION_SUITE,
+                        Map.of("input", JsonUtils.getJsonNodeFromString("42")),
+                        Map.of("input", JsonUtils.getJsonNodeFromString("42"))),
+                Arguments.of(
+                        "EVALUATION_SUITE with boolean input wraps under input key",
+                        DatasetType.EVALUATION_SUITE,
+                        Map.of("input", JsonUtils.getJsonNodeFromString("true")),
+                        Map.of("input", JsonUtils.getJsonNodeFromString("true"))),
+                Arguments.of(
+                        "EVALUATION_SUITE with null input returns empty map",
+                        DatasetType.EVALUATION_SUITE,
+                        Map.of("input", JsonUtils.getJsonNodeFromString("null")),
                         Map.<String, JsonNode>of()));
     }
 

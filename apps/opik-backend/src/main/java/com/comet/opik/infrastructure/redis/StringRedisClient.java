@@ -2,8 +2,10 @@ package com.comet.opik.infrastructure.redis;
 
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.BatchOptions;
+import org.redisson.api.RAtomicLong;
 import org.redisson.api.RBatch;
 import org.redisson.api.RBlockingDeque;
+import org.redisson.api.RBlockingQueue;
 import org.redisson.api.RBucket;
 import org.redisson.api.RList;
 import org.redisson.api.RMap;
@@ -39,6 +41,14 @@ public class StringRedisClient {
 
     public <V> RBlockingDeque<V> getBlockingDeque(String name) {
         return syncClient.getBlockingDeque(name, StringCodec.INSTANCE);
+    }
+
+    public <V> RBlockingQueue<V> getBlockingQueue(String name) {
+        return syncClient.getBlockingQueue(name, StringCodec.INSTANCE);
+    }
+
+    public RAtomicLong getAtomicLong(String name) {
+        return syncClient.getAtomicLong(name);
     }
 
     public RBatch createBatch() {
