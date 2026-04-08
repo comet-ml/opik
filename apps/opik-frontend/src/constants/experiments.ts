@@ -11,7 +11,7 @@ export const OPTIMIZATION_OPTIMIZER_KEY = "optimizer";
 export const OPTIMIZATION_PROMPT_KEY = `${OPTIMIZATION_METADATA_EXCLUDED_KEY}.prompt`;
 export const OPTIMIZATION_EXAMPLES_KEY = `${OPTIMIZATION_METADATA_EXCLUDED_KEY}.examples`;
 
-// TODO: OPIK-XXXX — replace with a dedicated BE count endpoint / dataset_item_id filter
+// TODO: OPIK-5724 — replace with a dedicated BE count endpoint / dataset_item_id filter
 export const COMPARE_EXPERIMENTS_MAX_PAGE_SIZE = 20000;
 
 export const ASSERTION_POLL_INTERVAL_MS = 3000;

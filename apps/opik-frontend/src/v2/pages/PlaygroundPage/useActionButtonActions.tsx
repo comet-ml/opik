@@ -48,6 +48,7 @@ import usePromptDatasetItemCombination, {
 } from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
+const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
 interface UseActionButtonActionsArguments {
   datasetItems: DatasetItem[];
@@ -233,11 +234,31 @@ const useActionButtonActions = ({
       throttlingSeconds,
     });
 
-  // TODO: OPIK-XXXX — for datasets >20k items, replace with a dedicated BE count endpoint
+  const handlePollTimeout = useCallback(
+    (description: string) => {
+      clearRunningMap();
+      isToStopRef.current = false;
+      resetProgress();
+      queryClient.invalidateQueries({ queryKey: ["experiments"] });
+      queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
+      toast({ title: "Timeout", description, variant: "destructive" });
+    },
+    [clearRunningMap, resetProgress, queryClient, toast],
+  );
+
+  // TODO: OPIK-5724 — for datasets >20k items, replace with a dedicated BE count endpoint
   const pollAssertionEvaluation = useCallback(
     async (experimentIds: string[], curDatasetId: string) => {
+      const startTime = Date.now();
       const poll = async () => {
         if (isToStopRef.current) return;
+
+        if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
+          handlePollTimeout(
+            "Assertion evaluation polling timed out after 5 minutes",
+          );
+          return;
+        }
 
         try {
           const controller = new AbortController();
@@ -308,6 +329,7 @@ const useActionButtonActions = ({
       setProgress,
       resetProgress,
       clearRunningMap,
+      handlePollTimeout,
       queryClient,
       toast,
     ],
@@ -319,8 +341,16 @@ const useActionButtonActions = ({
       totalItems: number,
       curDatasetId: string,
     ) => {
+      const startTime = Date.now();
       const poll = async () => {
         if (isToStopRef.current) return;
+
+        if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
+          handlePollTimeout(
+            "Experiment completion polling timed out after 5 minutes",
+          );
+          return;
+        }
 
         try {
           const controller = new AbortController();
@@ -378,6 +408,7 @@ const useActionButtonActions = ({
       setProgress,
       setProgressPhase,
       clearRunningMap,
+      handlePollTimeout,
       queryClient,
       pollAssertionEvaluation,
       toast,

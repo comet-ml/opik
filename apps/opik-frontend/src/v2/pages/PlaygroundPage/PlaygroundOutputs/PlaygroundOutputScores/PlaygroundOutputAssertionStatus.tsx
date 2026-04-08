@@ -50,7 +50,7 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
       datasetId,
       experimentsIds: experimentId ? [experimentId] : [],
       page: 1,
-      // TODO: OPIK-XXXX — add BE dataset_item_id filter so we can fetch size: 1
+      // TODO: OPIK-5724 — add BE dataset_item_id filter so we can fetch size: 1
       size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
       truncate: true,
     },
