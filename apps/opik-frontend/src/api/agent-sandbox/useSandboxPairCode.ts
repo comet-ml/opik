@@ -30,7 +30,7 @@ export default function useSandboxPairCode({
   return useQuery({
     queryKey: [AGENT_SANDBOX_KEY, "pair-code", { projectId }],
     queryFn: ({ signal }) => getPairCode(projectId, signal),
-    enabled: !!projectId,
+    enabled: false,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
