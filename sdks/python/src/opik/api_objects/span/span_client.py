@@ -17,6 +17,7 @@ from opik.types import (
     SpanType,
     TraceSource,
 )
+from opik import logging_messages
 from .. import constants, validation_helpers, helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -87,7 +88,13 @@ class Span:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        self.update(
+        if self._streamer.use_batching:
+            LOGGER.warning(
+                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+                "Span.end()",
+            )
+
+        self._update(
             end_time=end_time,
             metadata=metadata,
             input=input,
@@ -136,6 +143,38 @@ class Span:
         Returns:
             None
         """
+        if self._streamer.use_batching:
+            LOGGER.warning(
+                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+                "Span.update()",
+            )
+
+        self._update(
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+        )
+
+    def _update(
+        self,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[LLMProvider, str]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+    ) -> None:
         update_span(
             id=self.id,
             trace_id=self.trace_id,

@@ -1314,7 +1314,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
     def f(x):
         return "f-output"
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     trace_data = trace.TraceData(
         id="manually-created-trace-id",
         name="manually-created-trace",

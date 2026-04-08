@@ -271,7 +271,7 @@ def evaluate(
         prompts=prompts,
     )
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
@@ -348,7 +348,7 @@ def evaluate_suite(
         EvaluationSuiteResult with pass/fail status for each item and the suite.
     """
     if client is None:
-        client = opik_client.get_client_cached()
+        client = opik_client.get_global_client()
 
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
@@ -627,7 +627,7 @@ def evaluate_experiment(
     )
     start_time = time.time()
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     if experiment_id:
         LOGGER.info("Getting experiment by id. Experiment name is ignored.")
@@ -892,7 +892,7 @@ def evaluate_prompt(
         if "model" not in experiment_config:
             experiment_config["model"] = opik_model.model_name
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     prompts = [prompt] if prompt else None
 
@@ -1131,7 +1131,7 @@ def evaluate_optimization_trial(
         project_name=project_name,
     )
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
@@ -1260,7 +1260,7 @@ def evaluate_on_dict_items(
         LOGGER.warning("No scoring metrics provided for items evaluation")
         return evaluation_result.EvaluationResultOnDictItems(test_results=[])
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     with asyncio_support.async_http_connections_expire_immediately():
         dataset_items = [

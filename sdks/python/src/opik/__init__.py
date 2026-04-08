@@ -14,7 +14,7 @@ from .api_objects.experiment.experiment_item import (
 from .api_objects.agent_config import AgentConfig, Blueprint
 from .api_objects.agent_config.context import agent_config_context
 from .exceptions import AgentConfigNotFound
-from .api_objects.opik_client import Opik
+from .api_objects.opik_client import Opik, get_global_client, set_global_client
 from .api_objects.prompt import Prompt, ChatPrompt
 from .api_objects.prompt.types import PromptType
 from .api_objects.span import Span
@@ -61,6 +61,8 @@ __all__ = [
     "track",
     "flush_tracker",
     "Opik",
+    "get_global_client",
+    "set_global_client",
     "opik_context",
     "Trace",
     "Span",

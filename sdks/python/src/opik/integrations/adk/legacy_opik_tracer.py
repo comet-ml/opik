@@ -11,7 +11,7 @@ from google.adk.tools import tool_context
 import opik
 from opik import context_storage
 from opik.decorator import arguments_helpers, span_creation_handler
-from opik.api_objects import opik_client, span, trace
+from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict
 
 from . import (
@@ -67,9 +67,11 @@ class LegacyOpikTracer:
             Optional[str]
         ] = contextvars.ContextVar("current_trace_created_by_opik_tracer", default=None)
 
-        self._opik_client = opik_client.get_client_cached()
+        patchers.patch_adk()
 
-        patchers.patch_adk(self._opik_client)
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def flush(self) -> None:
         self._opik_client.flush()

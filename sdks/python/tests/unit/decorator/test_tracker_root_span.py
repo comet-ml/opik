@@ -198,7 +198,7 @@ def test_track__disable_root_span__trace_already_created_by_hand__root_span_crea
         nested_function(x)
         return "top-output"
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     trace_data = trace.TraceData(
         id="manually-created-trace-id",
         name="manually-created-trace",

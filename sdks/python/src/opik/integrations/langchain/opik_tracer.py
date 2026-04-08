@@ -17,6 +17,7 @@ from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
 
+import opik
 from opik import context_storage, dict_utils, llm_usage, tracing_runtime_config
 from opik.api_objects import span, trace
 from opik.decorator import arguments_helpers, span_creation_handler
@@ -29,7 +30,7 @@ from . import (
     provider_usage_extractors,
 )
 
-from ...api_objects import helpers, opik_client
+from ...api_objects import helpers
 
 if TYPE_CHECKING:
     from langchain_core.runnables.graph import Graph
@@ -143,8 +144,6 @@ class OpikTracer(BaseTracer):
 
         self._distributed_headers = distributed_headers
 
-        self._opik_client = opik_client.get_client_cached()
-
         self._thread_id = thread_id
 
         self._opik_context_storage = context_storage.get_current_context_instance()
@@ -156,6 +155,10 @@ class OpikTracer(BaseTracer):
         self._skip_error_callback = skip_error_callback
 
         self._opik_context_read_only_mode = opik_context_read_only_mode
+
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def set_graph(self, graph: "Graph") -> None:
         """
