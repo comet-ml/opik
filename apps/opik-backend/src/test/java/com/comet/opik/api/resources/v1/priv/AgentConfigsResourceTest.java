@@ -77,7 +77,7 @@ class AgentConfigsResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     public static final String[] BLUEPRINT_PAYLOAD_IGNORED_FIELDS = {"envs", "createdBy", "createdAt",
-            "lastUpdatedBy", "lastUpdatedAt", "values.id", "values.validToBlueprintId"};
+            "lastUpdatedBy", "lastUpdatedAt", "values.id"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
