@@ -87,7 +87,7 @@ public class AgentConfigsResource {
     }
 
     @POST
-    @Path("/blueprints/from-mask/projects/{project_id}/masks/{mask_id}")
+    @Path("/blueprints/projects/{project_id}/masks/{mask_id}")
     @JsonView(AgentConfig.View.Write.class)
     @Operation(operationId = "createBlueprintFromMask", summary = "Create blueprint from mask", description = "Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {

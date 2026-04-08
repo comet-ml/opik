@@ -22,7 +22,7 @@ public class AgentConfigsResourceClient {
     private static final String RESOURCE_PATH = "%s/v1/private/agent-configs";
     private static final String BLUEPRINTS_PATH = RESOURCE_PATH + "/blueprints";
     private static final String REMOVE_KEYS_PATH = BLUEPRINTS_PATH + "/remove-keys";
-    private static final String FROM_MASK_PATH = BLUEPRINTS_PATH + "/from-mask/projects/%s/masks/%s";
+    private static final String FROM_MASK_PATH = BLUEPRINTS_PATH + "/projects/%s/masks/%s";
     private static final String LATEST_BLUEPRINT_PATH = RESOURCE_PATH + "/blueprints/latest/projects/%s";
     private static final String BLUEPRINT_BY_ID_PATH = RESOURCE_PATH + "/blueprints/%s";
     private static final String BLUEPRINT_BY_ENV_PATH = RESOURCE_PATH + "/blueprints/environments/%s/projects/%s";
