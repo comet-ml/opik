@@ -77,8 +77,7 @@ public class EvalSuiteEvaluatorMapper {
 
                         return Stream.of(new PreparedEvaluator(evaluator.name(), code, scoreNameMapping));
                     } catch (java.io.UncheckedIOException e) {
-                        log.error("Failed to deserialize evaluator config for '{}': {}",
-                                evaluator.name(), evaluator.config(), e);
+                        log.error("Failed to deserialize evaluator config for '{}'", evaluator.name(), e);
                         return Stream.<PreparedEvaluator>empty();
                     }
                 })
