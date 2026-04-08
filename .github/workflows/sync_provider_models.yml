@@ -93,7 +93,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_OPIK_CDN_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_OPIK_CDN_SECRERT }}
+          aws-secret-access-key: ${{ secrets.AWS_OPIK_CDN_SECRET }}
           aws-region: us-east-1
           role-to-assume: ${{ vars.AWS_OPIK_CDN_ROLE }}
           role-session-name: sync-provider-models
