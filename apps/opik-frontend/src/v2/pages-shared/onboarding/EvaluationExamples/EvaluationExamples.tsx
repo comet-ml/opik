@@ -8,7 +8,7 @@ import IntegrationTabs from "../IntegrationTabs/IntegrationTabs";
 import IntegrationTemplate from "../FrameworkIntegrations/IntegrationTemplate";
 import UsingPlaygroundTab from "./UsingPlaygroundTab";
 import { useUserApiKey } from "@/store/AppStore";
-import { SNIPPET_PROJECT_NAME } from "@/constants/shared";
+import useActiveProjectName from "@/hooks/useActiveProjectName";
 
 type TabValue = "evaluate-prompts" | "evaluate-llm" | "using-playground";
 type TabItem = {
@@ -37,20 +37,21 @@ const tabList: TabItem[] = [
 const EvaluationExamples: React.FC = () => {
   const [exampleTab, setExampleTab] = useState<TabValue>(tabList[0].value);
   const apiKey = useUserApiKey();
+  const projectName = useActiveProjectName();
 
   const tabContentMap: Record<TabValue, JSX.Element> = {
     "evaluate-prompts": (
       <IntegrationTemplate
         code={evaluatePromptsCode}
         apiKey={apiKey}
-        projectName={SNIPPET_PROJECT_NAME}
+        projectName={projectName}
       />
     ),
     "evaluate-llm": (
       <IntegrationTemplate
         code={evaluateLLMCode}
         apiKey={apiKey}
-        projectName={SNIPPET_PROJECT_NAME}
+        projectName={projectName}
       />
     ),
     "using-playground": <UsingPlaygroundTab />,
