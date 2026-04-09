@@ -149,17 +149,17 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
     }
 
     private BiEvent mapResults(String anonymousId, Tuple4<UserCount, Long, Long, Long> results) {
-        return new BiEvent(
-                anonymousId,
-                STATISTICS_BE,
-                Map.of(
+        return BiEvent.builder()
+                .anonymousId(anonymousId)
+                .eventType(STATISTICS_BE)
+                .eventProperties(Map.of(
                         "opik_app_version", config.getMetadata().getVersion(),
                         "total_users", String.valueOf(results.getT1().allTimes()),
                         "daily_users", String.valueOf(results.getT1().daily()),
                         "daily_traces", String.valueOf(results.getT2()),
                         "daily_experiments", String.valueOf(results.getT3()),
-                        "daily_datasets", String.valueOf(results.getT4())),
-                null);
+                        "daily_datasets", String.valueOf(results.getT4())))
+                .build();
     }
 
     private Mono<Response> sendEvent(BiEvent biEvent) {

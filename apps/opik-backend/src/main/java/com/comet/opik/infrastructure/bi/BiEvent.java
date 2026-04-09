@@ -11,7 +11,8 @@ import java.util.Map;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 record BiEvent(String anonymousId, String eventType, Map<String, String> eventProperties,
-        @JsonInclude(JsonInclude.Include.NON_NULL) List<String> targets) {
+        List<String> targets) {
 }

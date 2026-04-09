@@ -30,7 +30,11 @@ class BiEventServiceImpl implements BiEventService {
 
     public void reportEvent(@NonNull String anonymousId, @NonNull String eventType, @NonNull String biEventType,
             @NonNull Map<String, String> eventProperties) {
-        var event = new BiEvent(anonymousId, biEventType, eventProperties, null);
+        var event = BiEvent.builder()
+                .anonymousId(anonymousId)
+                .eventType(biEventType)
+                .eventProperties(eventProperties)
+                .build();
 
         try (Response response = client.target(URI.create(config.getUsageReport().getUrl()))
                 .request()
