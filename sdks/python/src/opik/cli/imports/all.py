@@ -14,7 +14,7 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import debug_print, print_import_summary
+from .utils import debug_print, no_attachments_option, print_import_summary
 from ..include_validation import validate_include
 
 console = Console()
@@ -43,6 +43,7 @@ def import_all(
     force: bool,
     debug: bool,
     api_key: Optional[str] = None,
+    include_attachments: bool = True,
 ) -> None:
     """Import all data types from the workspace export directory."""
     try:
@@ -128,6 +129,7 @@ def import_all(
                     debug,
                     recreate_experiments_flag=False,
                     manifest=manifest,
+                    include_attachments=include_attachments,
                 )
                 _merge_stats(total_stats, stats)
             else:
@@ -227,6 +229,7 @@ def import_all(
         f"Defaults to all: {_DEFAULT_INCLUDE}."
     ),
 )
+@no_attachments_option()
 @click.pass_context
 def import_all_command(
     ctx: click.Context,
@@ -235,6 +238,7 @@ def import_all_command(
     force: bool,
     debug: bool,
     include: List[str],
+    no_attachments: bool,
 ) -> None:
     """Import all datasets, prompts, projects, and experiments into the workspace.
 
@@ -265,4 +269,13 @@ def import_all_command(
     """
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
-    import_all(workspace, path, include, dry_run, force, debug, api_key)
+    import_all(
+        workspace,
+        path,
+        include,
+        dry_run,
+        force,
+        debug,
+        api_key,
+        include_attachments=not no_attachments,
+    )

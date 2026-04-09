@@ -27,7 +27,7 @@ from .experiment import (
 )
 from .project import export_single_project
 from .prompt import export_single_prompt
-from .utils import console, debug_print, print_export_summary
+from .utils import console, debug_print, no_attachments_option, print_export_summary
 from ..include_validation import validate_include
 
 PAGE_SIZE = 500
@@ -255,6 +255,7 @@ def _export_all_projects(
     format: str,
     max_workers: int = 5,
     filter_string: Optional[str] = None,
+    include_attachments: bool = True,
     page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
     """Export all projects in the workspace.
@@ -291,16 +292,17 @@ def _export_all_projects(
             future_to_project = {
                 executor.submit(
                     export_single_project,
-                    client,
-                    project,
-                    projects_dir,
-                    filter_string,
-                    max_results,
-                    force,
-                    debug,
-                    format,
-                    False,  # show_progress=False — outer bar tracks progress
-                    page_size,
+                    client=client,
+                    project=project,
+                    output_dir=projects_dir,
+                    filter_string=filter_string,
+                    max_results=max_results,
+                    force=force,
+                    debug=debug,
+                    format=format,
+                    show_progress=False,  # outer bar tracks progress
+                    include_attachments=include_attachments,
+                    page_size=page_size,
                 ): project
                 for project in all_projects
             }
@@ -445,6 +447,7 @@ def export_all(
     format: str,
     api_key: Optional[str] = None,
     filter_string: Optional[str] = None,
+    include_attachments: bool = True,
     page_size: int = 500,
 ) -> None:
     """Export all data from the workspace."""
@@ -495,6 +498,7 @@ def export_all(
                 debug,
                 format,
                 filter_string=filter_string,
+                include_attachments=include_attachments,
                 page_size=page_size,
             )
             total_stats["projects"] = proj_exp
@@ -607,6 +611,7 @@ def _validate_include(
     default=None,
     help="Maximum number of traces/items to export per entity.",
 )
+@no_attachments_option()
 @click.option(
     "--page-size",
     type=click.IntRange(1, 1000),
@@ -624,6 +629,7 @@ def export_all_command(
     debug: bool,
     include: list[str],
     max_results: Optional[int],
+    no_attachments: bool,
     page_size: int,
 ) -> None:
     """Export all datasets, prompts, projects, and experiments from the workspace.
@@ -655,5 +661,6 @@ def export_all_command(
         format,
         api_key,
         filter_string=filter,
+        include_attachments=not no_attachments,
         page_size=page_size,
     )

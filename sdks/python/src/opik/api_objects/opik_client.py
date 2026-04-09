@@ -1880,6 +1880,45 @@ class Opik:
             rest_httpx_client=self._httpx_client,
         )
 
+    def queue_attachment_upload(
+        self,
+        entity_type: Literal["trace", "span"],
+        entity_id: str,
+        project_name: str,
+        file_path: str,
+        file_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> None:
+        """Queue a local file for background upload as an attachment via the streamer.
+
+        This method is non-blocking: the upload is handled by the background streamer
+        which provides parallelization, automatic retries, and monitoring. Call
+        :meth:`flush` to wait for all queued uploads to complete.
+
+        Parameters:
+            entity_type: The type of entity to attach the file to (``"trace"`` or ``"span"``).
+            entity_id: The ID of the trace or span to attach the file to.
+            project_name: The name of the project containing the entity.
+            file_path: Path to the local file to upload.
+            file_name: Name to assign the attachment. Defaults to the file's basename.
+            mime_type: MIME type of the file. Auto-detected from the file name if not provided.
+        """
+        attachment_data = Attachment(
+            data=file_path,
+            file_name=file_name,
+            content_type=mime_type,
+            create_temp_copy=False,
+        )
+        self._streamer.put(
+            attachment_converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                project_name=project_name,
+                url_override=self._config.url_override,
+            )
+        )
+
     def create_prompt(
         self,
         name: str,

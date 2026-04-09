@@ -1,5 +1,6 @@
 """Project export functionality."""
 
+import logging
 import sys
 import time
 from contextlib import nullcontext
@@ -15,21 +16,28 @@ import tenacity
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
+from opik.api_objects.attachment import client as attachment_client
+from opik import exceptions as opik_exceptions
+from opik.rate_limit import rate_limit
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.core.http_client import _parse_retry_after
 from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
+from .._attachment_path import safe_attachment_path
 from ..export_manifest import ExportManifest
 from .utils import (
     console,
     debug_print,
     extract_trace_id_from_filename,
     matches_name_pattern,
+    no_attachments_option,
     print_export_summary,
     trace_to_csv_rows,
     write_csv_data,
     write_json_data,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 # Delay (seconds) between fetching successive pages of traces/spans.
 _PAGE_FETCH_DELAY_SECONDS = 1.0
@@ -204,6 +212,143 @@ def _fetch_spans_page(
     )
 
 
+def _handle_attachment_api_error(e: ApiError, context: str) -> None:
+    """Centralised ApiError handler for attachment operations.
+
+    - 409 Conflict: silently ignored (caller continues).
+    - 429 Too Many Requests: raises ``OpikCloudRequestsRateLimited``.
+    - All other codes: logged at ERROR level then re-raised.
+
+    *context* is a human-readable string included in log messages
+    (e.g. ``"fetching attachments for trace abc"``).
+    """
+    if e.status_code == 409:
+        return  # Conflict — skip without error.
+    elif e.status_code == 429:
+        rate_limiter = rate_limit.parse_rate_limit(e.headers or {})
+        raise opik_exceptions.OpikCloudRequestsRateLimited(
+            headers=e.headers or {},
+            retry_after=rate_limiter.retry_after() if rate_limiter else 60.0,
+        )
+    else:
+        LOGGER.error("API error %s (status %s): %s", context, e.status_code, e)
+        raise
+
+
+def _fetch_attachments(
+    attachment_client: attachment_client.AttachmentClient,
+    project_name: str,
+    trace_id: str,
+    span_ids: list,
+) -> list:
+    """Fetch attachment metadata for a trace and all its spans.
+
+    Returns a list of dicts with keys: entity_type, entity_id, file_name,
+    mime_type, file_size. Failures per-entity are logged and skipped.
+    """
+    attachments = []
+    entities = [("trace", trace_id)] + [("span", sid) for sid in span_ids]
+    for entity_type, entity_id in entities:
+        try:
+            att_list = attachment_client.get_attachment_list(
+                project_name, entity_id, entity_type
+            )
+            for att in att_list:
+                attachments.append(
+                    {
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "file_name": att.file_name,
+                        "mime_type": att.mime_type,
+                        "file_size": att.file_size,
+                    }
+                )
+        except ApiError as e:
+            _handle_attachment_api_error(
+                e, f"fetching attachments for {entity_type} {entity_id}"
+            )
+        except (OSError, IOError) as e:
+            LOGGER.warning(
+                "Failed to fetch attachments for %s %s: %s", entity_type, entity_id, e
+            )
+        except Exception:
+            LOGGER.exception(
+                "Unexpected error fetching attachments for %s %s",
+                entity_type,
+                entity_id,
+            )
+            raise
+    return attachments
+
+
+def _download_attachment_file(
+    attachment_client: attachment_client.AttachmentClient,
+    project_name: str,
+    attachment: dict,
+    project_dir: Path,
+    force: bool,
+) -> bool:
+    """Download a single attachment binary to disk.
+
+    Saves to ``project_dir/attachments/<entity_type>/<entity_id>/<file_name>``.
+    Skips if the file already exists and *force* is False.
+    Returns True on success, False on recoverable failure (warning logged, no raise).
+    Raises on unexpected errors.
+    """
+    entity_type = attachment["entity_type"]
+    entity_id = attachment["entity_id"]
+    file_name = attachment["file_name"]
+    mime_type = attachment["mime_type"]
+
+    dest_path = safe_attachment_path(project_dir, entity_type, entity_id, file_name)
+    if dest_path is None:
+        LOGGER.warning(
+            "Skipping attachment with invalid or unsafe path: entity_type=%s entity_id=%s file_name=%r",
+            entity_type,
+            entity_id,
+            file_name,
+        )
+        return False
+
+    if not force and dest_path.exists():
+        return True
+
+    try:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        chunks = attachment_client.download_attachment(
+            project_name=project_name,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            file_name=file_name,
+            mime_type=mime_type,
+        )
+        with open(dest_path, "wb") as f:
+            for chunk in chunks:
+                f.write(chunk)
+        return True
+    except ApiError as e:
+        if e.status_code == 409:
+            return True  # Conflict — treat as already-present; no local write needed.
+        _handle_attachment_api_error(
+            e, f"downloading attachment '{file_name}' for {entity_type} {entity_id}"
+        )
+        raise  # unreachable — _handle_attachment_api_error always raises for non-409
+    except OSError as e:
+        console.print(
+            f"[yellow]Warning: failed to download attachment '{file_name}' "
+            f"for {entity_type} {entity_id}: {e}[/yellow]"
+        )
+        return False
+    except Exception:
+        LOGGER.exception(
+            "Unexpected error downloading attachment '%s' for %s %s",
+            file_name,
+            entity_type,
+            entity_id,
+        )
+        raise
+
+
 def export_traces(
     client: opik.Opik,
     project_name: str,
@@ -216,9 +361,20 @@ def export_traces(
     force: bool = False,
     show_progress: bool = True,
     manifest: Optional[ExportManifest] = None,
+    include_attachments: bool = True,
     page_size: int = 500,
 ) -> tuple[int, int, bool]:
     """Download traces and their spans with pagination support for large projects."""
+    att_client: Optional[attachment_client.AttachmentClient] = None
+    if include_attachments:
+        try:
+            att_client = client.get_attachment_client()
+        except Exception as e:
+            LOGGER.warning(
+                "Could not initialize attachment client; attachments will be skipped: %s",
+                e,
+            )
+
     if debug:
         debug_print(
             f"DEBUG: _export_traces called with project_name: {project_name}, project_dir: {project_dir}",
@@ -525,9 +681,37 @@ def export_traces(
 
             for trace_id, trace in traces_to_fetch.items():
                 spans = spans_by_trace_id.get(trace_id, [])
+
+                # Fetch and download attachments when requested
+                attachment_metadata: list = []
+                attachment_download_ok = True
+                if att_client is not None:
+                    span_ids = [span.id for span in spans if span.id]
+                    attachment_metadata = _fetch_attachments(
+                        att_client, project_name, trace_id, span_ids
+                    )
+                    for att in attachment_metadata:
+                        if not _download_attachment_file(
+                            att_client,
+                            project_name,
+                            att,
+                            project_dir,
+                            force,
+                        ):
+                            attachment_download_ok = False
+
+                if not attachment_download_ok:
+                    had_errors = True
+                    LOGGER.warning(
+                        "Trace %s: one or more attachment downloads failed; "
+                        "writing trace with partial attachments",
+                        trace_id,
+                    )
+
                 trace_data = {
                     "trace": trace.model_dump(),
                     "spans": [span.model_dump() for span in spans],
+                    "attachments": attachment_metadata,
                     "downloaded_at": datetime.now().isoformat(),
                     "project_name": project_name,
                 }
@@ -574,6 +758,7 @@ def export_project_by_name(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    include_attachments: bool = True,
     page_size: int = 500,
 ) -> None:
     """Export a project by exact name."""
@@ -658,14 +843,15 @@ def export_project_by_name(
         # Export the project
         exported_count, traces_exported, traces_skipped, had_errors = (
             export_single_project(
-                client,
-                matching_project,
-                output_dir,
-                filter_string,
-                max_results,
-                force,
-                debug,
-                format,
+                client=client,
+                project=matching_project,
+                output_dir=output_dir,
+                filter_string=filter_string,
+                max_results=max_results,
+                force=force,
+                debug=debug,
+                format=format,
+                include_attachments=include_attachments,
                 page_size=page_size,
             )
         )
@@ -705,6 +891,7 @@ def export_single_project(
     debug: bool,
     format: str,
     show_progress: bool = True,
+    include_attachments: bool = True,
     page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
     """Export a single project.
@@ -825,18 +1012,19 @@ def export_single_project(
 
         # Export related traces for this project
         traces_exported, traces_skipped, traces_had_errors = export_traces(
-            client,
-            project.name,
-            project_traces_dir,
-            max_results,  # None means no limit — fetch all pages
-            effective_filter,
-            None,  # project_name_filter
-            format,
-            debug,
-            force,
-            show_progress,
-            manifest,
-            page_size,
+            client=client,
+            project_name=project.name,
+            project_dir=project_traces_dir,
+            max_results=max_results,  # None means no limit — fetch all pages
+            filter_string=effective_filter,
+            project_name_filter=None,
+            format=format,
+            debug=debug,
+            force=force,
+            show_progress=show_progress,
+            manifest=manifest,
+            include_attachments=include_attachments,
+            page_size=page_size,
         )
 
         # Only mark the manifest complete when the export finished without errors.
@@ -882,6 +1070,7 @@ def export_project_by_name_or_id(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    include_attachments: bool = True,
     page_size: int = 500,
 ) -> None:
     """Export a project by name or ID.
@@ -920,14 +1109,15 @@ def export_project_by_name_or_id(
             # Export the project
             exported_count, traces_exported, traces_skipped, had_errors = (
                 export_single_project(
-                    client,
-                    project,
-                    output_dir,
-                    filter_string,
-                    max_results,
-                    force,
-                    debug,
-                    format,
+                    client=client,
+                    project=project,
+                    output_dir=output_dir,
+                    filter_string=filter_string,
+                    max_results=max_results,
+                    force=force,
+                    debug=debug,
+                    format=format,
+                    include_attachments=include_attachments,
                     page_size=page_size,
                 )
             )
@@ -964,16 +1154,17 @@ def export_project_by_name_or_id(
 
         # Try by name (either because ID lookup failed or we're explicitly trying name)
         export_project_by_name(
-            name_or_id,
-            workspace,
-            output_path,
-            filter_string,
-            max_results,
-            force,
-            debug,
-            format,
-            api_key,
-            page_size,
+            name=name_or_id,
+            workspace=workspace,
+            output_path=output_path,
+            filter_string=filter_string,
+            max_results=max_results,
+            force=force,
+            debug=debug,
+            format=format,
+            api_key=api_key,
+            include_attachments=include_attachments,
+            page_size=page_size,
         )
 
     except Exception as e:
@@ -1016,6 +1207,7 @@ def export_project_by_name_or_id(
     default="json",
     help="Format for exporting data. Defaults to json.",
 )
+@no_attachments_option()
 @click.option(
     "--page-size",
     type=click.IntRange(1, 1000),
@@ -1033,6 +1225,7 @@ def export_project_command(
     force: bool,
     debug: bool,
     format: str,
+    no_attachments: bool,
     page_size: int,
 ) -> None:
     """Export a project by name or ID to workspace/projects.
@@ -1043,14 +1236,15 @@ def export_project_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_project_by_name_or_id(
-        name_or_id,
-        workspace,
-        path,
-        filter,
-        max_results,
-        force,
-        debug,
-        format,
-        api_key,
-        page_size,
+        name_or_id=name_or_id,
+        workspace=workspace,
+        output_path=path,
+        filter_string=filter,
+        max_results=max_results,
+        force=force,
+        debug=debug,
+        format=format,
+        api_key=api_key,
+        include_attachments=not no_attachments,
+        page_size=page_size,
     )
