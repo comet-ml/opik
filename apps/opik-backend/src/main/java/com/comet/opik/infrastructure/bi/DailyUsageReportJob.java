@@ -158,7 +158,8 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
                         "daily_users", String.valueOf(results.getT1().daily()),
                         "daily_traces", String.valueOf(results.getT2()),
                         "daily_experiments", String.valueOf(results.getT3()),
-                        "daily_datasets", String.valueOf(results.getT4())));
+                        "daily_datasets", String.valueOf(results.getT4())),
+                null);
     }
 
     private Mono<Response> sendEvent(BiEvent biEvent) {
