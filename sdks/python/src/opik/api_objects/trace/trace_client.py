@@ -72,9 +72,9 @@ class Trace:
         )
 
         helpers.warn_if_batching_update(
-            self._streamer.use_batching,
-            self._config.suppress_batching_update_warning,
-            "Trace.end()",
+            use_batching=self._streamer.use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Trace.end()",
         )
 
         self._update(
@@ -119,9 +119,9 @@ class Trace:
             None
         """
         helpers.warn_if_batching_update(
-            self._streamer.use_batching,
-            self._config.suppress_batching_update_warning,
-            "Trace.update()",
+            use_batching=self._streamer.use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Trace.update()",
         )
 
         self._update(

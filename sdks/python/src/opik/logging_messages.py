@@ -70,7 +70,7 @@ WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream
 
 BATCHING_UPDATE_DATA_LOSS_WARNING = (
     "Calling %s shortly after creation with batching enabled may cause data loss. "
-    "See https://www.comet.com/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates for details and recommended alternatives."
+    "See https://www.comet.com/docs/opik/tracing/batching_and_updates for details and recommended alternatives."
 )
 
 

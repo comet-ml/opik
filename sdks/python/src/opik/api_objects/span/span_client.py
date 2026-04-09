@@ -96,9 +96,9 @@ class Span:
         )
 
         helpers.warn_if_batching_update(
-            self._streamer.use_batching,
-            bool(self._config and self._config.suppress_batching_update_warning),
-            "Span.end()",
+            use_batching=self._streamer.use_batching,
+            suppress_warning=bool(self._config and self._config.suppress_batching_update_warning),
+            method_name="Span.end()",
         )
 
         self._update(
@@ -156,9 +156,9 @@ class Span:
             None
         """
         helpers.warn_if_batching_update(
-            self._streamer.use_batching,
-            bool(self._config and self._config.suppress_batching_update_warning),
-            "Span.update()",
+            use_batching=self._streamer.use_batching,
+            suppress_warning=bool(self._config and self._config.suppress_batching_update_warning),
+            method_name="Span.update()",
         )
 
         self._update(

@@ -705,11 +705,11 @@ class Opik:
         Returns:
             None
         """
-        if self._use_batching and not self._config.suppress_batching_update_warning:
-            LOGGER.warning(
-                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
-                "Opik.update_span()",
-            )
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_span()",
+        )
 
         span_module.span_client.update_span(
             id=id,
@@ -775,11 +775,11 @@ class Opik:
         Returns:
             None
         """
-        if self._use_batching and not self._config.suppress_batching_update_warning:
-            LOGGER.warning(
-                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
-                "Opik.update_trace()",
-            )
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_trace()",
+        )
 
         if not trace_id or not project_name:
             raise ValueError(
