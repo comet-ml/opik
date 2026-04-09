@@ -9,12 +9,15 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPyt
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.TraceFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +25,7 @@ import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.slf4j.Logger;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -49,6 +53,7 @@ public class OnlineScoringSampler {
 
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final TraceFilterEvaluationService filterEvaluationService;
+    private final TraceService traceService;
     private final SecureRandom secureRandom;
     private final Logger userFacingLogger;
     private final ServiceTogglesConfig serviceTogglesConfig;
@@ -59,11 +64,13 @@ public class OnlineScoringSampler {
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull TraceFilterEvaluationService filterEvaluationService,
-            @NonNull OnlineScorePublisher onlineScorePublisher) throws NoSuchAlgorithmException {
+            @NonNull OnlineScorePublisher onlineScorePublisher,
+            @NonNull TraceService traceService) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.traceService = traceService;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
     }
@@ -83,53 +90,88 @@ public class OnlineScoringSampler {
                 .filter(trace -> trace.endTime() != null)
                 .toList();
 
-        if (completeTraces.isEmpty()) {
-            log.info("Skipping '{}' partial traces (no end_time) for workspace '{}'",
-                    tracesBatch.traces().size(), tracesBatch.workspaceId());
+        log.info("Received TracesCreated, complete '{}', total '{}', workspace '{}'",
+                completeTraces.size(), tracesBatch.traces().size(), tracesBatch.workspaceId());
+
+        sampleAndScore(completeTraces, tracesBatch.workspaceId(), tracesBatch.userName());
+    }
+
+    /**
+     * Listen for trace updates that include end_time being set. This handles the case where
+     * the SDK sends a POST (create) at function start and a PATCH (update) at function end
+     * (e.g., manual trace.end() API). Without this, traces completed via PATCH would never
+     * be scored because onTracesCreated only sees the initial partial trace.
+     */
+    @Subscribe
+    public void onTracesUpdated(TracesUpdated event) {
+        if (event.traceUpdate().endTime() == null) {
+            log.debug("TracesUpdated event without endTime -> incomplete trace, won't score.");
             return;
         }
 
-        var tracesByProject = completeTraces.stream().collect(Collectors.groupingBy(Trace::projectId));
+        log.info("Received TracesUpdated with end_time, traceIds '{}', workspace '{}'",
+                event.traceIds().size(), event.workspaceId());
+
+        // NOTE: there is a potential race condition in multi-node ClickHouse clusters — the write
+        // may have landed on one replica while this read hits another that hasn't replicated yet.
+        // In practice doOnSuccess fires after the INSERT completes and reads use FINAL, so this is
+        // unlikely. If it becomes an issue, consider carrying the full Trace objects in the event.
+        var traces = traceService.getByIds(new ArrayList<>(event.traceIds()))
+                .filter(trace -> trace.endTime() != null)
+                .collectList()
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
+                .block();
+
+        sampleAndScore(traces, event.workspaceId(), event.userName());
+    }
+
+    private void sampleAndScore(List<Trace> traces, String workspaceId, String userName) {
+        if (CollectionUtils.isEmpty(traces)) {
+            log.info("No traces to score for workspace '{}'", workspaceId);
+            return;
+        }
+
+        var tracesByProject = traces.stream().collect(Collectors.groupingBy(Trace::projectId));
 
         var countMap = tracesByProject.entrySet().stream()
                 .collect(Collectors.toMap(entry -> "projectId: " + entry.getKey(),
                         entry -> entry.getValue().size()));
 
-        log.info("Received '{}' complete traces (out of '{}' total) for workspace '{}': '{}'",
-                completeTraces.size(), tracesBatch.traces().size(), tracesBatch.workspaceId(), countMap);
+        log.info("Scoring traces, count '{}', workspace '{}', projects '{}'", traces.size(), workspaceId, countMap);
 
         // fetch automation rules per project
-        tracesByProject.forEach((projectId, traces) -> {
-            log.info("Fetching evaluators for '{}' traces, project '{}' on workspace '{}'",
-                    traces.size(), projectId, tracesBatch.workspaceId());
+        tracesByProject.forEach((projectId, projectTraces) -> {
+            log.info("Fetching evaluators, traces '{}', project '{}', workspace '{}'",
+                    projectTraces.size(), projectId, workspaceId);
 
             List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
-                    projectId, tracesBatch.workspaceId());
+                    projectId, workspaceId);
 
             // Filter evaluators based on trace metadata if selected_rule_ids is present
-            evaluators = filterEvaluatorsByTraceMetadata(evaluators, traces);
+            evaluators = filterEvaluatorsByTraceMetadata(evaluators, projectTraces);
 
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
             evaluators.parallelStream().forEach(evaluator -> {
                 // samples traces for this rule
-                var samples = traces.stream()
-                        .filter(trace -> shouldSampleTrace(evaluator, tracesBatch.workspaceId(), trace));
+                var samples = projectTraces.stream()
+                        .filter(trace -> shouldSampleTrace(evaluator, workspaceId, trace));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
                         var messages = samples
-                                .map(trace -> toLlmAsJudgeMessage(tracesBatch,
+                                .map(trace -> toLlmAsJudgeMessage(workspaceId, userName,
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
-                        logSampledTrace(tracesBatch, evaluator, messages);
+                        logSampledTrace(evaluator, messages, projectTraces.size());
                         onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
                         if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
                             var messages = samples
-                                    .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
+                                    .map(trace -> toScoreUserDefinedMetricPython(workspaceId, userName,
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
-                            logSampledTrace(tracesBatch, evaluator, messages);
+                            logSampledTrace(evaluator, messages, projectTraces.size());
                             onlineScorePublisher.enqueueMessage(messages,
                                     AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
                         } else {
@@ -180,7 +222,7 @@ public class OnlineScoringSampler {
         return shouldBeSampled;
     }
 
-    private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(TracesCreated tracesBatch,
+    private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(String workspaceId, String userName,
             AutomationRuleEvaluatorLlmAsJudge evaluator,
             Trace trace) {
         return TraceToScoreLlmAsJudge.builder()
@@ -188,14 +230,14 @@ public class OnlineScoringSampler {
                 .ruleId(evaluator.getId())
                 .ruleName(evaluator.getName())
                 .llmAsJudgeCode(evaluator.getCode())
-                .workspaceId(tracesBatch.workspaceId())
-                .userName(tracesBatch.userName())
+                .workspaceId(workspaceId)
+                .userName(userName)
                 .scoreNameMapping(Map.of())
                 .promptType(PromptType.MUSTACHE)
                 .build();
     }
 
-    private TraceToScoreUserDefinedMetricPython toScoreUserDefinedMetricPython(TracesCreated tracesBatch,
+    private TraceToScoreUserDefinedMetricPython toScoreUserDefinedMetricPython(String workspaceId, String userName,
             AutomationRuleEvaluatorUserDefinedMetricPython evaluator,
             Trace trace) {
         return TraceToScoreUserDefinedMetricPython.builder()
@@ -203,17 +245,17 @@ public class OnlineScoringSampler {
                 .ruleId(evaluator.getId())
                 .ruleName(evaluator.getName())
                 .code(evaluator.getCode())
-                .workspaceId(tracesBatch.workspaceId())
-                .userName(tracesBatch.userName())
+                .workspaceId(workspaceId)
+                .userName(userName)
                 .build();
     }
 
-    private void logSampledTrace(TracesCreated tracesBatch, AutomationRuleEvaluator<?, ?> evaluator, List<?> messages) {
+    private void logSampledTrace(AutomationRuleEvaluator<?, ?> evaluator, List<?> messages, int totalTraces) {
         log.info("[AutomationRule '{}', type '{}'] Sampled '{}/{}' from trace batch (expected rate: '{}')",
                 evaluator.getName(),
                 evaluator.getType(),
                 messages.size(),
-                tracesBatch.traces().size(),
+                totalTraces,
                 evaluator.getSamplingRate());
     }
 
