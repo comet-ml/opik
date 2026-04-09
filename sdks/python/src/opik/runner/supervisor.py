@@ -183,21 +183,9 @@ class Supervisor:
                 self._shutdown_event.set()
                 break
 
-            LOGGER.warning("Child exited with code %d", exit_code)
-            stderr_tail = self._get_stderr_tail()
-            self._guard.record_crash()
-
-            if not self._guard.is_stable():
-                LOGGER.error("Child crash-looping — waiting for file change to retry")
-                if self._on_error:
-                    self._on_error(
-                        "Crash loop detected — waiting for file change to retry"
-                    )
-                self._patch_crash_info(exit_code, stderr_tail)
+            should_restart = self._handle_child_exit(exit_code)
+            if not should_restart:
                 continue
-
-            if self._on_child_restart:
-                self._on_child_restart("agent process has failed")
 
             with self._child_lock:
                 self._child = self._start_child()
@@ -292,6 +280,24 @@ class Supervisor:
         self._reader_threads = []
 
         return child.returncode
+
+    def _handle_child_exit(self, exit_code: int) -> bool:
+        """Handle a child process exit. Returns True if child should be restarted."""
+        LOGGER.warning("Child exited with code %d", exit_code)
+        stderr_tail = self._get_stderr_tail()
+        self._guard.record_crash()
+
+        if not self._guard.is_stable():
+            LOGGER.error("Child crash-looping — waiting for file change to retry")
+            if self._on_error:
+                self._on_error("Crash loop detected — waiting for file change to retry")
+            self._patch_crash_info(exit_code, stderr_tail)
+            return False
+
+        if self._on_child_restart:
+            self._on_child_restart("agent process has failed")
+
+        return True
 
     def _restart_child(self, reason: str) -> None:
         with self._child_lock:

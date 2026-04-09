@@ -149,18 +149,11 @@ class TestChildExit:
         sup._on_child_restart = MagicMock()
         sup._on_error = MagicMock()
 
-        # Simulate child exit with nonzero code, guard is stable
-        sup._guard.record_crash()
-        assert sup._guard.is_stable()
+        # Guard stable, call _handle_child_exit with exit code 1
+        # (Guard tracks crashes in this method)
+        should_restart = sup._handle_child_exit(exit_code=1)
 
-        # Call the restart logic directly
-        if not sup._guard.is_stable():
-            if sup._on_error:
-                sup._on_error("Crash loop detected")
-        else:
-            if sup._on_child_restart:
-                sup._on_child_restart("agent process has failed")
-
+        assert should_restart is True
         sup._on_child_restart.assert_called_once_with("agent process has failed")
         sup._on_error.assert_not_called()
 
@@ -168,30 +161,19 @@ class TestChildExit:
         sup = _make_supervisor()
         sup._on_child_restart = MagicMock()
         sup._on_error = MagicMock()
-        sup._guard._max_crashes = 1
+        sup._guard._max_crashes = 2
         sup._guard._window_seconds = 60.0
 
-        # Exhaust stability — guard becomes unstable
+        # Pre-record 2 crashes to make guard unstable
         sup._guard.record_crash()
         sup._guard.record_crash()
         assert not sup._guard.is_stable()
 
-        # Call the crash-loop logic directly
-        if not sup._guard.is_stable():
-            if sup._on_error:
-                sup._on_error("Crash loop detected — waiting for file change to retry")
+        # Call _handle_child_exit — should trigger error, not restart
+        should_restart = sup._handle_child_exit(exit_code=1)
 
+        assert should_restart is False
         sup._on_error.assert_called_once()
-        sup._on_child_restart.assert_not_called()
-
-    def test_clean_exit_zero_no_restart(self) -> None:
-        sup = _make_supervisor()
-        sup._on_child_restart = MagicMock()
-
-        # Simulate clean exit — no restart
-        sup._shutdown_event.set()
-
-        assert sup._shutdown_event.is_set()
         sup._on_child_restart.assert_not_called()
 
 
