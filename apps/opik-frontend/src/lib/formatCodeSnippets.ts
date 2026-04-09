@@ -1,6 +1,9 @@
 import { maskAPIKey } from "./utils";
 import { BASE_API_URL } from "@/api/api";
-import { PROJECT_NAME_PLACEHOLDER, SNIPPET_PROJECT_NAME } from "@/constants/shared";
+import {
+  PROJECT_NAME_PLACEHOLDER,
+  SNIPPET_PROJECT_NAME,
+} from "@/constants/shared";
 
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
