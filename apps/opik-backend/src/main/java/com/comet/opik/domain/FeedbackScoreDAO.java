@@ -69,8 +69,6 @@ public interface FeedbackScoreDAO {
 @Slf4j
 class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
-    static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
-
     private static final String BULK_INSERT_FEEDBACK_SCORE = """
             INSERT INTO <if(author)>authored_feedback_scores<else>feedback_scores<endif>(
                 entity_type,

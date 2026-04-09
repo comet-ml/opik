@@ -5,6 +5,7 @@ import {
   AssistantSidebarBridge,
   BridgeContext,
   HostEventMap,
+  RunnerBridgeState,
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
 import { useActiveWorkspaceName } from "@/store/AppStore";
@@ -14,6 +15,7 @@ import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
 import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
+import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
 import { Spinner } from "@/ui/spinner";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
@@ -130,6 +132,7 @@ function createHostListeners(): HostListeners {
   return {
     "context:changed": new Set(),
     "visibility:changed": new Set(),
+    "runner:state-changed": new Set(),
   };
 }
 
@@ -142,8 +145,12 @@ interface BridgeRefs {
     (data: SidebarEventMap["notification"]) => void
   >;
   onRequestVisibility: React.MutableRefObject<(open: boolean) => void>;
+  onRequestPair: React.MutableRefObject<
+    (data: SidebarEventMap["runner:request-pair"]) => void
+  >;
   context: React.MutableRefObject<BridgeContext>;
   listeners: React.MutableRefObject<HostListeners>;
+  lastRunnerState: React.MutableRefObject<RunnerBridgeState | null>;
 }
 
 const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
@@ -155,6 +162,14 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       | undefined;
     if (!set) return () => {};
     set.add(callback);
+
+    // Replay latest runner state to late subscribers (e.g. Ollie iframe loaded after FE)
+    if (event === "runner:state-changed" && refs.lastRunnerState.current) {
+      (callback as (data: RunnerBridgeState) => void)(
+        refs.lastRunnerState.current,
+      );
+    }
+
     return () => {
       set.delete(callback);
     };
@@ -179,6 +194,11 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         break;
       case "sidebar:request-close":
         refs.onRequestVisibility.current(false);
+        break;
+      case "runner:request-pair":
+        refs.onRequestPair.current(
+          data as SidebarEventMap["runner:request-pair"],
+        );
         break;
       default:
         if (IS_DEV) {
@@ -319,6 +339,17 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   const contextRef = useLatestRef(context);
   const onWidthChangeRef = useLatestRef(onWidthChange);
   const listenersRef = useRef<HostListeners>(createHostListeners());
+  const lastRunnerStateRef = useRef<RunnerBridgeState | null>(null);
+
+  const { handleRequestPair } = useRunnerBridgeSync({
+    projectId: context.projectId,
+    onStateChanged: (state) => {
+      lastRunnerStateRef.current = state;
+      emitHostEvent(listenersRef, "runner:state-changed", state);
+    },
+  });
+
+  const onRequestPairRef = useLatestRef(handleRequestPair);
 
   const onNotificationRef = useLatestRef(
     (data: SidebarEventMap["notification"]) => {
@@ -348,8 +379,10 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       onWidthChange: onWidthChangeRef,
       onNotification: onNotificationRef,
       onRequestVisibility: onRequestVisibilityRef,
+      onRequestPair: onRequestPairRef,
       context: contextRef,
       listeners: listenersRef,
+      lastRunnerState: lastRunnerStateRef,
     }),
   );
 

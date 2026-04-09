@@ -118,7 +118,7 @@ class DatasetsResourceIntegrationTest {
         when(service.resolveDatasetByName(any(DatasetIdentifier.class)))
                 .thenReturn(factory.manufacturePojo(Dataset.class));
 
-        when(itemService.getItems(eq(workspaceId), eq(request), any()))
+        when(itemService.getItems(eq(request), any()))
                 .thenReturn(Flux.defer(() -> itemFlux));
 
         try (var response = EXT.target("/v1/private/datasets/items/stream")

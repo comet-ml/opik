@@ -1,12 +1,19 @@
 import React from "react";
 import {
   useProgressCompleted,
+  useProgressPhase,
   useProgressTotal,
 } from "@/store/PlaygroundStore";
+
+const PHASE_LABELS: Record<string, string> = {
+  running: "Running",
+  evaluating: "Evaluating assertions",
+};
 
 const PlaygroundProgressIndicator: React.FC = () => {
   const progressTotal = useProgressTotal();
   const progressCompleted = useProgressCompleted();
+  const progressPhase = useProgressPhase();
 
   if (progressTotal === 0) {
     return null;
@@ -16,10 +23,15 @@ const PlaygroundProgressIndicator: React.FC = () => {
     (progressCompleted / progressTotal) * 100,
   );
 
+  const phaseLabel =
+    (progressPhase && PHASE_LABELS[progressPhase]) || "Progress";
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="comet-body-s-accented text-foreground">Progress</span>
+        <span className="comet-body-s-accented text-foreground">
+          {phaseLabel}
+        </span>
         <span className="comet-body-s text-light-slate">
           {progressCompleted}/{progressTotal} completed ({progressPercentage}%)
         </span>

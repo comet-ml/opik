@@ -286,6 +286,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
     This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
     """
 
+    suppress_batching_update_warning: bool = False
+    """
+    Suppress the warning about potential data loss when calling .end() or .update()
+    on spans/traces with batching enabled. Set to True if your updates happen well
+    after creation and the warning is not relevant.
+    Env var: OPIK_SUPPRESS_BATCHING_UPDATE_WARNING
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
