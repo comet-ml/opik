@@ -114,7 +114,7 @@ def test_langchain__distributed_headers__happyflow(
     fake_backend,
 ):
     project_name = "langchain-integration-test--distributed-headers"
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # PREPARE DISTRIBUTED HEADERS
     trace_data = trace.TraceData(
@@ -394,7 +394,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
 
         synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # Prepare context to have manually created trace data
     trace_data = trace.TraceData(
@@ -502,7 +502,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
 
         synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     span_data = span.SpanData(
         trace_id="some-trace-id",
         name="manually-created-span",

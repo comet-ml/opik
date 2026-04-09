@@ -100,7 +100,7 @@ def evaluate_threads(
         >>>     trace_output_transform=lambda x: x["output"],
         >>> )
     """
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     threads_client_ = threads_client.ThreadsClient(client)
 
     with asyncio_support.async_http_connections_expire_immediately():

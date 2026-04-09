@@ -15,12 +15,12 @@ Strategy
    back into the Streamer queue, then ``opik_client.flush()`` to drain the queue.
 6. Verify that every message reached the server.
 
-Non-batching tests use ``_use_batching=False`` so that ``CreateTraceMessage``
+Non-batching tests use ``batching=False`` so that ``CreateTraceMessage``
 and ``CreateSpanMessage`` reach ``OpikMessageProcessor`` as individual messages
 and are stored in the DB under their own message types.  This avoids having to
 reason about the batching preprocessor during replay.
 
-Batching tests use ``_use_batching=True`` (the production default).  In this
+Batching tests use ``batching=True`` (the production default).  In this
 mode ``CreateTraceMessage`` / ``CreateSpanMessage`` are accumulated by the
 batch preprocessor and flushed as ``CreateTraceBatchMessage`` /
 ``CreateSpansBatchMessage`` — it is those *batch* messages that are stored in
@@ -86,7 +86,7 @@ def not_batching_opik_client(
 ) -> Generator[opik.Opik, None, None]:
     """Opik client with batching disabled so individual message types are stored
     in the SQLite replay store as-is (no CreateTraceBatchMessage wrapping)."""
-    client = opik.api_objects.opik_client.Opik(_use_batching=False)
+    client = opik.api_objects.opik_client.Opik(batching=False)
     yield client
     client.end()
 
@@ -622,7 +622,7 @@ def test_failed_message_replay__no_messages_while_offline__replay_is_noop(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BATCHING MODE (_use_batching=True — the production default)
+# BATCHING MODE (batching=True — the production default)
 #
 # In batching mode CreateTraceMessage / CreateSpanMessage are accumulated by
 # the batch preprocessor and flushed as CreateTraceBatchMessage /

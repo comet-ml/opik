@@ -80,7 +80,7 @@ class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         return super()._streams_handler(output, capture_output, generations_aggregator)
 
     def flush_tracker(self) -> None:
-        opik_ = opik_client.get_client_cached()
+        opik_ = opik_client.get_global_client()
         opik_.flush()
 
 

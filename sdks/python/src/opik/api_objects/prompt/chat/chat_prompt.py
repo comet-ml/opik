@@ -111,7 +111,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         try:
             from opik.api_objects import opik_client
 
-            opik_client_ = opik_client.get_client_cached()
+            opik_client_ = opik_client.get_global_client()
             prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
 
             # Convert messages array to JSON string for backend storage

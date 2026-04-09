@@ -68,5 +68,11 @@ LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION = "LLM provider rate
 
 WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream_usage=True` during LLM initialization. Token usage data is not available for .stream() or .astream() methods."
 
+BATCHING_UPDATE_DATA_LOSS_WARNING = (
+    "Calling %s shortly after creation with batching enabled may cause data loss. "
+    "Consider disabling batching via Opik(batching=False), "
+    "or using the @track decorator or start_as_current_span context manager instead for span/trace lifecycle management."
+)
+
 # Storing all the messages in this module is considered a deprecated practice.
 # Do it only if your message is used in more than one place.

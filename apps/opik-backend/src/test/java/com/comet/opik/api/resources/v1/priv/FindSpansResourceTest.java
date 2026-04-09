@@ -1083,6 +1083,46 @@ class FindSpansResourceTest {
             assertSpan(actualSpans, expectedSpans, USER);
         }
 
+        @Test
+        void searchSpansStream__whenExcludeFeedbackScores__thenReturnSpansWithoutScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    span.startTime(), span.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Span::id).reversed())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans, apiKey, workspaceName);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> feedbackScores = expectedSpans.stream()
+                    .flatMap(span -> PodamFactoryUtils
+                            .manufacturePojoList(podamFactory, FeedbackScoreItem.FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(span.projectName())
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            spanResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            var streamRequest = SpanSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .exclude(Set.of(Span.SpanField.FEEDBACK_SCORES))
+                    .build();
+            var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
+
+            assertSpan(actualSpans, expectedSpans, USER);
+        }
+
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterIdAndNameEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
@@ -4261,6 +4301,51 @@ class FindSpansResourceTest {
 
             getAndAssertPage(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey,
                     List.of(), exclude);
+        }
+
+        @Test
+        void findSpans__whenExcludeFeedbackScoresWithFilter__thenReturnSpansExcludingAndFilteringScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> feedbackScores = spans.stream()
+                    .flatMap(span -> PodamFactoryUtils
+                            .manufacturePojoList(podamFactory, FeedbackScoreItem.FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(span.projectName())
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            spanResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(SpanField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .key(feedbackScores.getFirst().name())
+                            .value(feedbackScores.getFirst().value().toString())
+                            .build());
+
+            // The query still runs feedback score CTEs because feedback_scores_filters is active,
+            // even though exclude_feedback_scores is requested.
+            // However, returned feedback scores are excluded (nulled) from the response.
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = spans.subList(1, spans.size());
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans,
+                    unexpectedSpans, apiKey, List.of(), List.of(Span.SpanField.FEEDBACK_SCORES));
         }
 
         @ParameterizedTest

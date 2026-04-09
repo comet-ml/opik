@@ -15,11 +15,13 @@ const HOME_PATH = "/$workspaceName/home";
 type SideBarProps = {
   expanded: boolean;
   setExpanded: OnChangeFn<boolean | undefined>;
+  locked?: boolean;
 };
 
 const SideBar: React.FunctionComponent<SideBarProps> = ({
   expanded,
   setExpanded,
+  locked = false,
 }) => {
   useActiveProjectInitializer();
   const workspaceName = useActiveWorkspaceName();
@@ -48,7 +50,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
           size="icon-2xs"
           onClick={() => setExpanded((s) => !s)}
           className={cn(
-            "absolute -right-3 top-2 hidden rounded-full z-50 lg:group-hover:flex",
+            "absolute -right-3 top-2 hidden rounded-full z-50",
+            !locked && "lg:group-hover:flex",
           )}
         >
           {expanded ? <ChevronLeft /> : <ChevronRight />}

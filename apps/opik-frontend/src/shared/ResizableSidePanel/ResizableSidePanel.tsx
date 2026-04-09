@@ -33,6 +33,7 @@ type ResizableSidePanelProps = {
   minWidth?: number;
   ignoreHotkeys?: boolean;
   closeOnClickOutside?: boolean;
+  closeButtonPosition?: "left" | "right";
   horizontalNavigation?: ArrowNavigationConfig;
   verticalNavigation?: ArrowNavigationConfig;
   container?: HTMLElement | null;
@@ -67,6 +68,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   minWidth,
   ignoreHotkeys = false,
   closeOnClickOutside = true,
+  closeButtonPosition = "left",
   horizontalNavigation,
   verticalNavigation,
   container,
@@ -283,7 +285,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     <div
       className={cn(
         "absolute inset-0 z-10",
-        !open && "pointer-events-none w-0",
+        !open && "pointer-events-none overflow-hidden",
       )}
     >
       {open && closeOnClickOutside && (
@@ -305,8 +307,16 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
               onMouseDown={startResizing as never}
             ></div>
             <div className="relative flex size-full">
-              <div className="absolute inset-x-0 top-0 flex h-[60px] items-center pl-6 pr-5">
-                <div className="flex items-center gap-2">
+              <div className="absolute inset-x-0 top-0 flex h-[47px] items-center pl-6 pr-5">
+                <div
+                  className={cn(
+                    "flex items-center gap-2",
+                    closeButtonPosition === "right" && "ml-auto",
+                  )}
+                  style={{
+                    order: closeButtonPosition === "right" ? 2 : 0,
+                  }}
+                >
                   <TooltipWrapper
                     content={`Close ${entity}`}
                     hotkeys={ESC_HOTKEYS}
@@ -324,7 +334,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                 </div>
                 {headerContent && headerContent}
               </div>
-              <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
+              <div className="absolute inset-x-0 bottom-0 top-[47px] border-t">
                 {children}
               </div>
             </div>

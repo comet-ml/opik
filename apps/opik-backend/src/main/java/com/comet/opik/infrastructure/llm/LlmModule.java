@@ -15,14 +15,16 @@ public class LlmModule extends AbstractModule {
     @Singleton
     public LlmProviderFactory llmProviderFactory(
             @NonNull LlmProviderApiKeyService llmProviderApiKeyService,
-            @NonNull @Config OpikConfiguration configuration) {
-        return createInstance(llmProviderApiKeyService, configuration);
+            @NonNull @Config OpikConfiguration configuration,
+            @NonNull LlmModelRegistryService registryService) {
+        return createInstance(llmProviderApiKeyService, configuration, registryService);
     }
 
     public LlmProviderFactory createInstance(
             LlmProviderApiKeyService llmProviderApiKeyService,
-            OpikConfiguration configuration) {
-        return new LlmProviderFactoryImpl(llmProviderApiKeyService, configuration);
+            OpikConfiguration configuration,
+            LlmModelRegistryService registryService) {
+        return new LlmProviderFactoryImpl(llmProviderApiKeyService, configuration, registryService);
     }
 
 }

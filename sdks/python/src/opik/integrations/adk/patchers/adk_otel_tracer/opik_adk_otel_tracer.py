@@ -10,7 +10,6 @@ from opik.decorator import (
     arguments_helpers,
     error_info_collector,
 )
-from opik.api_objects import opik_client
 from opik.types import DistributedTraceHeadersDict
 
 from . import llm_span_helpers
@@ -54,11 +53,13 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
 
     def __init__(
         self,
-        opik_client: opik_client.Opik,
         distributed_headers: Optional[DistributedTraceHeadersDict],
     ) -> None:
-        self.opik_client = opik_client
         self._distributed_headers = distributed_headers
+
+    @property
+    def opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def start_span(
         self,

@@ -88,7 +88,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
                 extensions={[jsonLanguage, EditorView.lineWrapping]}
               />
             </div>
-            <Description>
+            <Description className="comet-body-xs">
               {
                 EXPLAINERS_MAP[
                   EXPLAINER_ID
