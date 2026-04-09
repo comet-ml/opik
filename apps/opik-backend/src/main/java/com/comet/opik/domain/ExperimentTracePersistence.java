@@ -35,7 +35,8 @@ class ExperimentTracePersistence {
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull IdGenerator idGenerator;
 
-    Mono<Void> persistTraceSpanAndItem(
+    @lombok.Builder
+    record PersistenceContext(
             @NonNull UUID traceId,
             @NonNull String projectName,
             @NonNull ExperimentExecutionRequest.PromptVariant prompt,
@@ -49,46 +50,45 @@ class ExperimentTracePersistence {
             @NonNull UUID datasetId,
             String versionHash,
             @NonNull UUID datasetItemId) {
-
-        ObjectNode input = buildMessagesInput(renderedMessages);
-        ObjectNode output = buildLlmOutput(llmResponse);
-
-        return createTrace(traceId, projectName, input, output, errorType, errorMessage,
-                startTime, endTime, datasetId, versionHash, datasetItemId)
-                .then(createSpan(traceId, projectName, prompt, input, output, llmResponse, errorType, errorMessage,
-                        startTime, endTime))
-                .then(createExperimentItem(experimentId, datasetItemId, traceId));
     }
 
-    private Mono<Void> createTrace(UUID traceId, String projectName,
-            ObjectNode input, ObjectNode output, String errorType, String errorMessage,
-            Instant startTime, Instant endTime,
-            UUID datasetId, String versionHash, UUID datasetItemId) {
+    Mono<Void> persistTraceSpanAndItem(@NonNull PersistenceContext ctx) {
+
+        ObjectNode input = buildMessagesInput(ctx.renderedMessages());
+        ObjectNode output = buildLlmOutput(ctx.llmResponse());
+
+        return createTrace(ctx, input, output)
+                .then(createSpan(ctx, input, output))
+                .then(createExperimentItem(ctx.experimentId(), ctx.datasetItemId(), ctx.traceId(),
+                        ctx.projectName()));
+    }
+
+    private Mono<Void> createTrace(PersistenceContext ctx, ObjectNode input, ObjectNode output) {
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
-        metadata.put("eval_suite_dataset_id", datasetId.toString());
-        if (versionHash != null) {
-            metadata.put("eval_suite_dataset_version_hash", versionHash);
+        metadata.put("eval_suite_dataset_id", ctx.datasetId().toString());
+        if (ctx.versionHash() != null) {
+            metadata.put("eval_suite_dataset_version_hash", ctx.versionHash());
         }
-        metadata.put("eval_suite_dataset_item_id", datasetItemId.toString());
+        metadata.put("eval_suite_dataset_item_id", ctx.datasetItemId().toString());
 
         var traceBuilder = Trace.builder()
-                .id(traceId)
-                .projectName(projectName)
+                .id(ctx.traceId())
+                .projectName(ctx.projectName())
                 .name(TRACE_SPAN_NAME)
-                .startTime(startTime)
-                .endTime(endTime)
+                .startTime(ctx.startTime())
+                .endTime(ctx.endTime())
                 .input(input)
                 .output(output)
                 .metadata(metadata)
                 .source(Source.EXPERIMENT);
 
-        if (errorMessage != null) {
+        if (ctx.errorMessage() != null) {
             traceBuilder.errorInfo(ErrorInfo.builder()
-                    .exceptionType(errorType)
-                    .message(errorMessage)
-                    .traceback(errorMessage)
+                    .exceptionType(ctx.errorType())
+                    .message(ctx.errorMessage())
+                    .traceback(ctx.errorMessage())
                     .build());
         }
 
@@ -98,16 +98,12 @@ class ExperimentTracePersistence {
                 .then();
     }
 
-    private Mono<Void> createSpan(UUID traceId, String projectName,
-            ExperimentExecutionRequest.PromptVariant prompt,
-            ObjectNode input, ObjectNode output,
-            ChatCompletionResponse llmResponse, String errorType, String errorMessage,
-            Instant startTime, Instant endTime) {
+    private Mono<Void> createSpan(PersistenceContext ctx, ObjectNode input, ObjectNode output) {
 
         Map<String, Integer> usage = null;
-        if (llmResponse != null && llmResponse.usage() != null) {
+        if (ctx.llmResponse() != null && ctx.llmResponse().usage() != null) {
             usage = new HashMap<>();
-            var u = llmResponse.usage();
+            var u = ctx.llmResponse().usage();
             if (u.completionTokens() != null) {
                 usage.put("completion_tokens", u.completionTokens());
             }
@@ -119,16 +115,16 @@ class ExperimentTracePersistence {
             }
         }
 
-        var resolvedModelInfo = llmProviderFactory.getResolvedModelInfo(prompt.model());
+        var resolvedModelInfo = llmProviderFactory.getResolvedModelInfo(ctx.prompt().model());
 
         var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
-                .traceId(traceId)
-                .projectName(projectName)
+                .traceId(ctx.traceId())
+                .projectName(ctx.projectName())
                 .type(SpanType.llm)
                 .name(TRACE_SPAN_NAME)
-                .startTime(startTime)
-                .endTime(endTime)
+                .startTime(ctx.startTime())
+                .endTime(ctx.endTime())
                 .input(input)
                 .output(output)
                 .model(resolvedModelInfo.actualModel())
@@ -136,11 +132,11 @@ class ExperimentTracePersistence {
                 .usage(usage)
                 .source(Source.EXPERIMENT);
 
-        if (errorMessage != null) {
+        if (ctx.errorMessage() != null) {
             spanBuilder.errorInfo(ErrorInfo.builder()
-                    .exceptionType(errorType)
-                    .message(errorMessage)
-                    .traceback(errorMessage)
+                    .exceptionType(ctx.errorType())
+                    .message(ctx.errorMessage())
+                    .traceback(ctx.errorMessage())
                     .build());
         }
 
@@ -150,13 +146,15 @@ class ExperimentTracePersistence {
                 .then();
     }
 
-    private Mono<Void> createExperimentItem(UUID experimentId, UUID datasetItemId, UUID traceId) {
+    private Mono<Void> createExperimentItem(UUID experimentId, UUID datasetItemId, UUID traceId,
+            String projectName) {
 
         var item = ExperimentItem.builder()
                 .id(idGenerator.generateId())
                 .experimentId(experimentId)
                 .datasetItemId(datasetItemId)
                 .traceId(traceId)
+                .projectName(projectName)
                 .build();
 
         return experimentItemService.create(Set.of(item))

@@ -15,7 +15,6 @@ import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -70,8 +69,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     @Override
     protected Mono<Void> processEvent(ExperimentItemToProcess message) {
-        return Mono.defer(() -> itemProcessor.process(message))
-                .subscribeOn(Schedulers.boundedElastic())
+        return itemProcessor.process(message)
                 .thenReturn(true)
                 .onErrorResume(e -> {
                     log.error("Failed to process experiment item for experiment '{}', dataset item '{}'",
@@ -86,15 +84,18 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         var counterKey = ExperimentExecutionConfig.BATCH_COUNTER_KEY_PREFIX + message.batchId();
         var failureKey = ExperimentExecutionConfig.BATCH_COUNTER_KEY_PREFIX + message.batchId() + ":failures";
         RAtomicLongReactive counter = redisClient.getAtomicLong(counterKey);
+        RAtomicLongReactive failureCounter = redisClient.getAtomicLong(failureKey);
 
         Mono<Void> trackFailure = success
                 ? Mono.empty()
-                : redisClient.getAtomicLong(failureKey).incrementAndGet().then();
+                : failureCounter.incrementAndGet()
+                        .then(failureCounter.expire(config.getBatchCounterTtl().toJavaDuration()))
+                        .then();
 
         return trackFailure.then(counter.decrementAndGet())
                 .flatMap(remaining -> {
                     if (remaining <= 0) {
-                        return redisClient.getAtomicLong(failureKey).get()
+                        return failureCounter.get()
                                 .flatMap(failures -> {
                                     if (failures > 0) {
                                         log.warn(
