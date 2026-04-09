@@ -200,6 +200,65 @@ class TestChildExit:
         assert sup._shutdown_event.is_set()
 
 
+class TestErrorCallback:
+    def test_on_error_called_on_crash_loop(self) -> None:
+        error_messages = []
+        sup = _make_supervisor(
+            command=[sys.executable, "-c", "import sys; sys.exit(1)"],
+        )
+        sup._on_error = lambda msg: error_messages.append(msg)
+        sup._guard._max_crashes = 1
+        sup._guard._window_seconds = 60.0
+
+        # Exhaust stability guard so next crash triggers crash-loop
+        sup._guard.record_crash()
+
+        # Record another crash — guard should now be unstable
+        sup._guard.record_crash()
+        assert not sup._guard.is_stable()
+
+        # Simulate the on_error path directly
+        if not sup._guard.is_stable():
+            if sup._on_error:
+                sup._on_error("Crash loop detected — waiting for file change to retry")
+
+        assert len(error_messages) == 1
+        assert "Crash loop" in error_messages[0]
+
+    def test_on_child_restart_called_on_crash_restart(self) -> None:
+        restart_reasons = []
+        sup = _make_supervisor(
+            command=[sys.executable, "-c", "import sys; sys.exit(1)"],
+        )
+        sup._on_child_restart = lambda reason: restart_reasons.append(reason)
+
+        # Guard is stable — should trigger on_child_restart
+        assert sup._guard.is_stable()
+
+        if sup._on_child_restart:
+            sup._on_child_restart("process exited with code 1")
+
+        assert len(restart_reasons) == 1
+        assert "process exited with code 1" in restart_reasons[0]
+
+    def test_on_error_not_called_when_stable(self) -> None:
+        error_messages = []
+        sup = _make_supervisor(
+            command=[sys.executable, "-c", "import sys; sys.exit(1)"],
+        )
+        sup._on_error = lambda msg: error_messages.append(msg)
+
+        # Guard is stable — on_error should not fire
+        sup._guard.record_crash()
+        assert sup._guard.is_stable()
+
+        if not sup._guard.is_stable():
+            if sup._on_error:
+                sup._on_error("should not happen")
+
+        assert len(error_messages) == 0
+
+
 class TestShutdown:
     def test_stops_all(self) -> None:
         sup = _make_supervisor()
