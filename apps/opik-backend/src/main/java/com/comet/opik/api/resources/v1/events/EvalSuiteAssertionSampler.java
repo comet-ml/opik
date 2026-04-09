@@ -48,7 +48,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class EvalSuiteAssertionSampler {
 
-    private static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
+    public static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
 
     private final DatasetItemService datasetItemService;
     private final DatasetVersionService datasetVersionService;

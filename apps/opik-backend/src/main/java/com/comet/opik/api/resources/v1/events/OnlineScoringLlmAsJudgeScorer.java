@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.ScoreDestination;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
@@ -105,7 +106,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             try {
                 // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
-                // When categoryName is null, scores default to the standard feedback_scores table.
+                ScoreDestination destination = EvalSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY
+                        .equals(message.categoryName())
+                                ? ScoreDestination.ASSERTION_RESULTS
+                                : ScoreDestination.FEEDBACK_SCORES;
+
                 List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
                         .map(item -> {
                             String scoreName = item.name();
@@ -115,6 +120,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             return (FeedbackScoreBatchItem) item.toBuilder()
                                     .name(scoreName)
                                     .categoryName(message.categoryName())
+                                    .scoreDestination(destination)
                                     .id(trace.id())
                                     .projectId(trace.projectId())
                                     .projectName(trace.projectName())

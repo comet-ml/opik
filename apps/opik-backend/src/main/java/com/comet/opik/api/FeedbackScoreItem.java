@@ -47,6 +47,9 @@ public abstract sealed class FeedbackScoreItem {
 
     private final String reason;
 
+    @JsonIgnore
+    private final ScoreDestination scoreDestination;
+
     @NotNull private final ScoreSource source;
 
     private final String author;
@@ -73,7 +76,8 @@ public abstract sealed class FeedbackScoreItem {
                 "author", "id"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
                 BigDecimal value, String reason, ScoreSource source, String author, UUID id) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author);
+            super(projectName, projectId, name, value, categoryName, reason, ScoreDestination.FEEDBACK_SCORES,
+                    source, author);
             this.id = id;
         }
 
@@ -102,7 +106,8 @@ public abstract sealed class FeedbackScoreItem {
                 "source", "author", "threadId"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
                 BigDecimal value, String reason, ScoreSource source, String author, String threadId) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author);
+            super(projectName, projectId, name, value, categoryName, reason, ScoreDestination.FEEDBACK_SCORES,
+                    source, author);
             this.threadId = threadId;
         }
 
