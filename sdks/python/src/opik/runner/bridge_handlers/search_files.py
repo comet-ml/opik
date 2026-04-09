@@ -39,6 +39,25 @@ class SearchFilesHandler(BaseHandler):
                 f"Pattern too long (max {_MAX_PATTERN_LENGTH} chars)",
             )
 
+        # Verify we're in a git repository
+        try:
+            git_check = subprocess.run(
+                ["git", "rev-parse", "--git-dir"],
+                cwd=str(self._repo_root),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5.0,
+            )
+            if git_check.returncode != 0:
+                raise CommandError(
+                    "not_a_git_repository",
+                    f"Search requires a git repository, but {self._repo_root} is not one",
+                )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            raise CommandError(
+                "git_not_available", "git command not found or not executable"
+            )
+
         glob_filter = parsed.glob
         sub_path = parsed.path
 
@@ -57,6 +76,8 @@ class SearchFilesHandler(BaseHandler):
             parsed.pattern,
         ]
 
+        # git grep doesn't support combining glob patterns and path arguments.
+        # If both are provided, glob takes precedence.
         if glob_filter:
             cmd.extend(["--", glob_filter])
         elif sub_path:
@@ -72,13 +93,12 @@ class SearchFilesHandler(BaseHandler):
             )
         except subprocess.TimeoutExpired:
             raise CommandError("timeout", "Search timed out")
-        except FileNotFoundError:
-            raise CommandError("internal", "git not available")
 
         if result.returncode not in (0, 1):
             stderr = result.stderr.strip()
-            if "invalid" in stderr.lower() or "error" in stderr.lower():
+            if "invalid" in stderr.lower():
                 raise CommandError("match_not_found", f"Invalid pattern: {stderr}")
+            raise CommandError("search_failed", f"git grep failed: {stderr}")
 
         matches: List[Dict[str, Any]] = []
         total_matches = 0
