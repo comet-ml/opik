@@ -105,6 +105,7 @@ public class OnlineScoringSampler {
     @Subscribe
     public void onTracesUpdated(TracesUpdated event) {
         if (event.traceUpdate().endTime() == null) {
+            log.debug("TracesUpdated event without endTime -> incomplete trace, won't score.");
             return;
         }
 
@@ -229,8 +230,8 @@ public class OnlineScoringSampler {
                 .ruleId(evaluator.getId())
                 .ruleName(evaluator.getName())
                 .llmAsJudgeCode(evaluator.getCode())
-                .workspaceId(tracesBatch.workspaceId())
-                .userName(tracesBatch.userName())
+                .workspaceId(workspaceId)
+                .userName(userName)
                 .scoreNameMapping(Map.of())
                 .promptType(PromptType.MUSTACHE)
                 .build();
