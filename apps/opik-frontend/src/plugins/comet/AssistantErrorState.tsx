@@ -1,43 +1,52 @@
 import React from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, X } from "lucide-react";
 import { SLACK_LINK } from "@/shared/SupportHub/SupportHubSubMenu";
 
 interface AssistantErrorStateProps {
   collapsed: boolean;
   onRetry?: () => void;
+  onToggle?: () => void;
   retryCount: number;
 }
 
 const CollapsedError: React.FC<
-  Pick<AssistantErrorStateProps, "onRetry" | "retryCount">
-> = ({ onRetry, retryCount }) => {
+  Pick<AssistantErrorStateProps, "onToggle" | "retryCount">
+> = ({ onToggle, retryCount }) => {
   const hasRetriedAndFailed = retryCount > 0;
 
   return (
     <button
       type="button"
       className="flex size-full flex-col items-center border-l bg-primary-foreground pt-3"
-      onClick={onRetry}
-      title={
-        hasRetriedAndFailed
-          ? "Assistant is currently unavailable"
-          : "Unable to load assistant. Click to retry"
-      }
+      onClick={onToggle}
+      title="Expand sidebar"
     >
       <AlertCircle className="size-4 shrink-0 text-destructive" />
       <span className="mt-2 text-xs text-muted-foreground [writing-mode:vertical-lr]">
         {hasRetriedAndFailed
           ? "Assistant is currently unavailable"
-          : "Unable to load assistant. Try again later"}
+          : "Unable to load assistant"}
       </span>
     </button>
   );
 };
 
-const EscalatedError: React.FC<Pick<AssistantErrorStateProps, "onRetry">> = ({
-  onRetry,
-}) => (
-  <div className="flex size-full flex-col items-center justify-center gap-3 border-l bg-primary-foreground px-6 text-center">
+const CloseButton: React.FC<{ onClick?: () => void }> = ({ onClick }) => (
+  <button
+    type="button"
+    className="absolute right-2 top-2 flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
+    onClick={onClick}
+    title="Collapse sidebar"
+  >
+    <X className="size-4" />
+  </button>
+);
+
+const EscalatedError: React.FC<
+  Pick<AssistantErrorStateProps, "onRetry" | "onToggle">
+> = ({ onRetry, onToggle }) => (
+  <div className="relative flex size-full flex-col items-center justify-center gap-3 border-l bg-primary-foreground px-6 text-center">
+    <CloseButton onClick={onToggle} />
     <AlertCircle className="size-5 text-destructive" />
     <div className="text-sm font-medium text-foreground">
       Assistant is currently unavailable
@@ -63,10 +72,11 @@ const EscalatedError: React.FC<Pick<AssistantErrorStateProps, "onRetry">> = ({
   </div>
 );
 
-const FirstRetryError: React.FC<Pick<AssistantErrorStateProps, "onRetry">> = ({
-  onRetry,
-}) => (
-  <div className="flex size-full flex-col items-center justify-center gap-3 border-l bg-primary-foreground px-6 text-center">
+const FirstRetryError: React.FC<
+  Pick<AssistantErrorStateProps, "onRetry" | "onToggle">
+> = ({ onRetry, onToggle }) => (
+  <div className="relative flex size-full flex-col items-center justify-center gap-3 border-l bg-primary-foreground px-6 text-center">
+    <CloseButton onClick={onToggle} />
     <AlertCircle className="size-5 text-destructive" />
     <div className="text-sm font-medium text-foreground">
       Unable to load assistant
@@ -87,12 +97,14 @@ const FirstRetryError: React.FC<Pick<AssistantErrorStateProps, "onRetry">> = ({
 const AssistantErrorState: React.FC<AssistantErrorStateProps> = ({
   collapsed,
   onRetry,
+  onToggle,
   retryCount,
 }) => {
   if (collapsed)
-    return <CollapsedError onRetry={onRetry} retryCount={retryCount} />;
-  if (retryCount > 0) return <EscalatedError onRetry={onRetry} />;
-  return <FirstRetryError onRetry={onRetry} />;
+    return <CollapsedError onToggle={onToggle} retryCount={retryCount} />;
+  if (retryCount > 0)
+    return <EscalatedError onRetry={onRetry} onToggle={onToggle} />;
+  return <FirstRetryError onRetry={onRetry} onToggle={onToggle} />;
 };
 
 export default AssistantErrorState;
