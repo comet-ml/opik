@@ -66,6 +66,11 @@ class Span:
         This method is similar to the `update` method, but it automatically computes
         the end time if not provided.
 
+        Note: with batching enabled, calling this shortly after span creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.span()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/tracing/batching_and_updates
+
         Args:
             end_time: The end time of the span. If not provided, the current time will be used.
             metadata: Additional metadata to be associated with the span.
@@ -124,6 +129,11 @@ class Span:
     ) -> None:
         """
         Update the span attributes.
+
+        Note: with batching enabled, calling this shortly after span creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.span()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/tracing/batching_and_updates
 
         Args:
             end_time: The end time of the span.

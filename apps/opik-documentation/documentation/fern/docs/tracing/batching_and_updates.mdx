@@ -35,9 +35,9 @@ with opik.start_as_current_trace(name="my_trace") as trace:
         result = call_llm("Hello")
 ```
 
-### Provide all data at creation time
+### Re-send the full payload to overwrite
 
-If you need to use the low-level client API, pass all data (including `end_time`) when creating the span or trace. This avoids the need for a separate update call.
+If you need to use the low-level client API, you can call `client.trace()` or `client.span()` again with the same ID and the complete data. The backend treats each create request as an upsert — if a trace or span with that ID already exists, the new payload overwrites the previous one entirely. This avoids the race condition because you are not relying on a separate update arriving after the original create.
 
 ```python
 import datetime
@@ -45,20 +45,25 @@ import opik
 
 client = opik.Opik()
 
+# First call — creates the trace (batched)
 trace = client.trace(
+    name="my_trace",
+    input={"prompt": "Hello"},
+)
+
+# ... do work ...
+
+# Second call with the same ID — overwrites the trace with full data
+client.trace(
+    id=trace.id,
     name="my_trace",
     input={"prompt": "Hello"},
     output={"response": "Hi there"},
     end_time=datetime.datetime.now(datetime.timezone.utc),
 )
-
-trace.span(
-    name="llm_call",
-    input={"prompt": "Hello"},
-    output={"response": "Hi there"},
-    end_time=datetime.datetime.now(datetime.timezone.utc),
-)
 ```
+
+This also works for spans — call `client.span()` with the same `id` and `trace_id` to overwrite.
 
 ### Disable batching
 

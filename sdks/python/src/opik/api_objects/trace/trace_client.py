@@ -21,7 +21,7 @@ class Trace:
         project_name: str,
         url_override: str,
         source: TraceSource,
-        config: Optional[opik_config.OpikConfig] = None,
+        config: opik_config.OpikConfig,
     ):
         """
         A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
@@ -49,6 +49,11 @@ class Trace:
         This method is similar to the `update` method, but it automatically computes
         the end time if not provided.
 
+        Note: with batching enabled, calling this shortly after trace creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.trace()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/tracing/batching_and_updates
+
         Args:
             end_time: The end time of the trace. If not provided, the current time will be used.
             metadata: Additional metadata to be associated with the trace.
@@ -66,7 +71,7 @@ class Trace:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
+        if self._streamer.use_batching and not self._config.suppress_batching_update_warning:
             LOGGER.warning(
                 logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
                 "Trace.end()",
@@ -95,6 +100,11 @@ class Trace:
         """
         Update the trace attributes.
 
+        Note: with batching enabled, calling this shortly after trace creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.trace()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/tracing/batching_and_updates
+
         Args:
             end_time: The end time of the trace.
             metadata: Additional metadata to be associated with the trace.
@@ -108,7 +118,7 @@ class Trace:
         Returns:
             None
         """
-        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
+        if self._streamer.use_batching and not self._config.suppress_batching_update_warning:
             LOGGER.warning(
                 logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
                 "Trace.update()",
