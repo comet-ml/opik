@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check, ExternalLink, LoaderCircle } from "lucide-react";
 
 import CopyButton from "@/shared/CopyButton/CopyButton";
@@ -8,9 +8,7 @@ import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
 
 type AgentRunnerEmptyStateProps = {
   pairCode: string;
-  expiresInSeconds?: number;
-  createdAt?: number;
-  onRefreshPairCode: () => void;
+  expiresAt: number | null;
 };
 
 const TimelineStep: React.FC<{
@@ -63,42 +61,35 @@ const CodeBlockWithHeader: React.FC<{
   </div>
 );
 
-const getRemainingSeconds = (createdAt: number, expiresInSeconds: number) => {
-  const elapsed = Math.floor((Date.now() - createdAt) / 1000);
-  return Math.max(0, expiresInSeconds - elapsed);
-};
+const getRemainingSeconds = (expiresAt: number) =>
+  Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
 
 const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
   pairCode,
-  expiresInSeconds,
-  createdAt,
-  onRefreshPairCode,
+  expiresAt,
 }) => {
   const command = `opik connect --pair ${pairCode} -- <your app start command>`;
 
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    createdAt !== undefined && expiresInSeconds !== undefined
-      ? getRemainingSeconds(createdAt, expiresInSeconds)
-      : 0,
+    expiresAt ? getRemainingSeconds(expiresAt) : 0,
   );
-  const onRefreshRef = useRef(onRefreshPairCode);
-  onRefreshRef.current = onRefreshPairCode;
 
   useEffect(() => {
-    if (createdAt === undefined || expiresInSeconds === undefined) return;
-    setRemainingSeconds(getRemainingSeconds(createdAt, expiresInSeconds));
+    if (!expiresAt) {
+      setRemainingSeconds(0);
+      return;
+    }
+
+    setRemainingSeconds(getRemainingSeconds(expiresAt));
+
     const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onRefreshRef.current();
-          return 0;
-        }
-        return prev - 1;
-      });
+      const remaining = getRemainingSeconds(expiresAt);
+      setRemainingSeconds(remaining);
+      if (remaining <= 0) clearInterval(interval);
     }, 1000);
+
     return () => clearInterval(interval);
-  }, [createdAt, expiresInSeconds]);
+  }, [expiresAt]);
 
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
@@ -119,43 +110,56 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
         </p>
 
         <div className="flex flex-col">
-          <TimelineStep number={1}>
+          <TimelineStep number={1} isLast={!pairCode}>
             <div className="flex flex-col gap-2.5">
               <h4 className="comet-body-s-accented">Run the pairing command</h4>
               <p className="comet-body-xs text-muted-slate">
                 Install and run the Opik connector in your terminal (works with
                 Claude Code, Codex, Cursor, Windsurf, and more):
               </p>
-              <CodeBlockWithHeader title="Terminal" code={command} />
-              <p className="comet-body-xs text-muted-slate">
-                This code expires in {expiryDisplay}
-              </p>
+              {pairCode ? (
+                <>
+                  <CodeBlockWithHeader title="Terminal" code={command} />
+                  <p className="comet-body-xs mt-2.5 text-muted-slate">
+                    This code expires in {expiryDisplay}
+                  </p>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 py-2">
+                  <LoaderCircle className="size-3.5 animate-spin text-muted-slate" />
+                  <span className="comet-body-xs text-muted-slate">
+                    Generating pairing code...
+                  </span>
+                </div>
+              )}
             </div>
           </TimelineStep>
 
-          <TimelineStep isLast>
-            <div className="flex flex-col gap-1">
-              <h4 className="comet-body-s-accented text-primary">
-                Waiting for connection
-              </h4>
-              <p className="comet-body-xs text-muted-slate">
-                We&apos;ll automatically detect your agent once it&apos;s
-                connected.
-              </p>
-              <p className="comet-body-xs text-muted-slate">
-                Trouble connecting?{" "}
-                <a
-                  href={buildDocsUrl("/faq#troubleshooting")}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 underline hover:text-foreground"
-                >
-                  Check troubleshooting
-                  <ExternalLink className="size-3" />
-                </a>
-              </p>
-            </div>
-          </TimelineStep>
+          {pairCode && (
+            <TimelineStep isLast>
+              <div className="flex flex-col gap-1">
+                <h4 className="comet-body-s-accented text-primary">
+                  Waiting for connection
+                </h4>
+                <p className="comet-body-xs text-muted-slate">
+                  We&apos;ll automatically detect your agent once it&apos;s
+                  connected.
+                </p>
+                <p className="comet-body-xs text-muted-slate">
+                  Trouble connecting?{" "}
+                  <a
+                    href={buildDocsUrl("/faq#troubleshooting")}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 underline hover:text-foreground"
+                  >
+                    Check troubleshooting
+                    <ExternalLink className="size-3" />
+                  </a>
+                </p>
+              </div>
+            </TimelineStep>
+          )}
         </div>
       </div>
 

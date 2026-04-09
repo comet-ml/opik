@@ -1,36 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AgentRunnerContent from "./AgentRunnerContent";
-import { SandboxConnectionStatus } from "@/types/agent-sandbox";
+import { RunnerConnectionStatus } from "@/types/agent-sandbox";
+import type { PairingState } from "@/hooks/usePairingState";
 import { ReactNode } from "react";
 import { TooltipProvider } from "@/ui/tooltip";
 
-// Track removeQueries calls on the real QueryClient
-let removeQueriesSpy: ReturnType<typeof vi.spyOn>;
+const mockRequestNewCode = vi.fn();
 
-// Mutable state for connection status
-let mockRunnerData: { status: string; agents: { name: string }[] } | null =
-  null;
+let mockPairingState: PairingState;
 
-const mockRefetchPairCode = vi.fn();
-
-vi.mock("@/api/agent-sandbox/useSandboxPairCode", () => ({
-  default: vi.fn(() => ({
-    data: {
-      pair_code: "ABC123",
-      expires_in_seconds: 300,
-      created_at: Date.now(),
-    },
-    isPending: false,
-    refetch: mockRefetchPairCode,
-  })),
-}));
-
-vi.mock("@/api/agent-sandbox/useSandboxConnectionStatus", () => ({
-  default: vi.fn(() => ({
-    data: mockRunnerData,
-  })),
+vi.mock("@/hooks/usePairingState", () => ({
+  default: vi.fn(() => mockPairingState),
 }));
 
 vi.mock("@/api/agent-sandbox/useSandboxCreateJobMutation", () => ({
@@ -46,7 +28,6 @@ vi.mock("@/api/agent-sandbox/useSandboxJobStatus", () => ({
   })),
 }));
 
-// Mock child components to keep tests focused
 vi.mock("./AgentRunnerEmptyState", () => {
   const MockEmptyState = ({ pairCode }: { pairCode: string }) => (
     <div data-testid="empty-state">Pair code: {pairCode}</div>
@@ -82,15 +63,28 @@ describe("AgentRunnerContent", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRunnerData = null;
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    removeQueriesSpy = vi.spyOn(queryClient, "removeQueries");
+    mockPairingState = {
+      projectId: "proj-1",
+      status: RunnerConnectionStatus.IDLE,
+      pairCode: null,
+      expiresAt: null,
+      runnerId: null,
+      runner: null,
+      requestNewCode: mockRequestNewCode,
+    };
   });
 
-  it("shows empty state with pair code when disconnected", () => {
-    mockRunnerData = null;
+  it("shows empty state with pair code when pairing", () => {
+    mockPairingState = {
+      ...mockPairingState,
+      status: RunnerConnectionStatus.PAIRING,
+      pairCode: "ABC123",
+      expiresAt: Date.now() + 300_000,
+      runnerId: "runner-1",
+    };
 
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
@@ -101,9 +95,15 @@ describe("AgentRunnerContent", () => {
   });
 
   it("shows connected state when runner is connected", () => {
-    mockRunnerData = {
-      status: SandboxConnectionStatus.CONNECTED,
-      agents: [{ name: "test-agent" }],
+    mockPairingState = {
+      ...mockPairingState,
+      status: RunnerConnectionStatus.CONNECTED,
+      runner: {
+        id: "runner-1",
+        project_id: "proj-1",
+        status: RunnerConnectionStatus.CONNECTED,
+        agents: [{ name: "test-agent" }],
+      },
     };
 
     render(<AgentRunnerContent projectId="proj-1" />, {
@@ -113,30 +113,11 @@ describe("AgentRunnerContent", () => {
     expect(screen.getByTestId("connected-state")).toBeInTheDocument();
   });
 
-  it("clears cached pair code when runner connects", async () => {
-    mockRunnerData = {
-      status: SandboxConnectionStatus.CONNECTED,
-      agents: [{ name: "test-agent" }],
-    };
-
+  it("shows empty state when disconnected (no pair code)", () => {
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
     });
 
-    await waitFor(() => {
-      expect(removeQueriesSpy).toHaveBeenCalledWith({
-        queryKey: ["agent-sandbox", "pair-code", { projectId: "proj-1" }],
-      });
-    });
-  });
-
-  it("does NOT clear pair code cache when disconnected", () => {
-    mockRunnerData = null;
-
-    render(<AgentRunnerContent projectId="proj-1" />, {
-      wrapper: createWrapper(queryClient),
-    });
-
-    expect(removeQueriesSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("empty-state")).toBeInTheDocument();
   });
 });

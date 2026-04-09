@@ -5,8 +5,15 @@ export interface SandboxPairCode {
   created_at: number;
 }
 
-export enum SandboxConnectionStatus {
+/**
+ * Backend returns: PAIRING, CONNECTED, DISCONNECTED.
+ * Client-only states: LOADING (initial fetch), IDLE (no code requested), EXPIRED (code timed out).
+ */
+export enum RunnerConnectionStatus {
+  LOADING = "loading",
+  IDLE = "idle",
   PAIRING = "pairing",
+  EXPIRED = "expired",
   CONNECTED = "connected",
   DISCONNECTED = "disconnected",
 }
@@ -22,7 +29,7 @@ export interface LocalRunner {
   id: string;
   name?: string;
   project_id: string;
-  status: SandboxConnectionStatus;
+  status: RunnerConnectionStatus;
   connected_at?: string;
   agents?: LocalRunnerAgent[];
 }
