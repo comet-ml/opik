@@ -58,6 +58,7 @@ import static org.mockito.Mockito.when;
 class LlmProviderFactoryTest {
     private LlmProviderClientConfig llmProviderClientConfig;
     private OpikConfiguration opikConfiguration;
+    private LlmModelRegistryService registryService;
 
     private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
     private static final Validator validator = Validators.newValidator();
@@ -71,6 +72,7 @@ class LlmProviderFactoryTest {
         EncryptionUtils.setConfig(config);
         llmProviderClientConfig = config.getLlmProviderClient();
         opikConfiguration = config;
+        registryService = new LlmModelRegistryService(config.getLlmModelRegistry());
     }
 
     private OpikConfiguration createMockConfigWithFreeModel(boolean enabled, String actualModel,
@@ -107,7 +109,7 @@ class LlmProviderFactoryTest {
 
         // SUT - use config with disabled free model to not interfere with other tests
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         AnthropicModule anthropicModule = new AnthropicModule();
         GeminiModule geminiModule = new GeminiModule();
@@ -185,7 +187,7 @@ class LlmProviderFactoryTest {
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
@@ -226,7 +228,7 @@ class LlmProviderFactoryTest {
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
@@ -341,7 +343,7 @@ class LlmProviderFactoryTest {
 
         // SUT - config with enabled free model
         var mockConfig = createMockConfigWithFreeModel(true, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         // When - use the hardcoded model constant
         LlmProvider result = llmProviderFactory.getLlmProvider(FreeModelConfig.FREE_MODEL);
@@ -359,7 +361,7 @@ class LlmProviderFactoryTest {
 
         // SUT - config with disabled built-in provider
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         // When & Then - Should throw because model is not recognized when disabled
         assertThatThrownBy(() -> llmProviderFactory.getLlmProvider(FreeModelConfig.FREE_MODEL))
@@ -378,7 +380,7 @@ class LlmProviderFactoryTest {
 
         // SUT - config with enabled free model
         var mockConfig = createMockConfigWithFreeModel(true, actualModel, spanProvider);
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         // When - use the hardcoded model constant
         LlmProviderFactory.ResolvedModelInfo result = llmProviderFactory
@@ -399,7 +401,7 @@ class LlmProviderFactoryTest {
 
         // SUT - config with enabled free model (should not interfere with OpenAI models)
         var mockConfig = createMockConfigWithFreeModel(true, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         // When
         LlmProviderFactory.ResolvedModelInfo result = llmProviderFactory.getResolvedModelInfo(openaiModel);
@@ -416,12 +418,42 @@ class LlmProviderFactoryTest {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
         // When
         LlmProvider result = llmProviderFactory.getLlmProvider("openrouter/some-future-router");
 
         // Then
         assertThat(result).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    // ========== Structured Output Strategy Tests ==========
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("getStructuredOutputStrategy returns ToolCallingStrategy for registry model with structuredOutput=true")
+    void testGetStructuredOutputStrategy_returnsToolCalling_whenRegistryModelSupportsIt() {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        // gpt-4o has structuredOutput: true in the default YAML
+        var strategy = llmProviderFactory.getStructuredOutputStrategy("gpt-4o");
+
+        assertThat(strategy).isInstanceOf(
+                com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy.class);
+    }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("getStructuredOutputStrategy returns InstructionStrategy for registry model with structuredOutput=false")
+    void testGetStructuredOutputStrategy_returnsInstruction_whenRegistryModelDoesNotSupportIt() {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        // claude-sonnet-4-6 has no structuredOutput (defaults to false) in the default YAML
+        var strategy = llmProviderFactory.getStructuredOutputStrategy("claude-sonnet-4-6");
+
+        assertThat(strategy).isInstanceOf(
+                com.comet.opik.domain.llm.structuredoutput.InstructionStrategy.class);
     }
 }

@@ -61,13 +61,6 @@ vi.mock("@/ui/use-toast", () => ({
   }),
 }));
 
-// Mock the navigate hook
-vi.mock("@/hooks/useNavigateToExperiment", () => ({
-  useNavigateToExperiment: () => ({
-    navigate: vi.fn(),
-  }),
-}));
-
 // Mock the AddEditEvaluationSuiteDialog component
 vi.mock(
   "@/v1/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog",

@@ -127,6 +127,34 @@ class AgentConfigsClient:
         )
         return _response.data
 
+    def create_blueprint_from_mask(
+        self, project_id: str, mask_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.
+
+        Parameters
+        ----------
+        project_id : str
+
+        mask_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.create_blueprint_from_mask(project_id='project_id', mask_id='mask_id', )
+        """
+        _response = self._raw_client.create_blueprint_from_mask(project_id, mask_id, request_options=request_options)
+        return _response.data
+
     def create_or_update_envs(
         self,
         *,
@@ -590,6 +618,39 @@ class AsyncAgentConfigsClient:
             project_name=project_name,
             id=id,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def create_blueprint_from_mask(
+        self, project_id: str, mask_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.
+
+        Parameters
+        ----------
+        project_id : str
+
+        mask_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.create_blueprint_from_mask(project_id='project_id', mask_id='mask_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_blueprint_from_mask(
+            project_id, mask_id, request_options=request_options
         )
         return _response.data
 

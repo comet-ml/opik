@@ -3,5 +3,6 @@
 export const PromptWriteType = {
     Mustache: "mustache",
     Jinja2: "jinja2",
+    Python: "python",
 } as const;
 export type PromptWriteType = (typeof PromptWriteType)[keyof typeof PromptWriteType];

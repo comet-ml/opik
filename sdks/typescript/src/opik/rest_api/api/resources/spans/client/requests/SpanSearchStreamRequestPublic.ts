@@ -17,6 +17,8 @@ export interface SpanSearchStreamRequestPublic {
     lastRetrievedId?: string;
     /** Truncate image included in either input, output or metadata */
     truncate?: boolean;
+    /** Fields to exclude from the response */
+    exclude?: OpikApi.SpanSearchStreamRequestPublicExcludeItem[];
     /** Filter spans created from this time (ISO-8601 format). */
     fromTime?: Date;
     /** Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'. */

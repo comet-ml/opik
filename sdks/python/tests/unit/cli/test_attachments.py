@@ -118,10 +118,20 @@ def _make_opik_client(traces, spans_by_trace_id, attachment_client=None):
 
     client.rest_client.traces.get_traces_by_project.side_effect = [page1, page2]
 
-    def _search_spans(project_name, trace_id, max_results, truncate):
-        return spans_by_trace_id.get(trace_id, [])
+    # Bulk span fetch (Phase 2 in 3-phase export): collect all spans and set trace_id
+    all_spans = []
+    for tid, spans in spans_by_trace_id.items():
+        for span in spans:
+            span.trace_id = tid
+            all_spans.append(span)
 
-    client.search_spans.side_effect = _search_spans
+    span_page1 = MagicMock()
+    span_page1.content = all_spans
+    span_page2 = MagicMock()
+    span_page2.content = []
+
+    client.rest_client.spans.get_spans_by_project.side_effect = [span_page1, span_page2]
+
     client.get_attachment_client.return_value = attachment_client or MagicMock()
     return client
 

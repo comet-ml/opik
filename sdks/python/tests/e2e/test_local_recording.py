@@ -62,7 +62,7 @@ def test_prevents_nested_usage():
 
 
 def test_cleanup_and_reuse_after_exit__should_save_new_data():
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # First run: record and ensure the local processor becomes active
     with opik.record_traces_locally() as storage:

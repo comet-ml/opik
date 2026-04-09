@@ -22,6 +22,7 @@ public class AgentConfigsResourceClient {
     private static final String RESOURCE_PATH = "%s/v1/private/agent-configs";
     private static final String BLUEPRINTS_PATH = RESOURCE_PATH + "/blueprints";
     private static final String REMOVE_KEYS_PATH = BLUEPRINTS_PATH + "/remove-keys";
+    private static final String FROM_MASK_PATH = BLUEPRINTS_PATH + "/projects/%s/masks/%s";
     private static final String LATEST_BLUEPRINT_PATH = RESOURCE_PATH + "/blueprints/latest/projects/%s";
     private static final String BLUEPRINT_BY_ID_PATH = RESOURCE_PATH + "/blueprints/%s";
     private static final String BLUEPRINT_BY_ENV_PATH = RESOURCE_PATH + "/blueprints/environments/%s/projects/%s";
@@ -275,6 +276,26 @@ public class AgentConfigsResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_CREATED) {
+                assertThat(actualResponse.getLocation()).isNotNull();
+                return TestUtils.getIdFromLocation(actualResponse.getLocation());
+            }
+
+            return null;
+        }
+    }
+
+    public UUID createBlueprintFromMask(UUID projectId, UUID maskId, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(FROM_MASK_PATH.formatted(baseURI, projectId, maskId))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(null))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 

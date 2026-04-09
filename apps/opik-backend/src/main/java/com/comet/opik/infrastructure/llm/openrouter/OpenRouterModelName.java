@@ -50,6 +50,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     ANTHROPIC_CLAUDE_OPUS_4_1("anthropic/claude-opus-4.1"),
     ANTHROPIC_CLAUDE_OPUS_4_5("anthropic/claude-opus-4.5"),
     ANTHROPIC_CLAUDE_OPUS_4_6("anthropic/claude-opus-4.6"),
+    ANTHROPIC_CLAUDE_OPUS_4_6_FAST("anthropic/claude-opus-4.6-fast"),
     ANTHROPIC_CLAUDE_SONNET_4("anthropic/claude-sonnet-4"),
     ANTHROPIC_CLAUDE_SONNET_4_5("anthropic/claude-sonnet-4.5"),
     ANTHROPIC_CLAUDE_SONNET_4_6("anthropic/claude-sonnet-4.6"),
@@ -58,6 +59,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     ARCEE_AI_MAESTRO_REASONING("arcee-ai/maestro-reasoning"),
     ARCEE_AI_SPOTLIGHT("arcee-ai/spotlight"),
     ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE("arcee-ai/trinity-large-preview:free"),
+    ARCEE_AI_TRINITY_LARGE_THINKING("arcee-ai/trinity-large-thinking"),
     ARCEE_AI_TRINITY_MINI("arcee-ai/trinity-mini"),
     ARCEE_AI_TRINITY_MINI_FREE("arcee-ai/trinity-mini:free"),
     ARCEE_AI_VIRTUOSO_LARGE("arcee-ai/virtuoso-large"),
@@ -136,6 +138,10 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     GOOGLE_GEMMA_3N_E2B_IT_FREE("google/gemma-3n-e2b-it:free"),
     GOOGLE_GEMMA_3N_E4B_IT("google/gemma-3n-e4b-it"),
     GOOGLE_GEMMA_3N_E4B_IT_FREE("google/gemma-3n-e4b-it:free"),
+    GOOGLE_GEMMA_4_26B_A4B_IT("google/gemma-4-26b-a4b-it"),
+    GOOGLE_GEMMA_4_26B_A4B_IT_FREE("google/gemma-4-26b-a4b-it:free"),
+    GOOGLE_GEMMA_4_31B_IT("google/gemma-4-31b-it"),
+    GOOGLE_GEMMA_4_31B_IT_FREE("google/gemma-4-31b-it:free"),
     GOOGLE_LYRIA_3_CLIP_PREVIEW("google/lyria-3-clip-preview"),
     GOOGLE_LYRIA_3_PRO_PREVIEW("google/lyria-3-pro-preview"),
     GRYPHE_MYTHOMAX_L2_13B("gryphe/mythomax-l2-13b"),
@@ -400,10 +406,13 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     QWEN_QWEN3_5_9B("qwen/qwen3.5-9b"),
     QWEN_QWEN3_5_FLASH_02_23("qwen/qwen3.5-flash-02-23"),
     QWEN_QWEN3_5_PLUS_02_15("qwen/qwen3.5-plus-02-15"),
+    QWEN_QWEN3_6_PLUS("qwen/qwen3.6-plus"),
     QWEN_QWEN3_6_PLUS_PREVIEW_FREE("qwen/qwen3.6-plus-preview:free"),
+    QWEN_QWEN3_6_PLUS_FREE("qwen/qwen3.6-plus:free"),
     QWEN_QWQ_32B("qwen/qwq-32b"),
     RAIFLE_SORCERERLM_8X22B("raifle/sorcererlm-8x22b"),
     REKA_REKA_EDGE("reka/reka-edge"),
+    REKAAI_REKA_EDGE("rekaai/reka-edge"),
     REKAAI_REKA_FLASH_3("rekaai/reka-flash-3"),
     RELACE_RELACE_APPLY_3("relace/relace-apply-3"),
     RELACE_RELACE_SEARCH("relace/relace-search"),
@@ -457,7 +466,9 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_4_7("z-ai/glm-4.7"),
     Z_AI_GLM_4_7_FLASH("z-ai/glm-4.7-flash"),
     Z_AI_GLM_5("z-ai/glm-5"),
-    Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo");
+    Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo"),
+    Z_AI_GLM_5_1("z-ai/glm-5.1"),
+    Z_AI_GLM_5V_TURBO("z-ai/glm-5v-turbo");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 

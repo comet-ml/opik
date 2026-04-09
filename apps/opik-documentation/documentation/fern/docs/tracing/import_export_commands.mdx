@@ -31,6 +31,7 @@ Exports specific data types from the specified workspace to local files.
 - `--force`: Re-download items even if they already exist locally
 - `--format`: Format for exporting data (`json` or `csv`, default: `json`)
 - `--debug`: Enable debug output to show detailed information about the export process
+- `--page-size INTEGER`: Number of traces to fetch per API request when exporting projects (1–1000, default: `500`). Applies to `project` and `all`. Increase for fewer round-trips; decrease if you hit persistent rate-limit errors.
 
 **`all`-specific options:**
 - `--include`: Comma-separated list of data types to include (`datasets`, `prompts`, `projects`, `experiments`). Defaults to all four.
@@ -109,6 +110,9 @@ opik export my-workspace project "my-project" --filter 'start_time >= "2024-01-0
 
 # Show detailed API call and file I/O information during export
 opik export my-workspace dataset "my-dataset" --debug --force
+
+# Reduce page size if you are hitting persistent rate-limit errors on large projects
+opik export my-workspace project "my-project" --page-size 100
 ```
 
 ## `opik import WORKSPACE TYPE NAME`
@@ -549,6 +553,10 @@ opik import my-workspace experiment "evaluation" --path ./experiment_data
    - Verify the dataset name is correct
    - Use `--debug` to see detailed search information
 
+10. **Export is slow or keeps hitting rate limits**
+    - The exporter automatically retries 429 responses, honouring `Retry-After` headers where present
+    - Reduce `--page-size` (e.g. `--page-size 100`) to lower the per-request payload and decrease the chance of triggering rate limits
+    - The exporter pauses between pages and uses at most 3 concurrent workers to stay within server-side limits; no extra configuration is needed
 
 ### Getting Help
 

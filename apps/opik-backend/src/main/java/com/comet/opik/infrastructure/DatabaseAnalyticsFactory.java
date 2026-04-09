@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.validation.constraints.NotBlank;
@@ -20,6 +21,7 @@ public class DatabaseAnalyticsFactory {
     private @NotNull String password;
     private @NotBlank String databaseName;
     private String queryParameters;
+    private Duration healthCheckTimeout = Duration.seconds(1);
 
     public ConnectionFactory build() {
         var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);

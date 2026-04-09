@@ -1,6 +1,7 @@
 export type { AgentConfigEnvSetByName } from "./AgentConfigEnvSetByName.js";
 export type { AgentConfigEnvUpdate } from "./AgentConfigEnvUpdate.js";
 export type { AgentConfigRemoveValues } from "./AgentConfigRemoveValues.js";
+export type { CreateBlueprintFromMaskRequest } from "./CreateBlueprintFromMaskRequest.js";
 export type { DeleteEnvRequest } from "./DeleteEnvRequest.js";
 export type { GetBlueprintByEnvRequest } from "./GetBlueprintByEnvRequest.js";
 export type { GetBlueprintByIdRequest } from "./GetBlueprintByIdRequest.js";

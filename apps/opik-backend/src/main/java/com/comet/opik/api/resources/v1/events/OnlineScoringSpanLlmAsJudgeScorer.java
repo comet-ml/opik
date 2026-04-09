@@ -6,7 +6,6 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
@@ -90,8 +89,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             ChatRequest scoreRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
-                var llmProvider = llmProviderFactory.getLlmProvider(modelName);
-                var strategy = StructuredOutputStrategy.getStrategy(llmProvider, modelName);
+                var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
                 scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
                         message.llmAsJudgeCode(), span, strategy);
             } catch (Exception exception) {

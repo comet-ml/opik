@@ -9,6 +9,8 @@ export const PromptType = {
   MUSTACHE: "mustache" as const,
   /** Jinja2 template syntax with {% %} blocks and {{ }} variables */
   JINJA2: "jinja2" as const,
+  /** Python template syntax with {variable} placeholders */
+  PYTHON: "python" as const,
 } as const;
 
 export type PromptType = (typeof PromptType)[keyof typeof PromptType];

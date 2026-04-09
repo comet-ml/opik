@@ -4,6 +4,7 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -263,7 +264,9 @@ class DatasetsResourceCreateFromSpansTest {
     }
 
     private Dataset buildDataset() {
-        return DatasetResourceClient.buildDataset(factory);
+        return DatasetResourceClient.buildDataset(factory).toBuilder()
+                .type(DatasetType.DATASET)
+                .build();
     }
 
     @Test

@@ -5,6 +5,7 @@ import type * as OpikApi from "@/rest_api/api";
 import { formatPromptTemplate } from "./formatting";
 import { PromptVersion } from "./PromptVersion";
 import { BasePrompt, type BasePromptData } from "./BasePrompt";
+import { logger } from "@/utils/logger";
 
 export interface PromptData extends BasePromptData {
   prompt: string;
@@ -132,6 +133,7 @@ export class Prompt extends BasePrompt {
         changeDescription: apiResponse.changeDescription,
         description: promptData.description,
         tags: promptData.tags,
+        synced: true,
       },
       opik,
     );
@@ -197,6 +199,35 @@ export class Prompt extends BasePrompt {
    * }
    * ```
    */
+  /**
+   * Synchronize the prompt with the backend.
+   *
+   * Creates or updates the prompt on the Opik server. If the sync fails,
+   * a warning is logged and the same (unsynced) instance is returned.
+   *
+   * @returns Promise resolving to a new synced Prompt instance, or this instance if sync fails
+   */
+  async syncWithBackend(): Promise<Prompt> {
+    try {
+      return await this.opik.createPrompt({
+        name: this.name,
+        prompt: this.prompt,
+        metadata: this.metadata,
+        type: this.type,
+        description: this.description,
+        tags: this.tags ? Array.from(this.tags) : undefined,
+      });
+    } catch (error) {
+      logger.warn(
+        `Failed to sync prompt '${this.name}' with the backend. ` +
+          "The prompt will work locally but is not persisted on the server. " +
+          "You can retry by calling .syncWithBackend().",
+        { error },
+      );
+      return this;
+    }
+  }
+
   async getVersion(commit: string): Promise<Prompt | null> {
     const response = await this.retrieveVersionByCommit(commit);
     if (!response) {

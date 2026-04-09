@@ -28,6 +28,7 @@ export const basicPromptData = {
   name: "test-prompt",
   prompt: "Hello {{name}}!",
   type: PromptType.MUSTACHE,
+  synced: true,
 };
 
 export const promptWithMetadata = {

@@ -283,7 +283,7 @@ public class DatasetsResource {
 
         log.info("Finding dataset by name '{}', projectName '{}' on workspace_id '{}'", identifier.datasetName(),
                 identifier.projectName(), workspaceId);
-        Dataset dataset = service.findByName(workspaceId, identifier, visibility);
+        Dataset dataset = service.findByName(identifier, visibility);
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
                 workspaceId);
 
@@ -450,7 +450,7 @@ public class DatasetsResource {
                     .projectName(request.projectName())
                     .build());
 
-            var items = itemService.getItems(workspaceId, request, queryFilters)
+            var items = itemService.getItems(request, queryFilters)
                     .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
 
             ChunkedOutput<JsonNode> outputStream = streamer.getOutputStream(items);

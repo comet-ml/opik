@@ -19,6 +19,18 @@ generate_id = id_helpers.generate_id
 LOGGER = logging.getLogger(__name__)
 
 
+def warn_if_batching_update(
+    use_batching: bool,
+    suppress_warning: bool,
+    method_name: str,
+) -> None:
+    if use_batching and not suppress_warning:
+        LOGGER.warning(
+            logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+            method_name,
+        )
+
+
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",
     bound=Union[

@@ -24,7 +24,6 @@ import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
-import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import Loader from "@/shared/Loader/Loader";
@@ -271,11 +270,10 @@ const GeneralDatasetsTab: React.FC = () => {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
-        cell: TraceCountCell as never,
+        cell: TextCell as never,
         aggregatedCell: TextCell.Aggregation as never,
         customMeta: {
           aggregationKey: "trace_count",
-          tooltip: "View experiment traces",
         },
       },
       {

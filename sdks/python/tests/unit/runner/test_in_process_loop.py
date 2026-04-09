@@ -55,7 +55,7 @@ class TestHeartbeatLoop:
         loop._heartbeat_interval_seconds = 0.05
         call_count = 0
 
-        def heartbeat_side_effect(runner_id):
+        def heartbeat_side_effect(runner_id, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:

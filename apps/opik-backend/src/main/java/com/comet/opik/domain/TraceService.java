@@ -324,7 +324,8 @@ class TraceServiceImpl implements TraceService {
                                         Set.of(project.id()),
                                         Set.of(id),
                                         ctx.get(RequestContext.WORKSPACE_ID),
-                                        ctx.get(RequestContext.USER_NAME)))))))
+                                        ctx.get(RequestContext.USER_NAME),
+                                        traceUpdate))))))
                 .then());
     }
 
@@ -345,7 +346,7 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName));
+                                            userName, batchUpdate.update()));
                                 });
                     });
         });

@@ -4172,6 +4172,42 @@ class GetTracesByProjectResourceTest {
             TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
         }
 
+        @Test
+        void searchTracesStream__whenExcludeFeedbackScores__thenReturnTracesWithoutScores() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .usage(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    trace.startTime(), trace.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Trace::id).reversed())
+                    .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+
+            List<FeedbackScoreBatchItem> feedbackScores = expectedTraces.stream()
+                    .flatMap(trace -> PodamFactoryUtils
+                            .manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(trace.projectName())
+                                    .id(trace.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            traceResourceClient.feedbackScores(feedbackScores, API_KEY, TEST_WORKSPACE);
+
+            var streamRequest = TraceSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .exclude(Set.of(Trace.TraceField.FEEDBACK_SCORES))
+                    .build();
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(API_KEY, TEST_WORKSPACE, streamRequest);
+
+            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
+        }
+
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
         void whenUsingPagination__thenReturnTracesPaginated(boolean stream) {

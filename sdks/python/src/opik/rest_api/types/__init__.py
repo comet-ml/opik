@@ -177,6 +177,13 @@ from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
 from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
 from .breakdown_config_public import BreakdownConfigPublic
 from .breakdown_config_public_field import BreakdownConfigPublicField
+from .bridge_command import BridgeCommand
+from .bridge_command_batch_response import BridgeCommandBatchResponse
+from .bridge_command_item import BridgeCommandItem
+from .bridge_command_item_type import BridgeCommandItemType
+from .bridge_command_status import BridgeCommandStatus
+from .bridge_command_submit_response import BridgeCommandSubmitResponse
+from .bridge_command_type import BridgeCommandType
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
 from .categorical_feedback_definition_create import CategoricalFeedbackDefinitionCreate
 from .categorical_feedback_definition_public import CategoricalFeedbackDefinitionPublic
@@ -285,8 +292,10 @@ from .execution_policy_public import ExecutionPolicyPublic
 from .execution_policy_write import ExecutionPolicyWrite
 from .experiment import Experiment
 from .experiment_evaluation_method import ExperimentEvaluationMethod
+from .experiment_execution_response import ExperimentExecutionResponse
 from .experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from .experiment_group_response import ExperimentGroupResponse
+from .experiment_info import ExperimentInfo
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
 from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -498,6 +507,7 @@ from .prompt_public_template_structure import PromptPublicTemplateStructure
 from .prompt_template_structure import PromptTemplateStructure
 from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
+from .prompt_variant import PromptVariant
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
 from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
@@ -797,6 +807,13 @@ __all__ = [
     "BooleanFeedbackDetailUpdate",
     "BreakdownConfigPublic",
     "BreakdownConfigPublicField",
+    "BridgeCommand",
+    "BridgeCommandBatchResponse",
+    "BridgeCommandItem",
+    "BridgeCommandItemType",
+    "BridgeCommandStatus",
+    "BridgeCommandSubmitResponse",
+    "BridgeCommandType",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",
@@ -905,8 +922,10 @@ __all__ = [
     "ExecutionPolicyWrite",
     "Experiment",
     "ExperimentEvaluationMethod",
+    "ExperimentExecutionResponse",
     "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
+    "ExperimentInfo",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
@@ -1109,6 +1128,7 @@ __all__ = [
     "PromptTemplateStructure",
     "PromptTokensDetails",
     "PromptType",
+    "PromptVariant",
     "PromptVersion",
     "PromptVersionDetail",
     "PromptVersionDetailTemplateStructure",

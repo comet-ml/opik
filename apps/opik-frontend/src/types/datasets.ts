@@ -130,6 +130,12 @@ export enum EXPERIMENT_TYPE {
   MUTATION = "mutation",
 }
 
+export enum EXPERIMENT_STATUS {
+  COMPLETED = "completed",
+  CANCELLED = "cancelled",
+  RUNNING = "running",
+}
+
 export enum EVALUATION_METHOD {
   DATASET = "dataset",
   EVALUATION_SUITE = "evaluation_suite",

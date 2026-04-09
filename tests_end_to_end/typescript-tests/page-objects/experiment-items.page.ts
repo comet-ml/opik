@@ -14,7 +14,7 @@ export class ExperimentItemsPage {
   }
 
   private get paginationButton(): Locator {
-    return this.page.getByRole('button', { name: 'Showing' });
+    return this.page.locator('text=/Showing \\d+-\\d+ of \\d+/');
   }
 
   // Ensure the "Dataset item ID" column is visible and resolve its index.

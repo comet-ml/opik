@@ -10,7 +10,6 @@ from typing import Any, Iterator, Optional, TypeVar, Union
 import httpx
 import pydantic
 import click
-from rich.console import Console
 from rich.progress import (
     BarColumn,
     Progress,
@@ -28,10 +27,8 @@ from .experiment import (
 )
 from .project import export_single_project
 from .prompt import export_single_prompt
-from .utils import debug_print, no_attachments_option, print_export_summary
+from .utils import console, debug_print, no_attachments_option, print_export_summary
 from ..include_validation import validate_include
-
-console = Console()
 
 PAGE_SIZE = 500
 
@@ -259,6 +256,7 @@ def _export_all_projects(
     max_workers: int = 5,
     filter_string: Optional[str] = None,
     include_attachments: bool = True,
+    page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
     """Export all projects in the workspace.
 
@@ -304,16 +302,23 @@ def _export_all_projects(
                     format=format,
                     show_progress=False,  # outer bar tracks progress
                     include_attachments=include_attachments,
+                    page_size=page_size,
                 ): project
                 for project in all_projects
             }
             for future in as_completed(future_to_project):
                 project = future_to_project[future]
                 try:
-                    proj_count, t_exported, t_skipped = future.result()
+                    proj_count, t_exported, t_skipped, proj_had_errors = future.result()
                     projects_exported += proj_count
                     traces_exported += t_exported
                     traces_skipped += t_skipped
+                    if proj_had_errors:
+                        had_errors = True
+                        console.print(
+                            f"[yellow]Project '{project.name}' exported with errors — "
+                            "some traces may be missing. Run the export again to fill gaps.[/yellow]"
+                        )
                 except Exception as e:
                     console.print(
                         f"[red]Error exporting project '{project.name}': {e}[/red]"
@@ -443,6 +448,7 @@ def export_all(
     api_key: Optional[str] = None,
     filter_string: Optional[str] = None,
     include_attachments: bool = True,
+    page_size: int = 500,
 ) -> None:
     """Export all data from the workspace."""
     try:
@@ -493,6 +499,7 @@ def export_all(
                 format,
                 filter_string=filter_string,
                 include_attachments=include_attachments,
+                page_size=page_size,
             )
             total_stats["projects"] = proj_exp
             # Accumulate traces (experiments may also add traces below)
@@ -605,6 +612,13 @@ def _validate_include(
     help="Maximum number of traces/items to export per entity.",
 )
 @no_attachments_option()
+@click.option(
+    "--page-size",
+    type=click.IntRange(1, 1000),
+    default=500,
+    show_default=True,
+    help="Number of traces to fetch per API request when exporting projects. Larger values reduce round-trips but increase memory usage.",
+)
 @click.pass_context
 def export_all_command(
     ctx: click.Context,
@@ -616,6 +630,7 @@ def export_all_command(
     include: list[str],
     max_results: Optional[int],
     no_attachments: bool,
+    page_size: int,
 ) -> None:
     """Export all datasets, prompts, projects, and experiments from the workspace.
 
@@ -647,4 +662,5 @@ def export_all_command(
         api_key,
         filter_string=filter,
         include_attachments=not no_attachments,
+        page_size=page_size,
     )

@@ -1,8 +1,10 @@
 """Download command for Opik CLI."""
 
+import logging
 from typing import Optional
 
 import click
+from rich.logging import RichHandler
 
 from .all import export_all_command
 from .dataset import export_dataset_command
@@ -76,6 +78,48 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
     ctx.obj["api_key"] = api_key or (
         ctx.parent.obj.get("api_key") if ctx.parent and ctx.parent.obj else None
     )
+
+    # During bulk export the opik SDK emits deprecation warnings via its own
+    # StreamHandler (format "OPIK: <message>"), which writes to stderr and
+    # corrupts the Rich progress bar display.  Replace that handler with a
+    # RichHandler so any SDK log output is routed through the shared console
+    # (and therefore properly interleaved with the progress bars).
+    # Only ERROR and above are shown; WARNING-level deprecation notices are
+    # noise during export and the export code reports real errors itself.
+    from .utils import console as _console
+
+    _opik_logger = logging.getLogger("opik")
+    # Snapshot existing handlers so we can restore them when the CLI command
+    # exits (important: CliRunner-based unit tests share the global logger state
+    # across test cases, so any mutation must be undone on context teardown).
+    _original_handlers = list(_opik_logger.handlers)
+
+    def _restore_opik_handlers() -> None:
+        for _h in list(_opik_logger.handlers):
+            _opik_logger.removeHandler(_h)
+        for _h in _original_handlers:
+            _opik_logger.addHandler(_h)
+
+    ctx.call_on_close(_restore_opik_handlers)
+
+    # Remove existing StreamHandlers (SDK installs one with "OPIK: " prefix).
+    # Also remove any RichHandlers not bound to _console — those would route SDK
+    # logs to a different console and bypass our progress-bar-aware output.
+    for _h in list(_opik_logger.handlers):
+        if isinstance(_h, RichHandler):
+            if getattr(_h, "console", None) is not _console:
+                _opik_logger.removeHandler(_h)
+        elif isinstance(_h, logging.StreamHandler):
+            _opik_logger.removeHandler(_h)
+    if not any(isinstance(h, RichHandler) for h in _opik_logger.handlers):
+        _rich_handler = RichHandler(
+            console=_console,
+            show_time=False,
+            show_path=False,
+            markup=False,
+        )
+        _rich_handler.setLevel(logging.ERROR)
+        _opik_logger.addHandler(_rich_handler)
 
     # If no subcommand was invoked, show helpful error
     if ctx.invoked_subcommand is None:

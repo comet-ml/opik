@@ -55,12 +55,23 @@ type AgentRunnerInputFormProps = {
   isRunning: boolean;
 };
 
+const isFieldRequired = (type: string): boolean => {
+  const lower = type.toLowerCase();
+  return !BOOL_TYPES.has(lower) && !lower.startsWith("optional");
+};
+
 const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
   fields,
   onSubmit,
   isRunning,
 }) => {
-  const { register, handleSubmit, setValue, watch } = useForm({
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm({
     defaultValues: fields.reduce(
       (acc, field) => {
         acc[field.name] = "";
@@ -106,14 +117,24 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
                 />
               ) : field.type === "object" || field.type === "json" ? (
                 <Textarea
-                  {...register(field.name)}
+                  {...register(field.name, {
+                    ...(isFieldRequired(field.type) && {
+                      validate: (v: string) =>
+                        v.trim().length > 0 || "This field is required",
+                    }),
+                  })}
                   placeholder={`Enter ${field.name}...`}
                   rows={4}
                   disabled={isRunning}
                 />
               ) : (
                 <Input
-                  {...register(field.name)}
+                  {...register(field.name, {
+                    ...(isFieldRequired(field.type) && {
+                      validate: (v: string) =>
+                        v.trim().length > 0 || "This field is required",
+                    }),
+                  })}
                   placeholder={`Enter ${field.name}...`}
                   inputMode={
                     field.type === "integer" || field.type === "int"
@@ -124,6 +145,12 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
                   }
                   disabled={isRunning}
                 />
+              )}
+
+              {errors[field.name] && (
+                <span className="comet-body-xs text-destructive">
+                  {errors[field.name]?.message as string}
+                </span>
               )}
             </div>
           ))}

@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.events.CommentsCreated;
 import com.comet.opik.api.events.CommentsDeleted;
 import com.comet.opik.api.events.CommentsUpdated;
@@ -249,7 +250,8 @@ class ExperimentAggregateEventListenerTest {
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onTracesUpdated(
-                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(traceId), WORKSPACE_ID, USER_NAME));
+                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(traceId), WORKSPACE_ID, USER_NAME,
+                            TraceUpdate.builder().build()));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> verify(publisher).publish(Set.of(experimentId), WORKSPACE_ID, USER_NAME));
@@ -258,7 +260,8 @@ class ExperimentAggregateEventListenerTest {
         @Test
         void doesNotCallServiceWhenTraceIdsEmpty() {
             listener.onTracesUpdated(
-                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(), WORKSPACE_ID, USER_NAME));
+                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(), WORKSPACE_ID, USER_NAME,
+                            TraceUpdate.builder().build()));
 
             verify(experimentItemService, never()).getExperimentRefsByTraceIds(any(), any());
             verify(publisher, never()).publish(any(), anyString(), anyString());

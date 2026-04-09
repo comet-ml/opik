@@ -13,6 +13,14 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.runner.BridgeCommand;
+import com.comet.opik.api.runner.BridgeCommandBatchResponse;
+import com.comet.opik.api.runner.BridgeCommandNextRequest;
+import com.comet.opik.api.runner.BridgeCommandResultRequest;
+import com.comet.opik.api.runner.BridgeCommandStatus;
+import com.comet.opik.api.runner.BridgeCommandSubmitRequest;
+import com.comet.opik.api.runner.BridgeCommandSubmitResponse;
+import com.comet.opik.api.runner.BridgeCommandType;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
@@ -101,7 +109,9 @@ class LocalRunnersResourceTest {
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
                                 new CustomConfig("localRunner.heartbeatTtl", "2s"),
-                                new CustomConfig("localRunner.maxPendingJobsPerRunner", "3")))
+                                new CustomConfig("localRunner.maxPendingJobsPerRunner", "3"),
+                                new CustomConfig("localRunner.bridgePollTimeout", "2s"),
+                                new CustomConfig("localRunner.bridgeMaxPendingPerRunner", "3")))
                         .build());
     }
 
@@ -475,20 +485,17 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void paginatesCorrectly() {
+        void newRunnerEvictsOldForSameProject() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
-            for (int i = 0; i < 3; i++) {
-                connectRunnerWithPairing("paginate-runner-" + i, projectId, ctx.apiKey, ctx.workspace);
-            }
+            connectRunnerWithPairing("runner-old", projectId, ctx.apiKey, ctx.workspace);
+            UUID newRunner = connectRunnerWithPairing("runner-new", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(projectId, 0, 2, ctx.apiKey, ctx.workspace);
-            assertThat(page0.content()).hasSize(2);
-            assertThat(page0.total()).isEqualTo(3);
-
-            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(projectId, 1, 2, ctx.apiKey, ctx.workspace);
-            assertThat(page1.content()).hasSize(1);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content().getFirst().id()).isEqualTo(newRunner);
         }
     }
 
@@ -1262,6 +1269,261 @@ class LocalRunnersResourceTest {
             try (var response = runnersClient.callCancelJob(jobId, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
+        }
+    }
+
+    // ========== Bridge Tests ==========
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private UUID connectRunnerWithBridge(String name, UUID projectId, String apiKey, String workspace) {
+        UUID runnerId = connectRunnerWithPairing(name, projectId, apiKey, workspace);
+        runnersClient.heartbeatWithCapabilities(runnerId, List.of("jobs", "bridge"), apiKey, workspace);
+        return runnerId;
+    }
+
+    @Nested
+    @DisplayName("Bridge Happy Path")
+    class BridgeHappyPath {
+
+        @Test
+        @DisplayName("Full lifecycle: submit → poll → report → await")
+        void fullLifecycle() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-happy", projectId, ctx.apiKey, ctx.workspace);
+
+            BridgeCommandSubmitRequest submitReq = BridgeCommandSubmitRequest.builder()
+                    .type(BridgeCommandType.READ_FILE)
+                    .args(MAPPER.createObjectNode().put("path", "src/main.py"))
+                    .timeoutSeconds(30)
+                    .build();
+            BridgeCommandSubmitResponse submitResp = runnersClient.createBridgeCommand(runnerId, submitReq,
+                    ctx.apiKey, ctx.workspace);
+            UUID commandId = submitResp.commandId();
+            assertThat(commandId).isNotNull();
+
+            BridgeCommandBatchResponse batch = runnersClient.nextBridgeCommands(runnerId,
+                    BridgeCommandNextRequest.builder().maxCommands(10).build(), ctx.apiKey, ctx.workspace);
+            assertThat(batch.commands()).hasSize(1);
+            assertThat(batch.commands().getFirst().commandId()).isEqualTo(commandId);
+            assertThat(batch.commands().getFirst().type()).isEqualTo(BridgeCommandType.READ_FILE);
+
+            BridgeCommandResultRequest resultReq = BridgeCommandResultRequest.builder()
+                    .status(BridgeCommandStatus.COMPLETED)
+                    .result(MAPPER.createObjectNode().put("content", "file data"))
+                    .durationMs(15L)
+                    .build();
+            try (var response = runnersClient.callReportBridgeResult(runnerId, commandId, resultReq,
+                    ctx.apiKey, ctx.workspace)) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+
+            BridgeCommand cmd = runnersClient.getBridgeCommand(runnerId, commandId, false, 0,
+                    ctx.apiKey, ctx.workspace);
+            assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.COMPLETED);
+            assertThat(cmd.result().get("content").asText()).isEqualTo("file data");
+            assertThat(cmd.durationMs()).isEqualTo(15L);
+        }
+
+        @Test
+        @DisplayName("Batch poll: submit 3, poll returns all 3")
+        void batchPoll() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-batch", projectId, ctx.apiKey, ctx.workspace);
+
+            for (int i = 0; i < 3; i++) {
+                runnersClient.createBridgeCommand(runnerId,
+                        BridgeCommandSubmitRequest.builder()
+                                .type(BridgeCommandType.READ_FILE)
+                                .args(MAPPER.createObjectNode().put("path", "file" + i + ".py"))
+                                .build(),
+                        ctx.apiKey, ctx.workspace);
+            }
+
+            BridgeCommandBatchResponse batch = runnersClient.nextBridgeCommands(runnerId,
+                    BridgeCommandNextRequest.builder().maxCommands(10).build(), ctx.apiKey, ctx.workspace);
+            assertThat(batch.commands()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("No interference with job endpoints")
+        void noInterferenceWithJobs() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-no-interference", projectId, ctx.apiKey, ctx.workspace);
+
+            runnersClient.createBridgeCommand(runnerId,
+                    BridgeCommandSubmitRequest.builder()
+                            .type(BridgeCommandType.READ_FILE)
+                            .args(MAPPER.createObjectNode().put("path", "f.py"))
+                            .build(),
+                    ctx.apiKey, ctx.workspace);
+
+            UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
+            assertThat(jobId).isNotNull();
+
+            BridgeCommandBatchResponse batch = runnersClient.nextBridgeCommands(runnerId,
+                    BridgeCommandNextRequest.builder().maxCommands(10).build(), ctx.apiKey, ctx.workspace);
+            assertThat(batch.commands()).hasSize(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("Bridge Submit")
+    class BridgeSubmit {
+
+        @Test
+        void runnerWithoutBridgeCapability_returns409() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("bridge-no-cap", projectId, ctx.apiKey, ctx.workspace);
+
+            try (var response = runnersClient.callSubmitBridgeCommand(runnerId,
+                    BridgeCommandSubmitRequest.builder()
+                            .type(BridgeCommandType.READ_FILE)
+                            .args(MAPPER.createObjectNode().put("path", "f.py"))
+                            .build(),
+                    ctx.apiKey, ctx.workspace)) {
+                assertThat(response.getStatus()).isEqualTo(409);
+            }
+        }
+
+        @Test
+        void queueFull_returns429() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-queue-full", projectId, ctx.apiKey, ctx.workspace);
+
+            BridgeCommandSubmitRequest req = BridgeCommandSubmitRequest.builder()
+                    .type(BridgeCommandType.READ_FILE)
+                    .args(MAPPER.createObjectNode().put("path", "f.py"))
+                    .build();
+
+            for (int i = 0; i < 3; i++) {
+                runnersClient.createBridgeCommand(runnerId, req, ctx.apiKey, ctx.workspace);
+            }
+
+            try (var response = runnersClient.callSubmitBridgeCommand(runnerId, req, ctx.apiKey, ctx.workspace)) {
+                assertThat(response.getStatus()).isEqualTo(429);
+            }
+        }
+
+        @Test
+        void wrongWorkspace_returns404() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
+
+            try (var response = runnersClient.callSubmitBridgeCommand(runnerId,
+                    BridgeCommandSubmitRequest.builder()
+                            .type(BridgeCommandType.READ_FILE)
+                            .args(MAPPER.createObjectNode().put("path", "f.py"))
+                            .build(),
+                    OTHER_API_KEY, OTHER_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(404);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Bridge Await")
+    class BridgeAwait {
+
+        @Test
+        void longPollUnblocksOnResult() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-await", projectId, ctx.apiKey, ctx.workspace);
+
+            BridgeCommandSubmitResponse submitResp = runnersClient.createBridgeCommand(runnerId,
+                    BridgeCommandSubmitRequest.builder()
+                            .type(BridgeCommandType.READ_FILE)
+                            .args(MAPPER.createObjectNode().put("path", "f.py"))
+                            .build(),
+                    ctx.apiKey, ctx.workspace);
+            UUID commandId = submitResp.commandId();
+
+            runnersClient.nextBridgeCommands(runnerId,
+                    BridgeCommandNextRequest.builder().maxCommands(10).build(), ctx.apiKey, ctx.workspace);
+
+            Thread reporter = new Thread(() -> {
+                try {
+                    Thread.sleep(500);
+                    runnersClient.callReportBridgeResult(runnerId, commandId,
+                            BridgeCommandResultRequest.builder()
+                                    .status(BridgeCommandStatus.COMPLETED)
+                                    .result(MAPPER.createObjectNode().put("content", "data"))
+                                    .build(),
+                            ctx.apiKey, ctx.workspace).close();
+                } catch (Exception ignored) {
+                }
+            });
+            reporter.start();
+
+            BridgeCommand cmd = runnersClient.getBridgeCommand(runnerId, commandId, true, 10,
+                    ctx.apiKey, ctx.workspace);
+            assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.COMPLETED);
+        }
+
+        @Test
+        void noWait_returnsCurrentState() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-no-wait", projectId, ctx.apiKey, ctx.workspace);
+
+            BridgeCommandSubmitResponse submitResp = runnersClient.createBridgeCommand(runnerId,
+                    BridgeCommandSubmitRequest.builder()
+                            .type(BridgeCommandType.READ_FILE)
+                            .args(MAPPER.createObjectNode().put("path", "f.py"))
+                            .build(),
+                    ctx.apiKey, ctx.workspace);
+
+            BridgeCommand cmd = runnersClient.getBridgeCommand(runnerId, submitResp.commandId(),
+                    false, 0, ctx.apiKey, ctx.workspace);
+            assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.PENDING);
+        }
+
+        @Test
+        void commandNotFound_returns404() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-cmd-notfound", projectId, ctx.apiKey, ctx.workspace);
+
+            try (var response = runnersClient.callGetBridgeCommand(runnerId, randomUUID(), false, 0,
+                    ctx.apiKey, ctx.workspace)) {
+                assertThat(response.getStatus()).isEqualTo(404);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Bridge Heartbeat")
+    class BridgeHeartbeat {
+
+        @Test
+        void capabilitiesReturnedInGetRunner() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithBridge("bridge-caps", projectId, ctx.apiKey, ctx.workspace);
+
+            LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(runner.capabilities()).containsExactly("jobs", "bridge");
+        }
+
+        @Test
+        void oldStyleHeartbeatStillWorks() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("bridge-old-hb", projectId, ctx.apiKey, ctx.workspace);
+
+            LocalRunnerHeartbeatResponse resp = runnersClient.heartbeat(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(resp).isNotNull();
+
+            LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(runner.capabilities()).containsExactly("jobs");
         }
     }
 }

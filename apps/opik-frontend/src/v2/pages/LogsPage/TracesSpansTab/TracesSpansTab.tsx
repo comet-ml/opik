@@ -18,7 +18,10 @@ import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
-import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import {
+  useMetricDateRangeWithQueryAndStorage,
+  DATE_RANGE_PRESET_ALLTIME,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 
 import useTracesOrSpansList, {
@@ -366,7 +369,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQueryAndStorage();
+  } = useMetricDateRangeWithQueryAndStorage({
+    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+  });
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
     StringParam,
@@ -1252,6 +1257,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             onChangeValue={handleDateRangeChange}
             minDate={minDate}
             maxDate={maxDate}
+            hideAlltime
           />
         </div>
       </PageBodyStickyContainer>

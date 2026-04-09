@@ -86,6 +86,9 @@ databaseAnalytics:
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
   queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1}
+  #  Default: 1s
+  #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
+  healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -590,6 +593,60 @@ onlineScoring:
       streamMaxLen: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
       streamTrimLimit: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
 
+# Configuration for Evaluation Suite assertions
+evalSuite:
+  # Default: gpt-5-nano
+  # Description: Default LLM model used for eval suite assertions when the evaluator config has no model specified
+  defaultModelName: ${EVAL_SUITE_DEFAULT_MODEL_NAME:-gpt-5-nano}
+  # Default: 1
+  # Description: Number of LLM runs per dataset item during eval suite execution
+  defaultRunsPerItem: ${EVAL_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
+  # Default: 10
+  # Description: Timeout in seconds for fetching dataset evaluators and item evaluators
+  fetchTimeoutSeconds: ${EVAL_SUITE_FETCH_TIMEOUT_SECONDS:-10}
+
+# Configuration for Experiment Execution (Redis Streams-based processing)
+experimentExecution:
+  # Default: playground
+  # Description: Default project name when experiments are run from the playground without an explicit project
+  defaultProjectName: ${EXPERIMENT_EXECUTION_DEFAULT_PROJECT_NAME:-playground}
+  # Default: true
+  # Description: Whether the experiment item processing subscriber is enabled
+  enabled: ${EXPERIMENT_EXECUTION_ENABLED:-true}
+  # Default: experiment_item_processing_stream
+  # Description: Redis Stream name for experiment item processing messages
+  streamName: ${EXPERIMENT_EXECUTION_STREAM_NAME:-'experiment_item_processing_stream'}
+  # Default: experiment_item_processing
+  # Description: Consumer group name for experiment item processing
+  consumerGroupName: ${EXPERIMENT_EXECUTION_CONSUMER_GROUP_NAME:-'experiment_item_processing'}
+  # Default: 10
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${EXPERIMENT_EXECUTION_CONSUMER_BATCH_SIZE:-10}
+  # Default: 500ms
+  # Description: How often the consumer checks Redis for new messages
+  poolingInterval: ${EXPERIMENT_EXECUTION_POOLING_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Duration for long-polling reads on the Redis Stream
+  longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
+  # Default: 10000
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Trim limit for the Redis Stream
+  streamTrimLimit: ${EXPERIMENT_EXECUTION_STREAM_TRIM_LIMIT:-100}
+  # Default: 10
+  # Description: Ratio for claim interval calculation
+  claimIntervalRatio: ${EXPERIMENT_EXECUTION_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Duration after which a pending message is eligible for claiming
+  pendingMessageDuration: ${EXPERIMENT_EXECUTION_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retries for failed messages
+  maxRetries: ${EXPERIMENT_EXECUTION_MAX_RETRIES:-3}
+  # Default: 24h
+  # Description: TTL for the batch completion counter in Redis
+  batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+
 # Configuration for Dataset Export
 datasetExport:
   # Default: false
@@ -968,6 +1025,33 @@ localRunner:
   # Default: 1000
   # Description: Maximum number of log entries a runner can send in a single batch
   maxLogEntriesPerBatch: ${OPIK_RUNNER_MAX_LOG_ENTRIES_PER_BATCH:-1000}
+  # Default: 50
+  # Description: Maximum number of pending bridge commands allowed per runner
+  bridgeMaxPendingPerRunner: ${OPIK_RUNNER_BRIDGE_MAX_PENDING:-50}
+  # Default: 600
+  # Description: Maximum bridge commands per minute per runner
+  bridgeMaxCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_COMMANDS_PER_MIN:-600}
+  # Default: 120
+  # Description: Maximum bridge write commands per minute per runner
+  bridgeMaxWriteCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_WRITE_COMMANDS_PER_MIN:-120}
+  # Default: 30s
+  # Description: How long the bridge nextCommands long-poll blocks before returning empty
+  bridgePollTimeout: ${OPIK_RUNNER_BRIDGE_POLL_TIMEOUT:-30s}
+  # Default: 30s
+  # Description: Default timeout for bridge commands when not specified by caller
+  bridgeDefaultCommandTimeout: ${OPIK_RUNNER_BRIDGE_DEFAULT_CMD_TIMEOUT:-30s}
+  # Default: 120s
+  # Description: Maximum allowed timeout for bridge commands
+  bridgeMaxCommandTimeout: ${OPIK_RUNNER_BRIDGE_MAX_CMD_TIMEOUT:-120s}
+  # Default: 1h
+  # Description: How long completed bridge command metadata is retained in Redis
+  bridgeCompletedCommandTtl: ${OPIK_RUNNER_BRIDGE_COMPLETED_CMD_TTL:-1h}
+  # Default: 5s
+  # Description: Extra buffer added to async response timeout beyond bridge poll/command timeout
+  bridgeAsyncTimeoutBuffer: ${OPIK_RUNNER_BRIDGE_ASYNC_TIMEOUT_BUFFER:-5s}
+  # Default: 1048576 (1MB)
+  # Description: Maximum payload size in bytes for bridge command args and results
+  bridgeMaxPayloadBytes: ${OPIK_RUNNER_BRIDGE_MAX_PAYLOAD_BYTES:-1048576}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -1195,4 +1279,12 @@ datasetVersioningMigration:
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
+  remoteEnabled: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-false}
+  remoteUrl: ${LLM_MODEL_REGISTRY_REMOTE_URL:-}
   refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}
+
+# Agent Config configuration
+agentConfig:
+  # Default: 5000ms
+  # Description: Duration of the distributed lock held during blueprint create/update operations
+  blueprintLockDuration: ${OPIK_AGENT_CONFIG_BLUEPRINT_LOCK_DURATION:-5000ms}

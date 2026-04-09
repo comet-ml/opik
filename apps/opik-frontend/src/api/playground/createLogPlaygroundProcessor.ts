@@ -52,10 +52,13 @@ export interface TraceMapping {
 }
 
 export interface LogProcessorArgs {
-  onAddExperimentRegistry: (loggedExperiments: LogExperiment[]) => void;
+  onAddExperimentRegistry: (
+    loggedExperiments: LogExperiment[],
+    experimentPromptMap: Record<string, string>,
+  ) => void;
   onError: (error: Error) => void;
   onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
-  onExperimentItemsComplete?: () => void;
+  onExperimentItemsComplete?: (experimentIds: string[]) => void;
   projectName?: string;
 }
 
@@ -297,7 +300,7 @@ const createLogPlaygroundProcessor = ({
   }, CREATE_EXPERIMENT_CONCURRENCY_RATE);
 
   experimentsQueue.drain(() => {
-    onAddExperimentRegistry(experimentRegistry);
+    onAddExperimentRegistry(experimentRegistry, experimentPromptMap);
     areExperimentsCreated = true;
     tryFinishExperiments();
   });
@@ -314,7 +317,7 @@ const createLogPlaygroundProcessor = ({
       try {
         const experimentIds = experimentRegistry.map((e) => e.id);
         await finishExperiments(experimentIds);
-        onExperimentItemsComplete?.();
+        onExperimentItemsComplete?.(experimentIds);
       } catch {
         onError(
           new Error("There has been an error with finishing experiments"),
