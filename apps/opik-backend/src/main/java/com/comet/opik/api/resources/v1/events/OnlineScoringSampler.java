@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
@@ -189,6 +190,8 @@ public class OnlineScoringSampler {
                 .llmAsJudgeCode(evaluator.getCode())
                 .workspaceId(tracesBatch.workspaceId())
                 .userName(tracesBatch.userName())
+                .scoreNameMapping(Map.of())
+                .promptType(PromptType.MUSTACHE)
                 .build();
     }
 

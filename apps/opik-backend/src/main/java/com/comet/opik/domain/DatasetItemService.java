@@ -85,7 +85,7 @@ public interface DatasetItemService {
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
-    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, List<DatasetItemFilter> filters);
+    Flux<DatasetItem> getItems(DatasetItemStreamRequest request, List<DatasetItemFilter> filters);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -135,6 +135,7 @@ public interface DatasetItemService {
      * @return Mono emitting the DatasetVersion when versioning is enabled, or empty when disabled
      */
     Mono<DatasetVersion> save(DatasetItemBatch batch);
+
 }
 
 @Singleton
@@ -755,65 +756,61 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @WithSpan
-    public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
+    public Flux<DatasetItem> getItems(@NonNull DatasetItemStreamRequest request,
             @NonNull List<DatasetItemFilter> filters) {
-        log.info("Getting dataset items for dataset '{}' (hasFilters={}), version='{}', workspaceId='{}'",
-                request.datasetName(), !filters.isEmpty(),
-                request.datasetVersion(), workspaceId);
+        return Flux.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-        return datasetService.resolveDatasetByNameAsync(
-                DatasetIdentifier.builder()
-                        .datasetName(request.datasetName())
-                        .projectName(request.projectName())
-                        .build())
-                .flatMap(dataset -> Mono.deferContextual(ctx -> {
-                    // Ensure dataset is migrated if lazy migration is enabled
-                    return ensureLazyMigration(dataset.id(), workspaceId)
-                            .thenReturn(dataset);
-                }))
-                .flatMapMany(dataset -> {
-                    // 3-tier version resolution logic:
-                    // 1. If version parameter is specified, use it
-                    // 2. If feature toggle is ON and no version specified, use latest version
-                    // 3. Otherwise, use legacy table (existing behavior)
+            log.info("Getting dataset items for dataset '{}' (hasFilters={}), version='{}', workspaceId='{}'",
+                    request.datasetName(), !filters.isEmpty(),
+                    request.datasetVersion(), workspaceId);
 
-                    String versionHashOrTag = request.datasetVersion();
+            return datasetService.resolveDatasetByNameAsync(
+                    DatasetIdentifier.builder()
+                            .datasetName(request.datasetName())
+                            .projectName(request.projectName())
+                            .build())
+                    .flatMap(dataset -> Mono.deferContextual(ctx2 -> {
+                        return ensureLazyMigration(dataset.id(), workspaceId)
+                                .thenReturn(dataset);
+                    }))
+                    .flatMapMany(dataset -> {
+                        String versionHashOrTag = request.datasetVersion();
 
-                    // Case 1: Version explicitly specified
-                    if (versionHashOrTag != null && !versionHashOrTag.isBlank()) {
-                        log.info("Using explicitly provided version '{}' for streaming dataset '{}' items",
-                                versionHashOrTag, dataset.id());
-                        return Mono.fromCallable(() -> versionService.resolveVersionId(workspaceId, dataset.id(),
-                                versionHashOrTag))
-                                .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
-                                        request.steamLimit(), request.lastRetrievedId(), filters));
-                    }
+                        if (versionHashOrTag != null && !versionHashOrTag.isBlank()) {
+                            log.info("Using explicitly provided version '{}' for streaming dataset '{}' items",
+                                    versionHashOrTag, dataset.id());
+                            return Mono.fromCallable(() -> versionService.resolveVersionId(workspaceId, dataset.id(),
+                                    versionHashOrTag))
+                                    .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
+                                            request.steamLimit(), request.lastRetrievedId(), filters));
+                        }
 
-                    // Case 2: Feature toggle ON and no version specified - use latest version
-                    if (featureFlags.isDatasetVersioningEnabled()) {
-                        log.info("Feature toggle ON, using latest version for streaming dataset '{}' items",
+                        if (featureFlags.isDatasetVersioningEnabled()) {
+                            log.info("Feature toggle ON, using latest version for streaming dataset '{}' items",
+                                    dataset.id());
+                            return Mono
+                                    .fromCallable(() -> versionService.getLatestVersion(dataset.id(), workspaceId))
+                                    .flatMapMany(latestVersionOpt -> {
+                                        if (latestVersionOpt.isPresent()) {
+                                            UUID versionId = latestVersionOpt.get().id();
+                                            log.info("Streaming from latest version '{}' for dataset '{}'", versionId,
+                                                    dataset.id());
+                                            return versionDao.getItems(dataset.id(), versionId, request.steamLimit(),
+                                                    request.lastRetrievedId(), filters);
+                                        } else {
+                                            log.warn("No versions exist for dataset '{}', returning empty stream",
+                                                    dataset.id());
+                                            return Flux.empty();
+                                        }
+                                    });
+                        }
+
+                        log.info("Feature toggle OFF, using legacy table for streaming dataset '{}' items",
                                 dataset.id());
-                        return Mono.fromCallable(() -> versionService.getLatestVersion(dataset.id(), workspaceId))
-                                .flatMapMany(latestVersionOpt -> {
-                                    if (latestVersionOpt.isPresent()) {
-                                        UUID versionId = latestVersionOpt.get().id();
-                                        log.info("Streaming from latest version '{}' for dataset '{}'", versionId,
-                                                dataset.id());
-                                        return versionDao.getItems(dataset.id(), versionId, request.steamLimit(),
-                                                request.lastRetrievedId(), filters);
-                                    } else {
-                                        // No version exists yet - return empty
-                                        log.warn("No versions exist for dataset '{}', returning empty stream",
-                                                dataset.id());
-                                        return Flux.empty();
-                                    }
-                                });
-                    }
-
-                    // Case 3: Feature toggle OFF - use legacy table
-                    log.info("Feature toggle OFF, using legacy table for streaming dataset '{}' items", dataset.id());
-                    return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId(), filters);
-                });
+                        return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId(), filters);
+                    });
+        });
     }
 
     @Override

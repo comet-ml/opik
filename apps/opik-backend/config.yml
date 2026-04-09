@@ -593,6 +593,60 @@ onlineScoring:
       streamMaxLen: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
       streamTrimLimit: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
 
+# Configuration for Evaluation Suite assertions
+evalSuite:
+  # Default: gpt-5-nano
+  # Description: Default LLM model used for eval suite assertions when the evaluator config has no model specified
+  defaultModelName: ${EVAL_SUITE_DEFAULT_MODEL_NAME:-gpt-5-nano}
+  # Default: 1
+  # Description: Number of LLM runs per dataset item during eval suite execution
+  defaultRunsPerItem: ${EVAL_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
+  # Default: 10
+  # Description: Timeout in seconds for fetching dataset evaluators and item evaluators
+  fetchTimeoutSeconds: ${EVAL_SUITE_FETCH_TIMEOUT_SECONDS:-10}
+
+# Configuration for Experiment Execution (Redis Streams-based processing)
+experimentExecution:
+  # Default: playground
+  # Description: Default project name when experiments are run from the playground without an explicit project
+  defaultProjectName: ${EXPERIMENT_EXECUTION_DEFAULT_PROJECT_NAME:-playground}
+  # Default: true
+  # Description: Whether the experiment item processing subscriber is enabled
+  enabled: ${EXPERIMENT_EXECUTION_ENABLED:-true}
+  # Default: experiment_item_processing_stream
+  # Description: Redis Stream name for experiment item processing messages
+  streamName: ${EXPERIMENT_EXECUTION_STREAM_NAME:-'experiment_item_processing_stream'}
+  # Default: experiment_item_processing
+  # Description: Consumer group name for experiment item processing
+  consumerGroupName: ${EXPERIMENT_EXECUTION_CONSUMER_GROUP_NAME:-'experiment_item_processing'}
+  # Default: 10
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${EXPERIMENT_EXECUTION_CONSUMER_BATCH_SIZE:-10}
+  # Default: 500ms
+  # Description: How often the consumer checks Redis for new messages
+  poolingInterval: ${EXPERIMENT_EXECUTION_POOLING_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Duration for long-polling reads on the Redis Stream
+  longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
+  # Default: 10000
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Trim limit for the Redis Stream
+  streamTrimLimit: ${EXPERIMENT_EXECUTION_STREAM_TRIM_LIMIT:-100}
+  # Default: 10
+  # Description: Ratio for claim interval calculation
+  claimIntervalRatio: ${EXPERIMENT_EXECUTION_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Duration after which a pending message is eligible for claiming
+  pendingMessageDuration: ${EXPERIMENT_EXECUTION_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retries for failed messages
+  maxRetries: ${EXPERIMENT_EXECUTION_MAX_RETRIES:-3}
+  # Default: 24h
+  # Description: TTL for the batch completion counter in Redis
+  batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+
 # Configuration for Dataset Export
 datasetExport:
   # Default: false
