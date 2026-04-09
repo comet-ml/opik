@@ -8,5 +8,13 @@ package com.comet.opik.api;
  */
 public enum ScoreDestination {
     FEEDBACK_SCORES,
-    ASSERTION_RESULTS
+    ASSERTION_RESULTS;
+
+    private static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
+
+    public static ScoreDestination fromCategoryName(String categoryName) {
+        return SUITE_ASSERTION_CATEGORY.equals(categoryName)
+                ? ASSERTION_RESULTS
+                : FEEDBACK_SCORES;
+    }
 }
