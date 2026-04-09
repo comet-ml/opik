@@ -15,7 +15,11 @@ import { DropdownOption } from "@/types/shared";
 type AgentRunnerConnectedStateProps = {
   projectId: string;
   runner: LocalRunner;
-  onRun: (inputs: Record<string, unknown>, blueprintName?: string, maskId?: string) => void;
+  onRun: (
+    inputs: Record<string, unknown>,
+    blueprintName?: string,
+    maskId?: string,
+  ) => void;
   isRunning: boolean;
   resetKey: number;
 };

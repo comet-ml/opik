@@ -6,8 +6,8 @@ _active_config_mask_var: contextvars.ContextVar[Optional[str]] = contextvars.Con
     "opik_active_config_mask", default=None
 )
 
-_active_config_blueprint_name_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "opik_active_config_blueprint_name", default=None
+_active_config_blueprint_name_var: contextvars.ContextVar[Optional[str]] = (
+    contextvars.ContextVar("opik_active_config_blueprint_name", default=None)
 )
 
 

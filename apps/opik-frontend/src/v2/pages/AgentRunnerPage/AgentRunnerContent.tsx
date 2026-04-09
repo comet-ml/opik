@@ -71,12 +71,15 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     },
   );
 
-  const handleRun = (inputs: Record<string, unknown>, blueprintName?: string, maskId?: string) => {
+  const handleRun = (
+    inputs: Record<string, unknown>,
+    blueprintName?: string,
+    maskId?: string,
+  ) => {
     if (!agentName) {
       return;
     }
-    setActiveJobId(null);
-    setTraceOpen(false);
+    handleStop();
     createJobMutation.mutate(
       {
         agent_name: agentName,
