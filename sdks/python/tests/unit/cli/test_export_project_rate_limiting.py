@@ -114,7 +114,7 @@ class TestExportTracesRetryWaitBehaviour:
             get_traces_side_effect
         )
 
-        with patch("time.sleep") as mock_sleep:
+        with patch(f"{_MODULE}._fetch_traces_page.retry.sleep") as mock_sleep:
             export_traces(
                 client=mock_client,
                 project_name="proj",
@@ -250,15 +250,16 @@ class TestExportTracesPageFetchFailures:
                     page3,  # page 3: OK, 500 traces
                     _make_page([]),  # page 4: end
                 ]
-                with patch(f"{_MODULE}.time.sleep"):
-                    exported, skipped, had_errors = export_traces(
-                        client=mock_client,
-                        project_name="proj",
-                        project_dir=Path(tmp),
-                        max_results=None,
-                        filter_string=None,
-                        show_progress=False,
-                    )
+                with patch(f"{_MODULE}._fetch_spans_page", return_value=_make_page([])):
+                    with patch(f"{_MODULE}.time.sleep"):
+                        exported, skipped, had_errors = export_traces(
+                            client=mock_client,
+                            project_name="proj",
+                            project_dir=Path(tmp),
+                            max_results=None,
+                            filter_string=None,
+                            show_progress=False,
+                        )
 
         assert had_errors is True
         assert exported == 1000  # page 1 and page 3 traces both exported
@@ -377,15 +378,16 @@ class TestExportTracesInterPageDelay:
                     _make_full_page(500, offset=500),  # page 2: full, IDs 500–999
                     _make_page([]),  # page 3: empty — end
                 ]
-                with patch(f"{_MODULE}.time.sleep") as mock_sleep:
-                    export_traces(
-                        client=mock_client,
-                        project_name="proj",
-                        project_dir=Path(tmp),
-                        max_results=None,
-                        filter_string=None,
-                        show_progress=False,
-                    )
+                with patch(f"{_MODULE}._fetch_spans_page", return_value=_make_page([])):
+                    with patch(f"{_MODULE}.time.sleep") as mock_sleep:
+                        export_traces(
+                            client=mock_client,
+                            project_name="proj",
+                            project_dir=Path(tmp),
+                            max_results=None,
+                            filter_string=None,
+                            show_progress=False,
+                        )
 
         # sleep called once after page 1 and once after page 2.
         from unittest.mock import call as mock_call
