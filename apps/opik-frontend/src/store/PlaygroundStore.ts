@@ -445,7 +445,6 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           progressPhase,
           progressTotal,
           progressCompleted,
-          experimentByPromptId,
           isRunning,
           isRunningMap,
           ...rest
