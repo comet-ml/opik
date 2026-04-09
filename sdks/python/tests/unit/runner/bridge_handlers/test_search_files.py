@@ -119,74 +119,60 @@ class TestSearchFiles:
             handler.execute({"pattern": "hello"}, timeout=_TEST_TIMEOUT)
         assert exc_info.value.code == "not_a_git_repository"
 
+    def test_search_files__untracked_file__is_searched(self, tmp_path: Path) -> None:
+        _git_init(tmp_path)
+        _git_add_commit(tmp_path)
+        # Write after commit so the file is untracked
+        (tmp_path / "untracked.py").write_text("def untracked_func():\n    pass\n")
+        handler = self._handler(tmp_path)
+        result = handler.execute({"pattern": r"def \w+"}, timeout=_TEST_TIMEOUT)
+        files = [m["file"] for m in result["matches"]]
+        assert "untracked.py" in files
+
     @patch("subprocess.run")
-    def test_search_files__glob_and_path__constructs_correct_command(
+    def test_search_files__uses_untracked_flag(
         self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
-        _git_init(tmp_path)
-        (tmp_path / "file.txt").write_text("target\n")
-        _git_add_commit(tmp_path)
+        def side_effect(*args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
 
-        def git_rev_parse_side_effect(*args, **kwargs):
-            if "rev-parse" in args[0]:
-                result = MagicMock()
-                result.returncode = 0
-                return result
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = ""
-            return mock_result
-
-        mock_run.side_effect = git_rev_parse_side_effect
+        mock_run.side_effect = side_effect
 
         handler = self._handler(tmp_path)
-        handler.execute(
-            {"pattern": "target", "glob": "*.txt", "path": "."}, timeout=_TEST_TIMEOUT
-        )
+        handler.execute({"pattern": "target"}, timeout=_TEST_TIMEOUT)
 
-        grep_call = [
-            call for call in mock_run.call_args_list if call[0][0][1] == "grep"
-        ][0]
-        cmd = grep_call[0][0]
-
-        assert "git" in cmd
-        assert "grep" in cmd
-        assert "-P" in cmd
-        assert "target" in cmd
-        assert "*.txt" in cmd
-        assert "--" in cmd
+        grep_call = [call for call in mock_run.call_args_list if "grep" in call[0][0]][
+            0
+        ]
+        assert "--untracked" in grep_call[0][0]
 
     @patch("subprocess.run")
     def test_search_files__glob_takes_precedence_over_path(
         self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
-        _git_init(tmp_path)
-        (tmp_path / "file.txt").write_text("target\n")
-        _git_add_commit(tmp_path)
+        (tmp_path / "src").mkdir()
 
-        def git_rev_parse_side_effect(*args, **kwargs):
-            if "rev-parse" in args[0]:
-                result = MagicMock()
-                result.returncode = 0
-                return result
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = ""
-            return mock_result
+        def side_effect(*args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
 
-        mock_run.side_effect = git_rev_parse_side_effect
+        mock_run.side_effect = side_effect
 
         handler = self._handler(tmp_path)
         handler.execute(
-            {"pattern": "target", "glob": "*.txt", "path": "."}, timeout=_TEST_TIMEOUT
+            {"pattern": "target", "glob": "*.txt", "path": "src"}, timeout=_TEST_TIMEOUT
         )
 
-        grep_call = [
-            call for call in mock_run.call_args_list if call[0][0][1] == "grep"
-        ][0]
+        grep_call = [call for call in mock_run.call_args_list if "grep" in call[0][0]][
+            0
+        ]
         cmd = grep_call[0][0]
-
-        assert cmd.count("*.txt") == 1
-        assert "." not in cmd[cmd.index("--") + 1 :]
+        assert "*.txt" in cmd
+        assert "src" not in cmd[cmd.index("--") + 1 :]

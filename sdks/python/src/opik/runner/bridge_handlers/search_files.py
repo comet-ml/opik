@@ -52,6 +52,7 @@ class SearchFilesHandler(BaseHandler):
         cmd = [
             "git",
             "grep",
+            "--untracked",
             "-n",
             f"-C{_CONTEXT_LINES}",
             "--no-color",
