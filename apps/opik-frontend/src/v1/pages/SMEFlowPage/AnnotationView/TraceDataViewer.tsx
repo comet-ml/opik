@@ -119,7 +119,10 @@ const TraceDataViewer: React.FC = () => {
   return (
     <>
       <div className="relative pr-4">
-        <TraceIdentifier name={displayTrace?.name} id={displayTrace?.id || ""} />
+        <TraceIdentifier
+          name={displayTrace?.name}
+          id={displayTrace?.id || ""}
+        />
         {isFetching && (
           <div className="absolute right-6 top-2 z-10">
             <Loader2 className="size-4 animate-spin text-slate-400" />

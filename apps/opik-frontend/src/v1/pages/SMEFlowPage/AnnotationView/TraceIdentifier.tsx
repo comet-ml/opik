@@ -12,9 +12,7 @@ const TraceIdentifier: React.FC<TraceIdentifierProps> = ({ name, id }) => {
 
   return (
     <div className="group mb-3 flex min-w-0 items-center gap-1.5">
-      {name && (
-        <span className="comet-body-s-accented truncate">{name}</span>
-      )}
+      {name && <span className="comet-body-s-accented truncate">{name}</span>}
       {name && <span className="text-light-slate">/</span>}
       <TooltipWrapper content={id}>
         <span className="comet-body-s truncate text-light-slate">{id}</span>
