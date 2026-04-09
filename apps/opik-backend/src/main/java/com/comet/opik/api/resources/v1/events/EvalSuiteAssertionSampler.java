@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.PromptType;
+import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
@@ -11,6 +12,7 @@ import com.comet.opik.api.resources.v1.events.EvalSuiteEvaluatorMapper.PreparedE
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -56,6 +59,7 @@ public class EvalSuiteAssertionSampler {
     private final IdGenerator idGenerator;
     private final EvalSuiteConfig evalSuiteConfig;
     private final EvalSuiteEvaluatorMapper evaluatorMapper;
+    private final LlmProviderApiKeyService llmProviderApiKeyService;
 
     @Inject
     public EvalSuiteAssertionSampler(
@@ -64,13 +68,15 @@ public class EvalSuiteAssertionSampler {
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull IdGenerator idGenerator,
             @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig,
-            @NonNull EvalSuiteEvaluatorMapper evaluatorMapper) {
+            @NonNull EvalSuiteEvaluatorMapper evaluatorMapper,
+            @NonNull LlmProviderApiKeyService llmProviderApiKeyService) {
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.idGenerator = idGenerator;
         this.evalSuiteConfig = evalSuiteConfig;
         this.evaluatorMapper = evaluatorMapper;
+        this.llmProviderApiKeyService = llmProviderApiKeyService;
     }
 
     @Subscribe
@@ -89,6 +95,13 @@ public class EvalSuiteAssertionSampler {
                 RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
 
         Duration fetchTimeout = Duration.ofSeconds(evalSuiteConfig.getFetchTimeoutSeconds());
+
+        // Resolve the model once per batch from connected providers
+        String modelName = resolveModel(tracesBatch.workspaceId());
+        if (modelName == null) {
+            log.warn("No supported LLM provider connected for eval suite assertions in workspace '{}'. "
+                    + "Evaluators without an explicit model will be skipped.", tracesBatch.workspaceId());
+        }
 
         // Cache dataset evaluators by (datasetId:versionHash) to avoid redundant fetches
         Map<String, List<PreparedEvaluator>> datasetEvaluatorsCache = new HashMap<>();
@@ -120,7 +133,7 @@ public class EvalSuiteAssertionSampler {
                                 .contextWrite(reactiveContext)
                                 .timeout(fetchTimeout)
                                 .block();
-                        return evaluatorMapper.prepareEvaluators(result.evaluators());
+                        return evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
                     });
 
                     var datasetItemId = getMetadataString(trace, "eval_suite_dataset_item_id");
@@ -134,7 +147,8 @@ public class EvalSuiteAssertionSampler {
                             .flatMap(itemId -> {
                                 List<PreparedEvaluator> allEvaluators = new ArrayList<>(
                                         preparedDatasetEvaluators);
-                                allEvaluators.addAll(fetchItemEvaluators(itemId, reactiveContext));
+                                allEvaluators.addAll(fetchItemEvaluators(itemId, reactiveContext,
+                                        modelName));
 
                                 if (allEvaluators.isEmpty()) {
                                     log.debug("No evaluators found for trace '{}', dataset item '{}'",
@@ -191,7 +205,8 @@ public class EvalSuiteAssertionSampler {
     }
 
     private List<PreparedEvaluator> fetchItemEvaluators(
-            UUID itemId, reactor.util.context.Context reactiveContext) {
+            UUID itemId, reactor.util.context.Context reactiveContext,
+            String modelName) {
         try {
             var item = datasetItemService.get(itemId)
                     .contextWrite(reactiveContext)
@@ -202,7 +217,7 @@ public class EvalSuiteAssertionSampler {
                 return List.of();
             }
 
-            return evaluatorMapper.prepareEvaluators(item.evaluators());
+            return evaluatorMapper.prepareEvaluators(item.evaluators(), modelName);
         } catch (Exception e) {
             log.error("Failed to fetch evaluators for item '{}'", itemId, e);
             return List.of();
@@ -227,6 +242,20 @@ public class EvalSuiteAssertionSampler {
         } catch (IllegalArgumentException e) {
             log.warn("Invalid UUID for eval_suite_dataset_item_id '{}' in trace '{}'", id, traceId);
             return Optional.empty();
+        }
+    }
+
+    private String resolveModel(String workspaceId) {
+        try {
+            var connectedProviders = llmProviderApiKeyService.find(workspaceId)
+                    .content().stream()
+                    .map(ProviderApiKey::provider)
+                    .collect(Collectors.toSet());
+
+            return EvalSuiteEvaluatorMapper.resolveModel(connectedProviders).orElse(null);
+        } catch (Exception e) {
+            log.error("Failed to fetch connected providers for workspace '{}'", workspaceId, e);
+            return null;
         }
     }
 

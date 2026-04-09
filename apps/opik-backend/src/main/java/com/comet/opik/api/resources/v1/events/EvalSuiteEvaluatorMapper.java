@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.ExecutionPolicy;
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
@@ -15,13 +16,13 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,11 +34,44 @@ import java.util.stream.Stream;
 @Slf4j
 public class EvalSuiteEvaluatorMapper {
 
+    /**
+     * Supported providers for eval suite LLM-as-judge assertions, ordered by priority.
+     * First connected provider wins.
+     */
+    enum SupportedJudgeProvider {
+        OPEN_AI(LlmProvider.OPEN_AI, "gpt-5-nano"),
+        ANTHROPIC(LlmProvider.ANTHROPIC, "claude-haiku-4-5-20251001"),
+        GEMINI(LlmProvider.GEMINI, "gemini-2.0-flash");
+
+        private final LlmProvider provider;
+        private final String model;
+
+        SupportedJudgeProvider(LlmProvider provider, String model) {
+            this.provider = provider;
+            this.model = model;
+        }
+    }
+
     private final EvalSuiteConfig evalSuiteConfig;
 
     @Inject
     public EvalSuiteEvaluatorMapper(@NonNull EvalSuiteConfig evalSuiteConfig) {
         this.evalSuiteConfig = evalSuiteConfig;
+    }
+
+    /**
+     * Resolves the LLM model for eval suite assertions based on connected providers.
+     * Returns the model for the highest-priority connected provider, or empty if none match.
+     */
+    public static Optional<String> resolveModel(Set<LlmProvider> connectedProviders) {
+        for (var judge : SupportedJudgeProvider.values()) {
+            if (connectedProviders.contains(judge.provider)) {
+                log.debug("Resolved eval suite model '{}' for provider '{}'",
+                        judge.model, judge.provider);
+                return Optional.of(judge.model);
+            }
+        }
+        return Optional.empty();
     }
 
     public record PreparedEvaluator(@NonNull String name, @NonNull LlmAsJudgeCode code,
@@ -54,7 +88,8 @@ public class EvalSuiteEvaluatorMapper {
         return evalSuiteConfig.getDefaultRunsPerItem();
     }
 
-    public List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators) {
+    public List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators,
+            String modelName) {
         return evaluators.stream()
                 .filter(evaluator -> {
                     if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
@@ -66,7 +101,7 @@ public class EvalSuiteEvaluatorMapper {
                 })
                 .flatMap(evaluator -> {
                     try {
-                        LlmAsJudgeCode code = toScoringCode(evaluator.config());
+                        LlmAsJudgeCode code = toScoringCode(evaluator.config(), modelName);
 
                         Map<String, String> scoreNameMapping = code.schema() != null
                                 ? code.schema().stream()
@@ -84,9 +119,9 @@ public class EvalSuiteEvaluatorMapper {
                 .toList();
     }
 
-    LlmAsJudgeCode toScoringCode(JsonNode config) {
+    LlmAsJudgeCode toScoringCode(JsonNode config, String modelName) {
         LlmAsJudgeCode code = deserializeEvaluatorConfig(config);
-        code = resolveModelName(code);
+        code = setModel(code, modelName);
         code = renameSchemaToAssertionKeys(code);
         code = applyEvalSuitePrompt(code);
         return code;
@@ -160,17 +195,10 @@ public class EvalSuiteEvaluatorMapper {
                 .collect(Collectors.joining("\n"));
     }
 
-    private LlmAsJudgeCode resolveModelName(LlmAsJudgeCode code) {
-        var existingModel = Optional.ofNullable(code.model());
-        if (existingModel.map(LlmAsJudgeModelParameters::name).filter(StringUtils::isNotBlank).isEmpty()) {
-            var resolvedModel = LlmAsJudgeModelParameters.builder()
-                    .name(evalSuiteConfig.getDefaultModelName())
-                    .temperature(existingModel.map(LlmAsJudgeModelParameters::temperature).orElse(null))
-                    .seed(existingModel.map(LlmAsJudgeModelParameters::seed).orElse(null))
-                    .customParameters(existingModel.map(LlmAsJudgeModelParameters::customParameters).orElse(null))
-                    .build();
-            return new LlmAsJudgeCode(resolvedModel, code.messages(), code.variables(), code.schema());
-        }
-        return code;
+    private LlmAsJudgeCode setModel(LlmAsJudgeCode code, String modelName) {
+        var model = LlmAsJudgeModelParameters.builder()
+                .name(modelName)
+                .build();
+        return new LlmAsJudgeCode(model, code.messages(), code.variables(), code.schema());
     }
 }

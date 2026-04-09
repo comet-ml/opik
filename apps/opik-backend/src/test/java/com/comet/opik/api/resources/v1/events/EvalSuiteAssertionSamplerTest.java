@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
@@ -16,6 +17,7 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -39,6 +41,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,15 +66,20 @@ class EvalSuiteAssertionSamplerTest {
         @Mock
         IdGenerator idGenerator;
 
+        @Mock
+        LlmProviderApiKeyService llmProviderApiKeyService;
+
         private EvalSuiteAssertionSampler sampler;
 
         @org.junit.jupiter.api.BeforeEach
         void setUp() {
             var evalSuiteConfig = new EvalSuiteConfig();
             var evaluatorMapper = new EvalSuiteEvaluatorMapper(evalSuiteConfig);
+            lenient().when(llmProviderApiKeyService.find(any(String.class)))
+                    .thenReturn(new ProviderApiKey.ProviderApiKeyPage(0, 0, 0, List.of(), List.of()));
             sampler = new EvalSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    evalSuiteConfig, evaluatorMapper);
+                    evalSuiteConfig, evaluatorMapper, llmProviderApiKeyService);
         }
 
         @Test
@@ -155,6 +163,12 @@ class EvalSuiteAssertionSamplerTest {
                     .versionHash(versionHash)
                     .evaluators(List.of())
                     .build();
+
+            var openAiKey = ProviderApiKey.builder()
+                    .provider(com.comet.opik.api.LlmProvider.OPEN_AI)
+                    .build();
+            when(llmProviderApiKeyService.find(workspaceId))
+                    .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
 
             when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
                     .thenReturn(versionId);

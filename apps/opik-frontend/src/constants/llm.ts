@@ -10,7 +10,25 @@ import {
   PythonCodeDetailsTraceForm,
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
+
+const EVAL_SUITE_SUPPORTED_PROVIDER_SET = new Set<string>([
+  PROVIDER_TYPE.OPEN_AI,
+  PROVIDER_TYPE.ANTHROPIC,
+  PROVIDER_TYPE.GEMINI,
+]);
+
+export const EVAL_SUITE_MISSING_PROVIDER_MESSAGE =
+  "To run evaluation suite experiments with assertions, connect one of: OpenAI, Anthropic, or Gemini";
+
+export const hasEvalSuiteSupportedProvider = (
+  providerKeys: COMPOSED_PROVIDER_TYPE[],
+): boolean =>
+  providerKeys.some((key) => EVAL_SUITE_SUPPORTED_PROVIDER_SET.has(key));
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =

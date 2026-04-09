@@ -204,6 +204,38 @@ class ExperimentMessageRendererTest {
         }
 
         @Test
+        @DisplayName("should not recognize snake_case config keys - frontend must send camelCase")
+        void rejectSnakeCaseConfigKeys() {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var mapper = JsonUtils.getMapper();
+            var configs = Map.<String, JsonNode>of(
+                    "temperature", mapper.valueToTree(0.7),
+                    "top_p", mapper.valueToTree(0.9),
+                    "max_completion_tokens", mapper.valueToTree(1024),
+                    "frequency_penalty", mapper.valueToTree(0.5),
+                    "presence_penalty", mapper.valueToTree(0.3));
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "gpt-4o", messages, configs, null);
+
+            ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            assertThat(request.temperature()).isEqualTo(0.7);
+            assertThat(request.topP()).as("top_p should not be recognized, must use topP").isNull();
+            assertThat(request.maxCompletionTokens())
+                    .as("max_completion_tokens should not be recognized, must use maxCompletionTokens").isNull();
+            assertThat(request.frequencyPenalty())
+                    .as("frequency_penalty should not be recognized, must use frequencyPenalty").isNull();
+            assertThat(request.presencePenalty())
+                    .as("presence_penalty should not be recognized, must use presencePenalty").isNull();
+        }
+
+        @Test
         @DisplayName("should not apply configs when null")
         void noConfigsWhenNull() {
             var messages = List.of(
