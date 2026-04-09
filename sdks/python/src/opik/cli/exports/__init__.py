@@ -89,6 +89,19 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
     from .utils import console as _console
 
     _opik_logger = logging.getLogger("opik")
+    # Snapshot existing handlers so we can restore them when the CLI command
+    # exits (important: CliRunner-based unit tests share the global logger state
+    # across test cases, so any mutation must be undone on context teardown).
+    _original_handlers = list(_opik_logger.handlers)
+
+    def _restore_opik_handlers() -> None:
+        for _h in list(_opik_logger.handlers):
+            _opik_logger.removeHandler(_h)
+        for _h in _original_handlers:
+            _opik_logger.addHandler(_h)
+
+    ctx.call_on_close(_restore_opik_handlers)
+
     # Remove existing StreamHandlers (SDK installs one with "OPIK: " prefix).
     # Also remove any RichHandlers not bound to _console — those would route SDK
     # logs to a different console and bypass our progress-bar-aware output.
