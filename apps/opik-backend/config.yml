@@ -967,6 +967,12 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: "" (empty) (no allowlisted workspaces)
+  # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
+  # Highest priority — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
+  # Non-allowlisted workspaces follow normal determination. Empty/missing means no allowlisting.
+  # Use case: gradual V2 rollout — set forceWorkspaceVersion to "version_1" and allowlist specific workspace IDs for V2.
+  v2WorkspaceAllowlist: ${TOGGLE_V2_WORKSPACE_ALLOWLIST:-""}
   # Default: version_1
   # Description: Forces ALL workspaces to a specific navigation version. Highest priority override.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).

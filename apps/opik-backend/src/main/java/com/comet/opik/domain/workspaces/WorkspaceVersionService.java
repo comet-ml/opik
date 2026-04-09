@@ -14,7 +14,7 @@ import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import lombok.NonNull;
-import org.apache.tika.utils.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -117,6 +117,11 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     @Override
     public Mono<WorkspaceVersion> getWorkspaceVersion(@NonNull String workspaceId, OpikVersion authSuggestedVersion) {
+        var isWorkspaceInV2Allowlist = serviceTogglesConfig.getV2WorkspaceAllowlistIds().contains(workspaceId);
+        if (isWorkspaceInV2Allowlist) {
+            log.info("Workspace included in version_2 allowlist, workspaceId '{}'", workspaceId);
+            return Mono.just(buildResponse(OpikVersion.VERSION_2));
+        }
         var forcedVersion = getForcedVersion();
         if (forcedVersion.isPresent()) {
             log.info("Workspace version forced by feature flag, opikVersion '{}', workspaceId '{}'",
