@@ -132,5 +132,11 @@ public class OpikConfiguration extends JobConfiguration {
     private OllieStateConfig ollieStateConfig = new OllieStateConfig();
 
     @Valid @NotNull @JsonProperty
+    private EvalSuiteConfig evalSuite = new EvalSuiteConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentExecutionConfig experimentExecution = new ExperimentExecutionConfig();
+
+    @Valid @NotNull @JsonProperty
     private AgentConfigConfiguration agentConfig = new AgentConfigConfiguration();
 }

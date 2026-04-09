@@ -450,7 +450,7 @@ public class DatasetsResource {
                     .projectName(request.projectName())
                     .build());
 
-            var items = itemService.getItems(workspaceId, request, queryFilters)
+            var items = itemService.getItems(request, queryFilters)
                     .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
 
             ChunkedOutput<JsonNode> outputStream = streamer.getOutputStream(items);

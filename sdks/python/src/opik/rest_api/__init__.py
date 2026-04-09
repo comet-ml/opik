@@ -701,6 +701,7 @@ from .spans import (
     FindFeedbackScoreNames1RequestType,
     GetSpanStatsRequestType,
     GetSpansByProjectRequestType,
+    SpanSearchStreamRequestPublicExcludeItem,
     SpanSearchStreamRequestPublicType,
 )
 from .traces import TraceSearchStreamRequestPublicExcludeItem
@@ -1253,6 +1254,7 @@ __all__ = [
     "SpanPublic",
     "SpanPublicSource",
     "SpanPublicType",
+    "SpanSearchStreamRequestPublicExcludeItem",
     "SpanSearchStreamRequestPublicType",
     "SpanSource",
     "SpanType",

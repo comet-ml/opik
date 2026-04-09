@@ -79,7 +79,14 @@ public class OnlineScoringEngine {
      */
     public static ChatRequest prepareLlmRequest(
             @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
-        var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
+        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE);
+    }
+
+    public static ChatRequest prepareLlmRequest(
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType) {
+        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
@@ -239,6 +246,11 @@ public class OnlineScoringEngine {
      */
     private static List<ChatMessage> renderMessagesWithReplacements(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> replacements) {
+        return renderMessagesWithReplacements(templateMessages, replacements, PromptType.MUSTACHE);
+    }
+
+    private static List<ChatMessage> renderMessagesWithReplacements(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> replacements, PromptType promptType) {
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
@@ -246,7 +258,7 @@ public class OnlineScoringEngine {
                     if (templateMessage.isStringContent()) {
                         // String format: plain text content
                         var txtContent = templateMessage.asString();
-                        var renderedMessage = TemplateParseUtils.render(txtContent, replacements, PromptType.MUSTACHE);
+                        var renderedMessage = TemplateParseUtils.render(txtContent, replacements, promptType);
                         return switch (templateMessage.role()) {
                             case USER -> UserMessage.from(renderedMessage);
                             case SYSTEM -> SystemMessage.from(renderedMessage);
@@ -259,14 +271,14 @@ public class OnlineScoringEngine {
                         // Array format: structured content parts
                         return switch (templateMessage.role()) {
                             case USER -> buildUserMessageFromContentParts(
-                                    templateMessage.asContentList(), replacements);
+                                    templateMessage.asContentList(), replacements, promptType);
                             case SYSTEM -> {
                                 // For SYSTEM messages with array content, extract first text part
                                 var textContent = templateMessage.asContentList().stream()
                                         .filter(part -> "text".equals(part.type()))
                                         .map(LlmAsJudgeMessageContent::text)
                                         .filter(Objects::nonNull)
-                                        .map(text -> TemplateParseUtils.render(text, replacements, PromptType.MUSTACHE))
+                                        .map(text -> TemplateParseUtils.render(text, replacements, promptType))
                                         .findFirst()
                                         .orElse("");
                                 yield SystemMessage.from(textContent);
@@ -376,13 +388,18 @@ public class OnlineScoringEngine {
      */
     private UserMessage buildUserMessageFromContentParts(
             List<LlmAsJudgeMessageContent> contentParts, Map<String, String> replacements) {
+        return buildUserMessageFromContentParts(contentParts, replacements, PromptType.MUSTACHE);
+    }
+
+    private UserMessage buildUserMessageFromContentParts(
+            List<LlmAsJudgeMessageContent> contentParts, Map<String, String> replacements, PromptType promptType) {
         var builder = UserMessage.builder();
 
         for (var part : contentParts) {
             switch (part.type()) {
                 case "text" -> {
                     if (part.text() != null) {
-                        var renderedText = TemplateParseUtils.render(part.text(), replacements, PromptType.MUSTACHE);
+                        var renderedText = TemplateParseUtils.render(part.text(), replacements, promptType);
                         if (StringUtils.isNotBlank(renderedText)) {
                             builder.addContent(TextContent.from(renderedText));
                         }
@@ -390,21 +407,21 @@ public class OnlineScoringEngine {
                 }
                 case "image_url" -> {
                     if (part.imageUrl() != null && part.imageUrl().url() != null) {
-                        var url = TemplateParseUtils.render(part.imageUrl().url(), replacements, PromptType.MUSTACHE);
+                        var url = TemplateParseUtils.render(part.imageUrl().url(), replacements, promptType);
                         var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
                         builder.addContent(ImageContent.from(unescapedUrl));
                     }
                 }
                 case "video_url" -> {
                     if (part.videoUrl() != null && part.videoUrl().url() != null) {
-                        var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, PromptType.MUSTACHE);
+                        var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, promptType);
                         var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
                         builder.addContent(VideoContent.from(unescapedUrl));
                     }
                 }
                 case "audio_url" -> {
                     if (part.audioUrl() != null && part.audioUrl().url() != null) {
-                        var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, PromptType.MUSTACHE);
+                        var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, promptType);
                         var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
                         builder.addContent(AudioContent.from(unescapedUrl));
                     }

@@ -18621,6 +18621,36 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
+        exclude:
+          uniqueItems: true
+          type: array
+          description: Fields to exclude from the response
+          items:
+            type: string
+            description: Fields to exclude from the response
+            enum:
+            - name
+            - type
+            - start_time
+            - end_time
+            - input
+            - output
+            - metadata
+            - model
+            - provider
+            - tags
+            - usage
+            - error_info
+            - created_at
+            - created_by
+            - last_updated_by
+            - feedback_scores
+            - comments
+            - total_estimated_cost
+            - total_estimated_cost_version
+            - duration
+            - ttft
+            - source
         from_time:
           type: string
           description: Filter spans created from this time (ISO-8601 format).

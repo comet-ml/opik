@@ -42,3 +42,11 @@ jobs:
 
       - name: Run tests (npm)
         run: npm run test
+
+      - name: Install 'configure' tool dependencies
+        working-directory: sdks/typescript/src/opik/configure
+        run: npm install
+
+      - name: Run 'configure' tool tests
+        working-directory: sdks/typescript/src/opik/configure
+        run: npm run test

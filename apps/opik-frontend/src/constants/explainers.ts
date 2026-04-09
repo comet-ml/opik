@@ -158,7 +158,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.i_added_traces_to_an_evaluation_suite_now_what,
     title: "Traces added to evaluation suite",
     description:
-      "Run experiments using your evaluation suite to evaluate your LLM's performance and get insights into how your model behaves in live scenarios.",
+      "Your traces have been added to the evaluation suite and can now be used in experiments to evaluate your agent.",
     docLink: "/evaluation/overview",
     docHash: "#running-an-evaluation",
   },

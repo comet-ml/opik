@@ -21,7 +21,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { buildDocsUrl } from "@/lib/utils";
 import { useLayoutDialog } from "@/hooks/useLayoutDialog";
 
-const SLACK_LINK = "http://chat.comet.com";
+export const SLACK_LINK = "http://chat.comet.com";
 
 interface SupportHubSubMenuProps {
   variant?: "submenu" | "dropdown";

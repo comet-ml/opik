@@ -14,6 +14,7 @@ import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Filters } from "@/types/filters";
+import { DATASET_TYPE } from "@/types/datasets";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import {
   usePromptMap,
@@ -27,6 +28,7 @@ import {
   useSetDatasetFilters,
   useSetExperimentNamePrefix,
   useDatasetFilters,
+  useSetDatasetType,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -74,6 +76,7 @@ const PlaygroundHeader = ({
   const setExperimentNamePrefix = useSetExperimentNamePrefix();
   const isRunning = useIsRunning();
   const filters = useDatasetFilters();
+  const setDatasetType = useSetDatasetType();
 
   const resetKeyRef = useRef(0);
   const leaveKeyRef = useRef(0);
@@ -192,6 +195,7 @@ const PlaygroundHeader = ({
     resetDatasetFilters();
     setSelectedRuleIds(null);
     setExperimentNamePrefix(null);
+    setDatasetType(null);
   }, [
     clearCreatedExperiments,
     resetOutputMap,
@@ -199,6 +203,7 @@ const PlaygroundHeader = ({
     resetDatasetFilters,
     setSelectedRuleIds,
     setExperimentNamePrefix,
+    setDatasetType,
   ]);
 
   const handleRunOnDataset = useCallback(
@@ -206,6 +211,7 @@ const PlaygroundHeader = ({
       datasetId: string;
       versionId?: string;
       datasetName: string;
+      datasetType: DATASET_TYPE;
       selectedRuleIds: string[] | null;
       experimentNamePrefix: string;
       filters: Filters;
@@ -219,6 +225,7 @@ const PlaygroundHeader = ({
       setSelectedRuleIds(params.selectedRuleIds);
       setDatasetFilters(params.filters);
       setExperimentNamePrefix(params.experimentNamePrefix);
+      setDatasetType(params.datasetType);
     },
     [
       resetOutputMap,
@@ -226,6 +233,7 @@ const PlaygroundHeader = ({
       setSelectedRuleIds,
       setDatasetFilters,
       setExperimentNamePrefix,
+      setDatasetType,
     ],
   );
 

@@ -39,6 +39,7 @@ from ..types.value_entry import ValueEntry
 from .types.find_feedback_score_names1request_type import FindFeedbackScoreNames1RequestType
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
+from .types.span_search_stream_request_public_exclude_item import SpanSearchStreamRequestPublicExcludeItem
 from .types.span_search_stream_request_public_type import SpanSearchStreamRequestPublicType
 
 # this is used as the default value for optional parameters
@@ -1083,6 +1084,7 @@ class RawSpansClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        exclude: typing.Optional[typing.Sequence[SpanSearchStreamRequestPublicExcludeItem]] = OMIT,
         from_time: typing.Optional[dt.datetime] = OMIT,
         to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1109,6 +1111,9 @@ class RawSpansClient:
 
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
+
+        exclude : typing.Optional[typing.Sequence[SpanSearchStreamRequestPublicExcludeItem]]
+            Fields to exclude from the response
 
         from_time : typing.Optional[dt.datetime]
             Filter spans created from this time (ISO-8601 format).
@@ -1138,6 +1143,7 @@ class RawSpansClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "exclude": exclude,
                 "from_time": from_time,
                 "to_time": to_time,
             },
@@ -2289,6 +2295,7 @@ class AsyncRawSpansClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        exclude: typing.Optional[typing.Sequence[SpanSearchStreamRequestPublicExcludeItem]] = OMIT,
         from_time: typing.Optional[dt.datetime] = OMIT,
         to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2315,6 +2322,9 @@ class AsyncRawSpansClient:
 
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
+
+        exclude : typing.Optional[typing.Sequence[SpanSearchStreamRequestPublicExcludeItem]]
+            Fields to exclude from the response
 
         from_time : typing.Optional[dt.datetime]
             Filter spans created from this time (ISO-8601 format).
@@ -2344,6 +2354,7 @@ class AsyncRawSpansClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "exclude": exclude,
                 "from_time": from_time,
                 "to_time": to_time,
             },
