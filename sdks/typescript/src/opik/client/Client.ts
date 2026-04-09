@@ -67,6 +67,7 @@ import {
 } from "@/agent-config/blueprintCache";
 import { trackStorage } from "@/decorators/track";
 import { z } from "zod";
+import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -82,6 +83,8 @@ interface AnnotationQueueOptions {
 }
 
 export const clients: OpikClient[] = [];
+
+let defaultProjectWarningEmitted = false;
 
 export class OpikClient {
   public api: OpikApiClientTemp;
@@ -155,6 +158,18 @@ export class OpikClient {
     );
 
     this.lastProjectNameLogged = projectName;
+
+    if (
+      !defaultProjectWarningEmitted &&
+      projectName === DEFAULT_CONFIG.projectName
+    ) {
+      defaultProjectWarningEmitted = true;
+      logger.warn(
+        'No project name configured. Traces are being logged to "Default Project".\n' +
+          "Set OPIK_PROJECT_NAME environment variable or pass projectName to the Opik client\n" +
+          "to log to a specific project."
+      );
+    }
   };
 
   public trace = (traceData: TraceData) => {

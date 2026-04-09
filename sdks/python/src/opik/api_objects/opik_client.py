@@ -87,6 +87,7 @@ from ..types import (
     SpanType,
     TraceSource,
 )
+from .. import _logging as opik_logging
 from .. import context_storage
 from ..file_upload import upload_manager
 
@@ -269,6 +270,15 @@ class Opik:
                 f'Started logging traces to the "{project_name}" project at {project_url}.'
             )
             self._project_name_most_recent_trace = project_name
+
+        if project_name == opik_config.OPIK_PROJECT_DEFAULT_NAME:
+            opik_logging.log_once_at_level(
+                logging.WARNING,
+                'No project name configured. Traces are being logged to "Default Project".\n'
+                "Set OPIK_PROJECT_NAME environment variable or pass project_name to the Opik client\n"
+                "to log to a specific project.",
+                LOGGER,
+            )
 
     def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
         dataset_url = url_helpers.get_dataset_url_by_id(
