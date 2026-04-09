@@ -6,6 +6,7 @@ from .types import (
     FindFeedbackScoreNames1RequestType,
     GetSpanStatsRequestType,
     GetSpansByProjectRequestType,
+    SpanSearchStreamRequestPublicExcludeItem,
     SpanSearchStreamRequestPublicType,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "FindFeedbackScoreNames1RequestType",
     "GetSpanStatsRequestType",
     "GetSpansByProjectRequestType",
+    "SpanSearchStreamRequestPublicExcludeItem",
     "SpanSearchStreamRequestPublicType",
 ]

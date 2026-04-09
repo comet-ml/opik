@@ -86,10 +86,12 @@ def create_traces_client():
             output={"output": "test output"},
             end_time=datetime.datetime.now(datetime.timezone.utc),
         )
-        span = client_trace.span(
-            name="span", input={"input": "test input"}, output={"output": "test output"}
+        client_trace.span(
+            name="span",
+            input={"input": "test input"},
+            output={"output": "test output"},
+            end_time=datetime.datetime.now(datetime.timezone.utc),
         )
-        span.end()
 
     return success_response({"traces_created": traces_number})
 
@@ -169,12 +171,11 @@ def create_traces_with_spans_client():
                 output={"output": f"output-{span_index}"},
                 tags=span_config.get("tags", []),
                 metadata=span_config.get("metadata", {}),
+                end_time=datetime.datetime.now(datetime.timezone.utc),
             )
 
             for score in span_config.get("feedback_scores", []):
                 client_span.log_feedback_score(name=score["name"], value=score["value"])
-
-            client_span.end()
 
     return success_response({"traces_created": trace_config["count"]})
 
@@ -276,7 +277,7 @@ def create_trace_with_span_attachment():
     )
 
     span_name = "Add prompt template"
-    span = trace.span(
+    trace.span(
         name=span_name,
         input={
             "text": "Hello, how are you?",
@@ -284,8 +285,8 @@ def create_trace_with_span_attachment():
         },
         output={"text": "Translate the following text to French: hello, how are you?"},
         attachments=[Attachment(data=attachment_path)],
+        end_time=datetime.datetime.now(datetime.timezone.utc),
     )
-    span.end()
 
     return success_response(
         {"attachment_name": os.path.basename(attachment_path), "span_name": span_name}
