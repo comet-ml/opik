@@ -17,7 +17,7 @@ from opik.types import (
     SpanType,
     TraceSource,
 )
-from opik import config as opik_config, logging_messages
+from opik import config as opik_config
 from .. import constants, validation_helpers, helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class Span:
         Note: with batching enabled, calling this shortly after span creation may
         cause data loss. An alternative is to re-send a full payload via
         ``client.span()`` with the same ID — the backend will overwrite the
-        previous value. See https://www.comet.com/docs/opik/tracing/batching_and_updates
+        previous value. See https://www.comet.com/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates
 
         Args:
             end_time: The end time of the span. If not provided, the current time will be used.
@@ -95,11 +95,11 @@ class Span:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
-            LOGGER.warning(
-                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
-                "Span.end()",
-            )
+        helpers.warn_if_batching_update(
+            self._streamer.use_batching,
+            bool(self._config and self._config.suppress_batching_update_warning),
+            "Span.end()",
+        )
 
         self._update(
             end_time=end_time,
@@ -133,7 +133,7 @@ class Span:
         Note: with batching enabled, calling this shortly after span creation may
         cause data loss. An alternative is to re-send a full payload via
         ``client.span()`` with the same ID — the backend will overwrite the
-        previous value. See https://www.comet.com/docs/opik/tracing/batching_and_updates
+        previous value. See https://www.comet.com/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates
 
         Args:
             end_time: The end time of the span.
@@ -155,11 +155,11 @@ class Span:
         Returns:
             None
         """
-        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
-            LOGGER.warning(
-                logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
-                "Span.update()",
-            )
+        helpers.warn_if_batching_update(
+            self._streamer.use_batching,
+            bool(self._config and self._config.suppress_batching_update_warning),
+            "Span.update()",
+        )
 
         self._update(
             end_time=end_time,
@@ -275,6 +275,7 @@ class Span:
             total_cost=total_cost,
             attachments=attachments,
             source=self.source,
+            config=self._config,
         )
 
     def log_feedback_score(
