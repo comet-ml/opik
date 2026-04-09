@@ -60,7 +60,7 @@ describe.skipIf(!shouldRunApiTests)(
         prompt: "Hello {{name}}, welcome to {{place}}!",
         metadata: { author: "compat-test", version: "1.0" },
       });
-      createdPromptIds.push(created.id);
+      createdPromptIds.push(created.id!);
 
       expect(created.name).toBe(promptName);
       expect(created.prompt).toBe("Hello {{name}}, welcome to {{place}}!");
@@ -86,7 +86,7 @@ describe.skipIf(!shouldRunApiTests)(
 
       // DELETE
       expect(created.id).toBe(updated.id);
-      await client.deletePrompts([created.id]);
+      await client.deletePrompts([created.id!]);
 
       const deleted = await client.getPrompt({ name: promptName });
       expect(deleted).toBeNull();
@@ -102,7 +102,7 @@ describe.skipIf(!shouldRunApiTests)(
         name: promptName,
         prompt: template,
       });
-      createdPromptIds.push(v1.id);
+      createdPromptIds.push(v1.id!);
 
       const v2 = await client.createPrompt({
         name: promptName,
@@ -120,7 +120,7 @@ describe.skipIf(!shouldRunApiTests)(
         name: promptName,
         prompt: "Test {{v}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const retrieved = await client.getPrompt({ name: promptName });
       expect(retrieved).not.toBeNull();
@@ -139,7 +139,7 @@ describe.skipIf(!shouldRunApiTests)(
         name: promptName,
         prompt: "User: {{user}}\nQuestion: {{question}}\nContext: {{context}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const formatted = prompt.format({
         user: "Alice",
@@ -157,7 +157,7 @@ describe.skipIf(!shouldRunApiTests)(
         name: promptName,
         prompt: "Hello {{name}}, score: {{score}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       expect(() => {
         prompt.format({ name: "Alice" });

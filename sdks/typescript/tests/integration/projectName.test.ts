@@ -308,7 +308,7 @@ describe.skipIf(!shouldRunApiTests)(
           name: promptName,
           prompt: "Hello {{name}}, welcome to {{place}}!",
         });
-        createdPromptIds.push(prompt.id);
+        createdPromptIds.push(prompt.id!);
 
         expect(prompt).toBeDefined();
         expect(prompt.name).toBe(promptName);
@@ -329,7 +329,7 @@ describe.skipIf(!shouldRunApiTests)(
             { role: "user", content: "Help me with {{task}}" },
           ],
         });
-        createdPromptIds.push(chatPrompt.id);
+        createdPromptIds.push(chatPrompt.id!);
 
         expect(chatPrompt).toBeDefined();
         expect(chatPrompt.name).toBe(promptName);
@@ -349,7 +349,7 @@ describe.skipIf(!shouldRunApiTests)(
           prompt: "Hello {{name}}!",
           projectName: explicitProject,
         });
-        createdPromptIds.push(prompt.id);
+        createdPromptIds.push(prompt.id!);
 
         expect(prompt).toBeDefined();
         expect(prompt.name).toBe(promptName);
@@ -376,7 +376,7 @@ describe.skipIf(!shouldRunApiTests)(
           name: promptName,
           prompt: "Answer: {{input}}",
         });
-        createdPromptIds.push(prompt.id);
+        createdPromptIds.push(prompt.id!);
 
         // Create experiment linked to dataset and prompt
         const experiment = await client.createExperiment({
