@@ -17,7 +17,7 @@ from opik.types import (
     SpanType,
     TraceSource,
 )
-from opik import logging_messages
+from opik import config as opik_config, logging_messages
 from .. import constants, validation_helpers, helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ class Span:
         url_override: str,
         source: TraceSource,
         parent_span_id: Optional[str] = None,
+        config: Optional[opik_config.OpikConfig] = None,
     ):
         """
         A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Opik.span`) or another Span (:meth:`opik.Span.span`).
@@ -44,6 +45,7 @@ class Span:
         self._project_name = project_name
         self._url_override = url_override
         self.source = source
+        self._config = config
 
     def end(
         self,
@@ -88,7 +90,7 @@ class Span:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        if self._streamer.use_batching:
+        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
             LOGGER.warning(
                 logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
                 "Span.end()",
@@ -143,7 +145,7 @@ class Span:
         Returns:
             None
         """
-        if self._streamer.use_batching:
+        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
             LOGGER.warning(
                 logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
                 "Span.update()",
@@ -330,6 +332,7 @@ def create_span(
     total_cost: Optional[float] = None,
     attachments: Optional[List[attachment.Attachment]] = None,
     source: TraceSource = "sdk",
+    config: Optional[opik_config.OpikConfig] = None,
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -387,6 +390,7 @@ def create_span(
         project_name=project_name,
         url_override=url_override,
         source=source,
+        config=config,
     )
 
 

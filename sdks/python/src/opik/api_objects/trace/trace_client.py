@@ -6,7 +6,7 @@ import opik.datetime_helpers as datetime_helpers
 import opik.llm_usage as llm_usage
 import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
-from opik import logging_messages
+from opik import config as opik_config, logging_messages
 from opik.types import ErrorInfoDict, SpanType, LLMProvider, TraceSource
 from .. import constants, span
 
@@ -21,6 +21,7 @@ class Trace:
         project_name: str,
         url_override: str,
         source: TraceSource,
+        config: Optional[opik_config.OpikConfig] = None,
     ):
         """
         A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
@@ -30,6 +31,7 @@ class Trace:
         self._project_name = project_name
         self._url_override = url_override
         self.source = source
+        self._config = config
 
     def end(
         self,
@@ -64,7 +66,7 @@ class Trace:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        if self._streamer.use_batching:
+        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
             LOGGER.warning(
                 logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
                 "Trace.end()",
@@ -106,7 +108,7 @@ class Trace:
         Returns:
             None
         """
-        if self._streamer.use_batching:
+        if self._streamer.use_batching and not (self._config and self._config.suppress_batching_update_warning):
             LOGGER.warning(
                 logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
                 "Trace.update()",

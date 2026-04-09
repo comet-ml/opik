@@ -70,9 +70,9 @@ WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream
 
 BATCHING_UPDATE_DATA_LOSS_WARNING = (
     "Calling %s shortly after creation with batching enabled may cause data loss. "
-    "Consider disabling batching via Opik(batching=False), "
-    "or using the @track decorator or start_as_current_span context manager instead for span/trace lifecycle management."
+    "See https://www.comet.com/docs/opik/tracing/batching_and_updates for details and recommended alternatives."
 )
+
 
 # Storing all the messages in this module is considered a deprecated practice.
 # Do it only if your message is used in more than one place.
