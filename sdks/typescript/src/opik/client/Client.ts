@@ -143,7 +143,24 @@ export class OpikClient {
    * Resolves the project name, falling back to the client's configured project name.
    */
   public resolveProjectName(projectName?: string): string {
-    return projectName ?? this.config.projectName;
+    if (projectName !== undefined) {
+      return projectName;
+    }
+
+    if (
+      !defaultProjectWarningEmitted &&
+      this.config.projectName === DEFAULT_CONFIG.projectName
+    ) {
+      defaultProjectWarningEmitted = true;
+      logger.warn(
+        'No project name configured. Traces are being logged to "Default Project".\n' +
+          "Set OPIK_PROJECT_NAME environment variable or pass projectName to the Opik client\n" +
+          "to log to a specific project.\n" +
+          "See https://www.comet.com/docs/opik/tracing/sdk_configuration"
+      );
+    }
+
+    return this.config.projectName;
   }
 
   private displayTraceLog = (traceId: string, projectName: string) => {
@@ -158,23 +175,11 @@ export class OpikClient {
     );
 
     this.lastProjectNameLogged = projectName;
-
-    if (
-      !defaultProjectWarningEmitted &&
-      projectName === DEFAULT_CONFIG.projectName
-    ) {
-      defaultProjectWarningEmitted = true;
-      logger.warn(
-        'No project name configured. Traces are being logged to "Default Project".\n' +
-          "Set OPIK_PROJECT_NAME environment variable or pass projectName to the Opik client\n" +
-          "to log to a specific project."
-      );
-    }
   };
 
   public trace = (traceData: TraceData) => {
     logger.debug("Creating new trace with data:", traceData);
-    const projectName = traceData.projectName ?? this.config.projectName;
+    const projectName = this.resolveProjectName(traceData.projectName);
     const trace = new Trace(
       {
         id: generateId(),
