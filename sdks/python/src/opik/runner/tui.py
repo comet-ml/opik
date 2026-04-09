@@ -54,21 +54,30 @@ class RunnerTUI:
             self._live.stop()
             self._live = None
 
-    def print_banner(self, runner_id: str, project_name: str = "") -> None:
+    def print_banner(
+        self,
+        runner_id: str,
+        project_name: str = "",
+        url: str = "",
+    ) -> None:
+        # Align url/project lines under "runner:" visually
+        # "   ⠀⃝ opik  " is ~13 chars wide in a terminal
+        padding = " " * 11
+
         info = Text()
         info.append("   ")
         info.append("\u2800\u20dd", style="rgb(224,62,45)")
         info.append(" opik  ", style="bold")
         info.append(f"runner: {runner_id}", style="dim")
+        if url:
+            info.append(f"\n{padding}")
+            info.append(f"url: {url}", style="dim")
         if project_name:
-            info.append(f"  project: {project_name}", style="dim")
+            info.append(f"\n{padding}")
+            info.append(f"project: {project_name}", style="dim")
 
-        if self._live is not None:
-            self._console.print(info)
-            self._console.print()
-        else:
-            self._console.print(info)
-            self._console.print()
+        self._console.print(info)
+        self._console.print()
 
     def app_line(self, stream: str, line: str) -> None:
         color = _color_for_line(self._line_count)
