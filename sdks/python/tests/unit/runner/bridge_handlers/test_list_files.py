@@ -111,8 +111,11 @@ class TestListFiles:
         assert result["total"] == 0
         assert result["truncated"] is False
 
-    def test_list_files__not_a_git_repo__raises_error(self, tmp_path: Path) -> None:
-        (tmp_path / "a.py").write_text("x")
+    @patch("subprocess.run")
+    def test_list_files__not_a_git_repo__raises_error(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=1)
         handler = self._handler(tmp_path)
         with pytest.raises(CommandError) as exc_info:
             handler.execute({"pattern": "*.py"}, timeout=30.0)
