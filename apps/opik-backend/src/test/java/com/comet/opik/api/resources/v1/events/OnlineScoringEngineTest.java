@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LogItem.LogLevel;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
@@ -199,6 +200,10 @@ class OnlineScoringEngineTest {
                 "output": "%s"
             }
             """.formatted(OUTPUT_STR).trim();
+
+    private static final String MOCK_AI_RESPONSE = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
+            + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
+            + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
 
     private static final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
     private static final String TEST_EVALUATOR_EDGE_CASE = """
@@ -518,8 +523,8 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @DisplayName("onTracesUpdated when hasEndTimeUpdate=true triggers scoring")
-    void onTracesUpdatedWhenEndTimeUpdateTriggersScoring(OnlineScoringSampler onlineScoringSampler) throws Exception {
+    @DisplayName("onTracesUpdated when endTime is set triggers scoring")
+    void onTracesUpdatedWhenEndTimeSetTriggersScoring(OnlineScoringSampler onlineScoringSampler) throws Exception {
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
         var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -532,29 +537,30 @@ class OnlineScoringEngineTest {
         var traceId = generator.generate();
 
         // Insert a complete trace into the DB via REST API (simulates SDK POST + PATCH lifecycle)
-        var trace = Trace.builder()
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(traceId)
                 .projectName(projectName)
+                .projectId(projectId)
+                .createdBy(USER_NAME)
                 .startTime(java.time.Instant.now())
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
                 .output(JsonUtils.getJsonNodeFromString(OUTPUT))
                 .endTime(java.time.Instant.now())
+                .feedbackScores(null)
                 .build();
         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
         Mockito.doNothing().when(eventBus).register(Mockito.any());
 
-        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
-                + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
-                + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
-        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
+        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(MOCK_AI_RESPONSE)).build();
 
         ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
         Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
-        // Fire TracesUpdated with hasEndTimeUpdate=true — should trigger scoring
-        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, true);
+        // Fire TracesUpdated with endTime set — should trigger scoring
+        var traceUpdate = TraceUpdate.builder().endTime(java.time.Instant.now()).build();
+        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, traceUpdate);
         onlineScoringSampler.onTracesUpdated(event);
 
         Awaitility.await().untilAsserted(() -> {
@@ -564,13 +570,19 @@ class OnlineScoringEngineTest {
                     .flatMap(List::stream)
                     .toList();
 
-            assertThat(allScores).hasSize(3); // 3 scores from one evaluator
+            assertThat(allScores).hasSize(3);
+
+            var resultMap = allScores.stream()
+                    .collect(Collectors.toMap(FeedbackScoreItem::name, java.util.function.Function.identity()));
+            assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
+            assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
+            assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
         });
     }
 
     @Test
-    @DisplayName("onTracesUpdated when hasEndTimeUpdate=false does NOT trigger scoring")
-    void onTracesUpdatedWithoutEndTimeUpdateDoesNotTriggerScoring(OnlineScoringSampler onlineScoringSampler)
+    @DisplayName("onTracesUpdated when endTime is null does NOT trigger scoring")
+    void onTracesUpdatedWithoutEndTimeDoesNotTriggerScoring(OnlineScoringSampler onlineScoringSampler)
             throws Exception {
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
@@ -585,11 +597,12 @@ class OnlineScoringEngineTest {
 
         Mockito.doNothing().when(eventBus).register(Mockito.any());
 
-        // Fire TracesUpdated with hasEndTimeUpdate=false (e.g., tag addition) — should NOT score
-        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, false);
+        // Fire TracesUpdated without endTime (e.g., tag addition) — should NOT score
+        var traceUpdate = TraceUpdate.builder().name("updated-name").build();
+        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, traceUpdate);
         onlineScoringSampler.onTracesUpdated(event);
 
-        Mono.delay(Duration.ofSeconds(1)).block();
+        TestUtils.waitForMillis(1000);
 
         // Verify no scoring happened
         Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(Mockito.any());

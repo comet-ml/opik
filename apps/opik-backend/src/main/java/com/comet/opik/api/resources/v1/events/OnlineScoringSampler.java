@@ -89,13 +89,7 @@ public class OnlineScoringSampler {
                 .filter(trace -> trace.endTime() != null)
                 .toList();
 
-        if (completeTraces.isEmpty()) {
-            log.info("Skipping '{}' partial traces (no end_time) for workspace '{}'",
-                    tracesBatch.traces().size(), tracesBatch.workspaceId());
-            return;
-        }
-
-        log.info("Received '{}' complete traces (out of '{}' total) for workspace '{}'",
+        log.info("Received TracesCreated, complete '{}', total '{}', workspace '{}'",
                 completeTraces.size(), tracesBatch.traces().size(), tracesBatch.workspaceId());
 
         sampleAndScore(completeTraces, tracesBatch.workspaceId(), tracesBatch.userName());
@@ -109,11 +103,11 @@ public class OnlineScoringSampler {
      */
     @Subscribe
     public void onTracesUpdated(TracesUpdated event) {
-        if (!event.hasEndTimeUpdate()) {
+        if (event.traceUpdate().endTime() == null) {
             return;
         }
 
-        log.info("Received TracesUpdated with end_time for '{}' traces in workspace '{}'",
+        log.info("Received TracesUpdated with end_time, traceIds '{}', workspace '{}'",
                 event.traceIds().size(), event.workspaceId());
 
         var traces = traceService.getByIds(new ArrayList<>(event.traceIds()))
@@ -123,26 +117,26 @@ public class OnlineScoringSampler {
                         .put(RequestContext.USER_NAME, event.userName()))
                 .block();
 
-        if (CollectionUtils.isEmpty(traces)) {
-            log.info("No completed traces found for TracesUpdated event in workspace '{}'", event.workspaceId());
-            return;
-        }
-
         sampleAndScore(traces, event.workspaceId(), event.userName());
     }
 
     private void sampleAndScore(List<Trace> traces, String workspaceId, String userName) {
+        if (CollectionUtils.isEmpty(traces)) {
+            log.info("No traces to score for workspace '{}'", workspaceId);
+            return;
+        }
+
         var tracesByProject = traces.stream().collect(Collectors.groupingBy(Trace::projectId));
 
         var countMap = tracesByProject.entrySet().stream()
                 .collect(Collectors.toMap(entry -> "projectId: " + entry.getKey(),
                         entry -> entry.getValue().size()));
 
-        log.info("Processing '{}' traces for workspace '{}': '{}'", traces.size(), workspaceId, countMap);
+        log.info("Scoring traces, count '{}', workspace '{}', projects '{}'", traces.size(), workspaceId, countMap);
 
         // fetch automation rules per project
         tracesByProject.forEach((projectId, projectTraces) -> {
-            log.info("Fetching evaluators for '{}' traces, project '{}' on workspace '{}'",
+            log.info("Fetching evaluators, traces '{}', project '{}', workspace '{}'",
                     projectTraces.size(), projectId, workspaceId);
 
             List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
