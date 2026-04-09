@@ -57,8 +57,7 @@ class ExperimentTracePersistence {
         ObjectNode input = buildMessagesInput(ctx.renderedMessages());
         ObjectNode output = buildLlmOutput(ctx.llmResponse());
 
-        return createTrace(ctx, input, output)
-                .then(createSpan(ctx, input, output))
+        return Mono.when(createTrace(ctx, input, output), createSpan(ctx, input, output))
                 .then(createExperimentItem(ctx.experimentId(), ctx.datasetItemId(), ctx.traceId(),
                         ctx.projectName()));
     }

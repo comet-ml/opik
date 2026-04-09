@@ -17,6 +17,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -196,6 +197,8 @@ public class ExperimentExecutionService {
             return datasetVersionService.getLatestVersion(datasetId, workspaceId)
                     .map(v -> v.executionPolicy())
                     .orElse(null);
+        } catch (NotFoundException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("Failed to fetch dataset execution policy for dataset '{}', versionHash '{}'",
                     datasetId, versionHash, e);
