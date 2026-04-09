@@ -89,9 +89,14 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
     from .utils import console as _console
 
     _opik_logger = logging.getLogger("opik")
-    # Remove existing StreamHandlers (SDK installs one with "OPIK: " prefix)
+    # Remove existing StreamHandlers (SDK installs one with "OPIK: " prefix).
+    # Also remove any RichHandlers not bound to _console — those would route SDK
+    # logs to a different console and bypass our progress-bar-aware output.
     for _h in list(_opik_logger.handlers):
-        if isinstance(_h, logging.StreamHandler) and not isinstance(_h, RichHandler):
+        if isinstance(_h, RichHandler):
+            if getattr(_h, "console", None) is not _console:
+                _opik_logger.removeHandler(_h)
+        elif isinstance(_h, logging.StreamHandler):
             _opik_logger.removeHandler(_h)
     if not any(isinstance(h, RichHandler) for h in _opik_logger.handlers):
         _rich_handler = RichHandler(

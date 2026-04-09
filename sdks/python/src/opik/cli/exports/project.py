@@ -707,7 +707,18 @@ def export_single_project(
     show_progress: bool = True,
     page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
-    """Export a single project."""
+    """Export a single project.
+
+    Returns:
+        A 4-tuple ``(project_exported, traces_exported, traces_skipped, traces_had_errors)``:
+
+        - ``project_exported`` (int): 1 if any traces were exported or skipped (i.e. the
+          project was processed), 0 if nothing changed (already up to date with no errors).
+        - ``traces_exported`` (int): number of trace files written in this run.
+        - ``traces_skipped`` (int): number of traces already on disk that were skipped.
+        - ``traces_had_errors`` (bool): True if any page fetch or write error occurred;
+          the manifest is left incomplete so the next run resumes from where it left off.
+    """
     try:
         # Create project-specific directory for traces
         project_traces_dir = output_dir / project.name
