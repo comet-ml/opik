@@ -121,6 +121,7 @@ class TestExportTracesRetryWaitBehaviour:
                 project_dir=tmp_path,
                 max_results=None,
                 filter_string=None,
+                show_progress=False,
             )
 
         return [c.args[0] for c in mock_sleep.call_args_list]
@@ -133,14 +134,14 @@ class TestExportTracesRetryWaitBehaviour:
         # Jitter adds 0–5 s on top of the header value.
         assert any(45.0 <= s <= 50.0 for s in sleep_calls)
 
-    def test_export_traces__page_fetch_429_retry_after_exceeds_cap__sleep_falls_back_to_30s(
+    def test_export_traces__page_fetch_429_retry_after_exceeds_cap__sleep_clamped_to_max(
         self, tmp_path
     ):
-        # 200 s > _EXPORT_MAX_RETRY_AFTER_SECONDS (120 s) → fall back to 30 s
+        # 200 s > _EXPORT_MAX_RETRY_AFTER_SECONDS (120 s) → clamped to 120 s
         exc = ApiError(status_code=429, headers={"retry-after": "200"})
         sleep_calls = self._run_with_first_call_raising(exc, tmp_path)
-        # Jitter adds 0–5 s on top of the 30 s fallback.
-        assert any(30.0 <= s <= 35.0 for s in sleep_calls)
+        # Jitter adds 0–5 s on top of the 120 s cap.
+        assert any(120.0 <= s <= 125.0 for s in sleep_calls)
 
     def test_export_traces__page_fetch_429_retry_after_http_date__sleep_honours_header(
         self, tmp_path
@@ -198,6 +199,7 @@ class TestExportTracesPageFetchFailures:
                         project_dir=Path(tmp),
                         max_results=None,
                         filter_string=None,
+                        show_progress=False,
                     )
 
         assert had_errors is True
@@ -223,6 +225,7 @@ class TestExportTracesPageFetchFailures:
                         project_dir=Path(tmp),
                         max_results=None,
                         filter_string=None,
+                        show_progress=False,
                     )
 
         assert had_errors is False
@@ -254,6 +257,7 @@ class TestExportTracesPageFetchFailures:
                         project_dir=Path(tmp),
                         max_results=None,
                         filter_string=None,
+                        show_progress=False,
                     )
 
         assert had_errors is True
@@ -279,6 +283,7 @@ class TestExportTracesPageFetchFailures:
                         project_dir=Path(tmp),
                         max_results=None,
                         filter_string=None,
+                        show_progress=False,
                     )
 
         assert had_errors is True
@@ -303,6 +308,7 @@ class TestExportTracesPageFetchFailures:
                             project_dir=Path(tmp),
                             max_results=None,
                             filter_string=None,
+                            show_progress=False,
                         )
 
         assert exc_info.value.status_code == 400
@@ -342,6 +348,7 @@ class TestExportTracesSpanFetchFailures:
                             project_dir=Path(tmp),
                             max_results=None,
                             filter_string=None,
+                            show_progress=False,
                         )
 
         assert had_errors is True
@@ -377,12 +384,10 @@ class TestExportTracesInterPageDelay:
                         project_dir=Path(tmp),
                         max_results=None,
                         filter_string=None,
+                        show_progress=False,
                     )
 
         # sleep called once after page 1 and once after page 2.
-        # Count only calls with _PAGE_FETCH_DELAY_SECONDS to avoid counting
-        # unrelated time.sleep(0.1) calls from Opik background threads that may
-        # be alive from earlier tests in the full CI suite.
         from unittest.mock import call as mock_call
 
         delay_calls = mock_sleep.call_args_list.count(
@@ -409,6 +414,7 @@ class TestExportTracesInterPageDelay:
                         project_dir=Path(tmp),
                         max_results=None,
                         filter_string=None,
+                        show_progress=False,
                     )
 
         from unittest.mock import call as mock_call
