@@ -47,7 +47,8 @@ class EvalSuiteEvaluatorMapperTest {
             return Stream.of(
                     Arguments.of(LlmProvider.OPEN_AI, "gpt-5-nano"),
                     Arguments.of(LlmProvider.ANTHROPIC, "claude-haiku-4-5-20251001"),
-                    Arguments.of(LlmProvider.GEMINI, "gemini-2.0-flash"));
+                    Arguments.of(LlmProvider.GEMINI, "gemini-2.0-flash"),
+                    Arguments.of(LlmProvider.VERTEX_AI, "vertex_ai/gemini-2.5-flash"));
         }
 
         @Test

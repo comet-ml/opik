@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.Trace;
@@ -32,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -96,12 +98,11 @@ public class EvalSuiteAssertionSampler {
 
         Duration fetchTimeout = Duration.ofSeconds(evalSuiteConfig.getFetchTimeoutSeconds());
 
-        // Resolve the model once per batch from connected providers
-        String modelName = resolveModel(tracesBatch.workspaceId());
-        if (modelName == null) {
-            log.warn("No supported LLM provider connected for eval suite assertions in workspace '{}'. "
-                    + "Evaluators without an explicit model will be skipped.", tracesBatch.workspaceId());
-        }
+        // Resolve model once per batch: prefer connected provider, fall back to first trace's model
+        var connectedProviders = getConnectedProviders(tracesBatch.workspaceId());
+        String modelName = EvalSuiteEvaluatorMapper.resolveModel(connectedProviders)
+                .or(() -> getMetadataString(completeTraces.getFirst(), "eval_suite_model"))
+                .orElse(null);
 
         // Cache dataset evaluators by (datasetId:versionHash) to avoid redundant fetches
         Map<String, List<PreparedEvaluator>> datasetEvaluatorsCache = new HashMap<>();
@@ -245,17 +246,15 @@ public class EvalSuiteAssertionSampler {
         }
     }
 
-    private String resolveModel(String workspaceId) {
+    private Set<LlmProvider> getConnectedProviders(String workspaceId) {
         try {
-            var connectedProviders = llmProviderApiKeyService.find(workspaceId)
+            return llmProviderApiKeyService.find(workspaceId)
                     .content().stream()
                     .map(ProviderApiKey::provider)
                     .collect(Collectors.toSet());
-
-            return EvalSuiteEvaluatorMapper.resolveModel(connectedProviders).orElse(null);
         } catch (Exception e) {
             log.error("Failed to fetch connected providers for workspace '{}'", workspaceId, e);
-            return null;
+            return Set.of();
         }
     }
 

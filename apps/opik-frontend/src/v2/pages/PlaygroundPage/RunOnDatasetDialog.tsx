@@ -28,7 +28,6 @@ import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Dataset, DatasetItemColumn, DATASET_TYPE } from "@/types/datasets";
 import { Filters } from "@/types/filters";
-import { EVAL_SUITE_MISSING_PROVIDER_MESSAGE } from "@/constants/llm";
 import {
   buildDatasetFilterColumns,
   transformDataColumnFilters,
@@ -53,7 +52,6 @@ interface RunOnDatasetDialogProps {
     filters: Filters;
   }) => void;
   workspaceName: string;
-  isEvalSuiteMissingSupportedProvider: boolean;
   initialDatasetId?: string | null;
   initialSelectedRuleIds?: string[] | null;
   initialFilters?: Filters;
@@ -64,13 +62,11 @@ const getRunDisabledTooltip = ({
   isDatasetEmpty,
   hasFilters,
   isEvaluationSuite,
-  isEvalSuiteMissingSupportedProvider,
 }: {
   isRunning: boolean;
   isDatasetEmpty: boolean;
   hasFilters: boolean;
   isEvaluationSuite: boolean;
-  isEvalSuiteMissingSupportedProvider: boolean;
 }): string | undefined => {
   if (isRunning) return "An experiment is already running";
   if (isDatasetEmpty && hasFilters) return "No items match the current filters";
@@ -78,9 +74,6 @@ const getRunDisabledTooltip = ({
     return `Selected ${
       isEvaluationSuite ? "evaluation suite" : "dataset"
     } is empty`;
-  }
-  if (isEvalSuiteMissingSupportedProvider) {
-    return EVAL_SUITE_MISSING_PROVIDER_MESSAGE;
   }
   return undefined;
 };
@@ -90,8 +83,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   onClose,
   onRun,
   workspaceName,
-  isEvalSuiteMissingSupportedProvider:
-    isEvalSuiteMissingSupportedProviderGlobal,
   initialDatasetId = null,
   initialSelectedRuleIds = null,
   initialFilters = [],
@@ -137,9 +128,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   const selectedDatasetType = selectedDataset?.type ?? null;
   const isEvaluationSuite =
     selectedDatasetType === DATASET_TYPE.EVALUATION_SUITE;
-
-  const isEvalSuiteMissingSupportedProvider =
-    isEvaluationSuite && isEvalSuiteMissingSupportedProviderGlobal;
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: plainDatasetId!, page: 1, size: MAX_VERSIONS_TO_FETCH },
@@ -237,7 +225,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     !datasetName ||
     isDatasetEmpty ||
     isLoadingDatasetItems ||
-    isEvalSuiteMissingSupportedProvider ||
     isRunning;
 
   return (
@@ -307,7 +294,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 isDatasetEmpty,
                 hasFilters: filters.length > 0,
                 isEvaluationSuite,
-                isEvalSuiteMissingSupportedProvider,
               })}
             >
               <Button

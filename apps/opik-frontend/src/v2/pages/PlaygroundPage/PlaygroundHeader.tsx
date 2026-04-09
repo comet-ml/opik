@@ -15,11 +15,7 @@ import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/Tr
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
-import {
-  EVAL_SUITE_MISSING_PROVIDER_MESSAGE,
-  hasEvalSuiteSupportedProvider,
-  PLAYGROUND_LAST_PICKED_MODEL,
-} from "@/constants/llm";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import {
   usePromptMap,
   useSetPromptMap,
@@ -33,7 +29,6 @@ import {
   useSetExperimentNamePrefix,
   useDatasetFilters,
   useSetDatasetType,
-  useDatasetType,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -100,12 +95,7 @@ const PlaygroundHeader = ({
     useLLMProviderModelsData();
 
   const isExperimentMode = !!datasetId;
-  const datasetType = useDatasetType();
   const activeProjectId = useActiveProjectId();
-
-  const isEvalSuiteMissingSupportedProvider =
-    datasetType === DATASET_TYPE.EVALUATION_SUITE &&
-    !hasEvalSuiteSupportedProvider(providerKeys);
 
   const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
@@ -142,7 +132,6 @@ const PlaygroundHeader = ({
     !allPromptsHaveModels ||
     !allMessagesNotEmpty ||
     hasMediaCompatibilityIssues ||
-    isEvalSuiteMissingSupportedProvider ||
     (isExperimentMode && !datasetName);
 
   const runDisabledReason = useMemo(() => {
@@ -152,8 +141,6 @@ const PlaygroundHeader = ({
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
-    if (isEvalSuiteMissingSupportedProvider)
-      return EVAL_SUITE_MISSING_PROVIDER_MESSAGE;
     if (isExperimentMode && !datasetName)
       return "Your dataset has been removed. Select another one";
     return null;
@@ -161,7 +148,6 @@ const PlaygroundHeader = ({
     allPromptsHaveModels,
     allMessagesNotEmpty,
     hasMediaCompatibilityIssues,
-    isEvalSuiteMissingSupportedProvider,
     isExperimentMode,
     datasetName,
   ]);
@@ -413,9 +399,6 @@ const PlaygroundHeader = ({
         onClose={() => setRunOnDatasetOpen(false)}
         onRun={handleRunOnDataset}
         workspaceName={workspaceName}
-        isEvalSuiteMissingSupportedProvider={
-          isEvalSuiteMissingSupportedProvider
-        }
         initialDatasetId={datasetId}
         initialSelectedRuleIds={selectedRuleIds}
         initialFilters={filters}

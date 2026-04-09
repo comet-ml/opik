@@ -71,6 +71,7 @@ class ExperimentTracePersistence {
             metadata.put("eval_suite_dataset_version_hash", ctx.versionHash());
         }
         metadata.put("eval_suite_dataset_item_id", ctx.datasetItemId().toString());
+        metadata.put("eval_suite_model", ctx.prompt().model());
 
         var traceBuilder = Trace.builder()
                 .id(ctx.traceId())

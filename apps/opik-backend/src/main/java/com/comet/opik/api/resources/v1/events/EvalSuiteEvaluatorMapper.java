@@ -9,6 +9,10 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -39,9 +43,10 @@ public class EvalSuiteEvaluatorMapper {
      * First connected provider wins.
      */
     enum SupportedJudgeProvider {
-        OPEN_AI(LlmProvider.OPEN_AI, "gpt-5-nano"),
-        ANTHROPIC(LlmProvider.ANTHROPIC, "claude-haiku-4-5-20251001"),
-        GEMINI(LlmProvider.GEMINI, "gemini-2.0-flash");
+        OPEN_AI(LlmProvider.OPEN_AI, OpenaiModelName.GPT_5_NANO.toString()),
+        ANTHROPIC(LlmProvider.ANTHROPIC, AnthropicModelName.CLAUDE_HAIKU_4_5.toString()),
+        GEMINI(LlmProvider.GEMINI, GeminiModelName.GEMINI_2_0_FLASH.toString()),
+        VERTEX_AI(LlmProvider.VERTEX_AI, VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName());
 
         private final LlmProvider provider;
         private final String model;
