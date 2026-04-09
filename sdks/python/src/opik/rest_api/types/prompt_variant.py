@@ -5,11 +5,15 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node import JsonNode
+from .message import Message
+from .prompt_version_link import PromptVersionLink
 
 
-class Message(UniversalBaseModel):
-    role: str
-    content: JsonNode
+class PromptVariant(UniversalBaseModel):
+    model: str
+    messages: typing.List[Message]
+    configs: typing.Optional[typing.Dict[str, JsonNode]] = None
+    prompt_versions: typing.Optional[typing.List[PromptVersionLink]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

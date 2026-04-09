@@ -4,12 +4,11 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .json_node import JsonNode
 
 
-class Message(UniversalBaseModel):
-    role: str
-    content: JsonNode
+class ExperimentInfo(UniversalBaseModel):
+    experiment_id: typing.Optional[str] = None
+    prompt_index: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
