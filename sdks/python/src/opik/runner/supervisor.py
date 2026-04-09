@@ -197,7 +197,7 @@ class Supervisor:
                 continue
 
             if self._on_child_restart:
-                self._on_child_restart(f"process exited with code {exit_code}")
+                self._on_child_restart("agent process has failed")
 
             with self._child_lock:
                 self._child = self._start_child()

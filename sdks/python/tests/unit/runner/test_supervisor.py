@@ -236,10 +236,10 @@ class TestErrorCallback:
         assert sup._guard.is_stable()
 
         if sup._on_child_restart:
-            sup._on_child_restart("process exited with code 1")
+            sup._on_child_restart("agent process has failed")
 
         assert len(restart_reasons) == 1
-        assert "process exited with code 1" in restart_reasons[0]
+        assert "agent process has failed" in restart_reasons[0]
 
     def test_on_error_not_called_when_stable(self) -> None:
         error_messages = []

@@ -29,9 +29,9 @@ class TestError:
 class TestChildRestarted:
     def test_includes_reason(self) -> None:
         tui = _make_tui()
-        tui.child_restarted("process exited with code 1")
+        tui.child_restarted("agent process has failed")
         rendered = tui._console.print.call_args[0][0]
-        assert "Restarting: process exited with code 1" in rendered.plain
+        assert "Restarting: agent process has failed" in rendered.plain
 
     def test_clears_pending_ops(self) -> None:
         tui = _make_tui()
