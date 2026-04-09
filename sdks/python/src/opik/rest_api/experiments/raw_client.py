@@ -15,6 +15,7 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.experiment_execution_response import ExperimentExecutionResponse
 from ..types.experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from ..types.experiment_group_response import ExperimentGroupResponse
 from ..types.experiment_item import ExperimentItem
@@ -32,6 +33,8 @@ from ..types.experiment_update_type import ExperimentUpdateType
 from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
+from ..types.prompt_variant import PromptVariant
+from ..types.prompt_version_link import PromptVersionLink
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
 from .types.experiment_write_evaluation_method import ExperimentWriteEvaluationMethod
 from .types.experiment_write_status import ExperimentWriteStatus
@@ -433,6 +436,82 @@ class RawExperimentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def execute_experiment(
+        self,
+        *,
+        dataset_name: str,
+        prompts: typing.Sequence[PromptVariant],
+        dataset_id: str,
+        dataset_version_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        version_hash: typing.Optional[str] = OMIT,
+        prompt_versions: typing.Optional[typing.Sequence[PromptVersionLink]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ExperimentExecutionResponse]:
+        """
+        Creates experiments for each prompt variant and asynchronously processes all dataset items
+
+        Parameters
+        ----------
+        dataset_name : str
+
+        prompts : typing.Sequence[PromptVariant]
+
+        dataset_id : str
+
+        dataset_version_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        version_hash : typing.Optional[str]
+
+        prompt_versions : typing.Optional[typing.Sequence[PromptVersionLink]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ExperimentExecutionResponse]
+            Experiments created and processing started
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/execute",
+            method="POST",
+            json={
+                "dataset_name": dataset_name,
+                "dataset_version_id": dataset_version_id,
+                "prompts": convert_and_respect_annotation_metadata(
+                    object_=prompts, annotation=typing.Sequence[PromptVariant], direction="write"
+                ),
+                "project_name": project_name,
+                "dataset_id": dataset_id,
+                "version_hash": version_hash,
+                "prompt_versions": convert_and_respect_annotation_metadata(
+                    object_=prompt_versions, annotation=typing.Sequence[PromptVersionLink], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentExecutionResponse,
+                    parse_obj_as(
+                        type_=ExperimentExecutionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1497,6 +1576,82 @@ class AsyncRawExperimentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def execute_experiment(
+        self,
+        *,
+        dataset_name: str,
+        prompts: typing.Sequence[PromptVariant],
+        dataset_id: str,
+        dataset_version_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        version_hash: typing.Optional[str] = OMIT,
+        prompt_versions: typing.Optional[typing.Sequence[PromptVersionLink]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ExperimentExecutionResponse]:
+        """
+        Creates experiments for each prompt variant and asynchronously processes all dataset items
+
+        Parameters
+        ----------
+        dataset_name : str
+
+        prompts : typing.Sequence[PromptVariant]
+
+        dataset_id : str
+
+        dataset_version_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        version_hash : typing.Optional[str]
+
+        prompt_versions : typing.Optional[typing.Sequence[PromptVersionLink]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ExperimentExecutionResponse]
+            Experiments created and processing started
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/execute",
+            method="POST",
+            json={
+                "dataset_name": dataset_name,
+                "dataset_version_id": dataset_version_id,
+                "prompts": convert_and_respect_annotation_metadata(
+                    object_=prompts, annotation=typing.Sequence[PromptVariant], direction="write"
+                ),
+                "project_name": project_name,
+                "dataset_id": dataset_id,
+                "version_hash": version_hash,
+                "prompt_versions": convert_and_respect_annotation_metadata(
+                    object_=prompt_versions, annotation=typing.Sequence[PromptVersionLink], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentExecutionResponse,
+                    parse_obj_as(
+                        type_=ExperimentExecutionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

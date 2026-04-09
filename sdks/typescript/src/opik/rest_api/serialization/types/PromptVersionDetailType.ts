@@ -7,8 +7,8 @@ import type * as serializers from "../index.js";
 export const PromptVersionDetailType: core.serialization.Schema<
     serializers.PromptVersionDetailType.Raw,
     OpikApi.PromptVersionDetailType
-> = core.serialization.enum_(["mustache", "jinja2"]);
+> = core.serialization.enum_(["mustache", "jinja2", "python"]);
 
 export declare namespace PromptVersionDetailType {
-    export type Raw = "mustache" | "jinja2";
+    export type Raw = "mustache" | "jinja2" | "python";
 }

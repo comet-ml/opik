@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const PromptType: core.serialization.Schema<serializers.PromptType.Raw, OpikApi.PromptType> =
-    core.serialization.enum_(["mustache", "jinja2"]);
+    core.serialization.enum_(["mustache", "jinja2", "python"]);
 
 export declare namespace PromptType {
-    export type Raw = "mustache" | "jinja2";
+    export type Raw = "mustache" | "jinja2" | "python";
 }
