@@ -63,6 +63,7 @@ class Supervisor:
         api: Any,
         on_child_output: Optional[Callable[[str, str], None]] = None,
         on_child_restart: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[str], None]] = None,
         on_command_start: Optional[Callable[[str, str, str], None]] = None,
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
@@ -74,6 +75,7 @@ class Supervisor:
         self._api = api
         self._on_child_output = on_child_output or self._default_output_callback
         self._on_child_restart = on_child_restart
+        self._on_error = on_error
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
         if command is None:
@@ -187,8 +189,15 @@ class Supervisor:
 
             if not self._guard.is_stable():
                 LOGGER.error("Child crash-looping — waiting for file change to retry")
+                if self._on_error:
+                    self._on_error(
+                        "Crash loop detected — waiting for file change to retry"
+                    )
                 self._patch_crash_info(exit_code, stderr_tail)
                 continue
+
+            if self._on_child_restart:
+                self._on_child_restart(f"process exited with code {exit_code}")
 
             with self._child_lock:
                 self._child = self._start_child()
