@@ -23,6 +23,7 @@ def _make_supervisor(
     repo_root=None,
     runner_id="runner-1",
     api=None,
+    watch=None,
 ) -> Supervisor:
     if command is _SENTINEL:
         command = [sys.executable, "-c", "import time; time.sleep(60)"]
@@ -40,6 +41,7 @@ def _make_supervisor(
         repo_root=repo_root,
         runner_id=runner_id,
         api=api,
+        watch=watch,
     )
 
 
@@ -149,6 +151,7 @@ class TestChildExit:
         sup = _make_supervisor(
             command=[sys.executable, "-c", "import sys; sys.exit(1)"],
             api=api,
+            watch=False,
         )
 
         restart_count = 0
@@ -172,6 +175,7 @@ class TestChildExit:
     def test_waits_if_unstable(self) -> None:
         sup = _make_supervisor(
             command=[sys.executable, "-c", "import sys; sys.exit(1)"],
+            watch=False,
         )
         sup._guard._max_crashes = 2
         sup._guard._window_seconds = 60.0
@@ -191,6 +195,7 @@ class TestChildExit:
     def test_exit_0__no_restart(self) -> None:
         sup = _make_supervisor(
             command=[sys.executable, "-c", "pass"],
+            watch=False,
         )
 
         t = threading.Thread(target=sup.run, daemon=True)
@@ -261,7 +266,7 @@ class TestErrorCallback:
 
 class TestShutdown:
     def test_stops_all(self) -> None:
-        sup = _make_supervisor()
+        sup = _make_supervisor(watch=False)
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
@@ -273,7 +278,7 @@ class TestShutdown:
         assert sup._child is None
 
     def test_waits_for_child(self) -> None:
-        sup = _make_supervisor()
+        sup = _make_supervisor(watch=False)
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
@@ -321,7 +326,7 @@ class TestStandaloneMode:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
 
-        sup = _make_supervisor(command=None, api=api)
+        sup = _make_supervisor(command=None, api=api, watch=False)
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
@@ -337,7 +342,7 @@ class TestStandaloneMode:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
 
-        sup = _make_supervisor(command=None, api=api)
+        sup = _make_supervisor(command=None, api=api, watch=False)
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
@@ -355,7 +360,7 @@ class TestStandaloneMode:
 
 class TestBridgeIntegration:
     def test_bridge_loop_runs(self) -> None:
-        sup = _make_supervisor()
+        sup = _make_supervisor(watch=False)
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
