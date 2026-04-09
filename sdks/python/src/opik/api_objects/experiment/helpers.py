@@ -42,7 +42,8 @@ def build_metadata_and_prompt_versions(
         experiment_config["prompts"] = {}
 
         for prompt_obj in prompts:
-            prompt_versions.append({"id": prompt_obj.__internal_api__version_id__})
+            if prompt_obj.__internal_api__version_id__ is not None:
+                prompt_versions.append({"id": prompt_obj.__internal_api__version_id__})
             # Use __internal_api__to_info_dict__() to get the prompt content in a consistent way
             prompt_info = prompt_obj.__internal_api__to_info_dict__()
             # Extract the template/messages from the version dict

@@ -8,8 +8,8 @@ import { logger } from "@/utils/logger";
  * Base data interface for all prompt types
  */
 export interface BasePromptData {
-  promptId: string;
-  versionId: string;
+  promptId?: string;
+  versionId?: string;
   name: string;
   commit?: string;
   metadata?: OpikApi.JsonNode;
@@ -18,6 +18,7 @@ export interface BasePromptData {
   description?: string;
   tags?: string[];
   templateStructure?: PromptTemplateStructure;
+  synced?: boolean;
 }
 
 /**
@@ -25,12 +26,15 @@ export interface BasePromptData {
  * Provides common functionality for versioning, property updates, and deletion.
  */
 export abstract class BasePrompt {
-  public readonly id: string;
-  public readonly versionId: string;
+  public readonly id: string | undefined;
+  public readonly versionId: string | undefined;
   public readonly commit: string | undefined;
   public readonly type: PromptType;
   public readonly changeDescription: string | undefined;
   public readonly templateStructure: PromptTemplateStructure;
+
+  /** Whether the prompt has been successfully synced with the backend. */
+  public readonly synced: boolean;
 
   // Mutable fields (can be updated via updateProperties)
   protected _name: string;
@@ -47,6 +51,7 @@ export abstract class BasePrompt {
     this.type = data.type ?? "mustache";
     this.changeDescription = data.changeDescription;
     this.templateStructure = data.templateStructure ?? "text";
+    this.synced = data.synced ?? false;
     this._name = data.name;
     this._description = data.description;
     this._tags = data.tags ? [...data.tags] : [];
@@ -90,8 +95,9 @@ export abstract class BasePrompt {
     description?: string;
     tags?: string[];
   }): Promise<this> {
+    this.requireSynced("updateProperties");
     await this.opik.api.prompts.updatePrompt(
-      this.id,
+      this.id!,
       {
         name: updates.name ?? this._name,
         description: updates.description,
@@ -113,7 +119,8 @@ export abstract class BasePrompt {
    * Performs immediate deletion (no batching).
    */
   async delete(): Promise<void> {
-    await this.opik.deletePrompts([this.id]);
+    this.requireSynced("delete");
+    await this.opik.deletePrompts([this.id!]);
   }
 
   /**
@@ -129,6 +136,7 @@ export abstract class BasePrompt {
     sorting?: string;
     filters?: string;
   }): Promise<PromptVersion[]> {
+    this.requireSynced("getVersions");
     logger.debug("Getting versions for prompt", {
       promptId: this.id,
       name: this.name,
@@ -141,7 +149,7 @@ export abstract class BasePrompt {
 
       while (true) {
         const versionsResponse = await this.opik.api.prompts.getPromptVersions(
-          this.id,
+          this.id!,
           {
             page,
             size: pageSize,
@@ -190,6 +198,7 @@ export abstract class BasePrompt {
   protected async restoreVersion(
     version: PromptVersion,
   ): Promise<OpikApi.PromptVersionDetail> {
+    this.requireSynced("restoreVersion");
     logger.debug("Restoring prompt version", {
       promptId: this.id,
       name: this.name,
@@ -200,7 +209,7 @@ export abstract class BasePrompt {
     try {
       const restoredVersionResponse =
         await this.opik.api.prompts.restorePromptVersion(
-          this.id,
+          this.id!,
           version.id,
           this.opik.api.requestOptions,
         );
@@ -262,6 +271,19 @@ export abstract class BasePrompt {
   }
 
   /**
+   * Throws an error if the prompt has not been synced with the backend.
+   * Call syncWithBackend() first to sync.
+   */
+  protected requireSynced(operation: string): void {
+    if (!this.synced) {
+      throw new Error(
+        `Cannot call ${operation}() on an unsynced prompt. ` +
+          "Call syncWithBackend() first to sync the prompt with the backend.",
+      );
+    }
+  }
+
+  /**
    * Get a specific version by commit hash.
    * Returns a new instance of the appropriate prompt type.
    *
@@ -277,4 +299,14 @@ export abstract class BasePrompt {
    * @returns Promise resolving to a new prompt instance with the restored version
    */
   abstract useVersion(version: PromptVersion): Promise<BasePrompt>;
+
+  /**
+   * Synchronize the prompt with the backend.
+   *
+   * Creates or updates the prompt on the Opik server. If the sync fails,
+   * a warning is logged and the prompt continues to work locally.
+   *
+   * @returns Promise resolving to a new synced instance, or the same instance if sync fails
+   */
+  abstract syncWithBackend(): Promise<BasePrompt>;
 }

@@ -36,8 +36,6 @@ import { useToast } from "@/ui/use-toast";
 import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { ToastAction } from "@/ui/toast";
-import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_SIZE = 100;
@@ -71,7 +69,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [fetching, setFetching] = useState<boolean>(false);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const { toast } = useToast();
-  const { navigate } = useNavigateToExperiment();
   const {
     permissions: { canCreateDatasets },
   } = usePermissions();
@@ -140,23 +137,9 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       toast({
         title: `${itemType} added to evaluation suite`,
         description: explainer.description,
-        actions: [
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="px-0"
-            altText="Run an experiment"
-            key="Run an experiment"
-            onClick={() =>
-              navigate({ newExperiment: true, datasetName: dataset.name })
-            }
-          >
-            Run an experiment
-          </ToastAction>,
-        ],
       });
     },
-    [navigate, toast],
+    [toast],
   );
 
   const addToDatasetHandler = useCallback(

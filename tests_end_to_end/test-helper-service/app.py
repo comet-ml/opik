@@ -15,6 +15,7 @@ import requests  # type: ignore[import-untyped]
 from routes.projects import projects_bp
 from routes.datasets import datasets_bp
 from routes.traces import traces_bp
+from routes.spans import spans_bp
 from routes.threads import threads_bp
 from routes.feedback_scores import feedback_scores_bp
 from routes.experiments import experiments_bp
@@ -99,6 +100,7 @@ CORS(app)
 app.register_blueprint(projects_bp, url_prefix="/api/projects")
 app.register_blueprint(datasets_bp, url_prefix="/api/datasets")
 app.register_blueprint(traces_bp, url_prefix="/api/traces")
+app.register_blueprint(spans_bp, url_prefix="/api/spans")
 app.register_blueprint(threads_bp, url_prefix="/api/threads")
 app.register_blueprint(feedback_scores_bp, url_prefix="/api/feedback-scores")
 app.register_blueprint(experiments_bp, url_prefix="/api/experiments")

@@ -18,6 +18,7 @@ import Loader from "@/shared/Loader/Loader";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
 import BlueprintValuePrompt from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
+import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import {
   useAgentConfigurationSave,
   AgentConfigPayload,
@@ -132,6 +133,15 @@ const AgentConfigurationEditView = React.forwardRef<
   const hasErrors = Object.values(errors).some(Boolean);
 
   const isDirty = hasChanges();
+
+  const { DialogComponent } = useNavigationBlocker({
+    condition: isDirty,
+    title: "You have unsaved changes",
+    description:
+      "If you leave now, your changes will be lost. Are you sure you want to continue?",
+    confirmText: "Leave without saving",
+    cancelText: "Stay on page",
+  });
 
   if (isPending) {
     return <Loader />;
@@ -262,6 +272,8 @@ const AgentConfigurationEditView = React.forwardRef<
           promptTemplates: diffPromptTemplates,
         }}
       />
+
+      {DialogComponent}
     </div>
   );
 });

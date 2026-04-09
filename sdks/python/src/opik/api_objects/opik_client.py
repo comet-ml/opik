@@ -1697,6 +1697,7 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[span_public.SpanPublic]:
@@ -1748,6 +1749,7 @@ class Opik:
                 If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: List of fields to exclude from the response (e.g., ["feedback_scores", "input", "output"])
             wait_for_at_least: The minimum number of spans to wait for before returning.
             wait_for_timeout: The timeout for waiting for spans.
 
@@ -1769,6 +1771,7 @@ class Opik:
             filters=filters,
             max_results=max_results,
             truncate=truncate,
+            exclude=exclude,
         )
 
         if wait_for_at_least is None:
