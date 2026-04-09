@@ -110,6 +110,10 @@ public class OnlineScoringSampler {
         log.info("Received TracesUpdated with end_time, traceIds '{}', workspace '{}'",
                 event.traceIds().size(), event.workspaceId());
 
+        // NOTE: there is a potential race condition in multi-node ClickHouse clusters — the write
+        // may have landed on one replica while this read hits another that hasn't replicated yet.
+        // In practice doOnSuccess fires after the INSERT completes and reads use FINAL, so this is
+        // unlikely. If it becomes an issue, consider carrying the full Trace objects in the event.
         var traces = traceService.getByIds(new ArrayList<>(event.traceIds()))
                 .filter(trace -> trace.endTime() != null)
                 .collectList()
