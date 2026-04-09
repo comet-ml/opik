@@ -21,6 +21,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -230,6 +231,37 @@ class BaseRedisSubscriberUnitTest {
 
             // Should continue processing after error
             await().atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(readCount.get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
+        }
+
+        @Test
+        void shouldHandleEmptyListEntryValue() {
+            var readCount = new AtomicInteger();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        int count = readCount.incrementAndGet();
+                        if (count == 1) {
+                            // Fix for OPIK-5647: simulate receiving Collections.emptyList() as the entry value instead
+                            // of a Map, for empty/malformed stream entries.
+                            return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                                    Collections.emptyList()));
+                        }
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                        podamFactory.manufacturePojo(String.class))));
+                    });
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(readCount.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
