@@ -6,7 +6,7 @@ from opik.exceptions import AgentConfigNotFound
 from opik.rest_api import core as rest_api_core
 from .. import type_helpers
 from . import cache as cache_mod, types
-from .context import get_active_config_mask
+from .context import get_active_config_mask, get_active_config_blueprint_name
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +273,9 @@ class AgentConfig:
             )
 
         field_types = cls._prefixed_field_types()
+        blueprint_name = get_active_config_blueprint_name()
+        if blueprint_name is not None:
+            version = blueprint_name
         mask_id = get_active_config_mask()
         resolved_env = None if (latest or version is not None) else env
 

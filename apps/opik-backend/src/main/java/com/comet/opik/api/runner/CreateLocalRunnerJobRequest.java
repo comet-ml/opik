@@ -18,5 +18,6 @@ public record CreateLocalRunnerJobRequest(
         JsonNode inputs,
         @NotNull UUID projectId,
         UUID maskId,
+        String blueprintName,
         LocalRunnerJobMetadata metadata) {
 }

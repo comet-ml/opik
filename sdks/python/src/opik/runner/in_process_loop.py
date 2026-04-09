@@ -238,6 +238,7 @@ class InProcessRunnerLoop:
 
         func: Callable = entry["func"]
         mask_id = job.mask_id
+        blueprint_name = job.blueprint_name
 
         trace_id = id_helpers.generate_id()
 
@@ -260,7 +261,7 @@ class InProcessRunnerLoop:
             _inject_trace_id(inputs, trace_id)
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
-                with agent_config_context(mask_id):
+                with agent_config_context(mask_id, blueprint_name):
                     coro = func(**inputs)
                     if timeout:
                         result = await asyncio.wait_for(coro, timeout=timeout)
@@ -269,7 +270,7 @@ class InProcessRunnerLoop:
             else:
 
                 def _run_with_mask() -> object:
-                    with agent_config_context(mask_id):
+                    with agent_config_context(mask_id, blueprint_name):
                         return func(**inputs)
 
                 if timeout:

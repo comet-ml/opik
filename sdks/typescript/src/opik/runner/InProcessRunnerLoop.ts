@@ -222,14 +222,15 @@ export class InProcessRunnerLoop {
     const agentName = job.agentName ?? "";
     const inputs = (job.inputs as Record<string, any>) ?? {};
     const maskId = job.maskId;
+    const blueprintName = job.blueprintName;
 
     const entry = getAll().get(agentName)!;
     const args = entry.params.map((p) => castInputValue(inputs[p.name], p.type));
 
     const run = () =>
       runWithJobContext({ traceId, jobId }, () => {
-        if (maskId) {
-          return agentConfigContext(maskId, () => entry.func(...args));
+        if (maskId || blueprintName) {
+          return agentConfigContext(maskId, () => entry.func(...args), blueprintName);
         }
         return entry.func(...args);
       });

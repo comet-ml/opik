@@ -60,7 +60,7 @@ import {
   matchesBlueprint,
 } from "@/typeHelpers";
 import { createTypedAgentConfig, type AgentConfig } from "@/agent-config/AgentConfig";
-import { getActiveConfigMask } from "@/agent-config/configContext";
+import { getActiveConfigMask, getActiveConfigBlueprintName } from "@/agent-config/configContext";
 import {
   getCachedBlueprint,
   initBlueprintCacheEntry,
@@ -1872,6 +1872,7 @@ export class OpikClient {
     }
 
     const maskId = getActiveConfigMask() ?? undefined;
+    const blueprintName = getActiveConfigBlueprintName() ?? undefined;
     const agentConfig = new AgentConfigManager(projectName, this);
 
     const { extractFieldMetadata } = await import("@/typeHelpers");
@@ -1879,15 +1880,16 @@ export class OpikClient {
 
     // effectiveEnv is null for `latest` and `version` lookups (no env tag involved)
     const effectiveEnv = options.latest || options.version ? null : (options.env ?? "prod");
-    const effectiveVersion = options.version ?? null;
-
+    const effectiveVersion = blueprintName ?? options.version ?? null;
     const cacheEntry = getCachedBlueprint(projectName, effectiveEnv, maskId ?? null, effectiveVersion);
 
     let blueprint = null;
 
     if (cacheEntry.isStale()) {
       try {
-        if (options.latest) {
+        if (blueprintName) {
+          blueprint = await agentConfig.getBlueprint({ name: blueprintName, maskId });
+        } else if (options.latest) {
           blueprint = await agentConfig.getBlueprint({ maskId });
         } else if (options.version) {
           blueprint = await agentConfig.getBlueprint({ name: options.version, maskId });
