@@ -120,15 +120,18 @@ public class EvalSuiteEvaluatorMapper {
     }
 
     LlmAsJudgeCode toScoringCode(JsonNode config, String modelName) {
-        LlmAsJudgeCode code = deserializeEvaluatorConfig(config);
-        code = setModel(code, modelName);
+        LlmAsJudgeCode code = deserializeScoringCode(config, modelName);
         code = renameSchemaToAssertionKeys(code);
         code = applyEvalSuitePrompt(code);
         return code;
     }
 
-    private LlmAsJudgeCode deserializeEvaluatorConfig(JsonNode config) {
-        return JsonUtils.treeToValue(config, LlmAsJudgeCode.class);
+    private LlmAsJudgeCode deserializeScoringCode(JsonNode config, String modelName) {
+        var model = LlmAsJudgeModelParameters.builder().name(modelName).build();
+        return JsonUtils.treeToValue(config, LlmAsJudgeCode.class)
+                .toBuilder()
+                .model(model)
+                .build();
     }
 
     /**
@@ -195,10 +198,4 @@ public class EvalSuiteEvaluatorMapper {
                 .collect(Collectors.joining("\n"));
     }
 
-    private LlmAsJudgeCode setModel(LlmAsJudgeCode code, String modelName) {
-        var model = LlmAsJudgeModelParameters.builder()
-                .name(modelName)
-                .build();
-        return new LlmAsJudgeCode(model, code.messages(), code.variables(), code.schema());
-    }
 }
