@@ -285,9 +285,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         try {
             stream.removeConsumer(config.getConsumerGroupName(), consumerId)
                     .subscribeOn(consumerScheduler)
-                    .doOnSuccess(pendingMessages -> log.info(
-                            "Removed consumer '{}', from group '{}', pendingMessages '{}'",
-                            consumerId, config.getConsumerGroupName(), pendingMessages))
+                    .doOnSuccess(pendingMessages -> {
+                        pendingMessages = Objects.requireNonNullElse(pendingMessages, 0L);
+                        log.info("Removed consumer '{}', from group '{}', pendingMessages '{}'",
+                                consumerId, config.getConsumerGroupName(), pendingMessages);
+                    })
                     .onErrorResume(throwable -> {
                         log.warn("Failed to remove consumer '{}', group '{}'",
                                 consumerId, config.getConsumerGroupName(), throwable);
@@ -377,7 +379,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .filter(Objects::nonNull)
                 .map(AutoClaimResult::getMessages)
                 .filter(Objects::nonNull)
-                .doOnNext(claimedMessages -> {
+                .doOnSuccess(claimedMessages -> {
+                    claimedMessages = Objects.requireNonNullElse(claimedMessages, Map.of());
                     claimSize.set(claimedMessages.size());
                     log.debug("Successfully auto claimed from stream, size '{}'", claimedMessages.size());
                 })
@@ -400,10 +403,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return stream.readGroup(config.getConsumerGroupName(), consumerId, streamReadGroupArgs)
                 .subscribeOn(consumerScheduler) // Isolates the Redis call
                 .filter(Objects::nonNull)
-                // Not using doOnSuccess because it fires with null for empty Monos (e.g. long-poll timeout),
-                // which would NullPointerException on messages.size().
-                // doOnNext only fires when an element is present.
-                .doOnNext(messages -> {
+                // doOnSuccess fires with null for empty Monos (e.g. long-poll timeout).
+                // Defaulting to empty map to avoid NullPointerException, and for the gauge to reset to 0
+                .doOnSuccess(messages -> {
+                    messages = Objects.requireNonNullElse(messages, Map.of());
                     readSize.set(messages.size());
                     log.debug("Successfully read from stream, size '{}'", messages.size());
                 })
@@ -447,6 +450,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             // entries, which the generic Map<String, M> type erasure hides at compile time.
             // ClassCastException is already in NON_RETRYABLE_EXCEPTIONS,
             // so the failure path will ack and remove the message without retry.
+            // Not logging here — postProcessFailureMessages logs non-retryable errors with full context.
             return Mono.just(ProcessingResult.builder()
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
@@ -551,7 +555,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 // Only attempt to remove if ack was successful
                 .then(stream.remove(idsArray)
                         .subscribeOn(consumerScheduler))
-                .doOnNext(size -> log.debug("Successfully ack and remove from stream, size '{}'", size))
+                .doOnSuccess(size -> {
+                    size = Objects.requireNonNullElse(size, 0L);
+                    log.debug("Successfully ack and remove from stream, size '{}'", size);
+                })
                 .onErrorResume(throwable -> {
                     // If ack and or remove fails, message will be automatically claimed and retried
                     ackAndRemoveErrors.add(1);

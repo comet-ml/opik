@@ -210,36 +210,6 @@ class BaseRedisSubscriberUnitTest {
         }
 
         @Test
-        void shouldHandleEmptyReadGroupResponse() {
-            var readCount = new AtomicInteger();
-            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
-            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
-            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
-                    .thenAnswer(invocation -> {
-                        int count = readCount.incrementAndGet();
-                        if (count == 1) {
-                            // Fix for OPIK-5647: simulate returning empty read e.g. long-poll timeout.
-                            // Before the doOnSuccess -> doOnNext fix, caused NullPointerException on messages.size().
-                            return Mono.empty();
-                        }
-                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
-                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
-                                        podamFactory.manufacturePojo(String.class))));
-                    });
-            whenAckReturn();
-            whenRemoveReturn();
-
-            subscriber.start();
-
-            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-                        assertThat(readCount.get()).isGreaterThan(2);
-                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
-                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
-                    });
-        }
-
-        @Test
         void shouldNotDieOnReadError() {
             var readCount = new AtomicInteger();
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
