@@ -102,6 +102,7 @@ def connect(
             api=api,
             on_child_output=tui.app_line,
             on_child_restart=tui.child_restarted,
+            on_error=tui.error,
             on_command_start=tui.op_start,
             on_command_end=tui.op_end,
             watch=watch,

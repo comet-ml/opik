@@ -63,6 +63,7 @@ class Supervisor:
         api: Any,
         on_child_output: Optional[Callable[[str, str], None]] = None,
         on_child_restart: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[str], None]] = None,
         on_command_start: Optional[Callable[[str, str, str], None]] = None,
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
@@ -74,6 +75,7 @@ class Supervisor:
         self._api = api
         self._on_child_output = on_child_output or self._default_output_callback
         self._on_child_restart = on_child_restart
+        self._on_error = on_error
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
         if command is None:
@@ -181,13 +183,8 @@ class Supervisor:
                 self._shutdown_event.set()
                 break
 
-            LOGGER.warning("Child exited with code %d", exit_code)
-            stderr_tail = self._get_stderr_tail()
-            self._guard.record_crash()
-
-            if not self._guard.is_stable():
-                LOGGER.error("Child crash-looping — waiting for file change to retry")
-                self._patch_crash_info(exit_code, stderr_tail)
+            should_restart = self._handle_child_exit(exit_code)
+            if not should_restart:
                 continue
 
             with self._child_lock:
@@ -283,6 +280,24 @@ class Supervisor:
         self._reader_threads = []
 
         return child.returncode
+
+    def _handle_child_exit(self, exit_code: int) -> bool:
+        """Handle a child process exit. Returns True if child should be restarted."""
+        LOGGER.warning("Child exited with code %d", exit_code)
+        stderr_tail = self._get_stderr_tail()
+        self._guard.record_crash()
+
+        if not self._guard.is_stable():
+            LOGGER.error("Child crash-looping — waiting for file change to retry")
+            if self._on_error:
+                self._on_error("Crash loop detected — waiting for file change to retry")
+            self._patch_crash_info(exit_code, stderr_tail)
+            return False
+
+        if self._on_child_restart:
+            self._on_child_restart("agent process has failed")
+
+        return True
 
     def _restart_child(self, reason: str) -> None:
         with self._child_lock:

@@ -128,10 +128,17 @@ class RunnerTUI:
             self._pending_ops.clear()
 
         text = Text()
-        text.append(" \u2503  Restarting...", style="rgb(80,85,245)")
+        text.append(" \u2503  ", style="rgb(80,85,245)")
+        text.append(f"Restarting: {reason}", style="rgb(80,85,245)")
         self._print(text)
 
         self._update_live()
+
+    def error(self, message: str) -> None:
+        text = Text()
+        text.append(" \u25cf ", style="red")
+        text.append(message, style="red")
+        self._print(text)
 
     def _print(self, renderable: Text) -> None:
         if self._live is not None:

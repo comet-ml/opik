@@ -60,6 +60,10 @@ class TestConnect:
         assert env["OPIK_RUNNER_ID"] == "r-xyz"
         assert env["OPIK_PROJECT_NAME"] == "proj"
 
+        tui_instance = mock_tui_cls.return_value
+        assert call_kwargs["on_child_restart"] == tui_instance.child_restarted
+        assert call_kwargs["on_error"] == tui_instance.error
+
         mock_supervisor_cls.return_value.run.assert_called_once()
 
     @patch("opik.cli.connect.RunnerTUI")
