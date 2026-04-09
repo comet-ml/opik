@@ -112,7 +112,8 @@ def check_git_repo(repo_root: Path) -> None:
         raise CommandError("git_not_available", "git command timed out")
     except FileNotFoundError:
         raise CommandError(
-            "git_not_available", "git command not found or not executable"
+            "git_not_available",
+            "You must have git installed to use Opik Connect",
         )
 
 
@@ -156,7 +157,8 @@ def git_ls_files(repo_root: Path) -> Set[str]:
         raise CommandError("git_not_available", "git command timed out")
     except FileNotFoundError:
         raise CommandError(
-            "git_not_available", "git command not found or not executable"
+            "git_not_available",
+            "You must have git installed to use Opik Connect",
         )
 
 
