@@ -39,24 +39,7 @@ class SearchFilesHandler(BaseHandler):
                 f"Pattern too long (max {_MAX_PATTERN_LENGTH} chars)",
             )
 
-        # Verify we're in a git repository
-        try:
-            git_check = subprocess.run(
-                ["git", "rev-parse", "--git-dir"],
-                cwd=str(self._repo_root),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=5.0,
-            )
-            if git_check.returncode != 0:
-                raise CommandError(
-                    "not_a_git_repository",
-                    f"Search requires a git repository, but {self._repo_root} is not one",
-                )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            raise CommandError(
-                "git_not_available", "git command not found or not executable"
-            )
+        common.check_git_repo(self._repo_root)
 
         glob_filter = parsed.glob
         sub_path = parsed.path
