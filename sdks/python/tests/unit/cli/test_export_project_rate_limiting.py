@@ -235,19 +235,19 @@ class TestExportTracesPageFetchFailures:
         """A failed page in the middle must not prevent later pages from being fetched."""
         from opik.cli.exports.project import export_traces
 
-        # Pages must be full (500 traces) so the loop doesn't break on the
-        # short-page termination check before reaching the failed page.
-        # Use distinct offsets so page3 trace IDs don't collide with page1.
-        page1 = _make_full_page(500, offset=0)
-        page3 = _make_full_page(500, offset=500)
+        # Use page_size=2 so pages with 2 traces are "full" (2 == page_size).
+        # Keeps file-write count tiny (4 files) while still exercising the
+        # pagination loop — the loop only breaks early on a *short* page.
+        page1 = _make_full_page(2, offset=0)
+        page3 = _make_full_page(2, offset=2)
         mock_client = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
                 mock_fetch.side_effect = [
-                    page1,  # page 1: OK, 500 traces
+                    page1,  # page 1: OK, 2 traces
                     ApiError(status_code=429),  # page 2: rate limited
-                    page3,  # page 3: OK, 500 traces
+                    page3,  # page 3: OK, 2 traces
                     _make_page([]),  # page 4: end
                 ]
                 with patch(f"{_MODULE}._fetch_spans_page", return_value=_make_page([])):
@@ -259,10 +259,11 @@ class TestExportTracesPageFetchFailures:
                             max_results=None,
                             filter_string=None,
                             show_progress=False,
+                            page_size=2,
                         )
 
         assert had_errors is True
-        assert exported == 1000  # page 1 and page 3 traces both exported
+        assert exported == 4  # page 1 and page 3 traces both exported
 
     def test_export_traces__consecutive_failures_reach_cap__export_aborted(self):
         """After MAX_CONSECUTIVE_PAGE_FAILURES pages in a row fail, the loop aborts."""
@@ -364,18 +365,19 @@ class TestExportTracesSpanFetchFailures:
 
 class TestExportTracesInterPageDelay:
     def test_export_traces__multiple_full_pages__sleep_called_between_pages(self):
-        """sleep is called after each full page (page_size=500) to throttle requests."""
+        """sleep is called after each full page to throttle requests."""
         from opik.cli.exports.project import export_traces, _PAGE_FETCH_DELAY_SECONDS
 
-        # Must use full pages (500 traces) — the loop breaks on short pages before
-        # reaching the sleep call, so partial pages do not trigger a sleep.
+        # Use page_size=2 so pages with 2 traces count as "full" (2 == page_size).
+        # Keeps file-write count tiny (4 files) while still exercising the sleep
+        # path — the loop only skips the inter-page sleep on a *short* page.
         mock_client = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
                 mock_fetch.side_effect = [
-                    _make_full_page(500, offset=0),  # page 1: full, IDs 0–499
-                    _make_full_page(500, offset=500),  # page 2: full, IDs 500–999
+                    _make_full_page(2, offset=0),  # page 1: full, IDs 0–1
+                    _make_full_page(2, offset=2),  # page 2: full, IDs 2–3
                     _make_page([]),  # page 3: empty — end
                 ]
                 with patch(f"{_MODULE}._fetch_spans_page", return_value=_make_page([])):
@@ -387,6 +389,7 @@ class TestExportTracesInterPageDelay:
                             max_results=None,
                             filter_string=None,
                             show_progress=False,
+                            page_size=2,
                         )
 
         # sleep called once after page 1 and once after page 2.
