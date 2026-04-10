@@ -14,7 +14,7 @@ import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import lombok.NonNull;
-import org.apache.tika.utils.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -36,9 +36,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Determination Logic (priority order):</h3>
  * <ol>
+ *   <li><b>V2 workspace allowlist</b> ({@code TOGGLE_V2_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
+ *       that always receive {@code version_2}. Highest priority, all deployment modes.</li>
  *   <li><b>Feature flag override</b> ({@code TOGGLE_FORCE_WORKSPACE_VERSION}) — if set to a valid
  *       {@link OpikVersion} value ({@code "version_1"} or {@code "version_2"}), that version is returned
- *       unconditionally. Value {@code "disabled"} means no override. Highest priority, all deployment modes.</li>
+ *       unconditionally. Value {@code "disabled"} means no override.</li>
  *   <li><b>Auth one-way V2 gate</b> (authenticated mode only) — if auth metadata indicates the workspace
  *       was created post-launch ({@code version_2}), always return {@code version_2}.
  *       Prevents V2 to V1 demotion. Defensive: gracefully degrades when auth service doesn't
@@ -117,6 +119,11 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     @Override
     public Mono<WorkspaceVersion> getWorkspaceVersion(@NonNull String workspaceId, OpikVersion authSuggestedVersion) {
+        var isWorkspaceInV2Allowlist = serviceTogglesConfig.getV2WorkspaceAllowlistIds().contains(workspaceId);
+        if (isWorkspaceInV2Allowlist) {
+            log.info("Workspace included in version_2 allowlist, workspaceId '{}'", workspaceId);
+            return Mono.just(buildResponse(OpikVersion.VERSION_2));
+        }
         var forcedVersion = getForcedVersion();
         if (forcedVersion.isPresent()) {
             log.info("Workspace version forced by feature flag, opikVersion '{}', workspaceId '{}'",
