@@ -2746,22 +2746,12 @@ class Opik:
             ),
         )
 
-    def _resolve_project_name(self, project_name: Optional[str]) -> str:
-        """Resolve the project name using the following precedence:
-
-        1. Explicit ``project_name`` argument (if not None).
-        2. Active project context set by ``@track(project_name=...)``
-           or ``opik.project_context(...)``.
-        3. The client's default project (``self._project_name``).
-        """
-        if project_name is not None:
-            return project_name
-
-        context_project = context_storage.get_context_project_name()
-        if context_project is not None:
-            return context_project
-
-        return self._project_name
+    def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
+        return helpers.resolve_project_name(
+            explicitly_passed_value=explicitly_passed_value,
+            value_from_config=self._project_name,
+            value_from_context=context_storage.get_context_project_name(),
+        )
 
 
 _context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.ContextVar(
