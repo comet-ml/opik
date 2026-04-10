@@ -349,7 +349,7 @@ describe.skipIf(!shouldRunApiTests)(
 
         // With mask via agentConfigContext
         let withMask: Awaited<ReturnType<typeof fetchWithMask>> | undefined;
-        await agentConfigContext(maskId, async () => {
+        await agentConfigContext({ maskId }, async () => {
           withMask = await fetchWithMask();
         });
 

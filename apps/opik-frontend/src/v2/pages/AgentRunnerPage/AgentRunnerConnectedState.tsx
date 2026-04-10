@@ -15,8 +15,13 @@ import { DropdownOption } from "@/types/shared";
 type AgentRunnerConnectedStateProps = {
   projectId: string;
   runner: LocalRunner;
-  onRun: (inputs: Record<string, unknown>, maskId?: string) => void;
+  onRun: (
+    inputs: Record<string, unknown>,
+    blueprintName?: string,
+    maskId?: string,
+  ) => void;
   isRunning: boolean;
+  resetKey: number;
 };
 
 const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
@@ -24,6 +29,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
   runner,
   onRun,
   isRunning,
+  resetKey,
 }) => {
   const [activeTab, setActiveTab] = useState("input");
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
@@ -64,20 +70,21 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
   const handleRun = useCallback(
     async (inputs: Record<string, unknown>) => {
       const editView = configEditRef.current;
+      const blueprintName = activeVersion?.name;
       if (editView?.hasChanges()) {
         const payload = await editView.buildMaskPayload();
         if (!payload) return;
         try {
           const { id } = await createConfigAsync({ agentConfig: payload });
-          onRun(inputs, id);
+          onRun(inputs, blueprintName, id);
         } catch {
           return;
         }
       } else {
-        onRun(inputs);
+        onRun(inputs, blueprintName);
       }
     },
-    [onRun, createConfigAsync],
+    [onRun, createConfigAsync, activeVersion],
   );
 
   return (
@@ -104,6 +111,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
         >
           {agent ? (
             <AgentRunnerInputForm
+              key={resetKey}
               fields={inputFields}
               onSubmit={handleRun}
               isRunning={isRunning}
@@ -124,7 +132,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
         >
           {activeVersion ? (
             <AgentConfigurationEditView
-              key={activeVersion.id}
+              key={`${activeVersion.id}-${resetKey}`}
               ref={configEditRef}
               item={activeVersion}
               projectId={projectId}
