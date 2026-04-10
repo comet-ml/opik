@@ -97,6 +97,11 @@ const ERROR_RATE_METRIC_MAP: Partial<Record<KpiEntityType, METRIC_NAME_TYPE>> =
     spans: METRIC_NAME_TYPE.SPAN_ERROR_RATE,
   };
 
+const ERROR_RATE_LINE_NAME_MAP: Partial<Record<KpiEntityType, string>> = {
+  traces: "trace_error_rate",
+  spans: "span_error_rate",
+};
+
 const AVG_DURATION_LINE_NAME_MAP: Record<KpiEntityType, string> = {
   traces: "trace_average_duration",
   spans: "span_average_duration",
@@ -124,7 +129,7 @@ const getChartConfig = (
       return {
         metricName: ERROR_RATE_METRIC_MAP[entityType]!,
         chartType: CHART_TYPE.bar,
-        colorMap: { [entityType]: CHART_RED },
+        colorMap: { [ERROR_RATE_LINE_NAME_MAP[entityType]!]: CHART_RED },
       };
     case "avg_duration":
       return {
@@ -167,7 +172,9 @@ const ChartEmptyState: React.FC = () => (
   <div className="relative">
     <ChartPlaceholderBars />
     <div className="absolute inset-0 flex items-center justify-center">
-      <span className="comet-body-s text-light-slate">Data not available</span>
+      <span className="comet-body-s text-muted-slate">
+        No data from this period
+      </span>
     </div>
   </div>
 );
@@ -321,6 +328,8 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             filterLineCallback={chartConfig.filterLineCallback}
             labelsMap={chartConfig.labelsMap}
             logsSource={logsSource}
+            tooltipPosition={{ y: 0 }}
+            targetTickCount={2}
             {...chartFilters}
           />
         ) : (

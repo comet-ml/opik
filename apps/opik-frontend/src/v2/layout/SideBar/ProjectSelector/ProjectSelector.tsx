@@ -67,6 +67,9 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const isLoading = !!activeProjectId && isProjectPending;
 
   const iconIndices = useProjectIconIndices();
+  const activeIconIndex = activeProjectId
+    ? iconIndices.get(activeProjectId) ?? 0
+    : 0;
 
   const { data: projectsData } = useProjectsList(
     {
@@ -111,14 +114,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                   </>
                 ) : (
                   <>
-                    <ProjectIcon
-                      index={
-                        activeProjectId
-                          ? iconIndices.get(activeProjectId) ?? 0
-                          : 0
-                      }
-                      variant="owl"
-                    />
+                    <ProjectIcon index={activeIconIndex} size="lg" />
                     <div className="flex min-w-0 flex-1 flex-col items-start">
                       <div className="flex w-full items-center gap-0.5">
                         <span className="comet-body-s text-light-slate">
@@ -150,7 +146,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             ) : (
               <button
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-md py-1",
+                  "flex size-7 items-center justify-center rounded-md",
                   open
                     ? "bg-primary-foreground"
                     : "hover:bg-primary-foreground",
@@ -158,10 +154,8 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
               >
                 {isLoading ? (
                   <Spinner size="xs" />
-                ) : open ? (
-                  <ChevronUp className="size-3.5 text-foreground" />
                 ) : (
-                  <ChevronDown className="size-3.5 text-foreground" />
+                  <ProjectIcon index={activeIconIndex} size="md" />
                 )}
               </button>
             )}

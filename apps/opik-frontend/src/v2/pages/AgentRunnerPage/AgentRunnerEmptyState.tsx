@@ -101,7 +101,7 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
     <div className="flex flex-1 justify-center gap-16 px-10 pt-[15.69rem]">
       <div className="w-full max-w-lg">
         <div className="mb-1 flex items-center gap-2">
-          <ProjectIcon index={0} variant="owl" />
+          <ProjectIcon index={0} size="lg" />
           <h2 className="comet-title-m">Connect your agent</h2>
         </div>
         <p className="comet-body-s mb-8 text-muted-slate">
