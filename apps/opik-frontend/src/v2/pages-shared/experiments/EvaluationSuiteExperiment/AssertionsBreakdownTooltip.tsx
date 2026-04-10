@@ -80,8 +80,9 @@ export const AssertionsBreakdownTooltip: React.FC<
         // Offset by the sticky header height so the failed assertion lands
         // below the header rather than hidden behind it.
         const headerHeight =
-          (runItem.firstElementChild as HTMLElement | null)?.getBoundingClientRect()
-            .height ?? 0;
+          (
+            runItem.firstElementChild as HTMLElement | null
+          )?.getBoundingClientRect().height ?? 0;
         const containerTop = container.getBoundingClientRect().top;
         const targetTop = firstFailed.getBoundingClientRect().top;
         container.scrollTop += targetTop - containerTop - headerHeight;
