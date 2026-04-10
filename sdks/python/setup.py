@@ -60,6 +60,9 @@ setup(
         "uuid6",
         "jinja2",
         "watchfiles>=1.0.0,<2.0.0",
+        "tree-sitter>=0.23,<1.0",
+        "tree-sitter-javascript>=0.23,<1.0",
+        "tree-sitter-typescript>=0.23,<1.0",
     ],
     extras_require={
         "proxy": [
