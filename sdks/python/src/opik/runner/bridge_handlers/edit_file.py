@@ -264,11 +264,11 @@ class EditFileHandler(BaseHandler):
 
         syntax_result = check_syntax(parsed.path, new_content)
 
-        result = {
+        response: Dict[str, Any] = {
             "diff": diff,
             "edits_applied": len(parsed.edits),
             "fuzzy_match_used": fuzzy_used,
         }
         if syntax_result is not None:
-            result["syntax_check"] = syntax_result
-        return result
+            response["syntax_check"] = syntax_result
+        return response

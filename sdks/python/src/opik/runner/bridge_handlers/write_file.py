@@ -68,11 +68,11 @@ class WriteFileHandler(BaseHandler):
 
         syntax_result = check_syntax(parsed.path, parsed.content)
 
-        result = {
+        response: Dict[str, Any] = {
             "bytes_written": len(parsed.content.encode("utf-8")),
             "created": old_content is None,
             "diff": diff,
         }
         if syntax_result is not None:
-            result["syntax_check"] = syntax_result
-        return result
+            response["syntax_check"] = syntax_result
+        return response

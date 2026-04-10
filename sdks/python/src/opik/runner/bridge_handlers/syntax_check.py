@@ -60,14 +60,14 @@ def _find_tree_sitter_errors(
     stack = [root_node]
     while stack:
         node = stack.pop()
-        if node.type == "ERROR":  # type: ignore[union-attr]
-            row, col = node.start_point  # type: ignore[union-attr]
+        if node.type == "ERROR":  # type: ignore[attr-defined]
+            row, col = node.start_point  # type: ignore[attr-defined]
             errors.append((row + 1, col, "ERROR"))
-        elif node.is_missing:  # type: ignore[union-attr]
-            row, col = node.start_point  # type: ignore[union-attr]
+        elif node.is_missing:  # type: ignore[attr-defined]
+            row, col = node.start_point  # type: ignore[attr-defined]
             errors.append((row + 1, col, "MISSING"))
         else:
-            stack.extend(node.children)  # type: ignore[union-attr]
+            stack.extend(node.children)  # type: ignore[attr-defined]
     return errors
 
 
