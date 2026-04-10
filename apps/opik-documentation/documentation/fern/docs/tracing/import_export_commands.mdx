@@ -31,6 +31,7 @@ Exports specific data types from the specified workspace to local files.
 - `--force`: Re-download items even if they already exist locally
 - `--format`: Format for exporting data (`json` or `csv`, default: `json`)
 - `--debug`: Enable debug output to show detailed information about the export process
+- `--no-attachments`: Skip downloading attachment files.
 - `--page-size INTEGER`: Number of traces to fetch per API request when exporting projects (1–1000, default: `500`). Applies to `project` and `all`. Increase for fewer round-trips; decrease if you hit persistent rate-limit errors.
 
 **`all`-specific options:**
@@ -100,6 +101,15 @@ Use `--format csv` when the target is a spreadsheet or analysis tool rather than
 opik export my-workspace project "my-project" --format csv --path ./csv_data
 ```
 
+Use `--no-attachments` to skip downloading attachment files (faster exports when you only need trace/span data):
+```bash
+# Export project without downloading attachments
+opik export my-workspace project "my-project" --no-attachments
+
+# Export all data without attachments
+opik export my-workspace all --no-attachments
+```
+
 Miscellaneous options:
 ```bash
 # Save to a custom directory
@@ -128,6 +138,7 @@ Imports specific data types from local files to the specified workspace.
 - `--path, -p`: Directory containing exported data (default: `opik_exports`)
 - `--dry-run`: Show what would be imported without actually importing
 - `--force`: Discard the migration manifest and re-import everything from scratch
+- `--no-attachments`: Skip uploading attachment files.
 - `--debug`: Enable debug output to show detailed information about the import process
 
 **Note:** Experiment imports automatically recreate experiments where possible. No additional flags are needed.
@@ -200,6 +211,15 @@ opik import my-workspace project "my-project" --path ./migration_data
 opik import my-workspace project "my-project" --path ./migration_data --force
 ```
 
+Use `--no-attachments` to skip uploading attachment files (faster imports when you only need trace/span data):
+```bash
+# Import project without uploading attachments
+opik import my-workspace project "my-project" --no-attachments
+
+# Import all data without attachments
+opik import my-workspace all --no-attachments
+```
+
 Use `--debug` to see per-file status and API call details:
 ```bash
 opik import my-workspace experiment "my-experiment" --debug
@@ -221,7 +241,14 @@ OUTPUT_DIR/
     ├── projects/
     │   └── PROJECT_NAME/
     │       ├── trace_TRACE_ID_1.json
-    │       └── trace_TRACE_ID_2.json
+    │       ├── trace_TRACE_ID_2.json
+    │       └── attachments/
+    │           ├── trace/
+    │           │   └── TRACE_ID/
+    │           │       └── image.png
+    │           └── span/
+    │               └── SPAN_ID/
+    │                   └── document.pdf
     ├── experiments/
     │   ├── experiment_EXPERIMENT_NAME_1.json
     │   └── experiment_EXPERIMENT_NAME_2.json
@@ -256,6 +283,18 @@ Each trace file contains:
       "type": "general",
       "model": "gpt-4",
       "provider": "openai"
+    }
+  ],
+  "attachments": [
+    {
+      "entity_type": "trace",
+      "entity_id": "trace-uuid",
+      "file_name": "image.png"
+    },
+    {
+      "entity_type": "span",
+      "entity_id": "span-uuid",
+      "file_name": "document.pdf"
     }
   ],
   "downloaded_at": "2024-01-01T00:00:00Z",
