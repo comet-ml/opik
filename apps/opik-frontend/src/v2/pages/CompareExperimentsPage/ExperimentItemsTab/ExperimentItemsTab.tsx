@@ -278,7 +278,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const visibleOutputColumns = useMemo(
     () =>
       isEvalSuite
-        ? dynamicOutputColumns.filter((c: DynamicColumn) => c.label !== EVAL_SUITE_ECHOED_OUTPUT_KEY)
+        ? dynamicOutputColumns.filter(
+            (c: DynamicColumn) => c.label !== EVAL_SUITE_ECHOED_OUTPUT_KEY,
+          )
         : dynamicOutputColumns,
     [dynamicOutputColumns, isEvalSuite],
   );
@@ -286,21 +288,21 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const outputColumnsData = useMemo(() => {
     return [
       ...visibleOutputColumns.map(
-          ({ label, id, columnType }) =>
-            ({
-              id,
-              label,
-              type: columnType,
-              cell: CompareExperimentsOutputCell as never,
-              customMeta: {
-                experiments,
-                experimentsIds,
-                outputKey: label,
-                openTrace: setTraceId,
-              },
-              ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
-            }) as ColumnData<ExperimentsCompare>,
-        ),
+        ({ label, id, columnType }: DynamicColumn) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            cell: CompareExperimentsOutputCell as never,
+            customMeta: {
+              experiments,
+              experimentsIds,
+              outputKey: label,
+              openTrace: setTraceId,
+            },
+            ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
+          }) as ColumnData<ExperimentsCompare>,
+      ),
       {
         id: COLUMN_DURATION_ID,
         label: "Duration",
