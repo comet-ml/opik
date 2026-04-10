@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from .bridge_handlers import common
+from .bridge_handlers import CommandError, common
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +42,11 @@ _ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTER
 
 
 def build_checklist(repo_root: Path, command: Optional[List[str]]) -> Dict[str, Any]:
-    git_files = common.git_ls_files(repo_root)
+    try:
+        git_files: Optional[Set[str]] = common.git_ls_files(repo_root)
+    except CommandError:
+        # Not a git repo or git unavailable — fall back to os.walk
+        git_files = None
     file_tree = _build_file_tree(repo_root, git_files)
     matches = _find_instrumentation(repo_root, git_files)
 
