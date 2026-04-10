@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -367,7 +368,7 @@ class OpikConnectServiceImplTest {
         }
 
         @Test
-        @DisplayName("activation race: fastPutIfAbsent false returns 409")
+        @DisplayName("activation race: fastPutIfAbsent false returns 409 (after the idempotent runner activation runs)")
         @SuppressWarnings("unchecked")
         void raceLostReturns409() {
             UUID sessionId = UUID.randomUUID();
@@ -387,7 +388,39 @@ class OpikConnectServiceImplTest {
                             ex -> assertThat(ex.getResponse().getStatus()).isEqualTo(Response.Status.CONFLICT
                                     .getStatusCode()));
 
-            verifyNoInteractions(localRunnerService);
+            // Runner activation IS called before the CAS check — the helpers are
+            // idempotent so a duplicate call from the loser of the race is safe.
+            verify(localRunnerService).activateFromOpikConnect(
+                    eq(WORKSPACE_ID), eq(USER_NAME), eq(projectId), eq(runnerId), eq("runner-1"));
+        }
+
+        @Test
+        @DisplayName("if activateFromOpikConnect throws, the session activated flag is NOT set so retries can succeed")
+        @SuppressWarnings("unchecked")
+        void runnerActivationFailureLeavesSessionRetryable() {
+            UUID sessionId = UUID.randomUUID();
+            byte[] activationKey = new byte[32];
+            UUID projectId = UUID.randomUUID();
+            UUID runnerId = UUID.randomUUID();
+            when(redisClient.getMap(anyString())).thenReturn(sessionMap);
+            when(sessionMap.readAllMap()).thenReturn(storedFields(WORKSPACE_ID, USER_NAME,
+                    projectId, runnerId, Base64.getEncoder().encodeToString(activationKey)));
+
+            // Simulate a Redis blip / internal error inside the runner activation helpers.
+            doThrow(new RuntimeException("simulated redis blip"))
+                    .when(localRunnerService)
+                    .activateFromOpikConnect(anyString(), anyString(), any(UUID.class), any(UUID.class), anyString());
+
+            String runnerName = "stuck-runner";
+            byte[] tag = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            ActivateRequest request = activateRequest(runnerName, Base64.getEncoder().encodeToString(tag));
+
+            assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, request))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessage("simulated redis blip");
+
+            // Critical: the activated flag must NOT have been set, so the next retry can succeed.
+            verify(sessionMap, never()).fastPutIfAbsent(anyString(), anyString());
         }
 
         @Test

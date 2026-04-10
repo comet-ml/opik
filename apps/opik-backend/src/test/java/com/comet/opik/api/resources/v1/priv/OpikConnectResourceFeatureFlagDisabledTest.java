@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.connect.ActivateRequest;
 import com.comet.opik.api.connect.CreateSessionRequest;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -104,7 +105,7 @@ class OpikConnectResourceFeatureFlagDisabledTest {
     }
 
     @Test
-    @DisplayName("POST /sessions returns 501 when localRunner.enabled=false")
+    @DisplayName("POST /sessions returns 501 with an ErrorMessage body when localRunner.enabled=false")
     void createSessionReturns501WhenDisabled() {
         CreateSessionRequest request = CreateSessionRequest.builder()
                 .projectId(randomUUID())
@@ -114,11 +115,13 @@ class OpikConnectResourceFeatureFlagDisabledTest {
 
         try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(501);
+            ErrorMessage body = response.readEntity(ErrorMessage.class);
+            assertThat(body.errors()).isNotEmpty();
         }
     }
 
     @Test
-    @DisplayName("POST /sessions/{id}/activate returns 501 when localRunner.enabled=false")
+    @DisplayName("POST /sessions/{id}/activate returns 501 with an ErrorMessage body when localRunner.enabled=false")
     void activateReturns501WhenDisabled() {
         ActivateRequest request = ActivateRequest.builder()
                 .runnerName("any-runner")
@@ -129,6 +132,8 @@ class OpikConnectResourceFeatureFlagDisabledTest {
 
         try (Response response = connectClient.callActivate(UUID.randomUUID(), request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(501);
+            ErrorMessage body = response.readEntity(ErrorMessage.class);
+            assertThat(body.errors()).isNotEmpty();
         }
     }
 }

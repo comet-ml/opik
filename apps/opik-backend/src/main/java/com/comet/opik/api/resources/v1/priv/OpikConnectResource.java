@@ -35,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 @Path("/v1/private/opik-connect")
@@ -96,7 +97,11 @@ public class OpikConnectResource {
 
     private void ensureEnabled() {
         if (!runnerConfig.isEnabled()) {
-            throw new WebApplicationException(Response.Status.NOT_IMPLEMENTED);
+            throw new WebApplicationException(
+                    Response.status(Response.Status.NOT_IMPLEMENTED)
+                            .type(MediaType.APPLICATION_JSON)
+                            .entity(new ErrorMessage(List.of("opik-connect is not enabled on this deployment")))
+                            .build());
         }
     }
 }

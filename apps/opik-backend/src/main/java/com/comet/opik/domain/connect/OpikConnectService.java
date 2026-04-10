@@ -196,6 +196,21 @@ class OpikConnectServiceImpl implements OpikConnectService {
             throw new ForbiddenException("Invalid activation hmac");
         }
 
+        UUID projectId = UUID.fromString(storedProjectId);
+        UUID runnerId = UUID.fromString(storedRunnerId);
+
+        // Activate the runner BEFORE flipping the session's activated flag. If
+        // activateFromOpikConnect fails (Redis hiccup, internal error in one of the
+        // helpers, etc.), the session must remain re-activatable so the user can
+        // retry the same pairing link rather than waiting out the TTL.
+        //
+        // The runner-row writes inside activateFromOpikConnect are idempotent
+        // (evictExistingRunner short-circuits when the user→runner bucket already
+        // points at this runnerId, set adds dedupe, bucket writes are last-write-wins),
+        // so a duplicate call from a parallel activator is harmless. The CAS below
+        // is what determines who returns 201 vs 409.
+        localRunnerService.activateFromOpikConnect(workspaceId, userName, projectId, runnerId, request.runnerName());
+
         boolean won = sessionMap.fastPutIfAbsent(FIELD_ACTIVATED, FIELD_ACTIVATED_VALUE);
         if (!won) {
             log.warn("opik-connect session already activated sessionId='{}' workspaceId='{}' userName='{}'",
@@ -205,11 +220,6 @@ class OpikConnectServiceImpl implements OpikConnectService {
                             .entity(new ErrorMessage(List.of("Session already activated: " + sessionId)))
                             .build());
         }
-
-        UUID projectId = UUID.fromString(storedProjectId);
-        UUID runnerId = UUID.fromString(storedRunnerId);
-
-        localRunnerService.activateFromOpikConnect(workspaceId, userName, projectId, runnerId, request.runnerName());
 
         log.info("opik-connect session activated sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}'",
                 sessionId, runnerId, workspaceId, userName);
