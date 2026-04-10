@@ -8,11 +8,10 @@ interface ConfigContext {
 const configContextStorage = new AsyncLocalStorage<ConfigContext>();
 
 export function agentConfigContext<T>(
-  blueprintName: string | undefined,
-  maskId: string | undefined,
+  context: ConfigContext,
   fn: () => T | Promise<T>,
 ): T | Promise<T> {
-  return configContextStorage.run({ maskId, blueprintName }, fn) as T | Promise<T>;
+  return configContextStorage.run(context, fn) as T | Promise<T>;
 }
 
 export function getActiveConfigMask(): string | null {

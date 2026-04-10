@@ -230,7 +230,7 @@ export class InProcessRunnerLoop {
     const run = () =>
       runWithJobContext({ traceId, jobId }, () => {
         if (maskId || blueprintName) {
-          return agentConfigContext(blueprintName, maskId, () => entry.func(...args));
+          return agentConfigContext({ blueprintName, maskId }, () => entry.func(...args));
         }
         return entry.func(...args);
       });

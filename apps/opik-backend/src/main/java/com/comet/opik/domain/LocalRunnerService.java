@@ -521,7 +521,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             jobFields.put(FIELD_MASK_ID, request.maskId().toString());
         }
         if (request.blueprintName() != null) {
-            jobFields.put(FIELD_BLUEPRINT_NAME, request.blueprintName());
+            jobFields.put(FIELD_BLUEPRINT_NAME, request.blueprintName().strip());
         }
         if (request.metadata() != null) {
             jobFields.put(FIELD_METADATA, JsonUtils.writeValueAsString(request.metadata()));
