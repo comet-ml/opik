@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
@@ -72,22 +78,32 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   onRetry,
   retryCount = 0,
 }) => {
-  const isOpen = useRef(getStoredSidebarOpen());
+  const [isOpen, setIsOpen] = useState(getStoredSidebarOpen);
   const initialWidth = useRef(
-    isOpen.current ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+    getStoredSidebarOpen() ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
   );
 
   useEffect(() => {
     onWidthChange(initialWidth.current);
   }, [onWidthChange]);
 
-  const collapsed = !isOpen.current;
+  const handleToggle = useCallback(() => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem("assistant-sidebar-open", String(next));
+      onWidthChange(next ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH);
+      return next;
+    });
+  }, [onWidthChange]);
+
+  const collapsed = !isOpen;
 
   if (error) {
     return (
       <AssistantErrorState
         collapsed={collapsed}
         onRetry={onRetry}
+        onToggle={handleToggle}
         retryCount={retryCount}
       />
     );
