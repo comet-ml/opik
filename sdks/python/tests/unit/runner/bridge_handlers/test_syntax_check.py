@@ -1,8 +1,5 @@
 """Tests for syntax_check module — Python via ast, JS/TS via tree-sitter."""
 
-import importlib
-from typing import Optional
-from unittest.mock import patch
 
 import pytest
 
@@ -62,11 +59,7 @@ class TestTypescriptSyntax:
         assert "line" in result
 
     def test_tsx_valid__returns_none(self) -> None:
-        code = (
-            "function App(): JSX.Element {\n"
-            "    return <div>Hello</div>;\n"
-            "}\n"
-        )
+        code = "function App(): JSX.Element {\n    return <div>Hello</div>;\n}\n"
         result = check_syntax("App.tsx", code)
         assert result is None
 
@@ -152,7 +145,9 @@ class TestTreeSitterUnavailable:
 class TestHandlerIntegration:
     """Verify syntax_check field appears in handler responses."""
 
-    def test_edit_file__valid_python__syntax_ok(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_edit_file__valid_python__syntax_ok(
+        self, tmp_path: "pytest.TempPathFactory"
+    ) -> None:
         from opik.runner.bridge_handlers import FileLockRegistry
         from opik.runner.bridge_handlers.edit_file import EditFileHandler
 
@@ -160,12 +155,17 @@ class TestHandlerIntegration:
         f.write_text("hello = 'world'\n")
         handler = EditFileHandler(tmp_path, FileLockRegistry())  # type: ignore[arg-type]
         result = handler.execute(
-            {"path": "code.py", "edits": [{"old_string": "world", "new_string": "earth"}]},
+            {
+                "path": "code.py",
+                "edits": [{"old_string": "world", "new_string": "earth"}],
+            },
             timeout=30.0,
         )
         assert result["syntax_check"] == "ok"
 
-    def test_edit_file__broken_python__syntax_error(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_edit_file__broken_python__syntax_error(
+        self, tmp_path: "pytest.TempPathFactory"
+    ) -> None:
         from opik.runner.bridge_handlers import FileLockRegistry
         from opik.runner.bridge_handlers.edit_file import EditFileHandler
 
@@ -173,13 +173,18 @@ class TestHandlerIntegration:
         f.write_text("def hello():\n    return 42\n")
         handler = EditFileHandler(tmp_path, FileLockRegistry())  # type: ignore[arg-type]
         result = handler.execute(
-            {"path": "code.py", "edits": [{"old_string": "def hello():", "new_string": "def hello(:"}]},
+            {
+                "path": "code.py",
+                "edits": [{"old_string": "def hello():", "new_string": "def hello(:"}],
+            },
             timeout=30.0,
         )
         assert result["syntax_check"] != "ok"
         assert "syntax_error" in result["syntax_check"]
 
-    def test_write_file__valid_python__syntax_ok(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_write_file__valid_python__syntax_ok(
+        self, tmp_path: "pytest.TempPathFactory"
+    ) -> None:
         from opik.runner.bridge_handlers import FileLockRegistry
         from opik.runner.bridge_handlers.write_file import WriteFileHandler
 
@@ -190,7 +195,9 @@ class TestHandlerIntegration:
         )
         assert result["syntax_check"] == "ok"
 
-    def test_write_file__broken_python__syntax_error(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_write_file__broken_python__syntax_error(
+        self, tmp_path: "pytest.TempPathFactory"
+    ) -> None:
         from opik.runner.bridge_handlers import FileLockRegistry
         from opik.runner.bridge_handlers.write_file import WriteFileHandler
 
@@ -202,7 +209,9 @@ class TestHandlerIntegration:
         assert result["syntax_check"] != "ok"
         assert "syntax_error" in result["syntax_check"]
 
-    def test_write_file__non_source_file__syntax_ok(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_write_file__non_source_file__syntax_ok(
+        self, tmp_path: "pytest.TempPathFactory"
+    ) -> None:
         from opik.runner.bridge_handlers import FileLockRegistry
         from opik.runner.bridge_handlers.write_file import WriteFileHandler
 
