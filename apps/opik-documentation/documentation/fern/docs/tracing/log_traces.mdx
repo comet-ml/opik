@@ -903,6 +903,25 @@ the trace to be logged to in a couple of ways:
 
 </Tabs>
 
+<Warning>
+When a script combines `@track` tracing with other Opik API calls — such as `evaluate()`, `get_or_create_dataset()`, or `Prompt()` — traces and API objects can land in different projects if the project name is not set consistently. Make sure the value passed to `opik.configure(project_name=...)` (which controls where `@track` traces go) matches the `project_name` argument passed explicitly to each API call:
+
+```python
+import opik
+
+opik.configure(project_name="my-project")
+
+dataset = client.get_or_create_dataset(name="my-dataset", project_name="my-project")
+
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    project_name="my-project",  # must match opik.configure value above
+    ...
+)
+```
+</Warning>
+
 ### Flushing traces and spans
 
 This process is optional and is only needed if you are running a short-lived script or if you are
