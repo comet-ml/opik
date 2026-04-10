@@ -2746,11 +2746,11 @@ class Opik:
             ),
         )
 
-    def _resolve_project_name(self, project_name: Optional[str]) -> str:
+    def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
         return helpers.resolve_project_name(
-            manually_passed_value=project_name,
-            config_project_name=self._project_name,
-            context_project_name=context_storage.get_context_project_name(),
+            explicitly_passed_value=explicitly_passed_value,
+            value_from_config=self._project_name,
+            value_from_context=context_storage.get_value_from_context(),
         )
 
 

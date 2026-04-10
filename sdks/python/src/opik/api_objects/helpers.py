@@ -194,9 +194,9 @@ def parse_feedback_score_messages(
 
 
 def resolve_project_name(
-    manually_passed_value: Optional[str],
-    config_project_name: str,
-    context_project_name: Optional[str] = None,
+    explicitly_passed_value: Optional[str],
+    value_from_config: str,
+    value_from_context: Optional[str] = None,
 ) -> str:
     """Resolve the project name using the following precedence:
 
@@ -204,13 +204,13 @@ def resolve_project_name(
     2. Active project context (if not None).
     3. The client's configured project name.
     """
-    if manually_passed_value is not None:
-        return manually_passed_value
+    if explicitly_passed_value is not None:
+        return explicitly_passed_value
 
-    if context_project_name is not None:
-        return context_project_name
+    if value_from_context is not None:
+        return value_from_context
 
-    if config_project_name == config.OPIK_PROJECT_DEFAULT_NAME:
+    if value_from_config == config.OPIK_PROJECT_DEFAULT_NAME:
         opik_logging.log_once_at_level(
             logging_level=logging.WARNING,
             message='No project name configured. Traces are being logged to "Default Project".\n'
@@ -220,4 +220,4 @@ def resolve_project_name(
             logger=LOGGER,
         )
 
-    return config_project_name
+    return value_from_config
