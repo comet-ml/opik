@@ -176,10 +176,13 @@ print(response)
 Let's create a custom evaluation metric and test our application:
 
 ```python
+import opik
 from opik import track
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import base_metric, score_result
 from typing import Any
+
+opik.configure(project_name="my-project")
 
 class ValidSQLQuery(base_metric.BaseMetric):
     def __init__(self, name: str, db: Any):

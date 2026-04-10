@@ -145,11 +145,14 @@ evaluate_experiment(experiment_name="my-experiment", scoring_metrics=[hallucinat
 Suppose you are building a chatbot and want to compute the hallucination scores for a set of example conversations. For this you would create a first experiment with the `evaluate` function:
 
 ```python
+import opik
 from opik import Opik, track
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Hallucination
 from opik.integrations.openai import track_openai
 import openai
+
+opik.configure(project_name="my-project")
 
 # Define the task to evaluate
 openai_client = track_openai(openai.OpenAI())
