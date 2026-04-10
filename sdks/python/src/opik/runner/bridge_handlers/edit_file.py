@@ -262,11 +262,13 @@ class EditFileHandler(BaseHandler):
                     f"File is not writable: {parsed.path}",
                 )
 
-        syntax_error = check_syntax(parsed.path, new_content)
+        syntax_result = check_syntax(parsed.path, new_content)
 
-        return {
+        result = {
             "diff": diff,
             "edits_applied": len(parsed.edits),
             "fuzzy_match_used": fuzzy_used,
-            "syntax_check": syntax_error or "ok",
         }
+        if syntax_result is not None:
+            result["syntax_check"] = syntax_result
+        return result

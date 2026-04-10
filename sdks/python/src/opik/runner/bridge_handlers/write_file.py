@@ -66,11 +66,13 @@ class WriteFileHandler(BaseHandler):
                 )
             )
 
-        syntax_error = check_syntax(parsed.path, parsed.content)
+        syntax_result = check_syntax(parsed.path, parsed.content)
 
-        return {
+        result = {
             "bytes_written": len(parsed.content.encode("utf-8")),
             "created": old_content is None,
             "diff": diff,
-            "syntax_check": syntax_error or "ok",
         }
+        if syntax_result is not None:
+            result["syntax_check"] = syntax_result
+        return result
