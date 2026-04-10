@@ -9,6 +9,7 @@ import {
 } from "use-query-params";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import { Plus } from "lucide-react";
 
 import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -441,7 +442,8 @@ const ProjectsPage: React.FunctionComponent = () => {
         <h1 className="comet-title-xs truncate break-words">Projects</h1>
         {canCreateProjects && (
           <Button variant="default" size="xs" onClick={handleNewProjectClick}>
-            Create new project
+            <Plus className="mr-1 size-4" />
+            Create project
           </Button>
         )}
       </div>
@@ -493,7 +495,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreateProjects && (
               <Button variant="link" onClick={handleNewProjectClick}>
-                Create new project
+                Create project
               </Button>
             )}
           </DataTableNoData>

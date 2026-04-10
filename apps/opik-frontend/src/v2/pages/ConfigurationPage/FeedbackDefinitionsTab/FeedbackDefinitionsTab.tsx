@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import capitalize from "lodash/capitalize";
+import { Plus } from "lucide-react";
 
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import AddEditFeedbackDefinitionDialog from "@/v2/pages-shared/datasets/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
@@ -220,7 +221,8 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
           size="xs"
           onClick={handleNewFeedbackDefinitionClick}
         >
-          Create new feedback definition
+          <Plus className="mr-1 size-4" />
+          Create feedback definition
         </Button>
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
@@ -258,7 +260,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewFeedbackDefinitionClick}>
-                Create new feedback definition
+                Create feedback definition
               </Button>
             )}
           </DataTableNoData>

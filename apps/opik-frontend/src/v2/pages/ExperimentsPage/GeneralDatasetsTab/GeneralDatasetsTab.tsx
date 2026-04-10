@@ -717,7 +717,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={onNewExperimentClick}>
-                Create new experiment
+                Create experiment
               </Button>
             )}
           </DataTableNoData>

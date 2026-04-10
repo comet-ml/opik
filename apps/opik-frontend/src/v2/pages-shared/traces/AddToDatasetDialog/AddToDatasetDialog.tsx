@@ -527,8 +527,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                   }}
                   disabled={noValidRows}
                 >
-                  <Plus className="mr-2 size-4" />
-                  Create new evaluation suite
+                  <Plus className="mr-1 size-4" />
+                  Create evaluation suite
                 </Button>
               )}
             </div>

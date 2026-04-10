@@ -392,7 +392,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
             <DataTableNoData title={noDataText}>
               {noData && (
                 <Button variant="link" onClick={handleNewOptimizationClick}>
-                  Create new optimization
+                  Create optimization
                 </Button>
               )}
             </DataTableNoData>

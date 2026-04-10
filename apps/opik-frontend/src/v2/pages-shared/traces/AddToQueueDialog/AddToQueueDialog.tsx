@@ -248,8 +248,8 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
                   }}
                   disabled={noValidRows}
                 >
-                  <Plus className="mr-2 size-4" />
-                  Create new annotation queue
+                  <Plus className="mr-1 size-4" />
+                  Create annotation queue
                 </Button>
               )}
             </div>

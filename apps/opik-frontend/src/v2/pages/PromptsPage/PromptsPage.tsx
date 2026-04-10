@@ -342,8 +342,8 @@ const PromptsPage: React.FunctionComponent = () => {
         <h1 className="comet-title-xs truncate break-words">Prompt library</h1>
         {canCreatePrompts && (
           <Button variant="default" size="xs" onClick={handleNewPromptClick}>
-            <PlusIcon className="mr-2 size-4" />
-            Create new prompt
+            <PlusIcon className="mr-1 size-4" />
+            Create prompt
           </Button>
         )}
       </div>
@@ -395,7 +395,7 @@ const PromptsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreatePrompts && (
               <Button variant="link" onClick={handleNewPromptClick}>
-                Create new prompt
+                Create prompt
               </Button>
             )}
           </DataTableNoData>

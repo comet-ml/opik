@@ -8,6 +8,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import { Plus } from "lucide-react";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -362,6 +363,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         </h1>
         {canCreateDatasets && (
           <Button variant="default" size="xs" onClick={handleNewSuiteClick}>
+            <Plus className="mr-1 size-4" />
             Create evaluation suite
           </Button>
         )}
@@ -418,7 +420,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreateDatasets && (
               <Button variant="link" onClick={handleNewSuiteClick}>
-                Create new
+                Create evaluation suite
               </Button>
             )}
           </DataTableNoData>

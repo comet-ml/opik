@@ -32,8 +32,8 @@ const ExperimentsPage: React.FC = () => {
       >
         <h1 className="comet-title-xs truncate break-words">Experiments</h1>
         <Button variant="outline" size="xs" onClick={handleNewExperimentClick}>
-          <Info className="mr-1.5 size-3.5" />
-          Create new experiment
+          <Info className="mr-1 size-3.5" />
+          Create experiment
         </Button>
       </PageBodyStickyContainer>
       <GeneralDatasetsTab onNewExperimentClick={handleNewExperimentClick} />

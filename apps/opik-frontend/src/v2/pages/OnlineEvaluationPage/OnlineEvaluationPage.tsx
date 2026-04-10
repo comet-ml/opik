@@ -14,6 +14,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import round from "lodash/round";
+import { Plus } from "lucide-react";
 
 import {
   COLUMN_ID_ID,
@@ -382,7 +383,8 @@ export const OnlineEvaluationPage: React.FC = () => {
         </h1>
         {canUpdateOnlineEvaluationRules && (
           <Button variant="default" size="xs" onClick={handleNewRuleClick}>
-            Create new rule
+            <Plus className="mr-1 size-4" />
+            Create rule
           </Button>
         )}
       </div>

@@ -9,6 +9,7 @@ import {
 } from "use-query-params";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
+import { Plus } from "lucide-react";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
@@ -356,7 +357,8 @@ const DashboardsPage: React.FunctionComponent = () => {
         <h1 className="comet-title-xs truncate break-words">Dashboards</h1>
         {canCreateDashboards && (
           <Button variant="default" size="xs" onClick={handleNewDashboardClick}>
-            Create new dashboard
+            <Plus className="mr-1 size-4" />
+            Create dashboard
           </Button>
         )}
       </div>
@@ -408,7 +410,8 @@ const DashboardsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreateDashboards && (
               <Button variant="link" onClick={handleNewDashboardClick}>
-                Create new dashboard
+                <Plus className="mr-2 size-4" />
+                Create dashboard
               </Button>
             )}
           </DataTableNoData>

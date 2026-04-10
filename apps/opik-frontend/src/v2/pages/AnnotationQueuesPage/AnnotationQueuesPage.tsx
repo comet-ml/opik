@@ -7,6 +7,7 @@ import {
 } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
+import { Plus } from "lucide-react";
 import {
   ColumnDef,
   ColumnPinningState,
@@ -408,7 +409,8 @@ export const AnnotationQueuesPage: React.FC = () => {
         </h1>
         {canCreateAnnotationQueues && (
           <Button size="xs" onClick={handleNewQueue}>
-            Create new queue
+            <Plus className="mr-1 size-4" />
+            Create queue
           </Button>
         )}
       </div>
