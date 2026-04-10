@@ -3,16 +3,11 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.ExecutionPolicy;
-import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
-import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
-import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
-import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
-import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -25,8 +20,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,45 +31,11 @@ import java.util.stream.Stream;
 @Slf4j
 public class EvalSuiteEvaluatorMapper {
 
-    /**
-     * Supported providers for eval suite LLM-as-judge assertions, ordered by priority.
-     * First connected provider wins.
-     */
-    enum SupportedJudgeProvider {
-        OPEN_AI(LlmProvider.OPEN_AI, OpenaiModelName.GPT_5_NANO.toString()),
-        ANTHROPIC(LlmProvider.ANTHROPIC, AnthropicModelName.CLAUDE_HAIKU_4_5.toString()),
-        GEMINI(LlmProvider.GEMINI, GeminiModelName.GEMINI_2_0_FLASH.toString()),
-        VERTEX_AI(LlmProvider.VERTEX_AI, VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName());
-
-        private final LlmProvider provider;
-        private final String model;
-
-        SupportedJudgeProvider(LlmProvider provider, String model) {
-            this.provider = provider;
-            this.model = model;
-        }
-    }
-
     private final EvalSuiteConfig evalSuiteConfig;
 
     @Inject
     public EvalSuiteEvaluatorMapper(@NonNull EvalSuiteConfig evalSuiteConfig) {
         this.evalSuiteConfig = evalSuiteConfig;
-    }
-
-    /**
-     * Resolves the LLM model for eval suite assertions based on connected providers.
-     * Returns the model for the highest-priority connected provider, or empty if none match.
-     */
-    public static Optional<String> resolveModel(Set<LlmProvider> connectedProviders) {
-        for (var judge : SupportedJudgeProvider.values()) {
-            if (connectedProviders.contains(judge.provider)) {
-                log.debug("Resolved eval suite model '{}' for provider '{}'",
-                        judge.model, judge.provider);
-                return Optional.of(judge.model);
-            }
-        }
-        return Optional.empty();
     }
 
     public record PreparedEvaluator(@NonNull String name, @NonNull LlmAsJudgeCode code,
@@ -132,9 +91,12 @@ public class EvalSuiteEvaluatorMapper {
     }
 
     private LlmAsJudgeCode deserializeScoringCode(JsonNode config, String modelName) {
-        var model = LlmAsJudgeModelParameters.builder().name(modelName).build();
-        return JsonUtils.treeToValue(config, LlmAsJudgeCode.class)
-                .toBuilder()
+        var code = JsonUtils.treeToValue(config, LlmAsJudgeCode.class);
+        var existingModel = code.model();
+        var model = (existingModel != null ? existingModel.toBuilder() : LlmAsJudgeModelParameters.builder())
+                .name(modelName)
+                .build();
+        return code.toBuilder()
                 .model(model)
                 .build();
     }

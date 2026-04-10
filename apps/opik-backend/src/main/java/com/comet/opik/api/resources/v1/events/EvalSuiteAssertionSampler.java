@@ -91,7 +91,7 @@ public class EvalSuiteAssertionSampler {
             return;
         }
 
-        var reactiveContext = reactor.util.context.Context.of(
+        var reactiveContext = Context.of(
                 RequestContext.WORKSPACE_ID, tracesBatch.workspaceId(),
                 RequestContext.USER_NAME, tracesBatch.userName(),
                 RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
@@ -100,9 +100,16 @@ public class EvalSuiteAssertionSampler {
 
         // Resolve model once per batch: prefer connected provider, fall back to first trace's model
         var connectedProviders = getConnectedProviders(tracesBatch.workspaceId());
-        String modelName = EvalSuiteEvaluatorMapper.resolveModel(connectedProviders)
+        String modelName = SupportedJudgeProvider.resolveModel(connectedProviders)
                 .or(() -> getMetadataString(completeTraces.getFirst(), "eval_suite_model"))
                 .orElse(null);
+
+        if (modelName == null) {
+            log.warn("No LLM model resolved for eval suite batch in workspace '{}' — "
+                    + "no supported provider connected and no eval_suite_model in trace metadata",
+                    tracesBatch.workspaceId());
+            return;
+        }
 
         // Cache dataset evaluators by (datasetId:versionHash) to avoid redundant fetches
         Map<String, List<PreparedEvaluator>> datasetEvaluatorsCache = new HashMap<>();
@@ -206,7 +213,7 @@ public class EvalSuiteAssertionSampler {
     }
 
     private List<PreparedEvaluator> fetchItemEvaluators(
-            UUID itemId, reactor.util.context.Context reactiveContext,
+            UUID itemId, Context reactiveContext,
             String modelName) {
         try {
             var item = datasetItemService.get(itemId)

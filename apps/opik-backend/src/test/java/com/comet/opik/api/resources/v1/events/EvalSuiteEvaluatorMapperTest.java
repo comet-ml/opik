@@ -1,6 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -23,14 +27,14 @@ class EvalSuiteEvaluatorMapperTest {
         @Test
         @DisplayName("returns empty when no supported provider is connected")
         void returnsEmptyWhenNoSupportedProvider() {
-            var result = EvalSuiteEvaluatorMapper.resolveModel(Set.of());
+            var result = SupportedJudgeProvider.resolveModel(Set.of());
             assertThat(result).isEmpty();
         }
 
         @Test
         @DisplayName("returns empty when only unsupported providers are connected")
         void returnsEmptyWhenOnlyUnsupportedProviders() {
-            var result = EvalSuiteEvaluatorMapper.resolveModel(
+            var result = SupportedJudgeProvider.resolveModel(
                     Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.OPEN_ROUTER));
             assertThat(result).isEmpty();
         }
@@ -39,40 +43,40 @@ class EvalSuiteEvaluatorMapperTest {
         @MethodSource("singleProviderCases")
         @DisplayName("resolves correct model for single supported provider")
         void resolvesModelForSingleProvider(LlmProvider provider, String expectedModel) {
-            var result = EvalSuiteEvaluatorMapper.resolveModel(Set.of(provider));
+            var result = SupportedJudgeProvider.resolveModel(Set.of(provider));
             assertThat(result).hasValue(expectedModel);
         }
 
         static Stream<Arguments> singleProviderCases() {
             return Stream.of(
-                    Arguments.of(LlmProvider.OPEN_AI, "gpt-5-nano"),
-                    Arguments.of(LlmProvider.ANTHROPIC, "claude-haiku-4-5-20251001"),
-                    Arguments.of(LlmProvider.GEMINI, "gemini-2.0-flash"),
-                    Arguments.of(LlmProvider.VERTEX_AI, "vertex_ai/gemini-2.5-flash"));
+                    Arguments.of(LlmProvider.OPEN_AI, OpenaiModelName.GPT_5_NANO.toString()),
+                    Arguments.of(LlmProvider.ANTHROPIC, AnthropicModelName.CLAUDE_HAIKU_4_5.toString()),
+                    Arguments.of(LlmProvider.GEMINI, GeminiModelName.GEMINI_2_0_FLASH.toString()),
+                    Arguments.of(LlmProvider.VERTEX_AI, VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName()));
         }
 
         @Test
         @DisplayName("picks OpenAI over Anthropic and Gemini when all are connected")
         void picksHighestPriorityProvider() {
-            var result = EvalSuiteEvaluatorMapper.resolveModel(
+            var result = SupportedJudgeProvider.resolveModel(
                     Set.of(LlmProvider.GEMINI, LlmProvider.ANTHROPIC, LlmProvider.OPEN_AI));
-            assertThat(result).hasValue("gpt-5-nano");
+            assertThat(result).hasValue(OpenaiModelName.GPT_5_NANO.toString());
         }
 
         @Test
         @DisplayName("picks Anthropic over Gemini when OpenAI is not connected")
         void picksAnthropicOverGemini() {
-            var result = EvalSuiteEvaluatorMapper.resolveModel(
+            var result = SupportedJudgeProvider.resolveModel(
                     Set.of(LlmProvider.GEMINI, LlmProvider.ANTHROPIC));
-            assertThat(result).hasValue("claude-haiku-4-5-20251001");
+            assertThat(result).hasValue(AnthropicModelName.CLAUDE_HAIKU_4_5.toString());
         }
 
         @Test
         @DisplayName("ignores unsupported providers in mixed set")
         void ignoresUnsupportedProvidersInMixedSet() {
-            var result = EvalSuiteEvaluatorMapper.resolveModel(
+            var result = SupportedJudgeProvider.resolveModel(
                     Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.GEMINI));
-            assertThat(result).hasValue("gemini-2.0-flash");
+            assertThat(result).hasValue(GeminiModelName.GEMINI_2_0_FLASH.toString());
         }
     }
 }
