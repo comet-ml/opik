@@ -407,7 +407,7 @@ export const AnnotationQueuesPage: React.FC = () => {
           Annotation queues
         </h1>
         {canCreateAnnotationQueues && (
-          <Button size="sm" onClick={handleNewQueue}>
+          <Button size="xs" onClick={handleNewQueue}>
             Create new queue
           </Button>
         )}

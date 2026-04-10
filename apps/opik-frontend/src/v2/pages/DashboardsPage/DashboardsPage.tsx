@@ -355,7 +355,7 @@ const DashboardsPage: React.FunctionComponent = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-xs truncate break-words">Dashboards</h1>
         {canCreateDashboards && (
-          <Button variant="default" size="sm" onClick={handleNewDashboardClick}>
+          <Button variant="default" size="xs" onClick={handleNewDashboardClick}>
             Create new dashboard
           </Button>
         )}

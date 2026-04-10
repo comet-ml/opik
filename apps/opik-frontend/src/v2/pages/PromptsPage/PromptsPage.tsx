@@ -341,7 +341,7 @@ const PromptsPage: React.FunctionComponent = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-xs truncate break-words">Prompt library</h1>
         {canCreatePrompts && (
-          <Button variant="default" size="sm" onClick={handleNewPromptClick}>
+          <Button variant="default" size="xs" onClick={handleNewPromptClick}>
             <PlusIcon className="mr-2 size-4" />
             Create new prompt
           </Button>

@@ -332,6 +332,11 @@ const AlertsPage: React.FunctionComponent = () => {
     <div className="pt-4">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-xs">Alerts</h1>
+        {canUpdateAlerts && (
+          <Button variant="default" size="xs" onClick={handleNewAlertClick}>
+            Create new alert
+          </Button>
+        )}
       </div>
       <ExplainerDescription
         className="mb-4"
@@ -367,11 +372,6 @@ const AlertsPage: React.FunctionComponent = () => {
               order={columnsOrder}
               onOrderChange={setColumnsOrder}
             ></ColumnsButton>
-            {canUpdateAlerts && (
-              <Button variant="default" size="sm" onClick={handleNewAlertClick}>
-                Create new alert
-              </Button>
-            )}
           </div>
         </div>
         <DataTable

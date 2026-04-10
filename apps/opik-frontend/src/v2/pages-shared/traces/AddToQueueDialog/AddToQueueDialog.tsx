@@ -241,7 +241,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
               {canCreateAnnotationQueues && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   onClick={() => {
                     setOpen(false);
                     setOpenDialog(true);

@@ -440,7 +440,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-xs truncate break-words">Projects</h1>
         {canCreateProjects && (
-          <Button variant="default" size="sm" onClick={handleNewProjectClick}>
+          <Button variant="default" size="xs" onClick={handleNewProjectClick}>
             Create new project
           </Button>
         )}

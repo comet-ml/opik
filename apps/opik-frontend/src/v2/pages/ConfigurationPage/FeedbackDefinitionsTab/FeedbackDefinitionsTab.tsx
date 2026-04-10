@@ -217,7 +217,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         <h2 className="comet-title-xs">Feedback definitions</h2>
         <Button
           variant="default"
-          size="sm"
+          size="xs"
           onClick={handleNewFeedbackDefinitionClick}
         >
           Create new feedback definition

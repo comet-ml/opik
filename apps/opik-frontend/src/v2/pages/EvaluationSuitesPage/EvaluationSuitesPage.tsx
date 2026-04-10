@@ -361,7 +361,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           Evaluation suites
         </h1>
         {canCreateDatasets && (
-          <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
+          <Button variant="default" size="xs" onClick={handleNewSuiteClick}>
             Create evaluation suite
           </Button>
         )}
