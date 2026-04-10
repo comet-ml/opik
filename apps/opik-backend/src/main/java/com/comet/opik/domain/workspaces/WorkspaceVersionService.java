@@ -36,9 +36,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Determination Logic (priority order):</h3>
  * <ol>
+ *   <li><b>V2 workspace allowlist</b> ({@code TOGGLE_V2_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
+ *       that always receive {@code version_2}. Highest priority, all deployment modes.</li>
  *   <li><b>Feature flag override</b> ({@code TOGGLE_FORCE_WORKSPACE_VERSION}) — if set to a valid
  *       {@link OpikVersion} value ({@code "version_1"} or {@code "version_2"}), that version is returned
- *       unconditionally. Value {@code "disabled"} means no override. Highest priority, all deployment modes.</li>
+ *       unconditionally. Value {@code "disabled"} means no override.</li>
  *   <li><b>Auth one-way V2 gate</b> (authenticated mode only) — if auth metadata indicates the workspace
  *       was created post-launch ({@code version_2}), always return {@code version_2}.
  *       Prevents V2 to V1 demotion. Defensive: gracefully degrades when auth service doesn't
