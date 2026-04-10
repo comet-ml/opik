@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.PromptType;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
@@ -15,7 +16,6 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.TraceFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
-import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.LogContextAware;
@@ -33,9 +33,11 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -60,8 +62,7 @@ public class OnlineScoringSampler {
     private final OnlineScorePublisher onlineScorePublisher;
 
     @Inject
-    public OnlineScoringSampler(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
-            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
+    public OnlineScoringSampler(@NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull TraceFilterEvaluationService filterEvaluationService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
@@ -142,19 +143,44 @@ public class OnlineScoringSampler {
 
         // fetch automation rules per project
         tracesByProject.forEach((projectId, projectTraces) -> {
+            // Only score traces from SDK logging source, by all applicable evaluators.
+            // We deliberately do not read selected_rule_ids from SDK traces.
+            // Non-SDK traces (playground, experiment, optimization) are only scored when
+            // they carry selected_rule_ids metadata (explicit user selection from the playground).
+            var scorableTraces = new ArrayList<Trace>();
+            var selectedRuleIds = new HashSet<UUID>();
+            for (var trace : projectTraces) {
+                if (isLoggingSource(trace)) {
+                    scorableTraces.add(trace);
+                } else {
+                    var ruleIds = extractSelectedRuleIds(trace);
+                    if (!ruleIds.isEmpty()) {
+                        scorableTraces.add(trace);
+                        selectedRuleIds.addAll(ruleIds);
+                    }
+                }
+            }
+            if (scorableTraces.isEmpty()) {
+                log.info(
+                        "No scorable traces: source is not SDK and no selected_rule_ids, projectId '{}', workspaceId '{}'",
+                        projectId, workspaceId);
+                return;
+            }
+
             log.info("Fetching evaluators, traces '{}', project '{}', workspace '{}'",
-                    projectTraces.size(), projectId, workspaceId);
+                    scorableTraces.size(), projectId, workspaceId);
 
             List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
                     projectId, workspaceId);
 
-            // Filter evaluators based on trace metadata if selected_rule_ids is present
-            evaluators = filterEvaluatorsByTraceMetadata(evaluators, projectTraces);
+            // If any trace carries explicit rule selections, narrow evaluators to that set.
+            // If no selection found, use all evaluators (default behavior for backward compatibility).
+            evaluators = filterEvaluatorsBySelectedRuleIds(evaluators, selectedRuleIds);
 
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
             evaluators.parallelStream().forEach(evaluator -> {
                 // samples traces for this rule
-                var samples = projectTraces.stream()
+                var samples = scorableTraces.stream()
                         .filter(trace -> shouldSampleTrace(evaluator, workspaceId, trace));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
@@ -162,8 +188,10 @@ public class OnlineScoringSampler {
                                 .map(trace -> toLlmAsJudgeMessage(workspaceId, userName,
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
-                        logSampledTrace(evaluator, messages, projectTraces.size());
-                        onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                        logSampledTrace(evaluator, messages, scorableTraces.size());
+                        if (!messages.isEmpty()) {
+                            onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                        }
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
                         if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
@@ -171,9 +199,11 @@ public class OnlineScoringSampler {
                                     .map(trace -> toScoreUserDefinedMetricPython(workspaceId, userName,
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
-                            logSampledTrace(evaluator, messages, projectTraces.size());
-                            onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                            logSampledTrace(evaluator, messages, scorableTraces.size());
+                            if (!messages.isEmpty()) {
+                                onlineScorePublisher.enqueueMessage(messages,
+                                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                            }
                         } else {
                             log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",
                                     evaluator.getType());
@@ -183,6 +213,13 @@ public class OnlineScoringSampler {
                 }
             });
         });
+    }
+
+    /**
+     * Returns true for traces originating from SDK logging (source == SDK or null for legacy rows).
+     */
+    private boolean isLoggingSource(Trace trace) {
+        return trace.source() == null || trace.source() == Source.SDK;
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {
@@ -270,35 +307,20 @@ public class OnlineScoringSampler {
     }
 
     /**
-     * Filters evaluators based on trace metadata. If the first trace in the batch contains
-     * "selected_rule_ids" in its metadata, only evaluators with IDs in that list will be returned.
-     * Otherwise, all evaluators are returned (default behavior for backward compatibility).
-     *
-     * Note: All traces in a batch from the same source (e.g., Playground) will have the same metadata,
-     * so checking only the first trace is sufficient.
+     * Filters evaluators to only those whose ID is in the given selected set.
+     * If the selection is empty, all evaluators are returned (default behavior for backward compatibility).
      *
      * @param evaluators the list of all evaluators for the project
-     * @param traces the traces batch to check for metadata
-     * @return filtered list of evaluators, or all evaluators if no selection metadata is present
+     * @param ruleIdsToApply the rule IDs for filtering; empty means no filtering
+     * @return filtered list of evaluators matching the selection, or all evaluators if selection is empty
      */
-    private List<? extends AutomationRuleEvaluator<?, ?>> filterEvaluatorsByTraceMetadata(
-            List<? extends AutomationRuleEvaluator<?, ?>> evaluators, List<Trace> traces) {
+    private List<? extends AutomationRuleEvaluator<?, ?>> filterEvaluatorsBySelectedRuleIds(
+            List<? extends AutomationRuleEvaluator<?, ?>> evaluators, Set<UUID> ruleIdsToApply) {
 
-        // Check if batch is empty
-        if (traces.isEmpty()) {
+        if (ruleIdsToApply.isEmpty()) {
             return evaluators;
         }
 
-        // Check the first trace for selected_rule_ids metadata
-        // All traces in the same batch will have identical metadata
-        Optional<List<UUID>> selectedRuleIds = extractSelectedRuleIds(traces.getFirst());
-
-        // If no selection found, return all evaluators (default behavior)
-        if (selectedRuleIds.isEmpty()) {
-            return evaluators;
-        }
-
-        List<UUID> ruleIdsToApply = selectedRuleIds.get();
         log.info("Filtering evaluators based on trace metadata. Selected rule IDs: '{}'", ruleIdsToApply);
 
         // Filter evaluators to only include those in the selected list
@@ -311,33 +333,33 @@ public class OnlineScoringSampler {
     }
 
     /**
-     * Extracts selected_rule_ids from trace metadata if present.
+     * Extracts selected_rule_ids from trace metadata.
      *
      * @param trace the trace to check
-     * @return Optional containing list of rule UUIDs if present, empty otherwise
+     * @return set of rule UUIDs found in metadata, or empty set if absent/invalid
      */
-    private Optional<List<UUID>> extractSelectedRuleIds(Trace trace) {
+    private Set<UUID> extractSelectedRuleIds(Trace trace) {
         return Optional.ofNullable(trace.metadata())
                 .map(metadata -> metadata.get("selected_rule_ids"))
                 .filter(JsonNode::isArray)
                 .map(ruleIdsNode -> {
+                    Set<UUID> ruleIds = new HashSet<>();
                     try {
-                        List<UUID> ruleIds = new ArrayList<>();
                         ruleIdsNode.forEach(idNode -> {
                             if (idNode.isTextual()) {
                                 try {
                                     ruleIds.add(UUID.fromString(idNode.asText()));
-                                } catch (IllegalArgumentException e) {
+                                } catch (IllegalArgumentException exception) {
                                     log.warn("Invalid UUID format in selected_rule_ids metadata for trace: '{}'",
-                                            trace.id(), e);
+                                            trace.id(), exception);
                                 }
                             }
                         });
-                        return ruleIds.isEmpty() ? null : ruleIds;
-                    } catch (Exception e) {
-                        log.warn("Error parsing selected_rule_ids metadata for trace: '{}'", trace.id(), e);
-                        return null;
+                    } catch (RuntimeException exception) {
+                        log.warn("Error parsing selected_rule_ids metadata for trace: '{}'", trace.id(), exception);
                     }
-                });
+                    return ruleIds;
+                })
+                .orElse(Set.of());
     }
 }
