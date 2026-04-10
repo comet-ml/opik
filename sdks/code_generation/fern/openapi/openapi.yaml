@@ -15946,6 +15946,9 @@ components:
         mask_id:
           type: string
           format: uuid
+        blueprint_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         metadata:
           $ref: "#/components/schemas/LocalRunnerJobMetadata"
     LocalRunnerJobMetadata:
@@ -16063,6 +16066,9 @@ components:
         mask_id:
           type: string
           format: uuid
+        blueprint_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         metadata:
           $ref: "#/components/schemas/LocalRunnerJobMetadata"
         timeout:
