@@ -86,6 +86,11 @@ export const clients: OpikClient[] = [];
 
 let defaultProjectWarningEmitted = false;
 
+/** @internal Reset warning state — for tests only. */
+export function resetDefaultProjectWarning() {
+  defaultProjectWarningEmitted = false;
+}
+
 export class OpikClient {
   public api: OpikApiClientTemp;
   public config: OpikConfig;

@@ -86,7 +86,6 @@ from ..types import (
     SpanType,
     TraceSource,
 )
-from .. import _logging as opik_logging
 from .. import context_storage
 from ..file_upload import upload_manager
 
@@ -2748,31 +2747,11 @@ class Opik:
         )
 
     def _resolve_project_name(self, project_name: Optional[str]) -> str:
-        """Resolve the project name using the following precedence:
-
-        1. Explicit ``project_name`` argument (if not None).
-        2. Active project context set by ``@track(project_name=...)``
-           or ``opik.project_context(...)``.
-        3. The client's default project (``self._project_name``).
-        """
-        if project_name is not None:
-            return project_name
-
-        context_project = context_storage.get_context_project_name()
-        if context_project is not None:
-            return context_project
-
-        if self._project_name == opik_config.OPIK_PROJECT_DEFAULT_NAME:
-            opik_logging.log_once_at_level(
-                logging_level=logging.WARNING,
-                message='No project name configured. Traces are being logged to "Default Project".\n'
-                "Set OPIK_PROJECT_NAME environment variable or pass project_name to the Opik client\n"
-                "to log to a specific project.\n"
-                "See https://www.comet.com/docs/opik/tracing/sdk_configuration",
-                logger=LOGGER,
-            )
-
-        return self._project_name
+        return helpers.resolve_project_name(
+            manually_passed_value=project_name,
+            config_project_name=self._project_name,
+            context_project_name=context_storage.get_context_project_name(),
+        )
 
 
 _context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.ContextVar(
