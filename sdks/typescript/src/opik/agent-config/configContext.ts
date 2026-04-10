@@ -7,12 +7,10 @@ interface ConfigContext {
 
 const configContextStorage = new AsyncLocalStorage<ConfigContext>();
 
-// maskId accepts undefined for backward compatibility — callers may pass
-// only blueprintName (to pin a config version without a mask overlay).
 export function agentConfigContext<T>(
+  blueprintName: string | undefined,
   maskId: string | undefined,
   fn: () => T | Promise<T>,
-  blueprintName?: string,
 ): T | Promise<T> {
   return configContextStorage.run({ maskId, blueprintName }, fn) as T | Promise<T>;
 }
