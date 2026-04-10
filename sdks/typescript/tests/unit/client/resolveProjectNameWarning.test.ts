@@ -8,7 +8,7 @@ describe("resolveProjectName default project warning", () => {
 
   beforeEach(() => {
     resetDefaultProjectWarning();
-    loggerWarnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    loggerWarnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
   });
 
   afterEach(() => {
