@@ -93,6 +93,11 @@ describe("evaluate function", () => {
         })
     );
 
+    vi.spyOn(
+      opikClient.api.experiments,
+      "createExperimentItems"
+    ).mockImplementation(mockAPIFunction);
+
     vi.useFakeTimers();
   });
 
