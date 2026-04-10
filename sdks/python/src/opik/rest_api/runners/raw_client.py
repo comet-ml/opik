@@ -373,6 +373,7 @@ class RawRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -388,6 +389,8 @@ class RawRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        blueprint_name : typing.Optional[str]
 
         metadata : typing.Optional[LocalRunnerJobMetadata]
 
@@ -406,6 +409,7 @@ class RawRunnersClient:
                 "inputs": inputs,
                 "project_id": project_id,
                 "mask_id": mask_id,
+                "blueprint_name": blueprint_name,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=LocalRunnerJobMetadata, direction="write"
                 ),
@@ -1592,6 +1596,7 @@ class AsyncRawRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -1607,6 +1612,8 @@ class AsyncRawRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        blueprint_name : typing.Optional[str]
 
         metadata : typing.Optional[LocalRunnerJobMetadata]
 
@@ -1625,6 +1632,7 @@ class AsyncRawRunnersClient:
                 "inputs": inputs,
                 "project_id": project_id,
                 "mask_id": mask_id,
+                "blueprint_name": blueprint_name,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=LocalRunnerJobMetadata, direction="write"
                 ),
