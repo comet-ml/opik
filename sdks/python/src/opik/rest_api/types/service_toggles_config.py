@@ -35,7 +35,13 @@ class ServiceTogglesConfig(UniversalBaseModel):
     customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
     ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
     collaborators_tab_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="collaboratorsTabEnabled")]
+    v2workspace_allowlist_ids: typing_extensions.Annotated[
+        typing.List[str], FieldMetadata(alias="v2WorkspaceAllowlistIds")
+    ]
     force_workspace_version: typing_extensions.Annotated[str, FieldMetadata(alias="forceWorkspaceVersion")]
+    v2workspace_allowlist: typing_extensions.Annotated[
+        typing.Optional[str], FieldMetadata(alias="v2WorkspaceAllowlist")
+    ] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
