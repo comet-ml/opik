@@ -2764,12 +2764,12 @@ class Opik:
 
         if self._project_name == opik_config.OPIK_PROJECT_DEFAULT_NAME:
             opik_logging.log_once_at_level(
-                logging.WARNING,
-                'No project name configured. Traces are being logged to "Default Project".\n'
+                logging_level=logging.WARNING,
+                message='No project name configured. Traces are being logged to "Default Project".\n'
                 "Set OPIK_PROJECT_NAME environment variable or pass project_name to the Opik client\n"
                 "to log to a specific project.\n"
                 "See https://www.comet.com/docs/opik/tracing/sdk_configuration",
-                LOGGER,
+                logger=LOGGER,
             )
 
         return self._project_name
