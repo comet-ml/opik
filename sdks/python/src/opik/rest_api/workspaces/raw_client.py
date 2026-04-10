@@ -415,10 +415,11 @@ class RawWorkspacesClient:
         determination, clients must never derive the version themselves.
 
         Determination logic (priority order):
-        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        2) Auth one-way V2 gate (authenticated mode only)
-        3) Version 1 entity check (entities without project_id)
-        4) Fallback on failure
+        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
+        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        3) Auth one-way V2 gate (authenticated mode only)
+        4) Version 1 entity check (entities without project_id)
+        5) Fallback on failure
 
         In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
         Called by the frontend on workspace load.
@@ -918,10 +919,11 @@ class AsyncRawWorkspacesClient:
         determination, clients must never derive the version themselves.
 
         Determination logic (priority order):
-        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        2) Auth one-way V2 gate (authenticated mode only)
-        3) Version 1 entity check (entities without project_id)
-        4) Fallback on failure
+        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
+        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        3) Auth one-way V2 gate (authenticated mode only)
+        4) Version 1 entity check (entities without project_id)
+        5) Fallback on failure
 
         In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
         Called by the frontend on workspace load.

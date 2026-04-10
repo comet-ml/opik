@@ -35,6 +35,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -47,11 +50,13 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class WorkspaceVersionResourceTest {
@@ -66,6 +71,83 @@ class WorkspaceVersionResourceTest {
             .build();
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class V2WorkspaceAllowlistTest {
+
+        private static final String ALLOWLISTED_WORKSPACE_ID_1 = UUID.randomUUID().toString();
+        private static final String ALLOWLISTED_WORKSPACE_ID_2 = UUID.randomUUID().toString();
+        private static final String V2_WORKSPACE_ALLOWLIST = "%s, %s".formatted(
+                ALLOWLISTED_WORKSPACE_ID_1, ALLOWLISTED_WORKSPACE_ID_2);
+
+        private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+        private final Network NETWORK = Network.newNetwork();
+        private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer(false, NETWORK);
+        private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(
+                false, NETWORK, ZOOKEEPER);
+        private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app;
+
+        private final WireMockUtils.WireMockRuntime wireMock;
+
+        {
+            wireMock = WireMockUtils.startWireMock();
+
+            Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
+
+            MigrationUtils.runMysqlDbMigration(MYSQL);
+            MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
+            var databaseAnalyticsFactory = ClickHouseContainerUtils
+                    .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
+
+            app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                    AppContextConfig.builder()
+                            .redisUrl(REDIS.getRedisURI())
+                            .jdbcUrl(MYSQL.getJdbcUrl())
+                            .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                            .runtimeInfo(wireMock.runtimeInfo())
+                            .customConfigs(List.of(
+                                    new CustomConfig("serviceToggles.v2WorkspaceAllowlist", V2_WORKSPACE_ALLOWLIST),
+                                    new CustomConfig("serviceToggles.forceWorkspaceVersion", "version_1")))
+                            .build());
+        }
+
+        private WorkspaceResourceClient workspaceClient;
+
+        @BeforeAll
+        void beforeAll(ClientSupport clientSupport) {
+            var baseUrl = TestUtils.getBaseUrl(clientSupport);
+            ClientSupportUtils.config(clientSupport);
+            workspaceClient = new WorkspaceResourceClient(clientSupport, baseUrl, podamFactory);
+        }
+
+        @AfterAll
+        void afterAll() {
+            wireMock.server().stop();
+        }
+
+        static Stream<Arguments> workspaceVersion__whenAllowlistAndForceV1__returnsExpectedVersion() {
+            return Stream.of(
+                    arguments(ALLOWLISTED_WORKSPACE_ID_1, V2_WORKSPACE_VERSION),
+                    arguments(ALLOWLISTED_WORKSPACE_ID_2, V2_WORKSPACE_VERSION),
+                    arguments(UUID.randomUUID().toString(), V1_WORKSPACE_VERSION));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void workspaceVersion__whenAllowlistAndForceV1__returnsExpectedVersion(
+                String workspaceId, WorkspaceVersion expectedVersion) {
+            var workspaceName = mockWorkspace(wireMock, workspaceId, null);
+
+            // If workspace ID in allow list will return V2, otherwise forcing to return V1
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(expectedVersion);
+        }
+    }
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -241,22 +323,9 @@ class WorkspaceVersionResourceTest {
             wireMock.server().stop();
         }
 
-        private String mockWorkspace() {
-            return mockWorkspace(null);
-        }
-
-        private String mockWorkspace(OpikVersion opikVersion) {
-            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var workspaceId = UUID.randomUUID().toString();
-            var user = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            AuthTestUtils.mockTargetWorkspace(
-                    wireMock.server(), API_KEY, workspaceName, workspaceId, user, null, opikVersion);
-            return workspaceName;
-        }
-
         @Test
         void workspaceVersion__whenAuthSaysVersion2__locksToVersion2() {
-            var workspaceName = mockWorkspace(OpikVersion.VERSION_2);
+            var workspaceName = mockWorkspace(wireMock, OpikVersion.VERSION_2);
 
             // Creating a V1 entity
             datasetClient.createDataset(podamFactory.manufacturePojo(Dataset.class).toBuilder()
@@ -270,7 +339,7 @@ class WorkspaceVersionResourceTest {
         @Test
         void workspaceVersion__whenDatasetEntities__returnsExpectedVersion() {
             // When Auth says Version1 entity check still runs
-            var workspaceName = mockWorkspace(OpikVersion.VERSION_1);
+            var workspaceName = mockWorkspace(wireMock, OpikVersion.VERSION_1);
 
             // Demo-only datasets do not trigger version_1
             datasetClient.createDataset(podamFactory.manufacturePojo(Dataset.class).toBuilder()
@@ -298,7 +367,7 @@ class WorkspaceVersionResourceTest {
         @Test
         void workspaceVersion__whenPromptWithoutProject__returnsVersion1() {
             // Auth doesn't include opikVersion — defensive, entity check is primary signal
-            var workspaceName = mockWorkspace();
+            var workspaceName = mockWorkspace(wireMock);
 
             // Empty workspace returns version_2
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
@@ -314,7 +383,7 @@ class WorkspaceVersionResourceTest {
 
         @Test
         void workspaceVersion__whenDashboardWithoutProject__returnsVersion1() {
-            var workspaceName = mockWorkspace();
+            var workspaceName = mockWorkspace(wireMock);
 
             // Empty workspace returns version_2
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
@@ -326,7 +395,7 @@ class WorkspaceVersionResourceTest {
 
         @Test
         void workspaceVersion__whenMultiProjectRule__returnsVersion1() {
-            var workspaceName = mockWorkspace();
+            var workspaceName = mockWorkspace(wireMock);
 
             // Single-project rule does not trigger version_1
             evaluatorClient.createEvaluator(podamFactory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
@@ -347,7 +416,7 @@ class WorkspaceVersionResourceTest {
 
         @Test
         void workspaceVersion__whenExperimentWithoutProject__returnsVersion1() {
-            var workspaceName = mockWorkspace();
+            var workspaceName = mockWorkspace(wireMock);
 
             // Project-scoped dataset for the experiment does not trigger V1
             var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
@@ -372,7 +441,7 @@ class WorkspaceVersionResourceTest {
 
         @Test
         void workspaceVersion__whenOptimizationWithoutProject__returnsVersion1() {
-            var workspaceName = mockWorkspace();
+            var workspaceName = mockWorkspace(wireMock);
 
             // Project-scoped dataset for the optimization does not trigger V1
             var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
@@ -391,7 +460,7 @@ class WorkspaceVersionResourceTest {
 
         @Test
         void workspaceVersion__whenAlertWithoutProject__returnsVersion1() {
-            var workspaceName = mockWorkspace();
+            var workspaceName = mockWorkspace(wireMock);
 
             // Project-scoped alert (projectId column) does not trigger version_1
             alertClient.createAlert(
@@ -474,5 +543,23 @@ class WorkspaceVersionResourceTest {
             var response3 = workspaceClient.getWorkspaceVersion(DEFAULT_WORKSPACE_NAME);
             assertThat(response3.opikVersion()).isEqualTo(OpikVersion.VERSION_1);
         }
+    }
+
+    private static String mockWorkspace(WireMockUtils.WireMockRuntime wireMock) {
+        return mockWorkspace(wireMock, null);
+    }
+
+    private static String mockWorkspace(WireMockUtils.WireMockRuntime wireMock, OpikVersion opikVersion) {
+        var workspaceId = UUID.randomUUID().toString();
+        return mockWorkspace(wireMock, workspaceId, opikVersion);
+    }
+
+    private static String mockWorkspace(
+            WireMockUtils.WireMockRuntime wireMock, String workspaceId, OpikVersion opikVersion) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var user = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        AuthTestUtils.mockTargetWorkspace(
+                wireMock.server(), API_KEY, workspaceName, workspaceId, user, null, opikVersion);
+        return workspaceName;
     }
 }
