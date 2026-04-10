@@ -1,35 +1,143 @@
 """Project export functionality."""
 
+import logging
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional, Set
 
+import random
+
 import click
-from rich.console import Console
+import httpx
+import tenacity
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
+from opik.api_objects.attachment import client as attachment_client
+from opik import exceptions as opik_exceptions
+from opik.rate_limit import rate_limit
 from opik.rest_api.core.api_error import ApiError
+from opik.rest_api.core.http_client import _parse_retry_after
 from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
+from .._attachment_path import safe_attachment_path
 from ..export_manifest import ExportManifest
 from .utils import (
+    console,
     debug_print,
     extract_trace_id_from_filename,
     matches_name_pattern,
+    no_attachments_option,
     print_export_summary,
     trace_to_csv_rows,
     write_csv_data,
     write_json_data,
 )
 
-console = Console()
+LOGGER = logging.getLogger(__name__)
 
-# Maximum number of concurrent workers for parallel span fetching.
-MAX_WORKERS = 10
+# Delay (seconds) between fetching successive pages of traces/spans.
+_PAGE_FETCH_DELAY_SECONDS = 1.0
+
+# If this many consecutive page fetches fail (after all per-request retries),
+# abort the loop rather than endlessly skipping pages — something systemic is wrong.
+MAX_CONSECUTIVE_PAGE_FAILURES = 5
+
+# Export-specific retry: more attempts and longer waits than the default
+# SDK decorator, to survive aggressive server-side rate limiting during
+# bulk exports without aborting the whole operation.
+_EXPORT_MAX_RETRY_AFTER_SECONDS = 120.0
+_EXPORT_DEFAULT_RETRY_AFTER_SECONDS = 30.0
+_EXPORT_JITTER_MAX_SECONDS = 5.0
+
+
+def _parse_rate_limit_reset(headers: httpx.Headers) -> Optional[float]:
+    """Extract seconds-until-reset from non-standard rate-limit headers.
+
+    Checks (in order):
+    1. ``opik-search-spans-remaining-limit-ttl-millis`` — ms until the spans
+       search window resets (Opik-specific).
+    2. ``ratelimit-reset`` — seconds until reset (draft IETF RateLimit header).
+    """
+    ttl_ms = headers.get("opik-search-spans-remaining-limit-ttl-millis")
+    if ttl_ms is not None:
+        try:
+            return max(0.0, float(ttl_ms) / 1000)
+        except (ValueError, TypeError):
+            pass
+
+    ratelimit_reset = headers.get("ratelimit-reset")
+    if ratelimit_reset is not None:
+        try:
+            return max(0.0, float(ratelimit_reset))
+        except (ValueError, TypeError):
+            pass
+
+    return None
+
+
+def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
+    """Wait strategy for export retries.
+
+    Honours the server's rate-limit headers for 429 responses (up to
+    ``_EXPORT_MAX_RETRY_AFTER_SECONDS``).  Adds random jitter so that
+    multiple concurrent workers don't all restart at the same instant
+    ("thundering herd").  Falls back to a longer exponential backoff than
+    the standard SDK decorator for other transient errors.
+    """
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if isinstance(exc, ApiError) and exc.status_code == 429:
+        headers = httpx.Headers(getattr(exc, "headers", {}) or {})
+        # Prefer the standard Retry-After header, then fall back to
+        # Opik-specific / draft-IETF rate-limit reset headers.
+        seconds = _parse_retry_after(headers)
+        if seconds is None:
+            seconds = _parse_rate_limit_reset(headers)
+        if seconds is None:
+            seconds = _EXPORT_DEFAULT_RETRY_AFTER_SECONDS
+        # Clamp to our maximum: respect the server's intent but never wait longer
+        # than _EXPORT_MAX_RETRY_AFTER_SECONDS.
+        seconds = min(seconds, _EXPORT_MAX_RETRY_AFTER_SECONDS)
+        # Jitter: avoid a thundering-herd if multiple export processes run in parallel.
+        jitter = random.uniform(0.0, _EXPORT_JITTER_MAX_SECONDS)
+        return seconds + jitter
+    # Other transient errors (e.g. connection blips): exponential backoff
+    # capped at 60 s — ~2s, 4s, 8s, 16s, 32s, 60s.
+    base = tenacity.wait_exponential(multiplier=2, min=2, max=60)(retry_state)
+    return min(base, 60.0)
+
+
+_export_rest_retry = tenacity.retry(
+    stop=tenacity.stop_after_attempt(8),
+    wait=_export_wait_duration,
+    retry=tenacity.retry_if_exception(retry_decorator._allowed_to_retry),
+    reraise=True,
+)
+
+
+def _print_project_export_status(
+    descriptor: str,
+    output_dir: Path,
+    exported_count: int,
+    had_errors: bool,
+) -> None:
+    """Print a consistent post-export status line for a single project."""
+    if had_errors:
+        console.print(
+            f"[yellow]Export of '{descriptor}' completed with errors — some traces may be "
+            "missing. Run the export again to download any skipped traces.[/yellow]"
+        )
+    elif exported_count > 0:
+        console.print(
+            f"[green]Successfully exported project '{descriptor}' to {output_dir}[/green]"
+        )
+    else:
+        console.print(
+            f"[yellow]Project '{descriptor}' already up to date (use --force to re-download)[/yellow]"
+        )
 
 
 def _print_oql_examples() -> None:
@@ -65,7 +173,7 @@ def _validate_filter_syntax(filter_string: str) -> None:
         raise
 
 
-@retry_decorator.opik_rest_retry
+@_export_rest_retry
 def _fetch_traces_page(
     client: opik.Opik,
     project_name: str,
@@ -73,7 +181,7 @@ def _fetch_traces_page(
     page: int,
     page_size: int,
 ) -> Any:
-    """Fetch one page of traces. Retries on 429/5xx via opik_rest_retry."""
+    """Fetch one page of traces. Retries on 429/5xx via _export_rest_retry."""
     return client.rest_client.traces.get_traces_by_project(
         project_name=project_name,
         filters=parsed_filter,
@@ -83,23 +191,162 @@ def _fetch_traces_page(
     )
 
 
-@retry_decorator.opik_rest_retry
-def _fetch_spans(
+@_export_rest_retry
+def _fetch_spans_page(
     client: opik.Opik,
-    trace: Any,
     project_name: str,
-) -> tuple:
-    """Fetch spans for a single trace. Returns (trace, spans).
+    page: int,
+    page_size: int,
+) -> Any:
+    """Fetch one page of all spans for a project (no trace_id filter).
 
-    Retries on transient errors (429, 5xx, network issues) via the shared
-    opik_rest_retry decorator; re-raises on permanent failures.
+    Using GET /v1/private/spans avoids the much stricter rate limit on
+    POST /v1/private/spans/search.  Each span includes its trace_id so
+    callers can group client-side.
     """
-    return trace, client.search_spans(
+    return client.rest_client.spans.get_spans_by_project(
         project_name=project_name,
-        trace_id=trace.id,
-        max_results=1000,
+        page=page,
+        size=page_size,
         truncate=False,
     )
+
+
+def _handle_attachment_api_error(e: ApiError, context: str) -> None:
+    """Centralised ApiError handler for attachment operations.
+
+    - 409 Conflict: silently ignored (caller continues).
+    - 429 Too Many Requests: raises ``OpikCloudRequestsRateLimited``.
+    - All other codes: logged at ERROR level then re-raised.
+
+    *context* is a human-readable string included in log messages
+    (e.g. ``"fetching attachments for trace abc"``).
+    """
+    if e.status_code == 409:
+        return  # Conflict — skip without error.
+    elif e.status_code == 429:
+        rate_limiter = rate_limit.parse_rate_limit(e.headers or {})
+        raise opik_exceptions.OpikCloudRequestsRateLimited(
+            headers=e.headers or {},
+            retry_after=rate_limiter.retry_after() if rate_limiter else 60.0,
+        )
+    else:
+        LOGGER.error("API error %s (status %s): %s", context, e.status_code, e)
+        raise
+
+
+def _fetch_attachments(
+    attachment_client: attachment_client.AttachmentClient,
+    project_name: str,
+    trace_id: str,
+    span_ids: list,
+) -> list:
+    """Fetch attachment metadata for a trace and all its spans.
+
+    Returns a list of dicts with keys: entity_type, entity_id, file_name,
+    mime_type, file_size. Failures per-entity are logged and skipped.
+    """
+    attachments = []
+    entities = [("trace", trace_id)] + [("span", sid) for sid in span_ids]
+    for entity_type, entity_id in entities:
+        try:
+            att_list = attachment_client.get_attachment_list(
+                project_name, entity_id, entity_type
+            )
+            for att in att_list:
+                attachments.append(
+                    {
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "file_name": att.file_name,
+                        "mime_type": att.mime_type,
+                        "file_size": att.file_size,
+                    }
+                )
+        except ApiError as e:
+            _handle_attachment_api_error(
+                e, f"fetching attachments for {entity_type} {entity_id}"
+            )
+        except (OSError, IOError) as e:
+            LOGGER.warning(
+                "Failed to fetch attachments for %s %s: %s", entity_type, entity_id, e
+            )
+        except Exception:
+            LOGGER.exception(
+                "Unexpected error fetching attachments for %s %s",
+                entity_type,
+                entity_id,
+            )
+            raise
+    return attachments
+
+
+def _download_attachment_file(
+    attachment_client: attachment_client.AttachmentClient,
+    project_name: str,
+    attachment: dict,
+    project_dir: Path,
+    force: bool,
+) -> bool:
+    """Download a single attachment binary to disk.
+
+    Saves to ``project_dir/attachments/<entity_type>/<entity_id>/<file_name>``.
+    Skips if the file already exists and *force* is False.
+    Returns True on success, False on recoverable failure (warning logged, no raise).
+    Raises on unexpected errors.
+    """
+    entity_type = attachment["entity_type"]
+    entity_id = attachment["entity_id"]
+    file_name = attachment["file_name"]
+    mime_type = attachment["mime_type"]
+
+    dest_path = safe_attachment_path(project_dir, entity_type, entity_id, file_name)
+    if dest_path is None:
+        LOGGER.warning(
+            "Skipping attachment with invalid or unsafe path: entity_type=%s entity_id=%s file_name=%r",
+            entity_type,
+            entity_id,
+            file_name,
+        )
+        return False
+
+    if not force and dest_path.exists():
+        return True
+
+    try:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        chunks = attachment_client.download_attachment(
+            project_name=project_name,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            file_name=file_name,
+            mime_type=mime_type,
+        )
+        with open(dest_path, "wb") as f:
+            for chunk in chunks:
+                f.write(chunk)
+        return True
+    except ApiError as e:
+        if e.status_code == 409:
+            return True  # Conflict — treat as already-present; no local write needed.
+        _handle_attachment_api_error(
+            e, f"downloading attachment '{file_name}' for {entity_type} {entity_id}"
+        )
+        raise  # unreachable — _handle_attachment_api_error always raises for non-409
+    except OSError as e:
+        console.print(
+            f"[yellow]Warning: failed to download attachment '{file_name}' "
+            f"for {entity_type} {entity_id}: {e}[/yellow]"
+        )
+        return False
+    except Exception:
+        LOGGER.exception(
+            "Unexpected error downloading attachment '%s' for %s %s",
+            file_name,
+            entity_type,
+            entity_id,
+        )
+        raise
 
 
 def export_traces(
@@ -114,8 +361,20 @@ def export_traces(
     force: bool = False,
     show_progress: bool = True,
     manifest: Optional[ExportManifest] = None,
+    include_attachments: bool = True,
+    page_size: int = 500,
 ) -> tuple[int, int, bool]:
     """Download traces and their spans with pagination support for large projects."""
+    att_client: Optional[attachment_client.AttachmentClient] = None
+    if include_attachments:
+        try:
+            att_client = client.get_attachment_client()
+        except Exception as e:
+            LOGGER.warning(
+                "Could not initialize attachment client; attachments will be skipped: %s",
+                e,
+            )
+
     if debug:
         debug_print(
             f"DEBUG: _export_traces called with project_name: {project_name}, project_dir: {project_dir}",
@@ -126,12 +385,11 @@ def export_traces(
     if filter_string and filter_string.strip():
         _validate_filter_syntax(filter_string)
 
-    exported_count = 0
     skipped_count = 0
     had_errors = False
-    page_size = 100  # Fixed batch size per API request
     current_page = 1
     total_processed = 0
+    consecutive_page_failures = 0
 
     # Build the set of already-downloaded trace IDs once, before the loop.
     # Manifest DB lookup is faster and survives aborted exports; filesystem
@@ -169,10 +427,14 @@ def export_traces(
     )
     with _progress_cm as progress:
         task = (
-            progress.add_task("Searching for traces...", total=None)
-            if progress
-            else None
+            progress.add_task("Collecting traces...", total=None) if progress else None
         )
+
+        # ── Phase 1: collect all traces that need downloading ──────────────────
+        # We gather every trace_id → trace object here without touching spans,
+        # so the expensive per-trace POST /spans/search calls are replaced by
+        # a single bulk GET /spans pagination in Phase 2.
+        traces_to_fetch: dict[str, Any] = {}  # trace_id → trace
 
         while max_results is None or total_processed < max_results:
             # Calculate how many traces to fetch in this batch
@@ -199,15 +461,41 @@ def export_traces(
                     debug_print(f"DEBUG: Parsed filter to JSON: {parsed_filter}", debug)
 
             try:
-                # _fetch_traces_page retries on 429/5xx via opik_rest_retry.
+                # _fetch_traces_page retries on 429/5xx via _export_rest_retry.
                 trace_page = _fetch_traces_page(
                     client, project_name, parsed_filter, current_page, current_page_size
                 )
-            except Exception as e:
-                console.print(f"[red]Error searching traces: {e}[/red]")
+            except (
+                ApiError,
+                httpx.RemoteProtocolError,
+                httpx.ConnectError,
+                httpx.TimeoutException,
+            ) as e:
+                # Re-raise permanent API errors (e.g. 400, 401, 403) — these indicate
+                # a misconfiguration and skipping the page would silently hide the problem.
+                if (
+                    isinstance(e, ApiError)
+                    and e.status_code not in retry_decorator.RETRYABLE_STATUS_CODES
+                ):
+                    raise
+                # Transient error that exhausted all retries — skip this page.
+                consecutive_page_failures += 1
+                if consecutive_page_failures >= MAX_CONSECUTIVE_PAGE_FAILURES:
+                    console.print(
+                        f"[red]{consecutive_page_failures} consecutive page fetch failures — "
+                        "aborting export. Run again to resume.[/red]"
+                    )
+                    had_errors = True
+                    break
+                console.print(
+                    f"[red]Error fetching page {current_page}: {e} — skipping page and continuing.[/red]"
+                )
                 had_errors = True
-                break
+                current_page += 1
+                time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+                continue
 
+            consecutive_page_failures = 0
             traces = trace_page.content or []
             if debug:
                 debug_print(
@@ -248,7 +536,7 @@ def export_traces(
             if progress and task is not None:
                 progress.update(
                     task,
-                    description=f"Downloading traces... (page {current_page}, {len(traces)} traces)",
+                    description=f"Collecting traces... (page {current_page}, {len(traces_to_fetch)} queued)",
                 )
 
             # Filter traces by project name if specified
@@ -266,20 +554,12 @@ def export_traces(
 
             if not traces:
                 # No traces match the name pattern, but we might have more to process
-                # Use original_traces for pagination, not the filtered empty list
                 total_processed += current_page_size
                 continue
 
-            if progress and task is not None:
-                progress.update(
-                    task,
-                    description=f"Downloading traces... (batch {total_processed // page_size + 1})",
-                )
-
-            # Step 1: Check the already-downloaded set (O(1) per trace).
-            # Also verify the file still exists on disk — a stale manifest entry
-            # for a deleted file would otherwise skip a trace forever.
-            traces_to_fetch = []
+            # Check already-downloaded set (O(1) per trace).
+            # Also verify the file still exists — a stale manifest entry for a
+            # deleted file would otherwise skip a trace forever.
             for trace in traces:
                 if trace.id in already_downloaded:
                     file_path = project_dir / f"trace_{trace.id}.{ext}"
@@ -298,79 +578,166 @@ def export_traces(
                                 debug,
                             )
                         already_downloaded.discard(trace.id)
-                        traces_to_fetch.append(trace)
+                        traces_to_fetch[trace.id] = trace
+                        total_processed += 1
                 else:
-                    traces_to_fetch.append(trace)
+                    traces_to_fetch[trace.id] = trace
+                    total_processed += 1
 
-            # Step 2: Fetch spans in parallel for traces that need downloading.
-            if traces_to_fetch:
-                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                    future_to_trace = {
-                        executor.submit(
-                            _fetch_spans, client, trace, project_name
-                        ): trace
-                        for trace in traces_to_fetch
-                    }
-                    for future in as_completed(future_to_trace):
-                        trace = future_to_trace[future]
-                        try:
-                            _, spans = future.result()
-                            trace_data = {
-                                "trace": trace.model_dump(),
-                                "spans": [span.model_dump() for span in spans],
-                                "downloaded_at": datetime.now().isoformat(),
-                                "project_name": project_name,
-                            }
-                            file_path = project_dir / f"trace_{trace.id}.{ext}"
-                            try:
-                                if format.lower() == "csv":
-                                    write_csv_data(
-                                        trace_data, file_path, trace_to_csv_rows
-                                    )
-                                    if debug:
-                                        debug_print(
-                                            f"Wrote CSV file: {file_path}", debug
-                                        )
-                                else:
-                                    write_json_data(trace_data, file_path)
-                                    if debug:
-                                        debug_print(
-                                            f"Wrote JSON file: {file_path}", debug
-                                        )
-                                exported_count += 1
-                                total_processed += 1
-                                # Track in manifest and local set so subsequent
-                                # pages don't re-download the same trace.
-                                already_downloaded.add(trace.id)
-                                if manifest is not None:
-                                    manifest.mark_trace_downloaded(trace.id)
-                            except Exception as write_error:
-                                console.print(
-                                    f"[red]Error writing trace {trace.id} to file: {write_error}[/red]"
-                                )
-                                had_errors = True
-                                if debug:
-                                    import traceback
-
-                                    debug_print(
-                                        f"Traceback: {traceback.format_exc()}", debug
-                                    )
-                        except Exception as e:
-                            console.print(
-                                f"[red]Error exporting trace {trace.id}: {e}[/red]"
-                            )
-                            had_errors = True
-
-            # Update pagination for next iteration
-            if traces:
-                current_page += 1
-            else:
-                # No more traces to process
-                break
+            current_page += 1
 
             # If we got fewer traces than requested, we've reached the end
             if len(traces) < current_page_size:
                 break
+
+            # Throttle page fetches to avoid triggering server-side rate limits.
+            time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+
+        # ── Phase 2: fetch all spans for the project in bulk ───────────────────
+        # Instead of one POST /spans/search per trace (rate-limited to 30 req/min),
+        # paginate GET /spans once across the whole project.  Each span carries its
+        # trace_id so we can group client-side and discard spans for already-
+        # downloaded traces.
+        spans_by_trace_id: dict[str, list] = {tid: [] for tid in traces_to_fetch}
+
+        if traces_to_fetch:
+            if progress and task is not None:
+                progress.update(task, description="Fetching spans...")
+
+            span_page = 1
+            span_consecutive_failures = 0
+
+            while True:
+                if debug:
+                    debug_print(f"DEBUG: Fetching span page {span_page}", debug)
+                try:
+                    span_result = _fetch_spans_page(
+                        client, project_name, span_page, page_size
+                    )
+                    span_consecutive_failures = 0
+                except (
+                    ApiError,
+                    httpx.RemoteProtocolError,
+                    httpx.ConnectError,
+                    httpx.TimeoutException,
+                ) as e:
+                    if (
+                        isinstance(e, ApiError)
+                        and e.status_code not in retry_decorator.RETRYABLE_STATUS_CODES
+                    ):
+                        raise
+                    span_consecutive_failures += 1
+                    if span_consecutive_failures >= MAX_CONSECUTIVE_PAGE_FAILURES:
+                        console.print(
+                            f"[red]{span_consecutive_failures} consecutive span page failures — "
+                            "stopping span fetch. Traces will be exported with partial spans.[/red]"
+                        )
+                        had_errors = True
+                        break
+                    console.print(
+                        f"[yellow]Error fetching span page {span_page}: {e} — skipping and continuing.[/yellow]"
+                    )
+                    had_errors = True
+                    span_page += 1
+                    time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+                    continue
+
+                spans = span_result.content or []
+                for span in spans:
+                    tid = span.trace_id
+                    if tid and tid in spans_by_trace_id:
+                        spans_by_trace_id[tid].append(span)
+
+                if debug:
+                    total_relevant = sum(len(v) for v in spans_by_trace_id.values())
+                    debug_print(
+                        f"DEBUG: Span page {span_page}: {len(spans)} spans fetched, "
+                        f"{total_relevant} relevant so far",
+                        debug,
+                    )
+
+                if progress and task is not None:
+                    total_relevant = sum(len(v) for v in spans_by_trace_id.values())
+                    progress.update(
+                        task,
+                        description=f"Fetching spans... (page {span_page}, {total_relevant} matched)",
+                    )
+
+                if not spans or len(spans) < page_size:
+                    break
+
+                span_page += 1
+                time.sleep(_PAGE_FETCH_DELAY_SECONDS)
+
+        # ── Phase 3: write trace files ─────────────────────────────────────────
+        exported_count = 0
+
+        if traces_to_fetch:
+            if progress and task is not None:
+                progress.update(
+                    task,
+                    description=f"Writing {len(traces_to_fetch)} trace files...",
+                )
+
+            for trace_id, trace in traces_to_fetch.items():
+                spans = spans_by_trace_id.get(trace_id, [])
+
+                # Fetch and download attachments when requested
+                attachment_metadata: list = []
+                attachment_download_ok = True
+                if att_client is not None:
+                    span_ids = [span.id for span in spans if span.id]
+                    attachment_metadata = _fetch_attachments(
+                        att_client, project_name, trace_id, span_ids
+                    )
+                    for att in attachment_metadata:
+                        if not _download_attachment_file(
+                            att_client,
+                            project_name,
+                            att,
+                            project_dir,
+                            force,
+                        ):
+                            attachment_download_ok = False
+
+                if not attachment_download_ok:
+                    had_errors = True
+                    LOGGER.warning(
+                        "Trace %s: one or more attachment downloads failed; "
+                        "writing trace with partial attachments",
+                        trace_id,
+                    )
+
+                trace_data = {
+                    "trace": trace.model_dump(),
+                    "spans": [span.model_dump() for span in spans],
+                    "attachments": attachment_metadata,
+                    "downloaded_at": datetime.now().isoformat(),
+                    "project_name": project_name,
+                }
+                file_path = project_dir / f"trace_{trace_id}.{ext}"
+                try:
+                    if format.lower() == "csv":
+                        write_csv_data(trace_data, file_path, trace_to_csv_rows)
+                        if debug:
+                            debug_print(f"Wrote CSV file: {file_path}", debug)
+                    else:
+                        write_json_data(trace_data, file_path)
+                        if debug:
+                            debug_print(f"Wrote JSON file: {file_path}", debug)
+                    exported_count += 1
+                    already_downloaded.add(trace_id)
+                    if manifest is not None:
+                        manifest.mark_trace_downloaded(trace_id)
+                except Exception as write_error:
+                    console.print(
+                        f"[red]Error writing trace {trace_id} to file: {write_error}[/red]"
+                    )
+                    had_errors = True
+                    if debug:
+                        import traceback
+
+                        debug_print(f"Traceback: {traceback.format_exc()}", debug)
 
         # Final progress update
         if exported_count == 0 and skipped_count == 0:
@@ -391,6 +758,8 @@ def export_project_by_name(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    include_attachments: bool = True,
+    page_size: int = 500,
 ) -> None:
     """Export a project by exact name."""
     try:
@@ -472,15 +841,19 @@ def export_project_by_name(
             debug_print(f"Found project by exact match: {matching_project.name}", debug)
 
         # Export the project
-        exported_count, traces_exported, traces_skipped = export_single_project(
-            client,
-            matching_project,
-            output_dir,
-            filter_string,
-            max_results,
-            force,
-            debug,
-            format,
+        exported_count, traces_exported, traces_skipped, had_errors = (
+            export_single_project(
+                client=client,
+                project=matching_project,
+                output_dir=output_dir,
+                filter_string=filter_string,
+                max_results=max_results,
+                force=force,
+                debug=debug,
+                format=format,
+                include_attachments=include_attachments,
+                page_size=page_size,
+            )
         )
 
         # Collect statistics for summary using actual export counts
@@ -494,14 +867,7 @@ def export_project_by_name(
         # Show export summary
         print_export_summary(stats, format)
 
-        if exported_count > 0:
-            console.print(
-                f"[green]Successfully exported project '{name}' to {output_dir}[/green]"
-            )
-        else:
-            console.print(
-                f"[yellow]Project '{name}' already exists (use --force to re-download)[/yellow]"
-            )
+        _print_project_export_status(name, output_dir, exported_count, had_errors)
 
     except ValueError as e:
         # Filter validation errors are already formatted, just exit
@@ -525,8 +891,21 @@ def export_single_project(
     debug: bool,
     format: str,
     show_progress: bool = True,
-) -> tuple[int, int, int]:
-    """Export a single project."""
+    include_attachments: bool = True,
+    page_size: int = 500,
+) -> tuple[int, int, int, bool]:
+    """Export a single project.
+
+    Returns:
+        A 4-tuple ``(project_exported, traces_exported, traces_skipped, traces_had_errors)``:
+
+        - ``project_exported`` (int): 1 if any traces were exported or skipped (i.e. the
+          project was processed), 0 if nothing changed (already up to date with no errors).
+        - ``traces_exported`` (int): number of trace files written in this run.
+        - ``traces_skipped`` (int): number of traces already on disk that were skipped.
+        - ``traces_had_errors`` (bool): True if any page fetch or write error occurred;
+          the manifest is left incomplete so the next run resumes from where it left off.
+    """
     try:
         # Create project-specific directory for traces
         project_traces_dir = output_dir / project.name
@@ -633,17 +1012,19 @@ def export_single_project(
 
         # Export related traces for this project
         traces_exported, traces_skipped, traces_had_errors = export_traces(
-            client,
-            project.name,
-            project_traces_dir,
-            max_results,  # None means no limit — fetch all pages
-            effective_filter,
-            None,  # project_name_filter
-            format,
-            debug,
-            force,
-            show_progress,
-            manifest,
+            client=client,
+            project_name=project.name,
+            project_dir=project_traces_dir,
+            max_results=max_results,  # None means no limit — fetch all pages
+            filter_string=effective_filter,
+            project_name_filter=None,
+            format=format,
+            debug=debug,
+            force=force,
+            show_progress=show_progress,
+            manifest=manifest,
+            include_attachments=include_attachments,
+            page_size=page_size,
         )
 
         # Only mark the manifest complete when the export finished without errors.
@@ -653,35 +1034,30 @@ def export_single_project(
             manifest.complete(export_start_time)
 
         # Project export only exports traces - datasets and prompts must be exported separately
+        project_exported = 1 if (traces_exported > 0 or traces_skipped > 0) else 0
         if traces_exported > 0:
             if debug:
                 debug_print(
                     f"Exported project: {project.name} with {traces_exported} traces",
                     debug,
                 )
-            return (1, traces_exported, traces_skipped)
         elif traces_skipped > 0:
-            # Traces were skipped (already exist)
             if debug:
                 debug_print(
                     f"Project {project.name} already has {traces_skipped} trace files",
                     debug,
                 )
-            return (1, traces_exported, traces_skipped)
         else:
-            # No traces found or exported
             if debug:
                 debug_print(
                     f"No traces found in project: {project.name}",
                     debug,
                 )
-            # Still return 1 to indicate the project was processed
-            # (the empty directory will remain, but that's expected if there are no traces)
-            return (1, traces_exported, traces_skipped)
+        return (project_exported, traces_exported, traces_skipped, traces_had_errors)
 
     except Exception as e:
         console.print(f"[red]Error exporting project {project.name}: {e}[/red]")
-        return (0, 0, 0)
+        return (0, 0, 0, True)
 
 
 def export_project_by_name_or_id(
@@ -694,6 +1070,8 @@ def export_project_by_name_or_id(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    include_attachments: bool = True,
+    page_size: int = 500,
 ) -> None:
     """Export a project by name or ID.
 
@@ -729,15 +1107,19 @@ def export_project_by_name_or_id(
                 )
 
             # Export the project
-            exported_count, traces_exported, traces_skipped = export_single_project(
-                client,
-                project,
-                output_dir,
-                filter_string,
-                max_results,
-                force,
-                debug,
-                format,
+            exported_count, traces_exported, traces_skipped, had_errors = (
+                export_single_project(
+                    client=client,
+                    project=project,
+                    output_dir=output_dir,
+                    filter_string=filter_string,
+                    max_results=max_results,
+                    force=force,
+                    debug=debug,
+                    format=format,
+                    include_attachments=include_attachments,
+                    page_size=page_size,
+                )
             )
 
             # Show export summary
@@ -748,14 +1130,12 @@ def export_project_by_name_or_id(
             }
             print_export_summary(stats, format)
 
-            if exported_count > 0:
-                console.print(
-                    f"[green]Successfully exported project '{project.name}' (ID: {project.id}) to {output_dir}[/green]"
-                )
-            else:
-                console.print(
-                    f"[yellow]Project '{project.name}' (ID: {project.id}) already exists (use --force to re-download)[/yellow]"
-                )
+            _print_project_export_status(
+                f"{project.name} (ID: {project.id})",
+                output_dir,
+                exported_count,
+                had_errors,
+            )
             return
 
         except ApiError as e:
@@ -774,15 +1154,17 @@ def export_project_by_name_or_id(
 
         # Try by name (either because ID lookup failed or we're explicitly trying name)
         export_project_by_name(
-            name_or_id,
-            workspace,
-            output_path,
-            filter_string,
-            max_results,
-            force,
-            debug,
-            format,
-            api_key,
+            name=name_or_id,
+            workspace=workspace,
+            output_path=output_path,
+            filter_string=filter_string,
+            max_results=max_results,
+            force=force,
+            debug=debug,
+            format=format,
+            api_key=api_key,
+            include_attachments=include_attachments,
+            page_size=page_size,
         )
 
     except Exception as e:
@@ -825,6 +1207,14 @@ def export_project_by_name_or_id(
     default="json",
     help="Format for exporting data. Defaults to json.",
 )
+@no_attachments_option()
+@click.option(
+    "--page-size",
+    type=click.IntRange(1, 1000),
+    default=500,
+    show_default=True,
+    help="Number of traces to fetch per API request. Larger values reduce round-trips but increase memory usage.",
+)
 @click.pass_context
 def export_project_command(
     ctx: click.Context,
@@ -835,6 +1225,8 @@ def export_project_command(
     force: bool,
     debug: bool,
     format: str,
+    no_attachments: bool,
+    page_size: int,
 ) -> None:
     """Export a project by name or ID to workspace/projects.
 
@@ -844,5 +1236,15 @@ def export_project_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_project_by_name_or_id(
-        name_or_id, workspace, path, filter, max_results, force, debug, format, api_key
+        name_or_id=name_or_id,
+        workspace=workspace,
+        output_path=path,
+        filter_string=filter,
+        max_results=max_results,
+        force=force,
+        debug=debug,
+        format=format,
+        api_key=api_key,
+        include_attachments=not no_attachments,
+        page_size=page_size,
     )

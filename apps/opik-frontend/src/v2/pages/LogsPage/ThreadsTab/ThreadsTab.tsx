@@ -16,7 +16,10 @@ import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
-import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import {
+  useMetricDateRangeWithQueryAndStorage,
+  DATE_RANGE_PRESET_ALLTIME,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 
 import {
@@ -295,7 +298,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQueryAndStorage();
+  } = useMetricDateRangeWithQueryAndStorage({
+    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+  });
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -675,6 +680,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             onChangeValue={handleDateRangeChange}
             minDate={minDate}
             maxDate={maxDate}
+            hideAlltime
           />
         </div>
       </PageBodyStickyContainer>

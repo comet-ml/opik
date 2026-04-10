@@ -5,7 +5,7 @@ import random
 import subprocess
 import threading
 from pathlib import Path
-from typing import Optional, Set, Tuple
+from typing import Set, Tuple
 
 from . import CommandError
 
@@ -90,9 +90,39 @@ def resolve_text_file(path_str: str, repo_root: Path) -> Tuple[Path, str]:
     return path, raw
 
 
-def git_ls_files(repo_root: Path) -> Optional[Set[str]]:
-    """Return all git-visible files (tracked + untracked non-ignored) as relative
-    paths. Returns None if git is unavailable or the directory isn't a repo."""
+def check_git_repo(repo_root: Path) -> None:
+    """Verify repo_root is inside a git repository.
+
+    Raises CommandError with code 'not_a_git_repository' or 'git_not_available'.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=str(repo_root),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5.0,
+        )
+        if result.returncode != 0:
+            raise CommandError(
+                "not_a_git_repository",
+                f"Operation requires a git repository, but {repo_root} is not one",
+            )
+    except subprocess.TimeoutExpired:
+        raise CommandError("git_not_available", "git command timed out")
+    except FileNotFoundError:
+        raise CommandError(
+            "git_not_available",
+            "You must have git installed to use Opik Connect",
+        )
+
+
+def git_ls_files(repo_root: Path) -> Set[str]:
+    """Return all git-visible files (tracked + untracked non-ignored) as relative paths.
+
+    Raises CommandError with code 'git_not_available' on timeout/missing git,
+    or 'search_failed' on unexpected git errors.
+    """
     try:
         tracked = subprocess.run(
             ["git", "ls-files"],
@@ -102,7 +132,10 @@ def git_ls_files(repo_root: Path) -> Optional[Set[str]]:
             timeout=10,
         )
         if tracked.returncode != 0:
-            return None
+            raise CommandError(
+                "search_failed",
+                f"git ls-files failed: {tracked.stderr.strip()}",
+            )
 
         untracked = subprocess.run(
             ["git", "ls-files", "--others", "--exclude-standard"],
@@ -112,7 +145,7 @@ def git_ls_files(repo_root: Path) -> Optional[Set[str]]:
             timeout=10,
         )
 
-        files = set()
+        files: Set[str] = set()
         for line in tracked.stdout.splitlines():
             if line.strip():
                 files.add(line.strip())
@@ -120,8 +153,13 @@ def git_ls_files(repo_root: Path) -> Optional[Set[str]]:
             if line.strip():
                 files.add(line.strip())
         return files
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
+    except subprocess.TimeoutExpired:
+        raise CommandError("git_not_available", "git command timed out")
+    except FileNotFoundError:
+        raise CommandError(
+            "git_not_available",
+            "You must have git installed to use Opik Connect",
+        )
 
 
 def backoff_wait(

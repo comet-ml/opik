@@ -83,7 +83,7 @@ def connect(
 
         tui = RunnerTUI()
         tui.start()
-        tui.print_banner(runner_id, project_name)
+        tui.print_banner(runner_id, project_name, url=client.config.url_override)
 
         # Suppress OPIK log lines from leaking into the TUI
         opik_logger = logging.getLogger("opik")
@@ -102,6 +102,7 @@ def connect(
             api=api,
             on_child_output=tui.app_line,
             on_child_restart=tui.child_restarted,
+            on_error=tui.error,
             on_command_start=tui.op_start,
             on_command_end=tui.op_end,
             watch=watch,

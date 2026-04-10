@@ -1,26 +1,22 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Pause, Play, RotateCcw } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/ui/button";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
-import Loader from "@/shared/Loader/Loader";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/ui/resizable";
-import useSandboxPairCode from "@/api/agent-sandbox/useSandboxPairCode";
-import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
-import { AGENT_SANDBOX_KEY } from "@/api/api";
 import useSandboxCreateJobMutation from "@/api/agent-sandbox/useSandboxCreateJobMutation";
 import useSandboxJobStatus from "@/api/agent-sandbox/useSandboxJobStatus";
 import {
-  SandboxConnectionStatus,
+  RunnerConnectionStatus,
   SandboxJobStatus,
 } from "@/types/agent-sandbox";
 import useTraceById from "@/api/traces/useTraceById";
+import usePairingState from "@/hooks/usePairingState";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
@@ -34,24 +30,15 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   projectId,
 }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const queryClient = useQueryClient();
   const [traceOpen, setTraceOpen] = useState(false);
   const [tracePanelSpanId, setTracePanelSpanId] = useState<
     string | null | undefined
   >("");
 
-  const {
-    data: pairCodeData,
-    isPending: isPairCodePending,
-    refetch: refetchPairCode,
-  } = useSandboxPairCode({ projectId });
+  const pairing = usePairingState(projectId, { autoRequestOnMount: true });
 
-  const pairCode = pairCodeData?.pair_code ?? "";
-
-  const { data: runnerData } = useSandboxConnectionStatus({ projectId });
-
-  const isConnected = runnerData?.status === SandboxConnectionStatus.CONNECTED;
-  const agentName = runnerData?.agents?.[0]?.name ?? "";
+  const isConnected = pairing.status === RunnerConnectionStatus.CONNECTED;
+  const agentName = pairing.runner?.agents?.[0]?.name ?? "";
   const isReady = isConnected && Boolean(agentName);
 
   const createJobMutation = useSandboxCreateJobMutation();
@@ -60,17 +47,12 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     jobId: activeJobId ?? "",
   });
 
-  // On connect: drop the consumed pair code so a disconnect fetches a fresh one.
-  // On disconnect: clear job state so results/errors from the previous session don't persist.
+  // Clear job state on disconnect so results/errors from the previous session don't persist.
   useEffect(() => {
-    if (isConnected) {
-      queryClient.removeQueries({
-        queryKey: [AGENT_SANDBOX_KEY, "pair-code", { projectId }],
-      });
-    } else {
+    if (!isConnected) {
       setActiveJobId(null);
     }
-  }, [isConnected, queryClient, projectId]);
+  }, [isConnected]);
 
   const traceId = jobData?.trace_id ?? "";
   const isTraceOpen = traceOpen && Boolean(traceId);
@@ -142,10 +124,6 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     return () => window.removeEventListener("keydown", handler);
   }, [isConnected, handleSubmitForm]);
 
-  if (isPairCodePending) {
-    return <Loader />;
-  }
-
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b bg-gray-100 px-4 py-3">
@@ -194,7 +172,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
         </div>
       </div>
 
-      {isConnected ? (
+      {isConnected && pairing.runner ? (
         <ResizablePanelGroup
           direction="vertical"
           autoSaveId="agent-sandbox-layout"
@@ -208,7 +186,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           >
             <AgentRunnerConnectedState
               projectId={projectId}
-              runner={runnerData!}
+              runner={pairing.runner}
               onRun={handleRun}
               isRunning={createJobMutation.isPending}
             />
@@ -231,10 +209,8 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <AgentRunnerEmptyState
-            pairCode={pairCode}
-            expiresInSeconds={pairCodeData?.expires_in_seconds}
-            createdAt={pairCodeData?.created_at}
-            onRefreshPairCode={() => refetchPairCode()}
+            pairCode={pairing.pairCode ?? ""}
+            expiresAt={pairing.expiresAt}
           />
         </div>
       )}

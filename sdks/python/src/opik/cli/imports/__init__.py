@@ -15,7 +15,7 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import print_import_summary, debug_print
+from .utils import debug_print, no_attachments_option, print_import_summary
 
 console = Console()
 
@@ -32,6 +32,7 @@ def _import_by_type(
     recreate_experiments: bool = False,
     api_key: Optional[str] = None,
     force: bool = False,
+    include_attachments: bool = True,
 ) -> None:
     """
     Import data by type (dataset, project, experiment) with pattern matching.
@@ -121,6 +122,7 @@ def _import_by_type(
                 debug,
                 recreate_experiments,
                 manifest=manifest,
+                include_attachments=include_attachments,
             )
         elif import_type == "experiment":
             stats = import_experiments_from_directory(
@@ -389,6 +391,7 @@ def import_dataset(
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
+@no_attachments_option()
 @click.pass_context
 def import_project(
     ctx: click.Context,
@@ -397,6 +400,7 @@ def import_project(
     dry_run: bool,
     force: bool,
     debug: bool,
+    no_attachments: bool,
 ) -> None:
     """Import projects from workspace/projects directory.
 
@@ -439,6 +443,7 @@ def import_project(
         True,  # Always recreate experiments when importing projects
         api_key=api_key,
         force=force,
+        include_attachments=not no_attachments,
     )
 
 

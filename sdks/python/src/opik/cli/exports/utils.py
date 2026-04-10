@@ -7,11 +7,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import click
 from rich.console import Console
 from rich.table import Table
 
 import opik.dict_utils as dict_utils
 from opik.api_objects.experiment.experiment_item import ExperimentItemContent
+
+
+def no_attachments_option() -> Callable:
+    """Shared Click decorator for the ``--no-attachments`` flag."""
+    return click.option(
+        "--no-attachments",
+        is_flag=True,
+        help="Skip downloading attachment files.",
+    )
+
 
 console = Console()
 
