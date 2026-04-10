@@ -1,4 +1,4 @@
-package com.comet.opik.api.relay;
+package com.comet.opik.api.connect;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -19,7 +19,7 @@ public record CreateSessionRequest(
         @NotNull UUID projectId,
         // @Size(44) is a weak proxy for "32 bytes decoded" — 31-byte inputs also
         // base64-encode to 44 characters. The authoritative byte-length check
-        // lives in RelayServiceImpl.create.
+        // lives in OpikConnectServiceImpl.create.
         @NotBlank @Size(min = 44, max = 44) String activationKey,
         // null means "use the service default (300)".
         @Min(60) @Max(600) Integer ttlSeconds) {

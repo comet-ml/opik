@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.relay.ActivateRequest;
-import com.comet.opik.api.relay.CreateSessionRequest;
-import com.comet.opik.api.relay.CreateSessionResponse;
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
+import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -14,8 +14,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
+import com.comet.opik.api.resources.utils.resources.OpikConnectResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
-import com.comet.opik.api.resources.utils.resources.RelayResourceClient;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -54,10 +54,10 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Relay Resource Test")
+@DisplayName("Opik Connect Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class RelayResourceTest {
+class OpikConnectResourceTest {
 
     private static final String API_KEY = randomUUID().toString();
     private static final String USER = randomUUID().toString();
@@ -106,7 +106,7 @@ class RelayResourceTest {
                         .build());
     }
 
-    private RelayResourceClient relayClient;
+    private OpikConnectResourceClient connectClient;
     private LocalRunnersResourceClient runnersClient;
     private ProjectResourceClient projectClient;
 
@@ -118,7 +118,7 @@ class RelayResourceTest {
         mockTargetWorkspace(OTHER_API_KEY, OTHER_WORKSPACE, OTHER_WORKSPACE_ID, OTHER_USER);
         mockTargetWorkspace(SAME_USER_OTHER_API_KEY, SAME_USER_OTHER_WORKSPACE, SAME_USER_OTHER_WORKSPACE_ID, USER);
 
-        this.relayClient = new RelayResourceClient(client, baseURI);
+        this.connectClient = new OpikConnectResourceClient(client, baseURI);
         this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
         this.projectClient = new ProjectResourceClient(client, baseURI, PodamFactoryUtils.newPodamFactory());
     }
@@ -133,7 +133,7 @@ class RelayResourceTest {
     }
 
     private UUID createProject(String apiKey, String workspace) {
-        return projectClient.createProject("relay-test-project-" + randomUUID(), apiKey, workspace);
+        return projectClient.createProject("opik-connect-test-project-" + randomUUID(), apiKey, workspace);
     }
 
     private static byte[] randomActivationKey() {
@@ -177,7 +177,7 @@ class RelayResourceTest {
                 .activationKey(base64(activationKey))
                 .ttlSeconds(300)
                 .build();
-        return relayClient.createSession(request, apiKey, workspace);
+        return connectClient.createSession(request, apiKey, workspace);
     }
 
     @Test
@@ -195,7 +195,7 @@ class RelayResourceTest {
                 .runnerName(runnerName)
                 .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                 .build();
-        UUID activatedRunnerId = relayClient.activate(created.sessionId(), activateRequest, API_KEY, TEST_WORKSPACE);
+        UUID activatedRunnerId = connectClient.activate(created.sessionId(), activateRequest, API_KEY, TEST_WORKSPACE);
         assertThat(activatedRunnerId).isEqualTo(created.runnerId());
 
         LocalRunner runner = runnersClient.getRunner(created.runnerId(), API_KEY, TEST_WORKSPACE);
@@ -233,7 +233,7 @@ class RelayResourceTest {
                     .ttlSeconds(300)
                     .build();
 
-            try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(400);
             }
         }
@@ -249,7 +249,7 @@ class RelayResourceTest {
                     .ttlSeconds(300)
                     .build();
 
-            try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(422);
             }
         }
@@ -267,7 +267,7 @@ class RelayResourceTest {
                     .ttlSeconds(300)
                     .build();
 
-            try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(400);
             }
         }
@@ -282,7 +282,7 @@ class RelayResourceTest {
                     .ttlSeconds(59)
                     .build();
 
-            try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(422);
             }
         }
@@ -297,7 +297,7 @@ class RelayResourceTest {
                     .ttlSeconds(601)
                     .build();
 
-            try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(422);
             }
         }
@@ -311,7 +311,7 @@ class RelayResourceTest {
                     .ttlSeconds(300)
                     .build();
 
-            try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }
@@ -326,7 +326,7 @@ class RelayResourceTest {
                     .ttlSeconds(300)
                     .build();
 
-            try (Response response = relayClient.callCreateSession(request, OTHER_API_KEY, OTHER_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }
@@ -349,7 +349,7 @@ class RelayResourceTest {
                     .hmac(computeHmac(created.sessionId(), randomActivationKey(), "bad-runner"))
                     .build();
 
-            try (Response response = relayClient.callActivate(created.sessionId(), bad, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callActivate(created.sessionId(), bad, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(403);
             }
 
@@ -359,7 +359,7 @@ class RelayResourceTest {
                     .runnerName(runnerName)
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
-            UUID runnerId = relayClient.activate(created.sessionId(), good, API_KEY, TEST_WORKSPACE);
+            UUID runnerId = connectClient.activate(created.sessionId(), good, API_KEY, TEST_WORKSPACE);
             assertThat(runnerId).isEqualTo(created.runnerId());
         }
 
@@ -375,7 +375,7 @@ class RelayResourceTest {
                     .hmac(computeHmac(created.sessionId(), activationKey, "runner-other"))
                     .build();
 
-            try (Response response = relayClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(403);
             }
         }
@@ -393,9 +393,9 @@ class RelayResourceTest {
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
 
-            relayClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
+            connectClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
 
-            try (Response response = relayClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(409);
             }
         }
@@ -409,7 +409,7 @@ class RelayResourceTest {
                     .hmac(computeHmac(sessionId, randomActivationKey(), "ghost"))
                     .build();
 
-            try (Response response = relayClient.callActivate(sessionId, req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callActivate(sessionId, req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }
@@ -427,13 +427,13 @@ class RelayResourceTest {
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
 
-            try (Response response = relayClient.callActivate(created.sessionId(), req, OTHER_API_KEY,
+            try (Response response = connectClient.callActivate(created.sessionId(), req, OTHER_API_KEY,
                     OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
 
             // Original workspace can still activate after the cross-workspace attempt.
-            UUID runnerId = relayClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
+            UUID runnerId = connectClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
             assertThat(runnerId).isEqualTo(created.runnerId());
         }
 
@@ -452,13 +452,13 @@ class RelayResourceTest {
 
             // SAME_USER_OTHER_WORKSPACE has the same USER string as TEST_WORKSPACE but
             // a different workspace id — the activate call must still 404.
-            try (Response response = relayClient.callActivate(created.sessionId(), req, SAME_USER_OTHER_API_KEY,
+            try (Response response = connectClient.callActivate(created.sessionId(), req, SAME_USER_OTHER_API_KEY,
                     SAME_USER_OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
 
             // Original workspace can still activate.
-            UUID runnerId = relayClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
+            UUID runnerId = connectClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
             assertThat(runnerId).isEqualTo(created.runnerId());
         }
 
@@ -473,7 +473,7 @@ class RelayResourceTest {
             // from Redis. Waiting for the minimum 60s TTL would be too slow to gate CI on.
             RedissonClient raw = newRawRedissonClient();
             try {
-                long deleted = raw.getKeys().delete("opik:relay:" + created.sessionId());
+                long deleted = raw.getKeys().delete("opik:connect:" + created.sessionId());
                 assertThat(deleted).isEqualTo(1L);
             } finally {
                 raw.shutdown();
@@ -484,7 +484,7 @@ class RelayResourceTest {
                     .runnerName(runnerName)
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
-            try (Response response = relayClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }

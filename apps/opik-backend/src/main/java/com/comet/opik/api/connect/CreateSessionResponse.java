@@ -1,4 +1,4 @@
-package com.comet.opik.api.relay;
+package com.comet.opik.api.connect;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;

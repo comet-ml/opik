@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.relay.CreateSessionRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -11,7 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.RelayResourceClient;
+import com.comet.opik.api.resources.utils.resources.OpikConnectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
@@ -37,10 +37,10 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Relay Resource Test — rate limit")
+@DisplayName("Opik Connect Resource Test — rate limit")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class RelayResourceRateLimitTest {
+class OpikConnectResourceRateLimitTest {
 
     private static final long LIMIT = 3L;
     private static final long WORKSPACE_LIMIT = 100L;
@@ -52,7 +52,7 @@ class RelayResourceRateLimitTest {
     private static final String TEST_WORKSPACE = randomUUID().toString();
 
     // Isolated containers (reusable=false, dedicated network) so the ClickHouse
-    // replica path in ZooKeeper does not collide with the other relay test classes
+    // replica path in ZooKeeper does not collide with the other opik-connect test classes
     // that use testcontainers' shared-reuse feature.
     private final Network network = Network.newNetwork();
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -91,14 +91,14 @@ class RelayResourceRateLimitTest {
                         .build());
     }
 
-    private RelayResourceClient relayClient;
+    private OpikConnectResourceClient connectClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
-        this.relayClient = new RelayResourceClient(client, baseURI);
+        this.connectClient = new OpikConnectResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -123,7 +123,7 @@ class RelayResourceRateLimitTest {
         // Fire twice the limit to guarantee at least LIMIT successful-bucket calls and
         // some 429s.
         for (int i = 0; i < LIMIT * 2; i++) {
-            try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 if (response.getStatus() == 429) {
                     tooManyRequestsCount++;
                 } else {

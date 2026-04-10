@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.relay.ActivateRequest;
-import com.comet.opik.api.relay.CreateSessionRequest;
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,7 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.RelayResourceClient;
+import com.comet.opik.api.resources.utils.resources.OpikConnectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
@@ -40,10 +40,10 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Relay Resource Test — feature flag disabled")
+@DisplayName("Opik Connect Resource Test — feature flag disabled")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class RelayResourceFeatureFlagDisabledTest {
+class OpikConnectResourceFeatureFlagDisabledTest {
 
     private static final String API_KEY = randomUUID().toString();
     private static final String USER = randomUUID().toString();
@@ -51,7 +51,7 @@ class RelayResourceFeatureFlagDisabledTest {
     private static final String TEST_WORKSPACE = randomUUID().toString();
 
     // Isolated containers (reusable=false, dedicated network) so the ClickHouse
-    // replica path in ZooKeeper does not collide with the other relay test classes
+    // replica path in ZooKeeper does not collide with the other opik-connect test classes
     // that use testcontainers' shared-reuse feature.
     private final Network network = Network.newNetwork();
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -88,14 +88,14 @@ class RelayResourceFeatureFlagDisabledTest {
                         .build());
     }
 
-    private RelayResourceClient relayClient;
+    private OpikConnectResourceClient connectClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
-        this.relayClient = new RelayResourceClient(client, baseURI);
+        this.connectClient = new OpikConnectResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -112,7 +112,7 @@ class RelayResourceFeatureFlagDisabledTest {
                 .ttlSeconds(300)
                 .build();
 
-        try (Response response = relayClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+        try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(501);
         }
     }
@@ -127,7 +127,7 @@ class RelayResourceFeatureFlagDisabledTest {
                 .hmac(Base64.getEncoder().encodeToString(new byte[32]))
                 .build();
 
-        try (Response response = relayClient.callActivate(UUID.randomUUID(), request, API_KEY, TEST_WORKSPACE)) {
+        try (Response response = connectClient.callActivate(UUID.randomUUID(), request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(501);
         }
     }

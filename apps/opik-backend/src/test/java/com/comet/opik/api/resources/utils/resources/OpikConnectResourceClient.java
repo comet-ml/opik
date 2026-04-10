@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
-import com.comet.opik.api.relay.ActivateRequest;
-import com.comet.opik.api.relay.CreateSessionRequest;
-import com.comet.opik.api.relay.CreateSessionResponse;
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
+import com.comet.opik.api.connect.CreateSessionResponse;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -17,9 +17,9 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
-public class RelayResourceClient {
+public class OpikConnectResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/relay";
+    private static final String RESOURCE_PATH = "%s/v1/private/opik-connect";
 
     private final ClientSupport client;
     private final String baseURI;

@@ -1,11 +1,11 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
+import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.relay.ActivateRequest;
-import com.comet.opik.api.relay.CreateSessionRequest;
-import com.comet.opik.api.relay.CreateSessionResponse;
-import com.comet.opik.domain.relay.RelayService;
+import com.comet.opik.domain.connect.OpikConnectService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -37,23 +37,23 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.UUID;
 
-@Path("/v1/private/relay")
+@Path("/v1/private/opik-connect")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Runner Relay", description = "Relay pairing sessions for local runners")
-public class RelayResource {
+@Tag(name = "Opik Connect", description = "Pairing sessions for the `opik connect` CLI command")
+public class OpikConnectResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull RelayService relayService;
+    private final @NonNull OpikConnectService opikConnectService;
     private final @NonNull LocalRunnerConfig runnerConfig;
 
     @POST
     @Path("/sessions")
     @RateLimited
-    @Operation(operationId = "createRelaySession", summary = "Create a relay pairing session", description = "Register a short-lived pairing session that a local daemon will later activate via HMAC", responses = {
+    @Operation(operationId = "createOpikConnectSession", summary = "Create an opik-connect pairing session", description = "Register a short-lived pairing session that a local daemon will later activate via HMAC", responses = {
             @ApiResponse(responseCode = "201", description = "Session created", content = @Content(schema = @Schema(implementation = CreateSessionResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -65,14 +65,14 @@ public class RelayResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        CreateSessionResponse response = relayService.create(workspaceId, userName, request);
+        CreateSessionResponse response = opikConnectService.create(workspaceId, userName, request);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
 
     @POST
     @Path("/sessions/{sessionId}/activate")
     @RateLimited
-    @Operation(operationId = "activateRelaySession", summary = "Activate a relay pairing session", description = "Verify the activation HMAC and flip the runner row to CONNECTED", responses = {
+    @Operation(operationId = "activateOpikConnectSession", summary = "Activate an opik-connect pairing session", description = "Verify the activation HMAC and flip the runner row to CONNECTED", responses = {
             @ApiResponse(responseCode = "201", description = "Session activated", headers = @Header(name = "Location", description = "URI of the runner")),
             @ApiResponse(responseCode = "403", description = "Invalid HMAC", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Session not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -87,7 +87,7 @@ public class RelayResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        UUID runnerId = relayService.activate(workspaceId, userName, sessionId, request);
+        UUID runnerId = opikConnectService.activate(workspaceId, userName, sessionId, request);
         URI location = uriInfo.getBaseUriBuilder()
                 .path("v1/private/local-runners/{runnerId}")
                 .build(runnerId);

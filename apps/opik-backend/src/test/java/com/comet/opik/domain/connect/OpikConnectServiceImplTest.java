@@ -1,8 +1,8 @@
-package com.comet.opik.domain.relay;
+package com.comet.opik.domain.connect;
 
-import com.comet.opik.api.relay.ActivateRequest;
-import com.comet.opik.api.relay.CreateSessionRequest;
-import com.comet.opik.api.relay.CreateSessionResponse;
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
+import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.domain.ProjectService;
@@ -41,9 +41,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-@DisplayName("RelayServiceImpl")
+@DisplayName("OpikConnectServiceImpl")
 @ExtendWith(MockitoExtension.class)
-class RelayServiceImplTest {
+class OpikConnectServiceImplTest {
 
     private static final HexFormat HEX = HexFormat.of();
     private static final String WORKSPACE_ID = "workspace-1";
@@ -61,7 +61,7 @@ class RelayServiceImplTest {
                     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
             String runnerName = "test-runner";
 
-            byte[] actual = RelayServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            byte[] actual = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
 
             assertThat(HEX.formatHex(actual))
                     .isEqualTo("127a99c794575e17cfe04628f23eef16155fdb2c5534ac54c7c780d611d86645");
@@ -75,7 +75,7 @@ class RelayServiceImplTest {
                     "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1");
             String runnerName = "devbox-01";
 
-            byte[] actual = RelayServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            byte[] actual = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
 
             assertThat(HEX.formatHex(actual))
                     .isEqualTo("081d9cb7963ef516ae705fe8658464901a445de154ae0f8ff7284253296585f0");
@@ -90,8 +90,8 @@ class RelayServiceImplTest {
                     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
             String runnerName = "test-runner";
 
-            byte[] tagA = RelayServiceImpl.computeActivationHmac(sessionIdA, activationKey, runnerName);
-            byte[] tagB = RelayServiceImpl.computeActivationHmac(sessionIdB, activationKey, runnerName);
+            byte[] tagA = OpikConnectServiceImpl.computeActivationHmac(sessionIdA, activationKey, runnerName);
+            byte[] tagB = OpikConnectServiceImpl.computeActivationHmac(sessionIdB, activationKey, runnerName);
 
             assertThat(tagA).isNotEqualTo(tagB);
         }
@@ -103,8 +103,8 @@ class RelayServiceImplTest {
             byte[] activationKey = HEX.parseHex(
                     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
 
-            byte[] tagX = RelayServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-x");
-            byte[] tagY = RelayServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-y");
+            byte[] tagX = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-x");
+            byte[] tagY = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-y");
 
             assertThat(tagX).isNotEqualTo(tagY);
         }
@@ -128,12 +128,12 @@ class RelayServiceImplTest {
         @SuppressWarnings("rawtypes")
         private RMapAsync batchMap;
 
-        private RelayServiceImpl service;
+        private OpikConnectServiceImpl service;
 
         @BeforeEach
         @SuppressWarnings("unchecked")
         void setUp() {
-            service = new RelayServiceImpl(redisClient, idGenerator, projectService, localRunnerService);
+            service = new OpikConnectServiceImpl(redisClient, idGenerator, projectService, localRunnerService);
             lenient().when(redisClient.createBatch()).thenReturn(batch);
             lenient().when(batch.<String, String>getMap(anyString(), any())).thenReturn(batchMap);
             lenient().when(batchMap.putAllAsync(any(Map.class))).thenReturn(null);
@@ -255,7 +255,7 @@ class RelayServiceImplTest {
 
             service.create(WORKSPACE_ID, USER_NAME, request);
 
-            verify(batchMap).expireAsync(Duration.ofSeconds(RelayServiceImpl.DEFAULT_TTL_SECONDS));
+            verify(batchMap).expireAsync(Duration.ofSeconds(OpikConnectServiceImpl.DEFAULT_TTL_SECONDS));
         }
 
         private CreateSessionRequest validRequest() {
@@ -287,11 +287,11 @@ class RelayServiceImplTest {
         @SuppressWarnings("rawtypes")
         private RMap sessionMap;
 
-        private RelayServiceImpl service;
+        private OpikConnectServiceImpl service;
 
         @BeforeEach
         void setUp() {
-            service = new RelayServiceImpl(redisClient, idGenerator, projectService, localRunnerService);
+            service = new OpikConnectServiceImpl(redisClient, idGenerator, projectService, localRunnerService);
         }
 
         @Test
@@ -336,7 +336,7 @@ class RelayServiceImplTest {
             // HMAC computed with a different key
             byte[] wrongKey = new byte[32];
             wrongKey[0] = 1;
-            byte[] wrongTag = RelayServiceImpl.computeActivationHmac(sessionId, wrongKey, "my-runner");
+            byte[] wrongTag = OpikConnectServiceImpl.computeActivationHmac(sessionId, wrongKey, "my-runner");
             ActivateRequest request = activateRequest("my-runner", Base64.getEncoder().encodeToString(wrongTag));
 
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, request))
@@ -356,7 +356,7 @@ class RelayServiceImplTest {
             when(sessionMap.readAllMap()).thenReturn(storedFields(WORKSPACE_ID, USER_NAME,
                     UUID.randomUUID(), UUID.randomUUID(), Base64.getEncoder().encodeToString(activationKey)));
 
-            byte[] tagForOther = RelayServiceImpl.computeActivationHmac(sessionId, activationKey, "other-runner");
+            byte[] tagForOther = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "other-runner");
             ActivateRequest request = activateRequest("actual-runner",
                     Base64.getEncoder().encodeToString(tagForOther));
 
@@ -379,7 +379,7 @@ class RelayServiceImplTest {
                     projectId, runnerId, Base64.getEncoder().encodeToString(activationKey)));
             when(sessionMap.fastPutIfAbsent("activated", "1")).thenReturn(false);
 
-            byte[] tag = RelayServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-1");
+            byte[] tag = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-1");
             ActivateRequest request = activateRequest("runner-1", Base64.getEncoder().encodeToString(tag));
 
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, request))
@@ -391,7 +391,7 @@ class RelayServiceImplTest {
         }
 
         @Test
-        @DisplayName("happy path: calls activateFromRelay with the correct arguments")
+        @DisplayName("happy path: calls activateFromOpikConnect with the correct arguments")
         @SuppressWarnings("unchecked")
         void happyPathCallsActivateFromRelay() {
             UUID sessionId = UUID.randomUUID();
@@ -404,13 +404,13 @@ class RelayServiceImplTest {
             when(sessionMap.fastPutIfAbsent("activated", "1")).thenReturn(true);
 
             String runnerName = "my-laptop";
-            byte[] tag = RelayServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            byte[] tag = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
             ActivateRequest request = activateRequest(runnerName, Base64.getEncoder().encodeToString(tag));
 
             UUID returnedRunnerId = service.activate(WORKSPACE_ID, USER_NAME, sessionId, request);
 
             assertThat(returnedRunnerId).isEqualTo(runnerId);
-            verify(localRunnerService).activateFromRelay(
+            verify(localRunnerService).activateFromOpikConnect(
                     eq(WORKSPACE_ID), eq(USER_NAME), eq(projectId), eq(runnerId), eq(runnerName));
         }
 

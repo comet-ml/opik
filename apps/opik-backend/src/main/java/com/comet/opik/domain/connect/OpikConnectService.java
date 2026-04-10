@@ -1,9 +1,9 @@
-package com.comet.opik.domain.relay;
+package com.comet.opik.domain.connect;
 
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
+import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.relay.ActivateRequest;
-import com.comet.opik.api.relay.CreateSessionRequest;
-import com.comet.opik.api.relay.CreateSessionResponse;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.domain.ProjectService;
@@ -40,8 +40,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-@ImplementedBy(RelayServiceImpl.class)
-public interface RelayService {
+@ImplementedBy(OpikConnectServiceImpl.class)
+public interface OpikConnectService {
 
     CreateSessionResponse create(String workspaceId, String userName, CreateSessionRequest request);
 
@@ -50,12 +50,12 @@ public interface RelayService {
 
 @Slf4j
 @Singleton
-class RelayServiceImpl implements RelayService {
+class OpikConnectServiceImpl implements OpikConnectService {
 
     static final int ACTIVATION_KEY_BYTES = 32;
     static final int DEFAULT_TTL_SECONDS = 300;
 
-    private static final String METER_NAMESPACE = "opik.relay";
+    private static final String METER_NAMESPACE = "opik.connect";
 
     private static final String FIELD_WORKSPACE_ID = "workspace_id";
     private static final String FIELD_USER_NAME = "user_name";
@@ -81,7 +81,7 @@ class RelayServiceImpl implements RelayService {
     private final LongCounter activationNotFound;
 
     @Inject
-    RelayServiceImpl(@NonNull StringRedisClient redisClient, @NonNull IdGenerator idGenerator,
+    OpikConnectServiceImpl(@NonNull StringRedisClient redisClient, @NonNull IdGenerator idGenerator,
             @NonNull ProjectService projectService, @NonNull LocalRunnerService localRunnerService) {
         this.redisClient = redisClient;
         this.idGenerator = idGenerator;
@@ -92,20 +92,21 @@ class RelayServiceImpl implements RelayService {
         // static initializer) keeps this service testable when the global OpenTelemetry
         // provider is reset between test runs.
         Meter meter = GlobalOpenTelemetry.get().getMeter(METER_NAMESPACE);
-        this.sessionsCreated = meter.counterBuilder("relay.sessions.created")
-                .setDescription("Number of relay pairing sessions created")
+        this.sessionsCreated = meter.counterBuilder("opik_connect.sessions.created")
+                .setDescription("Number of opik-connect pairing sessions created")
                 .build();
-        this.sessionsActivated = meter.counterBuilder("relay.sessions.activated")
-                .setDescription("Number of relay pairing sessions activated")
+        this.sessionsActivated = meter.counterBuilder("opik_connect.sessions.activated")
+                .setDescription("Number of opik-connect pairing sessions activated")
                 .build();
-        this.activationHmacFailures = meter.counterBuilder("relay.sessions.activation_hmac_failures")
-                .setDescription("Number of relay activations rejected due to invalid HMAC")
+        this.activationHmacFailures = meter.counterBuilder("opik_connect.sessions.activation_hmac_failures")
+                .setDescription("Number of opik-connect activations rejected due to invalid HMAC")
                 .build();
-        this.activationConflicts = meter.counterBuilder("relay.sessions.activation_conflicts")
-                .setDescription("Number of relay activations rejected due to already-activated session")
+        this.activationConflicts = meter.counterBuilder("opik_connect.sessions.activation_conflicts")
+                .setDescription("Number of opik-connect activations rejected due to already-activated session")
                 .build();
-        this.activationNotFound = meter.counterBuilder("relay.sessions.activation_not_found")
-                .setDescription("Number of relay activations rejected because the session was missing or expired")
+        this.activationNotFound = meter.counterBuilder("opik_connect.sessions.activation_not_found")
+                .setDescription(
+                        "Number of opik-connect activations rejected because the session was missing or expired")
                 .build();
     }
 
@@ -142,14 +143,14 @@ class RelayServiceImpl implements RelayService {
         // Write the hash and set its TTL in a single Redis round-trip. The spec
         // allows a best-effort write, but pipelining is cheap and keeps the session
         // from being briefly persisted without an expiry window.
-        String sessionKey = RelaySessionKey.key(sessionId);
+        String sessionKey = OpikConnectSessionKey.key(sessionId);
         RBatch batch = redisClient.createBatch();
         batch.<String, String>getMap(sessionKey, StringCodec.INSTANCE).putAllAsync(sessionFields);
         batch.<String, String>getMap(sessionKey, StringCodec.INSTANCE).expireAsync(Duration.ofSeconds(ttlSeconds));
         batch.execute();
 
         sessionsCreated.add(1);
-        log.info("relay session created sessionId={} runnerId={} workspaceId={} userName={} ttlSeconds={}",
+        log.info("opik-connect session created sessionId={} runnerId={} workspaceId={} userName={} ttlSeconds={}",
                 sessionId, runnerId, workspaceId, userName, ttlSeconds);
         return CreateSessionResponse.builder()
                 .sessionId(sessionId)
@@ -161,22 +162,22 @@ class RelayServiceImpl implements RelayService {
     public UUID activate(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID sessionId,
             @NonNull ActivateRequest request) {
 
-        RMap<String, String> sessionMap = redisClient.getMap(RelaySessionKey.key(sessionId));
+        RMap<String, String> sessionMap = redisClient.getMap(OpikConnectSessionKey.key(sessionId));
         Map<String, String> fields = sessionMap.readAllMap();
         if (fields.isEmpty()) {
             activationNotFound.add(1);
-            log.warn("relay session not found sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect session not found sessionId={} workspaceId={} userName={}",
                     sessionId, workspaceId, userName);
-            throw new NotFoundException("Relay session not found: " + sessionId);
+            throw new NotFoundException("Opik-connect session not found: " + sessionId);
         }
 
         String sessionWorkspace = fields.get(FIELD_WORKSPACE_ID);
         if (!workspaceId.equals(sessionWorkspace)) {
             // Return 404 rather than 403 to avoid leaking session existence across workspaces.
             activationNotFound.add(1);
-            log.warn("relay session workspace mismatch sessionId={} callerWorkspaceId={} userName={}",
+            log.warn("opik-connect session workspace mismatch sessionId={} callerWorkspaceId={} userName={}",
                     sessionId, workspaceId, userName);
-            throw new NotFoundException("Relay session not found: " + sessionId);
+            throw new NotFoundException("Opik-connect session not found: " + sessionId);
         }
 
         // The service is the only writer, and `create` validates the activation_key is
@@ -189,7 +190,7 @@ class RelayServiceImpl implements RelayService {
             providedHmac = Base64.getDecoder().decode(request.hmac());
         } catch (IllegalArgumentException e) {
             activationHmacFailures.add(1);
-            log.warn("relay activation hmac not valid base64 sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect activation hmac not valid base64 sessionId={} workspaceId={} userName={}",
                     sessionId, workspaceId, userName);
             throw new ForbiddenException("Invalid activation hmac");
         }
@@ -198,7 +199,7 @@ class RelayServiceImpl implements RelayService {
 
         if (!MessageDigest.isEqual(expectedHmac, providedHmac)) {
             activationHmacFailures.add(1);
-            log.warn("relay activation hmac mismatch sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect activation hmac mismatch sessionId={} workspaceId={} userName={}",
                     sessionId, workspaceId, userName);
             throw new ForbiddenException("Invalid activation hmac");
         }
@@ -206,7 +207,7 @@ class RelayServiceImpl implements RelayService {
         boolean won = sessionMap.fastPutIfAbsent(FIELD_ACTIVATED, FIELD_ACTIVATED_VALUE);
         if (!won) {
             activationConflicts.add(1);
-            log.warn("relay session already activated sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect session already activated sessionId={} workspaceId={} userName={}",
                     sessionId, workspaceId, userName);
             throw new ClientErrorException(
                     Response.status(Response.Status.CONFLICT)
@@ -217,16 +218,16 @@ class RelayServiceImpl implements RelayService {
         UUID projectId = UUID.fromString(fields.get(FIELD_PROJECT_ID));
         UUID runnerId = UUID.fromString(fields.get(FIELD_RUNNER_ID));
 
-        localRunnerService.activateFromRelay(workspaceId, userName, projectId, runnerId, request.runnerName());
+        localRunnerService.activateFromOpikConnect(workspaceId, userName, projectId, runnerId, request.runnerName());
 
         sessionsActivated.add(1);
-        log.info("relay session activated sessionId={} runnerId={} workspaceId={} userName={}",
+        log.info("opik-connect session activated sessionId={} runnerId={} workspaceId={} userName={}",
                 sessionId, runnerId, workspaceId, userName);
         return runnerId;
     }
 
     // HMAC-SHA256(activationKey, sessionIdBytes(16) || SHA256(runnerNameBytes)(32)).
-    // Package-private so the cross-language HMAC test vectors in RelayServiceImplTest
+    // Package-private so the cross-language HMAC test vectors in OpikConnectServiceImplTest
     // can pin the byte layout without going through Redis.
     static byte[] computeActivationHmac(UUID sessionId, byte[] activationKey, String runnerName) {
         byte[] sessionIdBytes = uuidToBytes(sessionId);
