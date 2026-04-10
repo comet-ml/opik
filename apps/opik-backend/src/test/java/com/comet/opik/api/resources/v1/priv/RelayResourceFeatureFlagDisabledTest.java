@@ -40,10 +40,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Spins up the Dropwizard app with {@code localRunner.enabled=false} and asserts
- * that both relay endpoints return 501 Not Implemented.
- */
 @DisplayName("Relay Resource Test — feature flag disabled")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)

@@ -37,10 +37,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Spins up the Dropwizard app with rate limiting enabled at a low ceiling to
- * prove {@code @RateLimited} on the relay endpoints actually triggers a 429.
- */
 @DisplayName("Relay Resource Test — rate limit")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)

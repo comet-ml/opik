@@ -41,11 +41,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for {@link RelayServiceImpl}. The HMAC vector tests lock the
- * cross-language byte layout; the remaining tests exercise the create/activate
- * paths with mocked collaborators.
- */
 @DisplayName("RelayServiceImpl")
 @ExtendWith(MockitoExtension.class)
 class RelayServiceImplTest {

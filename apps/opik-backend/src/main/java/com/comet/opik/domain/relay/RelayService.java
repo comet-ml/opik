@@ -40,17 +40,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Relay pairing service: registers short-lived pairing sessions and verifies
- * activation HMACs to transition a runner row to CONNECTED.
- */
 @ImplementedBy(RelayServiceImpl.class)
 public interface RelayService {
 
-    /** Create a new relay pairing session tied to a project and activation key. */
     CreateSessionResponse create(String workspaceId, String userName, CreateSessionRequest request);
 
-    /** Verify the activation HMAC and activate the runner for the session. Returns the runner id. */
     UUID activate(String workspaceId, String userName, UUID sessionId, ActivateRequest request);
 }
 
@@ -231,14 +225,9 @@ class RelayServiceImpl implements RelayService {
         return runnerId;
     }
 
-    /**
-     * Compute the activation HMAC. Exposed package-private so the cross-language
-     * HMAC test vectors can pin the byte layout without going through Redis.
-     *
-     * <p>Key: {@code activationKey} (32 raw bytes).
-     * <p>Message: {@code sessionIdBytes(16) || SHA256(runnerNameBytes)(32)}.
-     * <p>Algorithm: HMAC-SHA256.
-     */
+    // HMAC-SHA256(activationKey, sessionIdBytes(16) || SHA256(runnerNameBytes)(32)).
+    // Package-private so the cross-language HMAC test vectors in RelayServiceImplTest
+    // can pin the byte layout without going through Redis.
     static byte[] computeActivationHmac(UUID sessionId, byte[] activationKey, String runnerName) {
         byte[] sessionIdBytes = uuidToBytes(sessionId);
         byte[] runnerNameHash = sha256(runnerName.getBytes(StandardCharsets.UTF_8));

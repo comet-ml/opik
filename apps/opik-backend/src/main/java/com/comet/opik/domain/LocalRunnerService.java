@@ -71,14 +71,8 @@ public interface LocalRunnerService {
 
     LocalRunnerConnectResponse connect(String workspaceId, String userName, LocalRunnerConnectRequest request);
 
-    /**
-     * Relay-pairing equivalent of the post-validation steps in {@link #connect}. Creates
-     * the runner row, registers it in the workspace/user/project sets, points the
-     * {@code (workspace, project, user)} bucket at it, and flips it to
-     * {@link com.comet.opik.api.runner.LocalRunnerStatus#CONNECTED}. The caller is
-     * responsible for authenticating the client (via activation HMAC) before invoking
-     * this method.
-     */
+    // Relay-pairing equivalent of connect()'s post-validation steps. Caller
+    // (RelayService) is responsible for authenticating via activation HMAC.
     void activateFromRelay(String workspaceId, String userName, UUID projectId, UUID runnerId, String runnerName);
 
     LocalRunner.LocalRunnerPage listRunners(String workspaceId, String userName, UUID projectId,

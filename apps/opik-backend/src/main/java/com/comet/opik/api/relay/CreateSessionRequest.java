@@ -12,21 +12,15 @@ import lombok.Builder;
 
 import java.util.UUID;
 
-/**
- * Request body for {@code POST /v1/private/relay/sessions}.
- *
- * @param projectId     target project; must exist in the caller's workspace.
- * @param activationKey base64-encoded activation key. Length bound of 44 characters
- *                      is a weak proxy — the authoritative check is that the decoded
- *                      byte array is exactly 32 bytes, enforced by the service layer.
- * @param ttlSeconds    session TTL in seconds; bounded {@code [60, 600]}.
- *                      {@code null} means "use the service default (300)".
- */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CreateSessionRequest(
         @NotNull UUID projectId,
+        // @Size(44) is a weak proxy for "32 bytes decoded" — 31-byte inputs also
+        // base64-encode to 44 characters. The authoritative byte-length check
+        // lives in RelayServiceImpl.create.
         @NotBlank @Size(min = 44, max = 44) String activationKey,
+        // null means "use the service default (300)".
         @Min(60) @Max(600) Integer ttlSeconds) {
 }
