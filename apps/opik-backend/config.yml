@@ -595,9 +595,6 @@ onlineScoring:
 
 # Configuration for Evaluation Suite assertions
 evalSuite:
-  # Default: gpt-5-nano
-  # Description: Default LLM model used for eval suite assertions when the evaluator config has no model specified
-  defaultModelName: ${EVAL_SUITE_DEFAULT_MODEL_NAME:-gpt-5-nano}
   # Default: 1
   # Description: Number of LLM runs per dataset item during eval suite execution
   defaultRunsPerItem: ${EVAL_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
