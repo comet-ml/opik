@@ -74,11 +74,10 @@ class OpikConnectServiceImpl implements OpikConnectService {
     private final @NonNull ProjectService projectService;
     private final @NonNull LocalRunnerService localRunnerService;
 
-    private final LongCounter sessionsCreated;
-    private final LongCounter sessionsActivated;
+    // Security signal: spike == someone fishing for sessions or replaying activation
+    // requests. This is the only counter that isn't trivially derivable from the
+    // @Timed annotation on OpikConnectResource — page alerts hang off this.
     private final LongCounter activationHmacFailures;
-    private final LongCounter activationConflicts;
-    private final LongCounter activationNotFound;
 
     @Inject
     OpikConnectServiceImpl(@NonNull StringRedisClient redisClient, @NonNull IdGenerator idGenerator,
@@ -88,25 +87,12 @@ class OpikConnectServiceImpl implements OpikConnectService {
         this.projectService = projectService;
         this.localRunnerService = localRunnerService;
 
-        // Instantiating the meter at construction time (rather than in a class-level
-        // static initializer) keeps this service testable when the global OpenTelemetry
-        // provider is reset between test runs.
+        // Instantiated at construction time (rather than in a class-level static
+        // initializer) so the service stays testable when GlobalOpenTelemetry is
+        // reset between test runs.
         Meter meter = GlobalOpenTelemetry.get().getMeter(METER_NAMESPACE);
-        this.sessionsCreated = meter.counterBuilder("opik_connect.sessions.created")
-                .setDescription("Number of opik-connect pairing sessions created")
-                .build();
-        this.sessionsActivated = meter.counterBuilder("opik_connect.sessions.activated")
-                .setDescription("Number of opik-connect pairing sessions activated")
-                .build();
         this.activationHmacFailures = meter.counterBuilder("opik_connect.sessions.activation_hmac_failures")
                 .setDescription("Number of opik-connect activations rejected due to invalid HMAC")
-                .build();
-        this.activationConflicts = meter.counterBuilder("opik_connect.sessions.activation_conflicts")
-                .setDescription("Number of opik-connect activations rejected due to already-activated session")
-                .build();
-        this.activationNotFound = meter.counterBuilder("opik_connect.sessions.activation_not_found")
-                .setDescription(
-                        "Number of opik-connect activations rejected because the session was missing or expired")
                 .build();
     }
 
@@ -149,8 +135,8 @@ class OpikConnectServiceImpl implements OpikConnectService {
         batch.<String, String>getMap(sessionKey, StringCodec.INSTANCE).expireAsync(Duration.ofSeconds(ttlSeconds));
         batch.execute();
 
-        sessionsCreated.add(1);
-        log.info("opik-connect session created sessionId={} runnerId={} workspaceId={} userName={} ttlSeconds={}",
+        log.info(
+                "opik-connect session created sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}' ttlSeconds='{}'",
                 sessionId, runnerId, workspaceId, userName, ttlSeconds);
         return CreateSessionResponse.builder()
                 .sessionId(sessionId)
@@ -165,8 +151,7 @@ class OpikConnectServiceImpl implements OpikConnectService {
         RMap<String, String> sessionMap = redisClient.getMap(OpikConnectSessionKey.key(sessionId));
         Map<String, String> fields = sessionMap.readAllMap();
         if (fields.isEmpty()) {
-            activationNotFound.add(1);
-            log.warn("opik-connect session not found sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect session not found sessionId='{}' workspaceId='{}' userName='{}'",
                     sessionId, workspaceId, userName);
             throw new NotFoundException("Opik-connect session not found: " + sessionId);
         }
@@ -174,23 +159,30 @@ class OpikConnectServiceImpl implements OpikConnectService {
         String sessionWorkspace = fields.get(FIELD_WORKSPACE_ID);
         if (!workspaceId.equals(sessionWorkspace)) {
             // Return 404 rather than 403 to avoid leaking session existence across workspaces.
-            activationNotFound.add(1);
-            log.warn("opik-connect session workspace mismatch sessionId={} callerWorkspaceId={} userName={}",
+            log.warn("opik-connect session workspace mismatch sessionId='{}' callerWorkspaceId='{}' userName='{}'",
                     sessionId, workspaceId, userName);
             throw new NotFoundException("Opik-connect session not found: " + sessionId);
         }
 
-        // The service is the only writer, and `create` validates the activation_key is
-        // valid 32-byte base64 before storing. A decode failure here would indicate data
-        // corruption or out-of-band writes; we treat it as a programming error.
-        byte[] activationKey = Base64.getDecoder().decode(fields.get(FIELD_ACTIVATION_KEY));
+        // Defense in depth: create() always writes all fields atomically via RBatch, so
+        // a missing field would indicate data corruption or out-of-band writes. Surface
+        // those as a clean 404 rather than letting Base64.decode(null) throw a 500.
+        String storedActivationKey = fields.get(FIELD_ACTIVATION_KEY);
+        String storedProjectId = fields.get(FIELD_PROJECT_ID);
+        String storedRunnerId = fields.get(FIELD_RUNNER_ID);
+        if (storedActivationKey == null || storedProjectId == null || storedRunnerId == null) {
+            log.error("opik-connect session has missing fields sessionId='{}' workspaceId='{}' fields='{}'",
+                    sessionId, workspaceId, fields.keySet());
+            throw new NotFoundException("Opik-connect session not found: " + sessionId);
+        }
+        byte[] activationKey = Base64.getDecoder().decode(storedActivationKey);
 
         byte[] providedHmac;
         try {
             providedHmac = Base64.getDecoder().decode(request.hmac());
         } catch (IllegalArgumentException e) {
             activationHmacFailures.add(1);
-            log.warn("opik-connect activation hmac not valid base64 sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect activation hmac not valid base64 sessionId='{}' workspaceId='{}' userName='{}'",
                     sessionId, workspaceId, userName);
             throw new ForbiddenException("Invalid activation hmac");
         }
@@ -199,15 +191,14 @@ class OpikConnectServiceImpl implements OpikConnectService {
 
         if (!MessageDigest.isEqual(expectedHmac, providedHmac)) {
             activationHmacFailures.add(1);
-            log.warn("opik-connect activation hmac mismatch sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect activation hmac mismatch sessionId='{}' workspaceId='{}' userName='{}'",
                     sessionId, workspaceId, userName);
             throw new ForbiddenException("Invalid activation hmac");
         }
 
         boolean won = sessionMap.fastPutIfAbsent(FIELD_ACTIVATED, FIELD_ACTIVATED_VALUE);
         if (!won) {
-            activationConflicts.add(1);
-            log.warn("opik-connect session already activated sessionId={} workspaceId={} userName={}",
+            log.warn("opik-connect session already activated sessionId='{}' workspaceId='{}' userName='{}'",
                     sessionId, workspaceId, userName);
             throw new ClientErrorException(
                     Response.status(Response.Status.CONFLICT)
@@ -215,13 +206,12 @@ class OpikConnectServiceImpl implements OpikConnectService {
                             .build());
         }
 
-        UUID projectId = UUID.fromString(fields.get(FIELD_PROJECT_ID));
-        UUID runnerId = UUID.fromString(fields.get(FIELD_RUNNER_ID));
+        UUID projectId = UUID.fromString(storedProjectId);
+        UUID runnerId = UUID.fromString(storedRunnerId);
 
         localRunnerService.activateFromOpikConnect(workspaceId, userName, projectId, runnerId, request.runnerName());
 
-        sessionsActivated.add(1);
-        log.info("opik-connect session activated sessionId={} runnerId={} workspaceId={} userName={}",
+        log.info("opik-connect session activated sessionId='{}' runnerId='{}' workspaceId='{}' userName='{}'",
                 sessionId, runnerId, workspaceId, userName);
         return runnerId;
     }

@@ -30,6 +30,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
@@ -255,6 +257,24 @@ class OpikConnectResourceTest {
         }
 
         @Test
+        @DisplayName("unpadded base64 activation_key (43 chars) is accepted")
+        void activationKeyUnpaddedBase64Accepted() {
+            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+            String unpadded = Base64.getEncoder().withoutPadding().encodeToString(randomActivationKey());
+            assertThat(unpadded).hasSize(43);
+
+            CreateSessionRequest request = CreateSessionRequest.builder()
+                    .projectId(projectId)
+                    .activationKey(unpadded)
+                    .ttlSeconds(300)
+                    .build();
+
+            CreateSessionResponse response = connectClient.createSession(request, API_KEY, TEST_WORKSPACE);
+            assertThat(response.sessionId()).isNotNull();
+            assertThat(response.runnerId()).isNotNull();
+        }
+
+        @Test
         @DisplayName("activation_key with invalid base64 (size ok) returns 400")
         void activationKeyInvalidBase64() {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
@@ -272,29 +292,15 @@ class OpikConnectResourceTest {
             }
         }
 
-        @Test
-        @DisplayName("ttl_seconds below minimum returns 422")
-        void ttlBelowMinimum() {
+        @ParameterizedTest
+        @ValueSource(ints = {59, 601})
+        @DisplayName("ttl_seconds outside [60, 600] returns 422")
+        void ttlSecondsOutOfRangeReturns422(int ttlSeconds) {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
             CreateSessionRequest request = CreateSessionRequest.builder()
                     .projectId(projectId)
                     .activationKey(base64(randomActivationKey()))
-                    .ttlSeconds(59)
-                    .build();
-
-            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(422);
-            }
-        }
-
-        @Test
-        @DisplayName("ttl_seconds above maximum returns 422")
-        void ttlAboveMaximum() {
-            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
-            CreateSessionRequest request = CreateSessionRequest.builder()
-                    .projectId(projectId)
-                    .activationKey(base64(randomActivationKey()))
-                    .ttlSeconds(601)
+                    .ttlSeconds(ttlSeconds)
                     .build();
 
             try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {

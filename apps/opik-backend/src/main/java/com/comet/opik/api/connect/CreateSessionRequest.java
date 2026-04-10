@@ -17,10 +17,10 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CreateSessionRequest(
         @NotNull UUID projectId,
-        // @Size(44) is a weak proxy for "32 bytes decoded" — 31-byte inputs also
-        // base64-encode to 44 characters. The authoritative byte-length check
-        // lives in OpikConnectServiceImpl.create.
-        @NotBlank @Size(min = 44, max = 44) String activationKey,
+        // 32 raw bytes → 43 chars unpadded / 44 chars padded base64. The size bound
+        // is a cheap rejection of obvious garbage; the authoritative byte-length
+        // check lives in OpikConnectServiceImpl.create.
+        @NotBlank @Size(min = 43, max = 44) String activationKey,
         // null means "use the service default (300)".
         @Min(60) @Max(600) Integer ttlSeconds) {
 }
