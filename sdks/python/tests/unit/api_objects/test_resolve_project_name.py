@@ -30,7 +30,9 @@ class TestResolveProjectName:
         assert result == "My Project"
 
     def test_explicit_default_project_name_no_warning(self):
-        with patch("opik.api_objects.helpers.opik_logging.log_once_at_level") as mock_log:
+        with patch(
+            "opik.api_objects.helpers.opik_logging.log_once_at_level"
+        ) as mock_log:
             result = helpers.resolve_project_name(
                 explicitly_passed_value=OPIK_PROJECT_DEFAULT_NAME,
                 value_from_config=OPIK_PROJECT_DEFAULT_NAME,
@@ -47,7 +49,9 @@ class TestResolveProjectName:
         assert result == "Context Project"
 
     def test_context_project_no_warning(self):
-        with patch("opik.api_objects.helpers.opik_logging.log_once_at_level") as mock_log:
+        with patch(
+            "opik.api_objects.helpers.opik_logging.log_once_at_level"
+        ) as mock_log:
             helpers.resolve_project_name(
                 explicitly_passed_value=None,
                 value_from_config=OPIK_PROJECT_DEFAULT_NAME,
@@ -56,7 +60,9 @@ class TestResolveProjectName:
         mock_log.assert_not_called()
 
     def test_default_fallback_warns(self):
-        with patch("opik.api_objects.helpers.opik_logging.log_once_at_level") as mock_log:
+        with patch(
+            "opik.api_objects.helpers.opik_logging.log_once_at_level"
+        ) as mock_log:
             result = helpers.resolve_project_name(
                 explicitly_passed_value=None,
                 value_from_config=OPIK_PROJECT_DEFAULT_NAME,
@@ -69,7 +75,9 @@ class TestResolveProjectName:
         )
 
     def test_non_default_config_project_no_warning(self):
-        with patch("opik.api_objects.helpers.opik_logging.log_once_at_level") as mock_log:
+        with patch(
+            "opik.api_objects.helpers.opik_logging.log_once_at_level"
+        ) as mock_log:
             result = helpers.resolve_project_name(
                 explicitly_passed_value=None,
                 value_from_config="Custom Project",
