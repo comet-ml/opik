@@ -1,7 +1,10 @@
-import opik
-from opik.integrations.crewai import track_crewai
-from opik.integrations.crewai import opik_tracker
+import pytest
 from crewai import Agent, Crew, Process, Task
+
+import opik
+from opik.integrations.crewai import opik_tracker
+from opik.integrations.crewai import track_crewai
+from . import constants
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
@@ -11,10 +14,6 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
-from . import constants
-
-import pytest
-
 
 pytestmark = [
     pytest.mark.usefixtures("ensure_openai_configured"),
