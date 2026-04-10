@@ -2750,7 +2750,7 @@ class Opik:
         return helpers.resolve_project_name(
             explicitly_passed_value=explicitly_passed_value,
             value_from_config=self._project_name,
-            value_from_context=context_storage.get_value_from_context(),
+            value_from_context=context_storage.get_context_project_name(),
         )
 
 
