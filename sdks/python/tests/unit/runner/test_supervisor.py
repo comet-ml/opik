@@ -24,6 +24,7 @@ def _make_supervisor(
     runner_id="runner-1",
     api=None,
     watch=None,
+    runner_type="endpoint",
 ) -> Supervisor:
     if command is _SENTINEL:
         command = [sys.executable, "-c", "import time; time.sleep(60)"]
@@ -42,6 +43,7 @@ def _make_supervisor(
         runner_id=runner_id,
         api=api,
         watch=watch,
+        runner_type=runner_type,
     )
 
 
@@ -263,7 +265,7 @@ class TestShutdown:
 
 
 class TestHeartbeat:
-    def test_sends_capabilities(self) -> None:
+    def test_sends_heartbeat(self) -> None:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
 
@@ -277,8 +279,8 @@ class TestHeartbeat:
         t.join(timeout=5)
 
         api.runners.heartbeat.assert_called()
-        call_kwargs = api.runners.heartbeat.call_args.kwargs
-        assert call_kwargs["capabilities"] == ["jobs", "bridge"]
+        call_args = api.runners.heartbeat.call_args
+        assert call_args[0][0] == "runner-1"
 
     def test_410__shuts_down(self) -> None:
         api = MagicMock()
@@ -332,7 +334,7 @@ class TestStandaloneMode:
 
 class TestBridgeIntegration:
     def test_bridge_loop_runs(self) -> None:
-        sup = _make_supervisor(watch=False)
+        sup = _make_supervisor(watch=False, runner_type="connect")
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
