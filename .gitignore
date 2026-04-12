@@ -1,6 +1,5 @@
 # Mac
 .DS_Store
-apps/opik-frontend/src/plugins/development/
 
 # Environment variables
 .env.local
