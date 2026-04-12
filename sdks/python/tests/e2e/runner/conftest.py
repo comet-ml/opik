@@ -4,6 +4,7 @@ import hashlib
 import hmac as hmac_mod
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,7 @@ import urllib.request
 import opik
 import opik.api_objects.opik_client
 from opik.api_objects import rest_helpers
+from opik.cli.pairing import hkdf_sha256
 from opik.rest_api import core as rest_api_core
 from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 
@@ -87,7 +89,6 @@ def _drain_stdout(proc, output_lines):
 def _activate_session(
     api_url, workspace, project_id, activation_key, session_id, runner_name
 ):
-    """Simulate the browser side of pairing: compute HMAC and call activate."""
     session_id_bytes = uuid.UUID(session_id).bytes
     runner_name_hash = hashlib.sha256(runner_name.encode("utf-8")).digest()
     message = session_id_bytes + runner_name_hash
@@ -105,12 +106,10 @@ def _activate_session(
     urllib.request.urlopen(req)
 
 
-@pytest.fixture()
-def runner_process(api_client, subprocess_env, project_id, opik_client, request):
+def _start_runner(
+    api_client, subprocess_env, project_id, opik_client, request, cli_args
+):
     cfg = opik_client.config
-
-    # Create session via API
-    import secrets
 
     activation_key = secrets.token_bytes(32)
     activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
@@ -121,20 +120,10 @@ def runner_process(api_client, subprocess_env, project_id, opik_client, request)
     )
     session_id = resp.session_id
     runner_id = resp.runner_id
-
     runner_name = f"e2e-runner-{secrets.token_hex(3)}"
 
-    # Start CLI with endpoint command (includes echo app as child process)
     proc = subprocess.Popen(
-        [
-            OPIK_CLI,
-            "endpoint",
-            "--project",
-            OPIK_E2E_TESTS_PROJECT_NAME,
-            "--",
-            sys.executable,
-            ECHO_APP,
-        ],
+        cli_args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -147,16 +136,13 @@ def runner_process(api_client, subprocess_env, project_id, opik_client, request)
     )
     drain_thread.start()
 
-    # Activate the session (simulates browser clicking Connect)
-    # Resolve the base API URL (strip /api/ suffix to get the raw backend URL)
     api_base = cfg.url_override
     workspace = cfg.workspace or "default"
-    time.sleep(1)  # give CLI a moment to start polling
+    time.sleep(1)
     _activate_session(
         api_base, workspace, project_id, activation_key, session_id, runner_name
     )
 
-    # Wait for the CLI to detect connected status
     deadline = time.monotonic() + RUNNER_STARTUP_TIMEOUT
     connected = False
     while time.monotonic() < deadline:
@@ -178,9 +164,6 @@ def runner_process(api_client, subprocess_env, project_id, opik_client, request)
             f"Runner did not connect within {RUNNER_STARTUP_TIMEOUT}s.\n"
             f"Output:\n" + "\n".join(output_lines)
         )
-
-    # Derive bridge key (same HKDF as CLI and FE)
-    from opik.cli.pairing import hkdf_sha256
 
     bridge_key = hkdf_sha256(
         ikm=activation_key,
@@ -210,3 +193,42 @@ def runner_process(api_client, subprocess_env, project_id, opik_client, request)
         print(f"\n--- Runner output (runner_id={runner_id}) ---")
         print("\n".join(output_lines))
         print("--- End runner output ---")
+
+
+@pytest.fixture()
+def runner_process(api_client, subprocess_env, project_id, opik_client, request):
+    """Endpoint runner — for job/agent E2E tests."""
+    yield from _start_runner(
+        api_client,
+        subprocess_env,
+        project_id,
+        opik_client,
+        request,
+        cli_args=[
+            OPIK_CLI,
+            "endpoint",
+            "--project",
+            OPIK_E2E_TESTS_PROJECT_NAME,
+            "--",
+            sys.executable,
+            ECHO_APP,
+        ],
+    )
+
+
+@pytest.fixture()
+def bridge_runner_process(api_client, subprocess_env, project_id, opik_client, request):
+    """Connect runner — for bridge command E2E tests."""
+    yield from _start_runner(
+        api_client,
+        subprocess_env,
+        project_id,
+        opik_client,
+        request,
+        cli_args=[
+            OPIK_CLI,
+            "connect",
+            "--project",
+            OPIK_E2E_TESTS_PROJECT_NAME,
+        ],
+    )

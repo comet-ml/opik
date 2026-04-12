@@ -46,11 +46,13 @@ def _submit_and_wait(api_client, runner_id, cmd_type, args, bridge_key=b""):
 # ---------------------------------------------------------------------------
 
 
-def test_bridge_unsigned_command_rejected(api_client, runner_process: RunnerInfo):
+def test_bridge_unsigned_command_rejected(
+    api_client, bridge_runner_process: RunnerInfo
+):
     """Unsigned command is rejected with auth_failed."""
     cmd = _submit_and_wait(
         api_client,
-        runner_process.runner_id,
+        bridge_runner_process.runner_id,
         "Exec",
         {"command": "echo should-not-run"},
     )
@@ -58,11 +60,11 @@ def test_bridge_unsigned_command_rejected(api_client, runner_process: RunnerInfo
     assert cmd.error["code"] == "auth_failed"
 
 
-def test_bridge_bad_hmac_rejected(api_client, runner_process: RunnerInfo):
+def test_bridge_bad_hmac_rejected(api_client, bridge_runner_process: RunnerInfo):
     """Command with wrong HMAC is rejected."""
     cmd = _submit_and_wait(
         api_client,
-        runner_process.runner_id,
+        bridge_runner_process.runner_id,
         "Exec",
         {"command": "echo should-not-run", "_hmac": "dGhpcyBpcyBub3QgYSB2YWxpZCBobWFj"},
     )
@@ -75,16 +77,16 @@ def test_bridge_bad_hmac_rejected(api_client, runner_process: RunnerInfo):
 # ---------------------------------------------------------------------------
 
 
-def test_bridge_exec_echo(api_client, runner_process: RunnerInfo):
+def test_bridge_exec_echo(api_client, bridge_runner_process: RunnerInfo):
     """Submit a simple echo command and verify the result."""
     marker = f"bridge-e2e-{int(time.time())}"
 
     cmd = _submit_and_wait(
         api_client,
-        runner_process.runner_id,
+        bridge_runner_process.runner_id,
         "Exec",
         {"command": f"echo {marker}"},
-        bridge_key=runner_process.bridge_key,
+        bridge_key=bridge_runner_process.bridge_key,
     )
 
     assert cmd.status == "completed"
@@ -92,28 +94,28 @@ def test_bridge_exec_echo(api_client, runner_process: RunnerInfo):
     assert cmd.result["exit_code"] == 0
 
 
-def test_bridge_exec_nonzero_exit(api_client, runner_process: RunnerInfo):
+def test_bridge_exec_nonzero_exit(api_client, bridge_runner_process: RunnerInfo):
     """Verify non-zero exit codes are returned correctly."""
     cmd = _submit_and_wait(
         api_client,
-        runner_process.runner_id,
+        bridge_runner_process.runner_id,
         "Exec",
         {"command": "exit 42"},
-        bridge_key=runner_process.bridge_key,
+        bridge_key=bridge_runner_process.bridge_key,
     )
 
     assert cmd.status == "completed"
     assert cmd.result["exit_code"] == 42
 
 
-def test_bridge_exec_background(api_client, runner_process: RunnerInfo):
+def test_bridge_exec_background(api_client, bridge_runner_process: RunnerInfo):
     """Submit a background command, verify PID is returned."""
     cmd = _submit_and_wait(
         api_client,
-        runner_process.runner_id,
+        bridge_runner_process.runner_id,
         "Exec",
         {"command": "sleep 30", "background": True},
-        bridge_key=runner_process.bridge_key,
+        bridge_key=bridge_runner_process.bridge_key,
     )
 
     assert cmd.status == "completed"
@@ -126,10 +128,10 @@ def test_bridge_exec_background(api_client, runner_process: RunnerInfo):
 # ---------------------------------------------------------------------------
 
 
-def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
+def test_bridge_file_operations(api_client, bridge_runner_process: RunnerInfo):
     """Write a file, find it with list/search, edit it, and read back."""
-    rid = runner_process.runner_id
-    bk = runner_process.bridge_key
+    rid = bridge_runner_process.runner_id
+    bk = bridge_runner_process.bridge_key
     marker = f"xyzzy_{int(time.time())}"
     filename = f"bridge_e2e_{int(time.time())}.py"
     original_content = f"# {marker}\n"

@@ -41,7 +41,11 @@ _CONFIGURATION_PATTERNS = [
 _ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTERNS
 
 
-def build_checklist(repo_root: Path, command: Optional[List[str]]) -> Dict[str, Any]:
+def build_checklist(
+    repo_root: Path,
+    command: Optional[List[str]],
+    runner_type: str = "endpoint",
+) -> Dict[str, Any]:
     try:
         git_files: Optional[Set[str]] = common.git_ls_files(repo_root)
     except CommandError:
@@ -57,6 +61,7 @@ def build_checklist(repo_root: Path, command: Optional[List[str]]) -> Dict[str, 
     )
 
     return {
+        "runner_type": runner_type,
         "command": " ".join(command) if command else None,
         "platform": platform.system().lower(),
         "file_tree": file_tree,

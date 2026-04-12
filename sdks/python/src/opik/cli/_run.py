@@ -39,7 +39,9 @@ def run_cli_session(
             tui=tui,
         )
 
-        launch_supervisor(result, api, tui, command=command, watch=watch)
+        launch_supervisor(
+            result, api, tui, runner_type=runner_type, command=command, watch=watch
+        )
     except KeyboardInterrupt:
         raise SystemExit(130)
     except ApiError as e:

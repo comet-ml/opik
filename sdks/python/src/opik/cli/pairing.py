@@ -100,6 +100,7 @@ def launch_supervisor(
     result: PairingResult,
     api: "OpikApi",
     tui: "RunnerTUI",
+    runner_type: str,
     command: Optional[List[str]] = None,
     watch: Optional[bool] = None,
 ) -> None:
@@ -133,6 +134,7 @@ def launch_supervisor(
         on_command_end=tui.op_end,
         watch=watch,
         bridge_key=result.bridge_key,
+        runner_type=runner_type,
     )
     supervisor.run()
 
