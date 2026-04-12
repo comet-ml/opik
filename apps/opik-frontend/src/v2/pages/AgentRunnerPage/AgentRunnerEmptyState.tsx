@@ -68,7 +68,7 @@ const AgentRunnerEmptyState: React.FC<AgentRunnerEmptyStateProps> = ({
   pairCode,
   expiresAt,
 }) => {
-  const command = `opik connect --pair ${pairCode} -- <your app start command>`;
+  const command = `opik endpoint --project <project_name> -- <your app start command>`;
 
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
     expiresAt ? getRemainingSeconds(expiresAt) : 0,

@@ -14,9 +14,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
 import click
+import httpx
 
 from opik.rest_api.errors.not_found_error import NotFoundError
 from opik.url_helpers import get_base_url
+
+LOGGER = logging.getLogger(__name__)
+
+POLL_INTERVAL_SECONDS = 2
+DEFAULT_TTL_SECONDS = 300
 
 if TYPE_CHECKING:
     from opik.rest_api.client import OpikApi
@@ -39,14 +45,15 @@ def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes
 
 
 def resolve_project_id(api: "OpikApi", project_name: str) -> str:
-    page = api.projects.find_projects(name=project_name, size=100)
-    if page.content:
-        for project in page.content:
-            if project.name == project_name and project.id is not None:
-                return project.id
-    raise click.ClickException(
-        f"Project '{project_name}' not found. Check the project name and try again."
-    )
+    from opik.api_objects.rest_helpers import resolve_project_id_by_name
+    from opik.rest_api.core.api_error import ApiError
+
+    try:
+        return resolve_project_id_by_name(api, project_name)
+    except ApiError:
+        raise click.ClickException(
+            f"Project '{project_name}' not found. Check the project name and try again."
+        )
 
 
 def build_pairing_link(
@@ -138,7 +145,7 @@ def run_pairing(
     runner_type: str,
     base_url: str,
     tui: Optional["RunnerTUI"] = None,
-    ttl_seconds: int = 300,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
 ) -> PairingResult:
     validate_runner_name(runner_name)
 
@@ -174,13 +181,17 @@ def run_pairing(
             try:
                 runner = api.runners.get_runner(runner_id)
             except NotFoundError:
-                time.sleep(2)
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
+            except (httpx.ConnectError, httpx.TimeoutException):
+                LOGGER.debug("Transient network error during pairing poll, retrying")
+                time.sleep(POLL_INTERVAL_SECONDS)
                 continue
             if runner.status == "connected":
                 if tui:
                     tui.pairing_completed()
                 break
-            time.sleep(2)
+            time.sleep(POLL_INTERVAL_SECONDS)
         else:
             if tui:
                 tui.pairing_failed("timed out")

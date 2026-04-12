@@ -17,7 +17,7 @@ from opik.rest_api.errors.not_found_error import NotFoundError
 
 
 class TestHKDF:
-    def test_pinned_vector(self):
+    def test_hkdf__pinned_vector__matches_expected(self):
         ikm = bytes(range(32))
         salt = uuid.UUID("00000000-0000-0000-0000-000000000001").bytes
         info = b"opik-bridge-v1"
@@ -29,24 +29,24 @@ class TestHKDF:
             == "9647b7959765ecad68dfef02f31cfca7f7901a9076c15ebabb1f35d015f71198"
         )
 
-    def test_output_length(self):
+    def test_hkdf__any_input__output_is_32_bytes(self):
         okm = hkdf_sha256(ikm=b"\x00" * 32, salt=b"\x00" * 16, info=b"test")
         assert len(okm) == 32
 
-    def test_different_inputs_different_outputs(self):
+    def test_hkdf__different_info__different_output(self):
         a = hkdf_sha256(ikm=b"\x00" * 32, salt=b"\x00" * 16, info=b"a")
         b = hkdf_sha256(ikm=b"\x00" * 32, salt=b"\x00" * 16, info=b"b")
         assert a != b
 
 
 class TestUUIDBytesOrder:
-    def test_uuid_bytes_match_java_layout(self):
+    def test_uuid_bytes__known_uuid__matches_java_big_endian(self):
         u = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
         assert u.bytes.hex() == "550e8400e29b41d4a716446655440000"
 
 
 class TestBuildPairingLink:
-    def test_payload_layout(self):
+    def test_build_pairing_link__valid_inputs__correct_payload_layout(self):
         session_id = "550e8400-e29b-41d4-a716-446655440000"
         project_id = "660e8400-e29b-41d4-a716-446655440000"
         activation_key = b"\xaa" * 32
@@ -72,7 +72,7 @@ class TestBuildPairingLink:
         assert payload[64] == len(runner_name.encode("utf-8"))
         assert payload[65 : 65 + payload[64]] == runner_name.encode("utf-8")
 
-    def test_no_double_opik_path(self):
+    def test_build_pairing_link__cloud_url__no_double_opik_path(self):
         link = build_pairing_link(
             base_url="https://www.comet.com/opik/api/",
             session_id="550e8400-e29b-41d4-a716-446655440000",
@@ -82,7 +82,7 @@ class TestBuildPairingLink:
         )
         assert "/opik/opik/" not in link
 
-    def test_localhost_url(self):
+    def test_build_pairing_link__localhost_url__correct_prefix(self):
         link = build_pairing_link(
             base_url="http://localhost:5173/api/",
             session_id="550e8400-e29b-41d4-a716-446655440000",
@@ -94,79 +94,55 @@ class TestBuildPairingLink:
 
 
 class TestResolveProjectId:
-    def test_exact_match_returns_id(self):
+    def test_resolve_project_id__project_exists__returns_id(self):
         api = MagicMock()
         project = MagicMock()
-        project.name = "my-project"
         project.id = "proj-uuid-123"
-        page = MagicMock()
-        page.content = [project]
-        api.projects.find_projects.return_value = page
+        api.projects.retrieve_project.return_value = project
 
         result = resolve_project_id(api, "my-project")
         assert result == "proj-uuid-123"
+        api.projects.retrieve_project.assert_called_once_with(name="my-project")
 
-    def test_no_match_raises(self):
+    def test_resolve_project_id__project_missing__raises(self):
+        from opik.rest_api.core.api_error import ApiError
+
         api = MagicMock()
-        page = MagicMock()
-        page.content = []
-        api.projects.find_projects.return_value = page
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=404, body="not found"
+        )
 
         with pytest.raises(Exception, match="not found"):
             resolve_project_id(api, "nonexistent")
 
-    def test_substring_match_only_raises(self):
-        api = MagicMock()
-        project = MagicMock()
-        project.name = "my-project-extended"
-        project.id = "proj-uuid-456"
-        page = MagicMock()
-        page.content = [project]
-        api.projects.find_projects.return_value = page
-
-        with pytest.raises(Exception, match="not found"):
-            resolve_project_id(api, "my-project")
-
-    def test_none_project_id_raises(self):
-        api = MagicMock()
-        project = MagicMock()
-        project.name = "my-project"
-        project.id = None
-        page = MagicMock()
-        page.content = [project]
-        api.projects.find_projects.return_value = page
-
-        with pytest.raises(Exception, match="not found"):
-            resolve_project_id(api, "my-project")
-
 
 class TestValidateRunnerName:
-    def test_valid_name_passes(self):
+    def test_validate_runner_name__valid_name__passes(self):
         validate_runner_name("my-runner")
 
-    def test_empty_name_raises(self):
+    def test_validate_runner_name__empty__raises(self):
         with pytest.raises(Exception, match="empty"):
             validate_runner_name("")
 
-    def test_whitespace_only_raises(self):
+    def test_validate_runner_name__whitespace_only__raises(self):
         with pytest.raises(Exception, match="empty"):
             validate_runner_name("   ")
 
-    def test_name_over_128_chars_raises(self):
+    def test_validate_runner_name__over_128_chars__raises(self):
         with pytest.raises(Exception, match="128 characters"):
             validate_runner_name("x" * 129)
 
-    def test_name_over_255_utf8_bytes_raises(self):
+    def test_validate_runner_name__over_255_utf8_bytes__raises(self):
         name = "\U0001f600" * 64
         with pytest.raises(Exception, match="255 UTF-8 bytes"):
             validate_runner_name(name)
 
 
 class TestGenerateRunnerName:
-    def test_explicit_name_returned(self):
+    def test_generate_runner_name__explicit_name__returns_it(self):
         assert generate_runner_name("my-name") == "my-name"
 
-    def test_none_generates_random(self):
+    def test_generate_runner_name__none__generates_random_hex(self):
         name = generate_runner_name(None)
         assert "-" in name
         hex_part = name.rsplit("-", 1)[1]
@@ -179,16 +155,13 @@ class TestRunPairing:
     RUNNER_ID = "11111111-2222-3333-4444-555555555555"
     PROJECT_ID = "66666666-7777-8888-9999-aaaaaaaaaaaa"
 
-    def _make_api(self, project_name="my-proj", project_id=None):
+    def _make_api(self, project_id=None):
         if project_id is None:
             project_id = self.PROJECT_ID
         api = MagicMock()
         project = MagicMock()
-        project.name = project_name
         project.id = project_id
-        page = MagicMock()
-        page.content = [project]
-        api.projects.find_projects.return_value = page
+        api.projects.retrieve_project.return_value = project
 
         session_resp = MagicMock()
         session_resp.session_id = self.SESSION_ID
@@ -202,7 +175,7 @@ class TestRunPairing:
         return api
 
     @patch("opik.cli.pairing.time.sleep")
-    def test_success_returns_pairing_result(self, mock_sleep):
+    def test_run_pairing__happyflow__returns_result(self, mock_sleep):
         api = self._make_api()
         result = run_pairing(
             api=api,
@@ -219,7 +192,7 @@ class TestRunPairing:
         assert len(result.bridge_key) == 32
 
     @patch("opik.cli.pairing.time.sleep")
-    def test_calls_tui_pairing_started_and_completed(self, mock_sleep):
+    def test_run_pairing__with_tui__calls_started_and_completed(self, mock_sleep):
         api = self._make_api()
         tui = MagicMock()
 
@@ -236,7 +209,7 @@ class TestRunPairing:
         tui.pairing_completed.assert_called_once()
 
     @patch("opik.cli.pairing.time.sleep")
-    def test_404_during_polling_retries(self, mock_sleep):
+    def test_run_pairing__404_during_poll__retries_until_connected(self, mock_sleep):
         api = self._make_api()
         err = NotFoundError(body=None)
         runner = MagicMock()
@@ -256,7 +229,9 @@ class TestRunPairing:
 
     @patch("opik.cli.pairing.time.monotonic")
     @patch("opik.cli.pairing.time.sleep")
-    def test_timeout_calls_tui_pairing_failed(self, mock_sleep, mock_monotonic):
+    def test_run_pairing__timeout__calls_tui_pairing_failed(
+        self, mock_sleep, mock_monotonic
+    ):
         api = self._make_api()
         runner = MagicMock()
         runner.status = "pairing"
@@ -279,7 +254,9 @@ class TestRunPairing:
         tui.pairing_failed.assert_called_once_with("timed out")
 
     @patch("opik.cli.pairing.time.sleep")
-    def test_keyboard_interrupt_calls_tui_pairing_failed(self, mock_sleep):
+    def test_run_pairing__keyboard_interrupt__calls_tui_pairing_failed(
+        self, mock_sleep
+    ):
         api = self._make_api()
         api.runners.get_runner.side_effect = KeyboardInterrupt
 
@@ -297,7 +274,7 @@ class TestRunPairing:
         tui.pairing_failed.assert_called_once_with("interrupted")
 
     @patch("opik.cli.pairing.time.sleep")
-    def test_non_404_api_error_propagates(self, mock_sleep):
+    def test_run_pairing__non_404_api_error__propagates(self, mock_sleep):
         from opik.rest_api.core.api_error import ApiError
 
         api = self._make_api()
