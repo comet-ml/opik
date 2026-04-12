@@ -46,10 +46,9 @@ def _submit_and_wait(api_client, runner_id, cmd_type, args, bridge_key=b""):
 # ---------------------------------------------------------------------------
 
 
-def test_bridge_unsigned_command_rejected(
+def test_bridge_command__unsigned__fails_with_auth_failed(
     api_client, bridge_runner_process: RunnerInfo
 ):
-    """Unsigned command is rejected with auth_failed."""
     cmd = _submit_and_wait(
         api_client,
         bridge_runner_process.runner_id,
@@ -60,8 +59,9 @@ def test_bridge_unsigned_command_rejected(
     assert cmd.error["code"] == "auth_failed"
 
 
-def test_bridge_bad_hmac_rejected(api_client, bridge_runner_process: RunnerInfo):
-    """Command with wrong HMAC is rejected."""
+def test_bridge_command__invalid_hmac__fails_with_auth_failed(
+    api_client, bridge_runner_process: RunnerInfo
+):
     cmd = _submit_and_wait(
         api_client,
         bridge_runner_process.runner_id,
