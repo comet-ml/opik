@@ -70,10 +70,12 @@ public interface DatasetItemService {
 
     Mono<Long> saveBatch(UUID datasetId, List<DatasetItem> items);
 
-    Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions);
+    Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions,
+            List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy);
 
     Mono<Void> createFromSpans(UUID datasetId, Set<UUID> spanIds,
-            SpanEnrichmentOptions enrichmentOptions);
+            SpanEnrichmentOptions enrichmentOptions, List<EvaluatorItem> evaluators,
+            ExecutionPolicy executionPolicy);
 
     Mono<DatasetItem> get(UUID id);
 
@@ -175,7 +177,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
     public Mono<Void> createFromTraces(
             @NonNull UUID datasetId,
             @NonNull Set<UUID> traceIds,
-            @NonNull TraceEnrichmentOptions enrichmentOptions) {
+            @NonNull TraceEnrichmentOptions enrichmentOptions,
+            List<EvaluatorItem> evaluators,
+            ExecutionPolicy executionPolicy) {
 
         log.info("Creating dataset items from '{}' traces for dataset '{}'", traceIds.size(), datasetId);
 
@@ -199,6 +203,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .source(DatasetItemSource.TRACE)
                                         .traceId(entry.getKey())
                                         .data(filterDataForDatasetType(entry.getValue(), dataset.type()))
+                                        .evaluators(evaluators)
+                                        .executionPolicy(executionPolicy)
                                         .build())
                                 .toList();
 
@@ -224,7 +230,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
     public Mono<Void> createFromSpans(
             @NonNull UUID datasetId,
             @NonNull Set<UUID> spanIds,
-            @NonNull SpanEnrichmentOptions enrichmentOptions) {
+            @NonNull SpanEnrichmentOptions enrichmentOptions,
+            List<EvaluatorItem> evaluators,
+            ExecutionPolicy executionPolicy) {
 
         log.info("Creating dataset items from '{}' spans for dataset '{}'", spanIds.size(), datasetId);
 
@@ -248,6 +256,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .source(DatasetItemSource.SPAN)
                                         .spanId(entry.getKey())
                                         .data(filterDataForDatasetType(entry.getValue(), dataset.type()))
+                                        .evaluators(evaluators)
+                                        .executionPolicy(executionPolicy)
                                         .build())
                                 .toList();
 

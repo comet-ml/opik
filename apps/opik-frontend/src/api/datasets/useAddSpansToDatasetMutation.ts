@@ -3,6 +3,8 @@ import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
+import { Evaluator } from "@/types/datasets";
+import { ExecutionPolicy } from "@/types/evaluation-suites";
 
 export type SpanEnrichmentOptions = {
   include_tags: boolean;
@@ -17,6 +19,8 @@ type UseAddSpansToDatasetMutationParams = {
   spanIds: string[];
   enrichmentOptions: SpanEnrichmentOptions;
   workspaceName: string;
+  evaluators?: Evaluator[];
+  executionPolicy?: ExecutionPolicy;
 };
 
 const useAddSpansToDatasetMutation = () => {
@@ -29,6 +33,8 @@ const useAddSpansToDatasetMutation = () => {
       spanIds,
       enrichmentOptions,
       workspaceName,
+      evaluators,
+      executionPolicy,
     }: UseAddSpansToDatasetMutationParams) => {
       const { data } = await api.post(
         `${DATASETS_REST_ENDPOINT}${datasetId}/items/from-spans`,
@@ -36,6 +42,8 @@ const useAddSpansToDatasetMutation = () => {
           span_ids: spanIds,
           enrichment_options: enrichmentOptions,
           workspace_name: workspaceName,
+          ...(evaluators && { evaluators }),
+          ...(executionPolicy && { execution_policy: executionPolicy }),
         },
       );
       return data;
@@ -63,6 +71,7 @@ const useAddSpansToDatasetMutation = () => {
         queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
       queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
+      queryClient.invalidateQueries({ queryKey: ["dataset-versions"] });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });
