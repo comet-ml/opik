@@ -67,6 +67,7 @@ class Supervisor:
         on_command_start: Optional[Callable[[str, str, str], None]] = None,
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
+        bridge_key: Optional[bytes] = None,
     ) -> None:
         self._command = command
         self._env = env
@@ -78,6 +79,7 @@ class Supervisor:
         self._on_error = on_error
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
+        self._bridge_key = bridge_key
         if command is None:
             self._watch = False
         elif watch is None:
@@ -119,6 +121,7 @@ class Supervisor:
             self._shutdown_event,
             on_command_start=self._on_command_start,
             on_command_end=self._on_command_end,
+            bridge_key=self._bridge_key,
         )
         bridge_thread = threading.Thread(
             target=bridge_loop.run, name="bridge-poll", daemon=True
