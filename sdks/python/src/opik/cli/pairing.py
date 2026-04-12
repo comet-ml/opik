@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, List, Optional
 import click
 import httpx
 
+from opik.api_objects.rest_helpers import resolve_project_id_by_name
+from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.errors.not_found_error import NotFoundError
 from opik.url_helpers import get_base_url
 
@@ -45,9 +47,6 @@ def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes
 
 
 def resolve_project_id(api: "OpikApi", project_name: str) -> str:
-    from opik.api_objects.rest_helpers import resolve_project_id_by_name
-    from opik.rest_api.core.api_error import ApiError
-
     try:
         return resolve_project_id_by_name(api, project_name)
     except ApiError:
