@@ -50,7 +50,7 @@ function parsePairingPayload(fragment: string): PairingPayload {
 }
 
 // ---------------------------------------------------------------------------
-// HMAC computation (SubtleCrypto)
+// Crypto (SubtleCrypto)
 // ---------------------------------------------------------------------------
 
 async function computeActivationHmac(
@@ -75,14 +75,8 @@ async function computeActivationHmac(
     ["sign"],
   );
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, message));
-
-  // Standard base64 WITH padding — backend uses Java's Base64.getDecoder()
   return btoa(String.fromCharCode(...sig));
 }
-
-// ---------------------------------------------------------------------------
-// HKDF-SHA256 bridge key derivation (same as CLI)
-// ---------------------------------------------------------------------------
 
 async function deriveBridgeKey(
   activationKey: Uint8Array,
@@ -91,7 +85,6 @@ async function deriveBridgeKey(
   const salt = uuidToBytes(sessionId);
   const info = new TextEncoder().encode("opik-bridge-v1");
 
-  // Extract: PRK = HMAC-SHA256(salt, ikm)
   const prkKey = await crypto.subtle.importKey(
     "raw",
     salt,
@@ -103,7 +96,6 @@ async function deriveBridgeKey(
     await crypto.subtle.sign("HMAC", prkKey, activationKey),
   );
 
-  // Expand: OKM = HMAC-SHA256(PRK, info || 0x01)
   const expandKey = await crypto.subtle.importKey(
     "raw",
     prk,
@@ -118,10 +110,32 @@ async function deriveBridgeKey(
 }
 
 // ---------------------------------------------------------------------------
-// Page component
+// Activate + derive + store — runs once on mount
 // ---------------------------------------------------------------------------
 
-type Status = "confirm" | "busy" | "done" | "error";
+async function activate(payload: PairingPayload): Promise<void> {
+  const hmac = await computeActivationHmac(
+    payload.activationKey,
+    payload.sessionId,
+    payload.runnerName,
+  );
+  await api.post(
+    `/v1/private/opik-connect/sessions/${payload.sessionId}/activate`,
+    { runner_name: payload.runnerName, hmac },
+  );
+  const bridgeKey = await deriveBridgeKey(
+    payload.activationKey,
+    payload.sessionId,
+  );
+  localStorage.setItem(
+    `opik:bridgeKey:${payload.projectId}`,
+    btoa(String.fromCharCode(...bridgeKey)),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page component
+// ---------------------------------------------------------------------------
 
 const PairingPage: React.FC = () => {
   const fragment = window.location.hash.slice(1);
@@ -137,18 +151,36 @@ const PairingPage: React.FC = () => {
     }
   }, [fragment]);
 
-  const [status, setStatus] = useState<Status>(
-    parseError ? "error" : "confirm",
+  const [status, setStatus] = useState<"busy" | "done" | "error">(
+    parseError ? "error" : "busy",
   );
   const [error, setError] = useState(parseError ?? "");
 
-  // Check for SubtleCrypto on mount
+  // Auto-activate on mount
   useEffect(() => {
+    if (!payload) return;
     if (!crypto?.subtle) {
       setStatus("error");
       setError("Pairing requires a secure connection (HTTPS).");
+      return;
     }
-  }, []);
+    activate(payload)
+      .then(() => setStatus("done"))
+      .catch((err: unknown) => {
+        setStatus("error");
+        const s =
+          err && typeof err === "object" && "response" in err
+            ? (err as { response?: { status?: number } }).response?.status
+            : undefined;
+        if (s === 403)
+          setError("This pairing link is invalid or has been tampered with.");
+        else if (s === 404)
+          setError("This pairing link has expired. Run the CLI command again.");
+        else if (s === 409)
+          setError("This runner is already connected. You can close this tab.");
+        else setError("Could not reach Opik. Check your connection.");
+      });
+  }, [payload]);
 
   // Auto-close on success
   useEffect(() => {
@@ -157,93 +189,14 @@ const PairingPage: React.FC = () => {
     return () => clearTimeout(t);
   }, [status]);
 
-  async function handleConnect() {
-    if (!payload) return;
-    setStatus("busy");
-    try {
-      const hmac = await computeActivationHmac(
-        payload.activationKey,
-        payload.sessionId,
-        payload.runnerName,
-      );
-      await api.post(
-        `/v1/private/opik-connect/sessions/${payload.sessionId}/activate`,
-        { runner_name: payload.runnerName, hmac },
-      );
-      const bridgeKey = await deriveBridgeKey(
-        payload.activationKey,
-        payload.sessionId,
-      );
-      localStorage.setItem(
-        `opik:bridgeKey:${payload.projectId}`,
-        btoa(String.fromCharCode(...bridgeKey)),
-      );
-      setStatus("done");
-    } catch (err: unknown) {
-      setStatus("error");
-      const status =
-        err && typeof err === "object" && "response" in err
-          ? (err as { response?: { status?: number } }).response?.status
-          : undefined;
-      if (status === 403)
-        setError("This pairing link is invalid or has been tampered with.");
-      else if (status === 404)
-        setError("This pairing link has expired. Run the CLI command again.");
-      else if (status === 409)
-        setError("This runner is already connected. You can close this tab.");
-      else setError("Could not reach Opik. Check your connection.");
-    }
-  }
-
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "system-ui, sans-serif",
-      }}
-    >
-      {status === "done" ? (
-        <div style={{ textAlign: "center" }}>
-          <p style={{ fontSize: 20 }}>Connected ✔</p>
-          <p style={{ color: "#888", marginTop: 8 }}>Closing tab…</p>
-        </div>
-      ) : status === "error" ? (
-        <div style={{ textAlign: "center", maxWidth: 400 }}>
-          <p style={{ color: "#d33", marginBottom: 16 }}>{error}</p>
-          <button onClick={() => window.close()}>Close</button>
-        </div>
-      ) : (
-        <div
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            padding: 32,
-            minWidth: 320,
-          }}
-        >
-          <h2 style={{ margin: "0 0 16px", fontSize: 18 }}>Connect runner?</h2>
-          <table style={{ marginBottom: 24 }}>
-            <tbody>
-              <tr>
-                <td style={{ color: "#888", paddingRight: 16 }}>Runner</td>
-                <td>
-                  <strong>{payload?.runnerName}</strong>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button onClick={() => window.close()}>Cancel</button>
-            <button onClick={handleConnect} disabled={status === "busy"}>
-              {status === "busy" ? "Connecting…" : "Connect"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+    <p>
+      {status === "done"
+        ? "Connected ✔"
+        : status === "error"
+          ? error
+          : "Connecting…"}
+    </p>
   );
 };
 
