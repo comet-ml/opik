@@ -36,6 +36,8 @@ export * as manualEvaluation from "./manualEvaluation/index.js";
 export * as ollama from "./ollama/index.js";
 export * as ollieState from "./ollieState/index.js";
 export * as openTelemetryIngestion from "./openTelemetryIngestion/index.js";
+export * from "./opikConnect/client/requests/index.js";
+export * as opikConnect from "./opikConnect/index.js";
 export * from "./optimizations/client/requests/index.js";
 export * as optimizations from "./optimizations/index.js";
 export * from "./optimizations/types/index.js";

@@ -13,4 +13,7 @@ export interface CreateDatasetItemsFromTracesRequest {
     /** Set of trace IDs to add to the dataset */
     traceIds: string[];
     enrichmentOptions: OpikApi.TraceEnrichmentOptions;
+    /** Optional evaluators to apply to the created items */
+    evaluators?: OpikApi.EvaluatorItem[];
+    executionPolicy?: OpikApi.ExecutionPolicy;
 }
