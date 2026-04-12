@@ -147,6 +147,7 @@ export * from "./CompleteMultipartUploadRequest.js";
 export * from "./CompleteMultipartUploadRequestEntityType.js";
 export * from "./CompletionTokensDetails.js";
 export * from "./CountValueStatPublic.js";
+export * from "./CreateSessionResponse.js";
 export * from "./DashboardPagePublic.js";
 export * from "./DashboardPublic.js";
 export * from "./DashboardPublicScope.js";
