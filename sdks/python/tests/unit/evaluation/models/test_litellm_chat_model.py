@@ -56,11 +56,9 @@ def _install_litellm_stub(monkeypatch, *, supported_params=None):
 
         return decorator
 
-    monkeypatch.setattr(
-        litellm_chat_model.litellm_integration,
-        "track_completion",
-        mock_track_completion,
-    )
+    litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
+    litellm_integration_stub.track_completion = mock_track_completion
+    monkeypatch.setitem(sys.modules, "opik.integrations.litellm", litellm_integration_stub)
 
     return stub_module
 
@@ -423,11 +421,9 @@ def test_litellm_chat_model_track_parameter_controls_monitoring(
 
         return decorator
 
-    monkeypatch.setattr(
-        litellm_chat_model.litellm_integration,
-        "track_completion",
-        mock_track_completion,
-    )
+    litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
+    litellm_integration_stub.track_completion = mock_track_completion
+    monkeypatch.setitem(sys.modules, "opik.integrations.litellm", litellm_integration_stub)
 
     # Create model with specified track value
     litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o", track=track)
