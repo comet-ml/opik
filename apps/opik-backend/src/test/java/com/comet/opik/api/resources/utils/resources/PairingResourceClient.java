@@ -17,9 +17,9 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
-public class OpikConnectResourceClient {
+public class PairingResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/opik-connect";
+    private static final String RESOURCE_PATH = "%s/v1/private/pairing";
 
     private final ClientSupport client;
     private final String baseURI;

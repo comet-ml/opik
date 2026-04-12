@@ -14,7 +14,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.OpikConnectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PairingResourceClient;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
@@ -41,19 +42,16 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Opik Connect Resource Test — feature flag disabled")
+@DisplayName("Pairing Resource Test — feature flag disabled")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class OpikConnectResourceFeatureFlagDisabledTest {
+class PairingResourceFeatureFlagDisabledTest {
 
     private static final String API_KEY = randomUUID().toString();
     private static final String USER = randomUUID().toString();
     private static final String WORKSPACE_ID = randomUUID().toString();
     private static final String TEST_WORKSPACE = randomUUID().toString();
 
-    // Isolated containers (reusable=false, dedicated network) so the ClickHouse
-    // replica path in ZooKeeper does not collide with the other opik-connect test classes
-    // that use testcontainers' shared-reuse feature.
     private final Network network = Network.newNetwork();
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
@@ -84,19 +82,18 @@ class OpikConnectResourceFeatureFlagDisabledTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
-                        // Override the default localRunner.enabled=true from config-test.yml.
                         .customConfigs(List.of(new CustomConfig("localRunner.enabled", "false")))
                         .build());
     }
 
-    private OpikConnectResourceClient connectClient;
+    private PairingResourceClient pairingClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
-        this.connectClient = new OpikConnectResourceClient(client, baseURI);
+        this.pairingClient = new PairingResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -111,9 +108,10 @@ class OpikConnectResourceFeatureFlagDisabledTest {
                 .projectId(randomUUID())
                 .activationKey(Base64.getEncoder().encodeToString(new byte[32]))
                 .ttlSeconds(300)
+                .type(RunnerType.ENDPOINT)
                 .build();
 
-        try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+        try (Response response = pairingClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(501);
             ErrorMessage body = response.readEntity(ErrorMessage.class);
             assertThat(body.errors()).isNotEmpty();
@@ -125,12 +123,10 @@ class OpikConnectResourceFeatureFlagDisabledTest {
     void activateReturns501WhenDisabled() {
         ActivateRequest request = ActivateRequest.builder()
                 .runnerName("any-runner")
-                // A syntactically valid 44-char base64 HMAC is enough — the flag check
-                // fires before any HMAC verification.
                 .hmac(Base64.getEncoder().encodeToString(new byte[32]))
                 .build();
 
-        try (Response response = connectClient.callActivate(UUID.randomUUID(), request, API_KEY, TEST_WORKSPACE)) {
+        try (Response response = pairingClient.callActivate(UUID.randomUUID(), request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(501);
             ErrorMessage body = response.readEntity(ErrorMessage.class);
             assertThat(body.errors()).isNotEmpty();

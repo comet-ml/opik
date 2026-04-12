@@ -14,10 +14,11 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
-import com.comet.opik.api.resources.utils.resources.OpikConnectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PairingResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerStatus;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -56,10 +57,10 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Opik Connect Resource Test")
+@DisplayName("Pairing Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class OpikConnectResourceTest {
+class PairingResourceTest {
 
     private static final String API_KEY = randomUUID().toString();
     private static final String USER = randomUUID().toString();
@@ -71,8 +72,6 @@ class OpikConnectResourceTest {
     private static final String OTHER_WORKSPACE_ID = randomUUID().toString();
     private static final String OTHER_WORKSPACE = randomUUID().toString();
 
-    // Shares USER with TEST_WORKSPACE so we can prove workspace isolation does not
-    // collapse into user-only isolation.
     private static final String SAME_USER_OTHER_API_KEY = randomUUID().toString();
     private static final String SAME_USER_OTHER_WORKSPACE_ID = randomUUID().toString();
     private static final String SAME_USER_OTHER_WORKSPACE = randomUUID().toString();
@@ -108,7 +107,7 @@ class OpikConnectResourceTest {
                         .build());
     }
 
-    private OpikConnectResourceClient connectClient;
+    private PairingResourceClient pairingClient;
     private LocalRunnersResourceClient runnersClient;
     private ProjectResourceClient projectClient;
 
@@ -120,7 +119,7 @@ class OpikConnectResourceTest {
         mockTargetWorkspace(OTHER_API_KEY, OTHER_WORKSPACE, OTHER_WORKSPACE_ID, OTHER_USER);
         mockTargetWorkspace(SAME_USER_OTHER_API_KEY, SAME_USER_OTHER_WORKSPACE, SAME_USER_OTHER_WORKSPACE_ID, USER);
 
-        this.connectClient = new OpikConnectResourceClient(client, baseURI);
+        this.pairingClient = new PairingResourceClient(client, baseURI);
         this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
         this.projectClient = new ProjectResourceClient(client, baseURI, PodamFactoryUtils.newPodamFactory());
     }
@@ -135,7 +134,7 @@ class OpikConnectResourceTest {
     }
 
     private UUID createProject(String apiKey, String workspace) {
-        return projectClient.createProject("opik-connect-test-project-" + randomUUID(), apiKey, workspace);
+        return projectClient.createProject("pairing-test-project-" + randomUUID(), apiKey, workspace);
     }
 
     private static byte[] randomActivationKey() {
@@ -178,8 +177,9 @@ class OpikConnectResourceTest {
                 .projectId(projectId)
                 .activationKey(base64(activationKey))
                 .ttlSeconds(300)
+                .type(RunnerType.ENDPOINT)
                 .build();
-        return connectClient.createSession(request, apiKey, workspace);
+        return pairingClient.createSession(request, apiKey, workspace);
     }
 
     @Test
@@ -197,7 +197,7 @@ class OpikConnectResourceTest {
                 .runnerName(runnerName)
                 .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                 .build();
-        UUID activatedRunnerId = connectClient.activate(created.sessionId(), activateRequest, API_KEY, TEST_WORKSPACE);
+        UUID activatedRunnerId = pairingClient.activate(created.sessionId(), activateRequest, API_KEY, TEST_WORKSPACE);
         assertThat(activatedRunnerId).isEqualTo(created.runnerId());
 
         LocalRunner runner = runnersClient.getRunner(created.runnerId(), API_KEY, TEST_WORKSPACE);
@@ -207,10 +207,6 @@ class OpikConnectResourceTest {
         assertThat(runner.status()).isEqualTo(LocalRunnerStatus.CONNECTED);
     }
 
-    /**
-     * Opens a direct Redisson connection to the test Redis container so a test can
-     * deterministically simulate TTL expiry by deleting the session key.
-     */
     private RedissonClient newRawRedissonClient() {
         Config config = new Config();
         config.useSingleServer().setAddress(REDIS.getRedisURI());
@@ -225,17 +221,15 @@ class OpikConnectResourceTest {
         @DisplayName("activation_key that decodes to 31 bytes returns 400 (service-level length check)")
         void activationKeyDecodesToWrongLength() {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
-            // 31 bytes base64-encodes to 44 characters with padding (same length as
-            // 32 bytes), so @Size(44) lets it through and the service's own byte-length
-            // check is what rejects it.
             byte[] shortKey = new byte[31];
             CreateSessionRequest request = CreateSessionRequest.builder()
                     .projectId(projectId)
                     .activationKey(base64(shortKey))
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
-            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(400);
             }
         }
@@ -246,12 +240,12 @@ class OpikConnectResourceTest {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
             CreateSessionRequest request = CreateSessionRequest.builder()
                     .projectId(projectId)
-                    // 40 chars — shorter than @Size(min=44)
                     .activationKey("A".repeat(40))
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
-            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(422);
             }
         }
@@ -267,9 +261,10 @@ class OpikConnectResourceTest {
                     .projectId(projectId)
                     .activationKey(unpadded)
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
-            CreateSessionResponse response = connectClient.createSession(request, API_KEY, TEST_WORKSPACE);
+            CreateSessionResponse response = pairingClient.createSession(request, API_KEY, TEST_WORKSPACE);
             assertThat(response.sessionId()).isNotNull();
             assertThat(response.runnerId()).isNotNull();
         }
@@ -278,16 +273,15 @@ class OpikConnectResourceTest {
         @DisplayName("activation_key with invalid base64 (size ok) returns 400")
         void activationKeyInvalidBase64() {
             UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
-            // 44 characters to pass @Size(44) but not a valid base64 sequence — the
-            // service should reject it at decode time with 400.
             String invalidB64 = "*".repeat(44);
             CreateSessionRequest request = CreateSessionRequest.builder()
                     .projectId(projectId)
                     .activationKey(invalidB64)
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
-            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(400);
             }
         }
@@ -301,9 +295,10 @@ class OpikConnectResourceTest {
                     .projectId(projectId)
                     .activationKey(base64(randomActivationKey()))
                     .ttlSeconds(ttlSeconds)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
-            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(422);
             }
         }
@@ -315,9 +310,10 @@ class OpikConnectResourceTest {
                     .projectId(randomUUID())
                     .activationKey(base64(randomActivationKey()))
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
-            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }
@@ -330,9 +326,10 @@ class OpikConnectResourceTest {
                     .projectId(projectId)
                     .activationKey(base64(randomActivationKey()))
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
-            try (Response response = connectClient.callCreateSession(request, OTHER_API_KEY, OTHER_WORKSPACE)) {
+            try (Response response = pairingClient.callCreateSession(request, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }
@@ -351,21 +348,19 @@ class OpikConnectResourceTest {
 
             ActivateRequest bad = ActivateRequest.builder()
                     .runnerName("bad-runner")
-                    // HMAC computed with a different key
                     .hmac(computeHmac(created.sessionId(), randomActivationKey(), "bad-runner"))
                     .build();
 
-            try (Response response = connectClient.callActivate(created.sessionId(), bad, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callActivate(created.sessionId(), bad, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(403);
             }
 
-            // Session is still activatable with the correct HMAC.
             String runnerName = "good-runner";
             ActivateRequest good = ActivateRequest.builder()
                     .runnerName(runnerName)
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
-            UUID runnerId = connectClient.activate(created.sessionId(), good, API_KEY, TEST_WORKSPACE);
+            UUID runnerId = pairingClient.activate(created.sessionId(), good, API_KEY, TEST_WORKSPACE);
             assertThat(runnerId).isEqualTo(created.runnerId());
         }
 
@@ -381,7 +376,7 @@ class OpikConnectResourceTest {
                     .hmac(computeHmac(created.sessionId(), activationKey, "runner-other"))
                     .build();
 
-            try (Response response = connectClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(403);
             }
         }
@@ -399,9 +394,9 @@ class OpikConnectResourceTest {
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
 
-            connectClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
+            pairingClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
 
-            try (Response response = connectClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(409);
             }
         }
@@ -415,7 +410,7 @@ class OpikConnectResourceTest {
                     .hmac(computeHmac(sessionId, randomActivationKey(), "ghost"))
                     .build();
 
-            try (Response response = connectClient.callActivate(sessionId, req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callActivate(sessionId, req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }
@@ -433,13 +428,12 @@ class OpikConnectResourceTest {
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
 
-            try (Response response = connectClient.callActivate(created.sessionId(), req, OTHER_API_KEY,
+            try (Response response = pairingClient.callActivate(created.sessionId(), req, OTHER_API_KEY,
                     OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
 
-            // Original workspace can still activate after the cross-workspace attempt.
-            UUID runnerId = connectClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
+            UUID runnerId = pairingClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
             assertThat(runnerId).isEqualTo(created.runnerId());
         }
 
@@ -456,15 +450,12 @@ class OpikConnectResourceTest {
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
 
-            // SAME_USER_OTHER_WORKSPACE has the same USER string as TEST_WORKSPACE but
-            // a different workspace id — the activate call must still 404.
-            try (Response response = connectClient.callActivate(created.sessionId(), req, SAME_USER_OTHER_API_KEY,
+            try (Response response = pairingClient.callActivate(created.sessionId(), req, SAME_USER_OTHER_API_KEY,
                     SAME_USER_OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
 
-            // Original workspace can still activate.
-            UUID runnerId = connectClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
+            UUID runnerId = pairingClient.activate(created.sessionId(), req, API_KEY, TEST_WORKSPACE);
             assertThat(runnerId).isEqualTo(created.runnerId());
         }
 
@@ -475,11 +466,9 @@ class OpikConnectResourceTest {
             byte[] activationKey = randomActivationKey();
             CreateSessionResponse created = createValidSession(projectId, activationKey, API_KEY, TEST_WORKSPACE);
 
-            // Deterministically simulate TTL expiry by deleting the session hash directly
-            // from Redis. Waiting for the minimum 60s TTL would be too slow to gate CI on.
             RedissonClient raw = newRawRedissonClient();
             try {
-                long deleted = raw.getKeys().delete("opik:connect:" + created.sessionId());
+                long deleted = raw.getKeys().delete("opik:pairing:" + created.sessionId());
                 assertThat(deleted).isEqualTo(1L);
             } finally {
                 raw.shutdown();
@@ -490,7 +479,7 @@ class OpikConnectResourceTest {
                     .runnerName(runnerName)
                     .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
                     .build();
-            try (Response response = connectClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
         }

@@ -11,7 +11,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.OpikConnectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PairingResourceClient;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
@@ -37,10 +38,10 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Opik Connect Resource Test — rate limit")
+@DisplayName("Pairing Resource Test — rate limit")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class OpikConnectResourceRateLimitTest {
+class PairingResourceRateLimitTest {
 
     private static final long LIMIT = 3L;
     private static final long WORKSPACE_LIMIT = 100L;
@@ -51,9 +52,6 @@ class OpikConnectResourceRateLimitTest {
     private static final String WORKSPACE_ID = randomUUID().toString();
     private static final String TEST_WORKSPACE = randomUUID().toString();
 
-    // Isolated containers (reusable=false, dedicated network) so the ClickHouse
-    // replica path in ZooKeeper does not collide with the other opik-connect test classes
-    // that use testcontainers' shared-reuse feature.
     private final Network network = Network.newNetwork();
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
@@ -91,14 +89,14 @@ class OpikConnectResourceRateLimitTest {
                         .build());
     }
 
-    private OpikConnectResourceClient connectClient;
+    private PairingResourceClient pairingClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
-        this.connectClient = new OpikConnectResourceClient(client, baseURI);
+        this.pairingClient = new PairingResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -109,21 +107,17 @@ class OpikConnectResourceRateLimitTest {
     @Test
     @DisplayName("Exceeding the per-user limit on POST /sessions returns 429")
     void createSessionReturns429WhenLimitExceeded() {
-        // Each call will 404 (project doesn't exist) until the rate limit kicks in.
-        // The rate limit is checked before the service body runs, so 429 replaces the
-        // 404 response once the limit is hit.
         CreateSessionRequest request = CreateSessionRequest.builder()
                 .projectId(UUID.randomUUID())
                 .activationKey(Base64.getEncoder().encodeToString(new byte[32]))
                 .ttlSeconds(300)
+                .type(RunnerType.ENDPOINT)
                 .build();
 
         int tooManyRequestsCount = 0;
         int otherCount = 0;
-        // Fire twice the limit to guarantee at least LIMIT successful-bucket calls and
-        // some 429s.
         for (int i = 0; i < LIMIT * 2; i++) {
-            try (Response response = connectClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
+            try (Response response = pairingClient.callCreateSession(request, API_KEY, TEST_WORKSPACE)) {
                 if (response.getStatus() == 429) {
                     tooManyRequestsCount++;
                 } else {

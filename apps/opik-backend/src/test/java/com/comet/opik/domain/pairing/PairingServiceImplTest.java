@@ -1,11 +1,12 @@
-package com.comet.opik.domain.connect;
+package com.comet.opik.domain.pairing;
 
 import com.comet.opik.api.connect.ActivateRequest;
 import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.connect.CreateSessionResponse;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.RunnerService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
@@ -42,9 +43,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-@DisplayName("OpikConnectServiceImpl")
+@DisplayName("PairingServiceImpl")
 @ExtendWith(MockitoExtension.class)
-class OpikConnectServiceImplTest {
+class PairingServiceImplTest {
 
     private static final HexFormat HEX = HexFormat.of();
     private static final String WORKSPACE_ID = "workspace-1";
@@ -62,7 +63,7 @@ class OpikConnectServiceImplTest {
                     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
             String runnerName = "test-runner";
 
-            byte[] actual = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            byte[] actual = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
 
             assertThat(HEX.formatHex(actual))
                     .isEqualTo("127a99c794575e17cfe04628f23eef16155fdb2c5534ac54c7c780d611d86645");
@@ -76,7 +77,7 @@ class OpikConnectServiceImplTest {
                     "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1");
             String runnerName = "devbox-01";
 
-            byte[] actual = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            byte[] actual = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
 
             assertThat(HEX.formatHex(actual))
                     .isEqualTo("081d9cb7963ef516ae705fe8658464901a445de154ae0f8ff7284253296585f0");
@@ -91,8 +92,8 @@ class OpikConnectServiceImplTest {
                     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
             String runnerName = "test-runner";
 
-            byte[] tagA = OpikConnectServiceImpl.computeActivationHmac(sessionIdA, activationKey, runnerName);
-            byte[] tagB = OpikConnectServiceImpl.computeActivationHmac(sessionIdB, activationKey, runnerName);
+            byte[] tagA = PairingServiceImpl.computeActivationHmac(sessionIdA, activationKey, runnerName);
+            byte[] tagB = PairingServiceImpl.computeActivationHmac(sessionIdB, activationKey, runnerName);
 
             assertThat(tagA).isNotEqualTo(tagB);
         }
@@ -104,8 +105,8 @@ class OpikConnectServiceImplTest {
             byte[] activationKey = HEX.parseHex(
                     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
 
-            byte[] tagX = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-x");
-            byte[] tagY = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-y");
+            byte[] tagX = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-x");
+            byte[] tagY = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-y");
 
             assertThat(tagX).isNotEqualTo(tagY);
         }
@@ -122,19 +123,19 @@ class OpikConnectServiceImplTest {
         @Mock
         private ProjectService projectService;
         @Mock
-        private LocalRunnerService localRunnerService;
+        private RunnerService runnerService;
         @Mock
         private RBatch batch;
         @Mock(name = "batchMap")
         @SuppressWarnings("rawtypes")
         private RMapAsync batchMap;
 
-        private OpikConnectServiceImpl service;
+        private PairingServiceImpl service;
 
         @BeforeEach
         @SuppressWarnings("unchecked")
         void setUp() {
-            service = new OpikConnectServiceImpl(redisClient, idGenerator, projectService, localRunnerService);
+            service = new PairingServiceImpl(redisClient, idGenerator, projectService, runnerService);
             lenient().when(redisClient.createBatch()).thenReturn(batch);
             lenient().when(batch.<String, String>getMap(anyString(), any())).thenReturn(batchMap);
             lenient().when(batchMap.putAllAsync(any(Map.class))).thenReturn(null);
@@ -165,12 +166,12 @@ class OpikConnectServiceImplTest {
         @Test
         @DisplayName("rejects activation_key that does not decode to exactly 32 bytes")
         void rejectsWrongActivationKeyLength() {
-            // 31 bytes base64-encoded lands on the same 44-char length as 32 bytes.
             String shortKeyBase64 = Base64.getEncoder().encodeToString(new byte[31]);
             CreateSessionRequest request = CreateSessionRequest.builder()
                     .projectId(UUID.randomUUID())
                     .activationKey(shortKeyBase64)
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
             assertThatThrownBy(() -> service.create(WORKSPACE_ID, USER_NAME, request))
@@ -187,6 +188,7 @@ class OpikConnectServiceImplTest {
                     .projectId(UUID.randomUUID())
                     .activationKey("*".repeat(44))
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
             assertThatThrownBy(() -> service.create(WORKSPACE_ID, USER_NAME, request))
@@ -223,6 +225,7 @@ class OpikConnectServiceImplTest {
                     .projectId(projectId)
                     .activationKey(activationKey)
                     .ttlSeconds(120)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
             service.create(WORKSPACE_ID, USER_NAME, request);
@@ -252,11 +255,12 @@ class OpikConnectServiceImplTest {
                     .projectId(UUID.randomUUID())
                     .activationKey(Base64.getEncoder().encodeToString(new byte[32]))
                     .ttlSeconds(null)
+                    .type(RunnerType.ENDPOINT)
                     .build();
 
             service.create(WORKSPACE_ID, USER_NAME, request);
 
-            verify(batchMap).expireAsync(Duration.ofSeconds(OpikConnectServiceImpl.DEFAULT_TTL_SECONDS));
+            verify(batchMap).expireAsync(Duration.ofSeconds(PairingServiceImpl.DEFAULT_TTL_SECONDS));
         }
 
         private CreateSessionRequest validRequest() {
@@ -268,6 +272,7 @@ class OpikConnectServiceImplTest {
                     .projectId(projectId)
                     .activationKey(Base64.getEncoder().encodeToString(new byte[32]))
                     .ttlSeconds(300)
+                    .type(RunnerType.ENDPOINT)
                     .build();
         }
     }
@@ -283,16 +288,16 @@ class OpikConnectServiceImplTest {
         @Mock
         private ProjectService projectService;
         @Mock
-        private LocalRunnerService localRunnerService;
+        private RunnerService runnerService;
         @Mock
         @SuppressWarnings("rawtypes")
         private RMap sessionMap;
 
-        private OpikConnectServiceImpl service;
+        private PairingServiceImpl service;
 
         @BeforeEach
         void setUp() {
-            service = new OpikConnectServiceImpl(redisClient, idGenerator, projectService, localRunnerService);
+            service = new PairingServiceImpl(redisClient, idGenerator, projectService, runnerService);
         }
 
         @Test
@@ -306,7 +311,7 @@ class OpikConnectServiceImplTest {
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, activateRequest("r", "")))
                     .isInstanceOf(NotFoundException.class);
 
-            verifyNoInteractions(localRunnerService);
+            verifyNoInteractions(runnerService);
         }
 
         @Test
@@ -321,7 +326,7 @@ class OpikConnectServiceImplTest {
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, activateRequest("r", "")))
                     .isInstanceOf(NotFoundException.class);
 
-            verifyNoInteractions(localRunnerService);
+            verifyNoInteractions(runnerService);
         }
 
         @Test
@@ -334,17 +339,16 @@ class OpikConnectServiceImplTest {
             when(sessionMap.readAllMap()).thenReturn(storedFields(WORKSPACE_ID, USER_NAME,
                     UUID.randomUUID(), UUID.randomUUID(), Base64.getEncoder().encodeToString(activationKey)));
 
-            // HMAC computed with a different key
             byte[] wrongKey = new byte[32];
             wrongKey[0] = 1;
-            byte[] wrongTag = OpikConnectServiceImpl.computeActivationHmac(sessionId, wrongKey, "my-runner");
+            byte[] wrongTag = PairingServiceImpl.computeActivationHmac(sessionId, wrongKey, "my-runner");
             ActivateRequest request = activateRequest("my-runner", Base64.getEncoder().encodeToString(wrongTag));
 
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, request))
                     .isInstanceOf(ForbiddenException.class);
 
             verify(sessionMap, never()).fastPutIfAbsent(anyString(), anyString());
-            verifyNoInteractions(localRunnerService);
+            verifyNoInteractions(runnerService);
         }
 
         @Test
@@ -357,14 +361,14 @@ class OpikConnectServiceImplTest {
             when(sessionMap.readAllMap()).thenReturn(storedFields(WORKSPACE_ID, USER_NAME,
                     UUID.randomUUID(), UUID.randomUUID(), Base64.getEncoder().encodeToString(activationKey)));
 
-            byte[] tagForOther = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "other-runner");
+            byte[] tagForOther = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, "other-runner");
             ActivateRequest request = activateRequest("actual-runner",
                     Base64.getEncoder().encodeToString(tagForOther));
 
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, request))
                     .isInstanceOf(ForbiddenException.class);
 
-            verifyNoInteractions(localRunnerService);
+            verifyNoInteractions(runnerService);
         }
 
         @Test
@@ -380,7 +384,7 @@ class OpikConnectServiceImplTest {
                     projectId, runnerId, Base64.getEncoder().encodeToString(activationKey)));
             when(sessionMap.fastPutIfAbsent("activated", "1")).thenReturn(false);
 
-            byte[] tag = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-1");
+            byte[] tag = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, "runner-1");
             ActivateRequest request = activateRequest("runner-1", Base64.getEncoder().encodeToString(tag));
 
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, request))
@@ -388,14 +392,13 @@ class OpikConnectServiceImplTest {
                             ex -> assertThat(ex.getResponse().getStatus()).isEqualTo(Response.Status.CONFLICT
                                     .getStatusCode()));
 
-            // Runner activation IS called before the CAS check — the helpers are
-            // idempotent so a duplicate call from the loser of the race is safe.
-            verify(localRunnerService).activateFromOpikConnect(
-                    eq(WORKSPACE_ID), eq(USER_NAME), eq(projectId), eq(runnerId), eq("runner-1"));
+            verify(runnerService).activateFromPairing(
+                    eq(WORKSPACE_ID), eq(USER_NAME), eq(projectId), eq(runnerId), eq("runner-1"),
+                    any(RunnerType.class));
         }
 
         @Test
-        @DisplayName("if activateFromOpikConnect throws, the session activated flag is NOT set so retries can succeed")
+        @DisplayName("if activateFromPairing throws, the session activated flag is NOT set so retries can succeed")
         @SuppressWarnings("unchecked")
         void runnerActivationFailureLeavesSessionRetryable() {
             UUID sessionId = UUID.randomUUID();
@@ -406,25 +409,24 @@ class OpikConnectServiceImplTest {
             when(sessionMap.readAllMap()).thenReturn(storedFields(WORKSPACE_ID, USER_NAME,
                     projectId, runnerId, Base64.getEncoder().encodeToString(activationKey)));
 
-            // Simulate a Redis blip / internal error inside the runner activation helpers.
             doThrow(new RuntimeException("simulated redis blip"))
-                    .when(localRunnerService)
-                    .activateFromOpikConnect(anyString(), anyString(), any(UUID.class), any(UUID.class), anyString());
+                    .when(runnerService)
+                    .activateFromPairing(anyString(), anyString(), any(UUID.class), any(UUID.class), anyString(),
+                            any(RunnerType.class));
 
             String runnerName = "stuck-runner";
-            byte[] tag = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            byte[] tag = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
             ActivateRequest request = activateRequest(runnerName, Base64.getEncoder().encodeToString(tag));
 
             assertThatThrownBy(() -> service.activate(WORKSPACE_ID, USER_NAME, sessionId, request))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessage("simulated redis blip");
 
-            // Critical: the activated flag must NOT have been set, so the next retry can succeed.
             verify(sessionMap, never()).fastPutIfAbsent(anyString(), anyString());
         }
 
         @Test
-        @DisplayName("happy path: calls activateFromOpikConnect with the correct arguments")
+        @DisplayName("happy path: calls activateFromPairing with the correct arguments")
         @SuppressWarnings("unchecked")
         void happyPathCallsActivateFromRelay() {
             UUID sessionId = UUID.randomUUID();
@@ -437,14 +439,15 @@ class OpikConnectServiceImplTest {
             when(sessionMap.fastPutIfAbsent("activated", "1")).thenReturn(true);
 
             String runnerName = "my-laptop";
-            byte[] tag = OpikConnectServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
+            byte[] tag = PairingServiceImpl.computeActivationHmac(sessionId, activationKey, runnerName);
             ActivateRequest request = activateRequest(runnerName, Base64.getEncoder().encodeToString(tag));
 
             UUID returnedRunnerId = service.activate(WORKSPACE_ID, USER_NAME, sessionId, request);
 
             assertThat(returnedRunnerId).isEqualTo(runnerId);
-            verify(localRunnerService).activateFromOpikConnect(
-                    eq(WORKSPACE_ID), eq(USER_NAME), eq(projectId), eq(runnerId), eq(runnerName));
+            verify(runnerService).activateFromPairing(
+                    eq(WORKSPACE_ID), eq(USER_NAME), eq(projectId), eq(runnerId), eq(runnerName),
+                    any(RunnerType.class));
         }
 
         private ActivateRequest activateRequest(String runnerName, String hmac) {
@@ -463,7 +466,8 @@ class OpikConnectServiceImplTest {
                     "runner_id", runnerId.toString(),
                     "activation_key", activationKeyBase64,
                     "ttl_seconds", "300",
-                    "created_at", "2026-01-01T00:00:00Z");
+                    "created_at", "2026-01-01T00:00:00Z",
+                    "type", RunnerType.ENDPOINT.getValue());
         }
     }
 }

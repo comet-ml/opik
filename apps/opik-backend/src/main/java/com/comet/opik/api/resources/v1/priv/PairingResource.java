@@ -5,7 +5,7 @@ import com.comet.opik.api.connect.ActivateRequest;
 import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.connect.OpikConnectService;
+import com.comet.opik.domain.pairing.PairingService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -38,23 +38,23 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
-@Path("/v1/private/opik-connect")
+@Path("/v1/private/pairing")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Opik Connect", description = "Pairing sessions for the `opik connect` CLI command")
-public class OpikConnectResource {
+@Tag(name = "Pairing", description = "Pairing sessions for the `opik connect` and `opik endpoint` CLI commands")
+public class PairingResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull OpikConnectService opikConnectService;
+    private final @NonNull PairingService pairingService;
     private final @NonNull LocalRunnerConfig runnerConfig;
 
     @POST
     @Path("/sessions")
     @RateLimited
-    @Operation(operationId = "createOpikConnectSession", summary = "Create an opik-connect pairing session", description = "Register a short-lived pairing session that a local daemon will later activate via HMAC", responses = {
+    @Operation(operationId = "createPairingSession", summary = "Create a pairing session", description = "Register a short-lived pairing session that a local daemon will later activate via HMAC", responses = {
             @ApiResponse(responseCode = "201", description = "Session created", content = @Content(schema = @Schema(implementation = CreateSessionResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -66,14 +66,14 @@ public class OpikConnectResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        CreateSessionResponse response = opikConnectService.create(workspaceId, userName, request);
+        CreateSessionResponse response = pairingService.create(workspaceId, userName, request);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
 
     @POST
     @Path("/sessions/{sessionId}/activate")
     @RateLimited
-    @Operation(operationId = "activateOpikConnectSession", summary = "Activate an opik-connect pairing session", description = "Verify the activation HMAC and flip the runner row to CONNECTED", responses = {
+    @Operation(operationId = "activatePairingSession", summary = "Activate a pairing session", description = "Verify the activation HMAC and flip the runner row to CONNECTED", responses = {
             @ApiResponse(responseCode = "201", description = "Session activated", headers = @Header(name = "Location", description = "URI of the runner")),
             @ApiResponse(responseCode = "403", description = "Invalid HMAC", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Session not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -88,7 +88,7 @@ public class OpikConnectResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        UUID runnerId = opikConnectService.activate(workspaceId, userName, sessionId, request);
+        UUID runnerId = pairingService.activate(workspaceId, userName, sessionId, request);
         URI location = uriInfo.getBaseUriBuilder()
                 .path("v1/private/local-runners/{runnerId}")
                 .build(runnerId);
@@ -100,7 +100,7 @@ public class OpikConnectResource {
             throw new WebApplicationException(
                     Response.status(Response.Status.NOT_IMPLEMENTED)
                             .type(MediaType.APPLICATION_JSON)
-                            .entity(new ErrorMessage(List.of("opik-connect is not enabled on this deployment")))
+                            .entity(new ErrorMessage(List.of("pairing is not enabled on this deployment")))
                             .build());
         }
     }
