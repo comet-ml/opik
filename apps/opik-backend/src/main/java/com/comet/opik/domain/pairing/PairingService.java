@@ -76,6 +76,9 @@ class PairingServiceImpl implements PairingService {
     private final @NonNull ProjectService projectService;
     private final @NonNull RunnerService runnerService;
 
+    // Security signal: spike == someone fishing for sessions or replaying activation
+    // requests. This is the only counter that isn't trivially derivable from the
+    // @Timed annotation on PairingResource — page alerts hang off this.
     private final LongCounter activationHmacFailures;
 
     @Inject
@@ -86,6 +89,9 @@ class PairingServiceImpl implements PairingService {
         this.projectService = projectService;
         this.runnerService = runnerService;
 
+        // Instantiated at construction time (rather than in a class-level static
+        // initializer) so the service stays testable when GlobalOpenTelemetry is
+        // reset between test runs.
         Meter meter = GlobalOpenTelemetry.get().getMeter(METER_NAMESPACE);
         this.activationHmacFailures = meter.counterBuilder("opik.pairing.sessions.activation_hmac_failures")
                 .setDescription("Number of pairing activations rejected due to invalid HMAC")
@@ -106,6 +112,7 @@ class PairingServiceImpl implements PairingService {
             throw new BadRequestException("activation_key must decode to exactly " + ACTIVATION_KEY_BYTES + " bytes");
         }
 
+        // Verify the project exists in the caller's workspace. Throws NotFoundException if missing.
         projectService.get(request.projectId(), workspaceId);
 
         UUID sessionId = idGenerator.generateId();
@@ -122,6 +129,9 @@ class PairingServiceImpl implements PairingService {
                 FIELD_CREATED_AT, Instant.now().toString(),
                 FIELD_TYPE, request.type().getValue());
 
+        // Write the hash and set its TTL in a single Redis round-trip. The spec
+        // allows a best-effort write, but pipelining is cheap and keeps the session
+        // from being briefly persisted without an expiry window.
         String sessionKey = PairingSessionKey.key(sessionId);
         RBatch batch = redisClient.createBatch();
         batch.<String, String>getMap(sessionKey, StringCodec.INSTANCE).putAllAsync(sessionFields);
@@ -151,11 +161,15 @@ class PairingServiceImpl implements PairingService {
 
         String sessionWorkspace = fields.get(FIELD_WORKSPACE_ID);
         if (!workspaceId.equals(sessionWorkspace)) {
+            // Return 404 rather than 403 to avoid leaking session existence across workspaces.
             log.warn("pairing session workspace mismatch sessionId='{}' callerWorkspaceId='{}' userName='{}'",
                     sessionId, workspaceId, userName);
             throw new NotFoundException("Pairing session not found: " + sessionId);
         }
 
+        // Defense in depth: create() always writes all fields atomically via RBatch, so
+        // a missing field would indicate data corruption or out-of-band writes. Surface
+        // those as a clean 404 rather than letting Base64.decode(null) throw a 500.
         String storedActivationKey = fields.get(FIELD_ACTIVATION_KEY);
         String storedProjectId = fields.get(FIELD_PROJECT_ID);
         String storedRunnerId = fields.get(FIELD_RUNNER_ID);
@@ -188,8 +202,25 @@ class PairingServiceImpl implements PairingService {
 
         UUID projectId = UUID.fromString(storedProjectId);
         UUID runnerId = UUID.fromString(storedRunnerId);
-        RunnerType runnerType = RunnerType.fromValue(storedType);
+        RunnerType runnerType;
+        try {
+            runnerType = RunnerType.fromValue(storedType);
+        } catch (IllegalArgumentException e) {
+            log.error("pairing session has invalid type sessionId='{}' workspaceId='{}' type='{}'",
+                    sessionId, workspaceId, storedType);
+            throw new NotFoundException("Pairing session not found: " + sessionId);
+        }
 
+        // Activate the runner BEFORE flipping the session's activated flag. If
+        // activateFromPairing fails (Redis hiccup, internal error in one of the
+        // helpers, etc.), the session must remain re-activatable so the user can
+        // retry the same pairing link rather than waiting out the TTL.
+        //
+        // The runner-row writes inside activateFromPairing are idempotent
+        // (evictExistingRunner short-circuits when the user→runner bucket already
+        // points at this runnerId, set adds dedupe, bucket writes are last-write-wins),
+        // so a duplicate call from a parallel activator is harmless. The CAS below
+        // is what determines who returns 201 vs 409.
         runnerService.activateFromPairing(workspaceId, userName, projectId, runnerId, request.runnerName(), runnerType);
 
         boolean won = sessionMap.fastPutIfAbsent(FIELD_ACTIVATED, FIELD_ACTIVATED_VALUE);
@@ -207,6 +238,9 @@ class PairingServiceImpl implements PairingService {
         return runnerId;
     }
 
+    // HMAC-SHA256(activationKey, sessionIdBytes(16) || SHA256(runnerNameBytes)(32)).
+    // Package-private so the cross-language HMAC test vectors in PairingServiceImplTest
+    // can pin the byte layout without going through Redis.
     static byte[] computeActivationHmac(UUID sessionId, byte[] activationKey, String runnerName) {
         byte[] sessionIdBytes = uuidToBytes(sessionId);
         byte[] runnerNameHash = sha256(runnerName.getBytes(StandardCharsets.UTF_8));

@@ -137,6 +137,9 @@ class RunnerServiceImpl implements RunnerService {
     @Override
     public void activateFromPairing(@NonNull String workspaceId, @NonNull String userName,
             @NonNull UUID projectId, @NonNull UUID runnerId, @NonNull String runnerName, @NonNull RunnerType type) {
+        // Evict any existing runner of the same type for this (workspace, project, user),
+        // register the new runner in the workspace/user/project sets, point the
+        // type-scoped user→runner bucket at it, and flip the runner row to CONNECTED.
         evictExistingRunner(workspaceId, projectId, userName, runnerId, type);
         registerRunnerInSets(workspaceId, userName, projectId, runnerId);
         setUserRunner(workspaceId, projectId, userName, runnerId, type);
