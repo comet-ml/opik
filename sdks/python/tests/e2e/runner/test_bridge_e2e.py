@@ -7,13 +7,18 @@ File operation flow: write → list → search → edit → read, all via the AP
 import time
 
 from opik.rest_api.errors.conflict_error import ConflictError
+from opik.runner.bridge_auth import sign
 
 from .conftest import RunnerInfo
 
 _BRIDGE_READY_TIMEOUT = 15
 
 
-def _submit_and_wait(api_client, runner_id, cmd_type, args):
+def _submit_and_wait(api_client, runner_id, cmd_type, args, bridge_key=b""):
+    if bridge_key:
+        args = dict(args)
+        args["_hmac"] = sign(bridge_key, cmd_type, args)
+
     deadline = time.monotonic() + _BRIDGE_READY_TIMEOUT
     while True:
         try:
@@ -50,6 +55,7 @@ def test_bridge_exec_echo(api_client, runner_process: RunnerInfo):
         runner_process.runner_id,
         "Exec",
         {"command": f"echo {marker}"},
+        bridge_key=runner_process.bridge_key,
     )
 
     assert cmd.status == "completed"
@@ -64,6 +70,7 @@ def test_bridge_exec_nonzero_exit(api_client, runner_process: RunnerInfo):
         runner_process.runner_id,
         "Exec",
         {"command": "exit 42"},
+        bridge_key=runner_process.bridge_key,
     )
 
     assert cmd.status == "completed"
@@ -77,6 +84,7 @@ def test_bridge_exec_background(api_client, runner_process: RunnerInfo):
         runner_process.runner_id,
         "Exec",
         {"command": "sleep 30", "background": True},
+        bridge_key=runner_process.bridge_key,
     )
 
     assert cmd.status == "completed"
@@ -92,6 +100,7 @@ def test_bridge_exec_background(api_client, runner_process: RunnerInfo):
 def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
     """Write a file, find it with list/search, edit it, and read back."""
     rid = runner_process.runner_id
+    bk = runner_process.bridge_key
     marker = f"xyzzy_{int(time.time())}"
     filename = f"bridge_e2e_{int(time.time())}.py"
     original_content = f"# {marker}\n"
@@ -102,6 +111,7 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
         rid,
         "WriteFile",
         {"path": filename, "content": original_content},
+        bridge_key=bk,
     )
     assert cmd.status == "completed"
     assert cmd.result["created"] is True
@@ -112,6 +122,7 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
         rid,
         "ListFiles",
         {"pattern": f"**/{filename}"},
+        bridge_key=bk,
     )
     assert cmd.status == "completed"
     assert any(filename in f for f in cmd.result["files"]), (
@@ -127,24 +138,27 @@ def test_bridge_file_operations(api_client, runner_process: RunnerInfo):
             "path": filename,
             "edits": [{"old_string": marker, "new_string": f"edited_{marker}"}],
         },
+        bridge_key=bk,
     )
     assert cmd.status == "completed"
     assert cmd.result["edits_applied"] == 1
 
-    # 5. ReadFile — verify the edit took effect
+    # 4. ReadFile — verify the edit took effect
     cmd = _submit_and_wait(
         api_client,
         rid,
         "ReadFile",
         {"path": filename},
+        bridge_key=bk,
     )
     assert cmd.status == "completed"
     assert f"edited_{marker}" in cmd.result["content"]
 
-    # 6. Cleanup via Exec
+    # 5. Cleanup via Exec
     _submit_and_wait(
         api_client,
         rid,
         "Exec",
         {"command": f"rm {filename}"},
+        bridge_key=bk,
     )

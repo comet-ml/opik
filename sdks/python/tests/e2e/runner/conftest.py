@@ -1,13 +1,18 @@
+import base64
 import dataclasses
+import hashlib
+import hmac as hmac_mod
+import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import uuid
 
 import pytest
+import urllib.request
 
 import opik
 import opik.api_objects.opik_client
@@ -19,7 +24,7 @@ from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 ECHO_APP = os.path.join(os.path.dirname(__file__), "echo_app.py")
 OPIK_CLI = shutil.which("opik") or "opik"
 
-RUNNER_STARTUP_TIMEOUT = 15
+RUNNER_STARTUP_TIMEOUT = 30
 
 _phase_report_key = pytest.StashKey[dict]()
 
@@ -29,6 +34,7 @@ class RunnerInfo:
     runner_id: str
     process: subprocess.Popen
     output_lines: list
+    bridge_key: bytes = b""
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -78,12 +84,57 @@ def _drain_stdout(proc, output_lines):
         output_lines.append(line.rstrip())
 
 
-@pytest.fixture()
-def runner_process(api_client, subprocess_env, project_id, request):
-    pair = api_client.runners.generate_pairing_code(project_id=project_id)
+def _activate_session(
+    api_url, workspace, project_id, activation_key, session_id, runner_name
+):
+    """Simulate the browser side of pairing: compute HMAC and call activate."""
+    session_id_bytes = uuid.UUID(session_id).bytes
+    runner_name_hash = hashlib.sha256(runner_name.encode("utf-8")).digest()
+    message = session_id_bytes + runner_name_hash
+    sig = hmac_mod.new(activation_key, message, hashlib.sha256).digest()
+    hmac_b64 = base64.b64encode(sig).decode("ascii")
 
+    base = api_url.rstrip("/")
+    body = json.dumps({"runner_name": runner_name, "hmac": hmac_b64}).encode()
+    req = urllib.request.Request(
+        f"{base}/v1/private/opik-connect/sessions/{session_id}/activate",
+        data=body,
+        headers={"Content-Type": "application/json", "Comet-Workspace": workspace},
+        method="POST",
+    )
+    urllib.request.urlopen(req)
+
+
+@pytest.fixture()
+def runner_process(api_client, subprocess_env, project_id, opik_client, request):
+    cfg = opik_client.config
+
+    # Create session via API
+    import secrets
+
+    activation_key = secrets.token_bytes(32)
+    activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
+    resp = api_client.opik_connect.create_opik_connect_session(
+        project_id=project_id,
+        activation_key=activation_key_b64,
+        ttl_seconds=300,
+    )
+    session_id = resp.session_id
+    runner_id = resp.runner_id
+
+    runner_name = f"e2e-runner-{secrets.token_hex(3)}"
+
+    # Start CLI with endpoint command (includes echo app as child process)
     proc = subprocess.Popen(
-        [OPIK_CLI, "connect", "--pair", pair.pairing_code, sys.executable, ECHO_APP],
+        [
+            OPIK_CLI,
+            "endpoint",
+            "--project",
+            OPIK_E2E_TESTS_PROJECT_NAME,
+            "--",
+            sys.executable,
+            ECHO_APP,
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -96,31 +147,53 @@ def runner_process(api_client, subprocess_env, project_id, request):
     )
     drain_thread.start()
 
-    runner_id = None
-    deadline = time.monotonic() + RUNNER_STARTUP_TIMEOUT
+    # Activate the session (simulates browser clicking Connect)
+    # Resolve the base API URL (strip /api/ suffix to get the raw backend URL)
+    api_base = cfg.url_override
+    workspace = cfg.workspace or "default"
+    time.sleep(1)  # give CLI a moment to start polling
+    _activate_session(
+        api_base, workspace, project_id, activation_key, session_id, runner_name
+    )
 
+    # Wait for the CLI to detect connected status
+    deadline = time.monotonic() + RUNNER_STARTUP_TIMEOUT
+    connected = False
     while time.monotonic() < deadline:
         for line in list(output_lines):
-            match = re.search(r"runner: (\S+)", line)
-            if match:
-                runner_id = match.group(1)
+            if "Paired" in line:
+                connected = True
                 break
-        if runner_id is not None:
+        if connected:
             break
         if proc.poll() is not None:
             break
-        time.sleep(0.05)
+        time.sleep(0.5)
 
-    if runner_id is None:
+    if not connected:
         proc.terminate()
         proc.wait(timeout=5)
         drain_thread.join(timeout=5)
         pytest.fail(
-            f"Runner did not start within {RUNNER_STARTUP_TIMEOUT}s.\n"
+            f"Runner did not connect within {RUNNER_STARTUP_TIMEOUT}s.\n"
             f"Output:\n" + "\n".join(output_lines)
         )
 
-    info = RunnerInfo(runner_id=runner_id, process=proc, output_lines=output_lines)
+    # Derive bridge key (same HKDF as CLI and FE)
+    from opik.cli.pairing import hkdf_sha256
+
+    bridge_key = hkdf_sha256(
+        ikm=activation_key,
+        salt=uuid.UUID(session_id).bytes,
+        info=b"opik-bridge-v1",
+    )
+
+    info = RunnerInfo(
+        runner_id=runner_id,
+        process=proc,
+        output_lines=output_lines,
+        bridge_key=bridge_key,
+    )
 
     yield info
 
