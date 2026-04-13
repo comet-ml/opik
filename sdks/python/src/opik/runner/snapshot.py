@@ -51,7 +51,7 @@ def _git_files(repo_root: Path) -> Optional[Set[str]]:
 
 def has_entrypoint(repo_root: Path) -> bool:
     """Return True if any code file under *repo_root* contains an entrypoint marker."""
-    matches = _find_instrumentation(repo_root, _git_files(repo_root))
+    matches = _find_instrumentation(repo_root, _git_files(repo_root), max_matches=None)
     return any(_matches_any(line, _ENTRYPOINT_PATTERNS) for line in matches)
 
 
@@ -127,7 +127,11 @@ def _build_file_tree(repo_root: Path, git_files: Optional[Set[str]]) -> str:
     return "\n".join(entries)
 
 
-def _find_instrumentation(repo_root: Path, git_files: Optional[Set[str]]) -> List[str]:
+def _find_instrumentation(
+    repo_root: Path,
+    git_files: Optional[Set[str]],
+    max_matches: Optional[int] = _INSTRUMENTATION_MAX_MATCHES,
+) -> List[str]:
     matches: List[str] = []
 
     if git_files is not None:
@@ -149,7 +153,7 @@ def _find_instrumentation(repo_root: Path, git_files: Optional[Set[str]]) -> Lis
         code_files.sort()
 
     for rel in code_files:
-        if len(matches) >= _INSTRUMENTATION_MAX_MATCHES:
+        if max_matches is not None and len(matches) >= max_matches:
             break
 
         fpath = repo_root / rel
@@ -169,7 +173,7 @@ def _find_instrumentation(repo_root: Path, git_files: Optional[Set[str]]) -> Lis
             continue
 
         for line_num, line in enumerate(content.splitlines(), 1):
-            if len(matches) >= _INSTRUMENTATION_MAX_MATCHES:
+            if max_matches is not None and len(matches) >= max_matches:
                 break
             for pattern in _ALL_PATTERNS:
                 if pattern.search(line):

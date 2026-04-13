@@ -147,12 +147,12 @@ def test_bridge_file_operations(api_client, bridge_runner_process: RunnerInfo):
     assert cmd.status == "completed"
     assert cmd.result["created"] is True
 
-    # 2. ListFiles — new file should appear
+    # 2. ListFiles — new file should appear in the root
     cmd = _submit_and_wait(
         api_client,
         rid,
         "ListFiles",
-        {"pattern": f"**/{filename}"},
+        {"pattern": f"{filename}"},
         bridge_key=bk,
     )
     assert cmd.status == "completed"
