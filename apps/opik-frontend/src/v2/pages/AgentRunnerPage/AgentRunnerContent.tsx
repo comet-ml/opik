@@ -37,7 +37,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     string | null | undefined
   >("");
 
-  const pairing = usePairingState(projectId, { autoRequestOnMount: true });
+  const pairing = usePairingState(projectId);
 
   const isConnected = pairing.status === RunnerConnectionStatus.CONNECTED;
   const agentName = pairing.runner?.agents?.[0]?.name ?? "";
@@ -223,10 +223,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
         </ResizablePanelGroup>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <AgentRunnerEmptyState
-            pairCode={pairing.pairCode ?? ""}
-            expiresAt={pairing.expiresAt}
-          />
+          <AgentRunnerEmptyState />
         </div>
       )}
 

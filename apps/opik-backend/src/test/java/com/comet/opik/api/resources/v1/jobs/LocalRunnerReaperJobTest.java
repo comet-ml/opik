@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.LocalRunnerService;
+import com.comet.opik.domain.RunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 class LocalRunnerReaperJobTest {
 
     @Mock
-    private LocalRunnerService runnerService;
+    private RunnerService runnerService;
 
     @Mock
     private LockService lockService;

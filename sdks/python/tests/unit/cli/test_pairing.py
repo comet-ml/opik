@@ -168,7 +168,7 @@ class TestRunPairing:
         session_resp = MagicMock()
         session_resp.session_id = self.SESSION_ID
         session_resp.runner_id = self.RUNNER_ID
-        api.opik_connect.create_opik_connect_session.return_value = session_resp
+        api.pairing.create_pairing_session.return_value = session_resp
 
         runner = MagicMock()
         runner.status = "connected"

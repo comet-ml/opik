@@ -9,14 +9,12 @@ from ..types.bridge_command_batch_response import BridgeCommandBatchResponse
 from ..types.bridge_command_submit_response import BridgeCommandSubmitResponse
 from ..types.json_node import JsonNode
 from ..types.local_runner import LocalRunner
-from ..types.local_runner_connect_response import LocalRunnerConnectResponse
 from ..types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from ..types.local_runner_job import LocalRunnerJob
 from ..types.local_runner_job_metadata import LocalRunnerJobMetadata
 from ..types.local_runner_job_page import LocalRunnerJobPage
 from ..types.local_runner_log_entry import LocalRunnerLogEntry
 from ..types.local_runner_page import LocalRunnerPage
-from ..types.local_runner_pair_response import LocalRunnerPairResponse
 from .raw_client import AsyncRawRunnersClient, RawRunnersClient
 from .types.bridge_command_result_request_status import BridgeCommandResultRequestStatus
 from .types.bridge_command_submit_request_type import BridgeCommandSubmitRequestType
@@ -132,37 +130,6 @@ class RunnersClient:
         _response = self._raw_client.cancel_job(job_id, request_options=request_options)
         return _response.data
 
-    def connect_runner(
-        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> LocalRunnerConnectResponse:
-        """
-        Exchange a pairing code or API key for local runner credentials
-
-        Parameters
-        ----------
-        pairing_code : str
-
-        runner_name : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LocalRunnerConnectResponse
-            Runner connected
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.connect_runner(pairing_code='pairing_code', runner_name='runner_name', )
-        """
-        _response = self._raw_client.connect_runner(
-            pairing_code=pairing_code, runner_name=runner_name, request_options=request_options
-        )
-        return _response.data
-
     def create_bridge_command(
         self,
         runner_id: str,
@@ -255,33 +222,6 @@ class RunnersClient:
             metadata=metadata,
             request_options=request_options,
         )
-        return _response.data
-
-    def generate_pairing_code(
-        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> LocalRunnerPairResponse:
-        """
-        Generate a pairing code for a local runner in the current workspace
-
-        Parameters
-        ----------
-        project_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LocalRunnerPairResponse
-            Pairing code generated
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.generate_pairing_code(project_id='project_id', )
-        """
-        _response = self._raw_client.generate_pairing_code(project_id=project_id, request_options=request_options)
         return _response.data
 
     def get_bridge_command(
@@ -828,40 +768,6 @@ class AsyncRunnersClient:
         _response = await self._raw_client.cancel_job(job_id, request_options=request_options)
         return _response.data
 
-    async def connect_runner(
-        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> LocalRunnerConnectResponse:
-        """
-        Exchange a pairing code or API key for local runner credentials
-
-        Parameters
-        ----------
-        pairing_code : str
-
-        runner_name : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LocalRunnerConnectResponse
-            Runner connected
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.runners.connect_runner(pairing_code='pairing_code', runner_name='runner_name', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.connect_runner(
-            pairing_code=pairing_code, runner_name=runner_name, request_options=request_options
-        )
-        return _response.data
-
     async def create_bridge_command(
         self,
         runner_id: str,
@@ -960,36 +866,6 @@ class AsyncRunnersClient:
             metadata=metadata,
             request_options=request_options,
         )
-        return _response.data
-
-    async def generate_pairing_code(
-        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> LocalRunnerPairResponse:
-        """
-        Generate a pairing code for a local runner in the current workspace
-
-        Parameters
-        ----------
-        project_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LocalRunnerPairResponse
-            Pairing code generated
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.runners.generate_pairing_code(project_id='project_id', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.generate_pairing_code(project_id=project_id, request_options=request_options)
         return _response.data
 
     async def get_bridge_command(

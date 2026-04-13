@@ -66,12 +66,12 @@ class ExperimentTracePersistence {
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
-        metadata.put("eval_suite_dataset_id", ctx.datasetId().toString());
+        metadata.put("test_suite_dataset_id", ctx.datasetId().toString());
         if (ctx.versionHash() != null) {
-            metadata.put("eval_suite_dataset_version_hash", ctx.versionHash());
+            metadata.put("test_suite_dataset_version_hash", ctx.versionHash());
         }
-        metadata.put("eval_suite_dataset_item_id", ctx.datasetItemId().toString());
-        metadata.put("eval_suite_model", ctx.prompt().model());
+        metadata.put("test_suite_dataset_item_id", ctx.datasetItemId().toString());
+        metadata.put("test_suite_model", ctx.prompt().model());
 
         var traceBuilder = Trace.builder()
                 .id(ctx.traceId())
