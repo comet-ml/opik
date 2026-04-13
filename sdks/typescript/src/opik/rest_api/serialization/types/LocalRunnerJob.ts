@@ -19,6 +19,7 @@ export const LocalRunnerJob: core.serialization.ObjectSchema<serializers.LocalRu
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
         maskId: core.serialization.property("mask_id", core.serialization.string().optional()),
+        blueprintName: core.serialization.property("blueprint_name", core.serialization.string().optional()),
         metadata: LocalRunnerJobMetadata.optional(),
         timeout: core.serialization.number().optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -38,6 +39,7 @@ export declare namespace LocalRunnerJob {
         project_id?: string | null;
         trace_id?: string | null;
         mask_id?: string | null;
+        blueprint_name?: string | null;
         metadata?: LocalRunnerJobMetadata.Raw | null;
         timeout?: number | null;
         created_at?: string | null;

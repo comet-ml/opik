@@ -37,6 +37,14 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+    # Allow traffic to frontend reverse proxy (used by post_user_signup demo data creation)
+    - to:
+      - podSelector:
+          matchLabels:
+            component: {{ include "opik.name" $ }}-frontend
+      ports:
+        - protocol: TCP
+          port: 5173
     {{- if index .Values "component" "python-backend" "networkPolicy" "engineEgress" }}
     # Legacy engineEgress support (deprecated, use additionalRules instead)
     - to:

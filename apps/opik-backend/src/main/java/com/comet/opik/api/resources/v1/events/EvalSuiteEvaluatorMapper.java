@@ -15,13 +15,11 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -54,7 +52,8 @@ public class EvalSuiteEvaluatorMapper {
         return evalSuiteConfig.getDefaultRunsPerItem();
     }
 
-    public List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators) {
+    public List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators,
+            String modelName) {
         return evaluators.stream()
                 .filter(evaluator -> {
                     if (evaluator.type() != EvaluatorType.LLM_JUDGE) {
@@ -66,7 +65,7 @@ public class EvalSuiteEvaluatorMapper {
                 })
                 .flatMap(evaluator -> {
                     try {
-                        LlmAsJudgeCode code = toScoringCode(evaluator.config());
+                        LlmAsJudgeCode code = toScoringCode(evaluator.config(), modelName);
 
                         Map<String, String> scoreNameMapping = code.schema() != null
                                 ? code.schema().stream()
@@ -84,16 +83,22 @@ public class EvalSuiteEvaluatorMapper {
                 .toList();
     }
 
-    LlmAsJudgeCode toScoringCode(JsonNode config) {
-        LlmAsJudgeCode code = deserializeEvaluatorConfig(config);
-        code = resolveModelName(code);
+    LlmAsJudgeCode toScoringCode(JsonNode config, String modelName) {
+        LlmAsJudgeCode code = deserializeScoringCode(config, modelName);
         code = renameSchemaToAssertionKeys(code);
         code = applyEvalSuitePrompt(code);
         return code;
     }
 
-    private LlmAsJudgeCode deserializeEvaluatorConfig(JsonNode config) {
-        return JsonUtils.treeToValue(config, LlmAsJudgeCode.class);
+    private LlmAsJudgeCode deserializeScoringCode(JsonNode config, String modelName) {
+        var code = JsonUtils.treeToValue(config, LlmAsJudgeCode.class);
+        var existingModel = code.model();
+        var model = (existingModel != null ? existingModel.toBuilder() : LlmAsJudgeModelParameters.builder())
+                .name(modelName)
+                .build();
+        return code.toBuilder()
+                .model(model)
+                .build();
     }
 
     /**
@@ -160,17 +165,4 @@ public class EvalSuiteEvaluatorMapper {
                 .collect(Collectors.joining("\n"));
     }
 
-    private LlmAsJudgeCode resolveModelName(LlmAsJudgeCode code) {
-        var existingModel = Optional.ofNullable(code.model());
-        if (existingModel.map(LlmAsJudgeModelParameters::name).filter(StringUtils::isNotBlank).isEmpty()) {
-            var resolvedModel = LlmAsJudgeModelParameters.builder()
-                    .name(evalSuiteConfig.getDefaultModelName())
-                    .temperature(existingModel.map(LlmAsJudgeModelParameters::temperature).orElse(null))
-                    .seed(existingModel.map(LlmAsJudgeModelParameters::seed).orElse(null))
-                    .customParameters(existingModel.map(LlmAsJudgeModelParameters::customParameters).orElse(null))
-                    .build();
-            return new LlmAsJudgeCode(resolvedModel, code.messages(), code.variables(), code.schema());
-        }
-        return code;
-    }
 }

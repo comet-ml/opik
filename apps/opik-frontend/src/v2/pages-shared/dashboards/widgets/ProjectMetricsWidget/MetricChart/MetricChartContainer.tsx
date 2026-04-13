@@ -62,6 +62,8 @@ interface MetricContainerChartProps {
   logsSource?: LOGS_SOURCE;
   showLegend?: boolean;
   colorMap?: Record<string, string>;
+  tooltipPosition?: { x?: number; y?: number };
+  targetTickCount?: number;
 }
 
 const customColorMap = {
@@ -107,6 +109,8 @@ const MetricContainerChart = ({
   logsSource,
   showLegend = true,
   colorMap,
+  tooltipPosition,
+  targetTickCount,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -178,7 +182,9 @@ const MetricContainerChart = ({
     if (isPending) return false;
     if (data.length === 0) return true;
 
-    return data.every((record) => lines.every((line) => isNil(record[line])));
+    return data.every((record) =>
+      lines.every((line) => isNil(record[line]) || record[line] === 0),
+    );
   }, [data, lines, isPending]);
 
   const config = useChartConfig(lines, labelsMap, colorMap ?? customColorMap);
@@ -226,6 +232,8 @@ const MetricContainerChart = ({
         labelActions={labelActions}
         isAggregateTotal={isAggregateTotal}
         showLegend={showLegend}
+        tooltipPosition={tooltipPosition}
+        targetTickCount={targetTickCount}
       />
     );
   };

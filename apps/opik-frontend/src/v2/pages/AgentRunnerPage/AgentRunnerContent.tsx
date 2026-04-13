@@ -22,6 +22,8 @@ import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
 import AgentRunnerResult from "./AgentRunnerResult";
 
+const TRACE_POLL_INTERVAL = 1000;
+
 type AgentRunnerContentProps = {
   projectId: string;
 };
@@ -65,22 +67,26 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     { traceId, stripAttachments: true },
     {
       enabled: Boolean(traceId),
-      refetchInterval: isJobRunning ? 1000 : false,
+      refetchInterval: isJobRunning ? TRACE_POLL_INTERVAL : false,
     },
   );
 
-  const handleRun = (inputs: Record<string, unknown>, maskId?: string) => {
+  const handleRun = (
+    inputs: Record<string, unknown>,
+    blueprintName?: string,
+    maskId?: string,
+  ) => {
     if (!agentName) {
       return;
     }
-    setActiveJobId(null);
-    setTraceOpen(false);
+    handleStop();
     createJobMutation.mutate(
       {
         agent_name: agentName,
         project_id: projectId,
         inputs,
         mask_id: maskId,
+        blueprint_name: blueprintName,
       },
       {
         onSuccess: (data) => {
@@ -90,9 +96,16 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     );
   };
 
-  const handleReset = () => {
+  const [resetKey, setResetKey] = useState(0);
+
+  const handleStop = () => {
     setActiveJobId(null);
     setTraceOpen(false);
+  };
+
+  const handleReset = () => {
+    handleStop();
+    setResetKey((k) => k + 1);
   };
 
   const handleSubmitForm = useCallback(() => {
@@ -147,7 +160,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           {isConnected && (
             <>
               {isJobRunning ? (
-                <Button variant="outline" size="2xs" onClick={handleReset}>
+                <Button variant="outline" size="2xs" onClick={handleStop}>
                   <Pause className="mr-1 size-3.5" />
                   Stop run
                 </Button>
@@ -189,6 +202,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
               runner={pairing.runner}
               onRun={handleRun}
               isRunning={createJobMutation.isPending}
+              resetKey={resetKey}
             />
           </ResizablePanel>
 
@@ -198,6 +212,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
             <AgentRunnerResult
               job={jobData ?? null}
               onViewTrace={handleViewTrace}
+              hasTraceData={Boolean(traceData)}
               duration={traceData?.duration}
               startTime={traceData?.start_time}
               endTime={traceData?.end_time}
@@ -224,6 +239,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           setSpanId={setTracePanelSpanId}
           open
           onClose={() => setTraceOpen(false)}
+          refetchInterval={TRACE_POLL_INTERVAL}
         />
       )}
     </div>

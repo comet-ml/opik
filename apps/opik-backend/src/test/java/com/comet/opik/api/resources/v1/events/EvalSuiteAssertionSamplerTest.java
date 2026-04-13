@@ -4,6 +4,8 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
@@ -16,6 +18,7 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.EvalSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -39,6 +42,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,15 +67,23 @@ class EvalSuiteAssertionSamplerTest {
         @Mock
         IdGenerator idGenerator;
 
+        @Mock
+        LlmProviderApiKeyService llmProviderApiKeyService;
+
         private EvalSuiteAssertionSampler sampler;
 
         @org.junit.jupiter.api.BeforeEach
         void setUp() {
             var evalSuiteConfig = new EvalSuiteConfig();
             var evaluatorMapper = new EvalSuiteEvaluatorMapper(evalSuiteConfig);
+            var openAiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.OPEN_AI)
+                    .build();
+            lenient().when(llmProviderApiKeyService.find(any(String.class)))
+                    .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
             sampler = new EvalSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    evalSuiteConfig, evaluatorMapper);
+                    evalSuiteConfig, evaluatorMapper, llmProviderApiKeyService);
         }
 
         @Test
@@ -675,6 +687,115 @@ class EvalSuiteAssertionSamplerTest {
             List<TraceToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
             assertThat(messages.getFirst().ruleName()).isEqualTo("version-evaluator");
+        }
+
+        @Test
+        @DisplayName("falls back to eval_suite_model from trace metadata when no provider is connected")
+        void fallsBackToTraceMetadataModel() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID versionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            UUID ruleId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String versionHash = "abc123";
+            String traceModel = "custom-model-from-trace";
+
+            // No connected providers
+            when(llmProviderApiKeyService.find(workspaceId))
+                    .thenReturn(new ProviderApiKey.ProviderApiKeyPage(0, 0, 0, List.of(), List.of()));
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().name("placeholder").build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("Is it correct?")
+                            .build()));
+
+            var datasetVersion = DatasetVersion.builder()
+                    .id(versionId)
+                    .datasetId(datasetId)
+                    .versionHash(versionHash)
+                    .evaluators(List.of(EvaluatorItem.builder()
+                            .name("test-evaluator")
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                            .build()))
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
+                    .thenReturn(datasetVersion);
+            when(datasetItemService.get(datasetItemId))
+                    .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
+            when(idGenerator.generateId()).thenReturn(ruleId);
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\", \"eval_suite_model\": \"%s\"}"
+                            .formatted(datasetId, versionHash, datasetItemId, traceModel));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            List<TraceToScoreLlmAsJudge> messages = captor.getValue();
+            assertThat(messages).hasSize(1);
+            assertThat(messages.getFirst().llmAsJudgeCode().model().name()).isEqualTo(traceModel);
+        }
+
+        @Test
+        @DisplayName("skips evaluation when no provider connected and no eval_suite_model in metadata")
+        void skipsEvaluationWhenNoModelResolved() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+
+            // No connected providers
+            when(llmProviderApiKeyService.find(workspaceId))
+                    .thenReturn(new ProviderApiKey.ProviderApiKeyPage(0, 0, 0, List.of(), List.of()));
+
+            // Metadata has dataset info but no eval_suite_model
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"abc123\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                            .formatted(datasetId, Generators.timeBasedEpochGenerator().generate()));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(datasetVersionService, never()).resolveVersionId(any(), any(), any());
         }
     }
 

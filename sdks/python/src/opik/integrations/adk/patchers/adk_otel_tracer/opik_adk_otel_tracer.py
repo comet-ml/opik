@@ -49,6 +49,7 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
 
     _ADK_INTERNAL_SPAN_NAME_SKIP_LIST = [
         "invocation",  # This is the span that is created by ADK when the invocation is started.
+        "call_llm",  # Wrapper span around LLM calls, added in ADK 1.29.0.
     ]
 
     def __init__(

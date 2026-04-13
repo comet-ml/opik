@@ -9,6 +9,7 @@ import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceS
 type AgentRunnerResultProps = {
   job: SandboxJob | null;
   onViewTrace: () => void;
+  hasTraceData?: boolean;
   duration?: number | null;
   startTime?: string;
   endTime?: string;
@@ -19,6 +20,7 @@ type AgentRunnerResultProps = {
 const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({
   job,
   onViewTrace,
+  hasTraceData,
   duration,
   startTime,
   endTime,
@@ -33,7 +35,6 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({
     return { output: job.result };
   }, [job?.result]);
 
-  const hasTrace = Boolean(job?.trace_id);
   const isCompleted = job?.status === SandboxJobStatus.COMPLETED;
   const isRunning =
     job?.status === SandboxJobStatus.RUNNING ||
@@ -57,7 +58,7 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({
           />
         )}
 
-        {hasTrace && (
+        {hasTraceData && (
           <Button
             variant="ghost"
             size="2xs"
@@ -85,7 +86,7 @@ const AgentRunnerResult: React.FC<AgentRunnerResultProps> = ({
           <div className="flex flex-1 flex-col items-center justify-center gap-1 text-muted-slate">
             <Loader2 className="mb-2 size-5 animate-spin text-primary" />
             <p className="comet-body-s font-medium">Your agent is working</p>
-            {hasTrace && (
+            {hasTraceData && (
               <Button variant="link" size="2xs" onClick={onViewTrace}>
                 View trajectory live
               </Button>

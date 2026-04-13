@@ -45,6 +45,8 @@ interface BarChartProps {
   maxBarSize?: number;
   className?: string;
   labelActions?: Record<string, LegendLabelAction>;
+  tooltipPosition?: { x?: number; y?: number };
+  targetTickCount?: number;
 }
 
 const BarChart: React.FunctionComponent<BarChartProps> = ({
@@ -60,6 +62,8 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
   maxBarSize = 52,
   className = "h-[var(--chart-height)] w-full",
   labelActions,
+  tooltipPosition,
+  targetTickCount,
 }) => {
   const [activeLine, setActiveLine] = useState<string | null>(null);
 
@@ -78,6 +82,7 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
     yTickFormatter,
   } = useChartTickDefaultConfig(values, {
     tickFormatter: customYTickFormatter,
+    targetTickCount,
   });
 
   const defaultTooltipHeader = useCallback(
@@ -95,6 +100,7 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
   return (
     <ChartContainer config={config} className={className}>
       <RechartsBarChart
+        key={chartId}
         data={data}
         margin={{
           top: 5,
@@ -137,6 +143,7 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
         <ChartTooltip
           isAnimationActive={false}
           cursor={{ fillOpacity: 0.6 }}
+          position={tooltipPosition}
           content={
             <ChartTooltipContent
               renderHeader={tooltipHeader}

@@ -34,12 +34,10 @@ const runExperimentExecution = async ({
   projectName,
 }: UseRunExperimentExecutionParams): Promise<ExperimentExecutionResponse> => {
   const promptVariants = prompts.map((prompt) => {
-    const configs = snakeCaseObj(prompt.configs) as Record<string, unknown>;
-
     return {
       model: prompt.model,
       messages: prompt.messages.map((msg) => snakeCaseObj(msg)),
-      configs,
+      configs: prompt.configs,
       prompt_versions: prompt.loadedChatPromptId
         ? [{ id: prompt.loadedChatPromptId }]
         : undefined,

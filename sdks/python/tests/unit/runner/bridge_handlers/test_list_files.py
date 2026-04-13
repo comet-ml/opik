@@ -1,6 +1,7 @@
 import subprocess
 import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -110,74 +111,22 @@ class TestListFiles:
         assert result["total"] == 0
         assert result["truncated"] is False
 
-
-class TestListFilesNonGit:
-    """Tests for ListFiles fallback when no git repo is present."""
-
-    def _handler(self, tmp_path: Path) -> ListFilesHandler:
-        return ListFilesHandler(tmp_path)
-
-    def test_list_files__no_git__finds_files(self, tmp_path: Path) -> None:
-        (tmp_path / "a.py").write_text("x")
-        (tmp_path / "sub").mkdir()
-        (tmp_path / "sub" / "b.py").write_text("x")
-        handler = self._handler(tmp_path)
-        result = handler.execute({"pattern": "**/*.py"}, timeout=30.0)
-        assert "a.py" in result["files"]
-        assert any("b.py" in f for f in result["files"])
-
-    def test_list_files__no_git__skips_hidden_dirs(self, tmp_path: Path) -> None:
-        (tmp_path / ".hidden").mkdir()
-        (tmp_path / ".hidden" / "secret.py").write_text("x")
-        (tmp_path / "visible.py").write_text("x")
-        handler = self._handler(tmp_path)
-        result = handler.execute({"pattern": "**/*.py"}, timeout=30.0)
-        assert "visible.py" in result["files"]
-        assert not any("secret.py" in f for f in result["files"])
-
-    def test_list_files__no_git__skips_hidden_files(self, tmp_path: Path) -> None:
-        (tmp_path / ".env").write_text("SECRET=x")
-        (tmp_path / "app.py").write_text("x")
-        handler = self._handler(tmp_path)
-        result = handler.execute({}, timeout=30.0)
-        assert not any(".env" in f for f in result["files"])
-        assert "app.py" in result["files"]
-
-    def test_list_files__no_git__skips_junk_dirs(self, tmp_path: Path) -> None:
-        (tmp_path / "node_modules").mkdir()
-        (tmp_path / "node_modules" / "pkg.js").write_text("x")
-        (tmp_path / "__pycache__").mkdir()
-        (tmp_path / "__pycache__" / "mod.pyc").write_text("x")
-        (tmp_path / "app.py").write_text("x")
-        handler = self._handler(tmp_path)
-        result = handler.execute({}, timeout=30.0)
-        assert "app.py" in result["files"]
-        assert not any("node_modules" in f for f in result["files"])
-        assert not any("__pycache__" in f for f in result["files"])
-
-    def test_list_files__no_git__symlink_outside_root_excluded(
-        self, tmp_path: Path
+    @patch("subprocess.run")
+    def test_list_files__not_a_git_repo__raises_error(
+        self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
-        outside = tmp_path / "outside"
-        outside.mkdir()
-        secret = outside / "secret.txt"
-        secret.write_text("sensitive")
-
-        repo = tmp_path / "repo"
-        repo.mkdir()
-        (repo / "legit.py").write_text("x")
-        (repo / "link.txt").symlink_to(secret)
-
-        handler = ListFilesHandler(repo)
-        result = handler.execute({}, timeout=30.0)
-        assert "legit.py" in result["files"]
-        assert not any("link.txt" in f for f in result["files"])
-
-    def test_list_files__no_git__caps_at_max_files(self, tmp_path: Path) -> None:
-        from opik.runner.bridge_handlers.list_files import _WALK_MAX_FILES
-
-        for i in range(_WALK_MAX_FILES + 100):
-            (tmp_path / f"file_{i:06d}.txt").write_text("x")
+        mock_run.return_value = MagicMock(returncode=1)
         handler = self._handler(tmp_path)
-        result = handler.execute({}, timeout=30.0)
-        assert result["total"] <= _WALK_MAX_FILES
+        with pytest.raises(CommandError) as exc_info:
+            handler.execute({"pattern": "*.py"}, timeout=30.0)
+        assert exc_info.value.code == "not_a_git_repository"
+
+    @patch("subprocess.run")
+    def test_list_files__git_not_available__raises_error(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.side_effect = FileNotFoundError("git not found")
+        handler = self._handler(tmp_path)
+        with pytest.raises(CommandError) as exc_info:
+            handler.execute({"pattern": "*.py"}, timeout=30.0)
+        assert exc_info.value.code == "git_not_available"

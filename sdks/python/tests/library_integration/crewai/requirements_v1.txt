@@ -1,2 +1,1 @@
-anthropic>=0.88.0  # AttributeError: 'OpenAICompletion' object has no attribute 'client'
 crewai[anthropic, bedrock, google-genai]>=1.0.0

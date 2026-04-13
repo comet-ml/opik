@@ -19,7 +19,9 @@ from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.dataset_version_public import DatasetVersionPublic
+from ..types.evaluator_item import EvaluatorItem
 from ..types.evaluator_item_write import EvaluatorItemWrite
+from ..types.execution_policy import ExecutionPolicy
 from ..types.execution_policy_write import ExecutionPolicyWrite
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
@@ -377,6 +379,8 @@ class DatasetsClient:
         *,
         span_ids: typing.Sequence[str],
         enrichment_options: SpanEnrichmentOptions,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -390,6 +394,11 @@ class DatasetsClient:
             Set of span IDs to add to the dataset
 
         enrichment_options : SpanEnrichmentOptions
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItem]]
+            Optional evaluators to apply to the created items
+
+        execution_policy : typing.Optional[ExecutionPolicy]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -406,7 +415,12 @@ class DatasetsClient:
         client.datasets.create_dataset_items_from_spans(dataset_id='dataset_id', span_ids=['span_ids'], enrichment_options=SpanEnrichmentOptions(), )
         """
         _response = self._raw_client.create_dataset_items_from_spans(
-            dataset_id, span_ids=span_ids, enrichment_options=enrichment_options, request_options=request_options
+            dataset_id,
+            span_ids=span_ids,
+            enrichment_options=enrichment_options,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
+            request_options=request_options,
         )
         return _response.data
 
@@ -416,6 +430,8 @@ class DatasetsClient:
         *,
         trace_ids: typing.Sequence[str],
         enrichment_options: TraceEnrichmentOptions,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -429,6 +445,11 @@ class DatasetsClient:
             Set of trace IDs to add to the dataset
 
         enrichment_options : TraceEnrichmentOptions
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItem]]
+            Optional evaluators to apply to the created items
+
+        execution_policy : typing.Optional[ExecutionPolicy]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -445,7 +466,12 @@ class DatasetsClient:
         client.datasets.create_dataset_items_from_traces(dataset_id='dataset_id', trace_ids=['trace_ids'], enrichment_options=TraceEnrichmentOptions(), )
         """
         _response = self._raw_client.create_dataset_items_from_traces(
-            dataset_id, trace_ids=trace_ids, enrichment_options=enrichment_options, request_options=request_options
+            dataset_id,
+            trace_ids=trace_ids,
+            enrichment_options=enrichment_options,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1807,6 +1833,8 @@ class AsyncDatasetsClient:
         *,
         span_ids: typing.Sequence[str],
         enrichment_options: SpanEnrichmentOptions,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1820,6 +1848,11 @@ class AsyncDatasetsClient:
             Set of span IDs to add to the dataset
 
         enrichment_options : SpanEnrichmentOptions
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItem]]
+            Optional evaluators to apply to the created items
+
+        execution_policy : typing.Optional[ExecutionPolicy]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1839,7 +1872,12 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dataset_items_from_spans(
-            dataset_id, span_ids=span_ids, enrichment_options=enrichment_options, request_options=request_options
+            dataset_id,
+            span_ids=span_ids,
+            enrichment_options=enrichment_options,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1849,6 +1887,8 @@ class AsyncDatasetsClient:
         *,
         trace_ids: typing.Sequence[str],
         enrichment_options: TraceEnrichmentOptions,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1862,6 +1902,11 @@ class AsyncDatasetsClient:
             Set of trace IDs to add to the dataset
 
         enrichment_options : TraceEnrichmentOptions
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItem]]
+            Optional evaluators to apply to the created items
+
+        execution_policy : typing.Optional[ExecutionPolicy]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1881,7 +1926,12 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dataset_items_from_traces(
-            dataset_id, trace_ids=trace_ids, enrichment_options=enrichment_options, request_options=request_options
+            dataset_id,
+            trace_ids=trace_ids,
+            enrichment_options=enrichment_options,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
+            request_options=request_options,
         )
         return _response.data
 

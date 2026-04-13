@@ -212,6 +212,7 @@ class RunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -227,6 +228,8 @@ class RunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        blueprint_name : typing.Optional[str]
 
         metadata : typing.Optional[LocalRunnerJobMetadata]
 
@@ -248,6 +251,7 @@ class RunnersClient:
             project_id=project_id,
             inputs=inputs,
             mask_id=mask_id,
+            blueprint_name=blueprint_name,
             metadata=metadata,
             request_options=request_options,
         )
@@ -910,6 +914,7 @@ class AsyncRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        blueprint_name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -925,6 +930,8 @@ class AsyncRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        blueprint_name : typing.Optional[str]
 
         metadata : typing.Optional[LocalRunnerJobMetadata]
 
@@ -949,6 +956,7 @@ class AsyncRunnersClient:
             project_id=project_id,
             inputs=inputs,
             mask_id=mask_id,
+            blueprint_name=blueprint_name,
             metadata=metadata,
             request_options=request_options,
         )

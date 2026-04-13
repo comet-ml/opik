@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Literal
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
+from .. import _logging as opik_logging
 from .. import config, datetime_helpers, logging_messages, id_helpers
 from ..message_processing import messages
 from ..rest_api.types import (
@@ -190,3 +191,33 @@ def parse_feedback_score_messages(
     ]
 
     return score_messages
+
+
+def resolve_project_name(
+    explicitly_passed_value: Optional[str],
+    value_from_config: str,
+    value_from_context: Optional[str] = None,
+) -> str:
+    """Resolve the project name using the following precedence:
+
+    1. Explicitly passed ``project_name`` argument (if not None).
+    2. Active project context (if not None).
+    3. The client's configured project name.
+    """
+    if explicitly_passed_value is not None:
+        return explicitly_passed_value
+
+    if value_from_context is not None:
+        return value_from_context
+
+    if value_from_config == config.OPIK_PROJECT_DEFAULT_NAME:
+        opik_logging.log_once_at_level(
+            logging_level=logging.WARNING,
+            message='No project name configured. Traces are being logged to "Default Project".\n'
+            "Set OPIK_PROJECT_NAME environment variable or pass project_name to the Opik client\n"
+            "to log to a specific project.\n"
+            "See https://www.comet.com/docs/opik/tracing/sdk_configuration",
+            logger=LOGGER,
+        )
+
+    return value_from_config

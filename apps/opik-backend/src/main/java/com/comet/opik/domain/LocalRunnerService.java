@@ -71,6 +71,11 @@ public interface LocalRunnerService {
 
     LocalRunnerConnectResponse connect(String workspaceId, String userName, LocalRunnerConnectRequest request);
 
+    // Equivalent of connect()'s post-validation steps, for the opik-connect pairing flow.
+    // Caller (OpikConnectService) is responsible for authenticating via activation HMAC.
+    void activateFromOpikConnect(String workspaceId, String userName, UUID projectId, UUID runnerId,
+            String runnerName);
+
     LocalRunner.LocalRunnerPage listRunners(String workspaceId, String userName, UUID projectId,
             LocalRunnerStatus status, int page, int size);
 
@@ -237,6 +242,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     private static final String FIELD_TRACE_ID = "trace_id";
     private static final String FIELD_TIMEOUT = "timeout";
     private static final String FIELD_MASK_ID = "mask_id";
+    private static final String FIELD_BLUEPRINT_NAME = "blueprint_name";
     private static final String FIELD_METADATA = "metadata";
     private static final String FIELD_CAPABILITIES = "capabilities";
     private static final String FIELD_CHECKLIST = "checklist";
@@ -320,6 +326,18 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 .projectId(projectId)
                 .projectName(payload.projectName())
                 .build();
+    }
+
+    @Override
+    public void activateFromOpikConnect(@NonNull String workspaceId, @NonNull String userName,
+            @NonNull UUID projectId, @NonNull UUID runnerId, @NonNull String runnerName) {
+        // Mirrors the post-pairing-code steps of connect(): evict any existing runner for
+        // this (workspace, project, user), register the new runner in the relevant sets,
+        // point the user -> runner bucket at it, and flip the runner row to CONNECTED.
+        evictExistingRunner(workspaceId, projectId, userName, runnerId);
+        registerRunnerInSets(workspaceId, userName, projectId, runnerId);
+        setUserRunner(workspaceId, projectId, userName, runnerId);
+        activateRunner(runnerId, workspaceId, projectId, userName, runnerName);
     }
 
     @Override
@@ -518,6 +536,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         }
         if (request.maskId() != null) {
             jobFields.put(FIELD_MASK_ID, request.maskId().toString());
+        }
+        if (request.blueprintName() != null) {
+            jobFields.put(FIELD_BLUEPRINT_NAME, request.blueprintName().strip());
         }
         if (request.metadata() != null) {
             jobFields.put(FIELD_METADATA, JsonUtils.writeValueAsString(request.metadata()));
@@ -1179,6 +1200,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 .projectId(parseUUID(fields.get(FIELD_PROJECT_ID)))
                 .traceId(parseUUID(fields.get(FIELD_TRACE_ID)))
                 .maskId(parseUUID(fields.get(FIELD_MASK_ID)))
+                .blueprintName(fields.get(FIELD_BLUEPRINT_NAME))
                 .metadata(parseMetadata(fields.get(FIELD_METADATA)))
                 .timeout(parseIntValue(fields.get(FIELD_TIMEOUT)))
                 .createdAt(parseInstant(fields.get(FIELD_CREATED_AT)))

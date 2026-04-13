@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
@@ -72,22 +78,32 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   onRetry,
   retryCount = 0,
 }) => {
-  const isOpen = useRef(getStoredSidebarOpen());
+  const [isOpen, setIsOpen] = useState(getStoredSidebarOpen);
   const initialWidth = useRef(
-    isOpen.current ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+    getStoredSidebarOpen() ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
   );
 
   useEffect(() => {
     onWidthChange(initialWidth.current);
   }, [onWidthChange]);
 
-  const collapsed = !isOpen.current;
+  const handleToggle = useCallback(() => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem("assistant-sidebar-open", String(next));
+      onWidthChange(next ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH);
+      return next;
+    });
+  }, [onWidthChange]);
+
+  const collapsed = !isOpen;
 
   if (error) {
     return (
       <AssistantErrorState
         collapsed={collapsed}
         onRetry={onRetry}
+        onToggle={handleToggle}
         retryCount={retryCount}
       />
     );
@@ -138,7 +154,7 @@ function createHostListeners(): HostListeners {
 
 interface BridgeRefs {
   navigate: React.MutableRefObject<
-    (path: string, search?: Record<string, string>) => void
+    (path: string, search?: Record<string, unknown>) => void
   >;
   onWidthChange: React.MutableRefObject<(width: number) => void>;
   onNotification: React.MutableRefObject<
@@ -365,8 +381,16 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     emitHostEvent(listenersRef, "visibility:changed", { isOpen: open });
   });
 
+  /**
+   * Forwards a sidebar navigation request to TanStack Router. `search` is
+   * typed `Record<string, unknown>` because the bridge is route-agnostic and
+   * no runtime narrowing is possible here — the producer (ollie-assist) is
+   * responsible for supplying values that match the destination route's
+   * search schema. Structured values are single-stringified by the router so
+   * `use-query-params`' `JsonParam` round-trips correctly.
+   */
   const navigateRef = useLatestRef(
-    (path: string, search?: Record<string, string>) => {
+    (path: string, search?: Record<string, unknown>) => {
       const ws = contextRef.current.workspaceName;
       const fullPath = ws ? `/${ws}${path}` : path;
       router.navigate({ to: fullPath, search });
