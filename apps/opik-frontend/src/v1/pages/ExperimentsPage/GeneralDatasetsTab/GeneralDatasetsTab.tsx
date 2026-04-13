@@ -83,9 +83,6 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
-import { EXPERIMENT_TYPE } from "@/types/datasets";
-
-const ALL_EXPERIMENT_TYPES = Object.values(EXPERIMENT_TYPE);
 const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
@@ -388,7 +385,6 @@ const GeneralDatasetsTab: React.FC = () => {
       filters,
       sorting: sortedColumns,
       groups,
-      types: ALL_EXPERIMENT_TYPES,
       search: search!,
       page: page!,
       size: size!,

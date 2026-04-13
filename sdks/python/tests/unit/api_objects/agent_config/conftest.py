@@ -56,7 +56,7 @@ def clear_caches():
 def fake_track_context():
     """Push a fake trace so _resolve_from_backend's @track guard passes in all unit tests."""
     with mock.patch.object(
-        opik_client, "get_client_cached", return_value=mock.Mock(spec=opik_client.Opik)
+        opik_client, "get_global_client", return_value=mock.Mock(spec=opik_client.Opik)
     ):
         with start_as_current_trace(name="test-trace"):
             yield

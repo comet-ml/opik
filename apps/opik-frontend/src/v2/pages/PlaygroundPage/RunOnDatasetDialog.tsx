@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/ui/button";
 import {
@@ -19,22 +18,20 @@ import MetricSelector from "@/v2/pages/PlaygroundPage/MetricSelector";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
-import useProjectByName from "@/api/projects/useProjectByName";
 import useRulesList from "@/api/automations/useRulesList";
-import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
 
 import { useIsRunning } from "@/store/PlaygroundStore";
+import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { Dataset, DatasetItemColumn } from "@/types/datasets";
+import { Dataset, DatasetItemColumn, DATASET_TYPE } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import {
   buildDatasetFilterColumns,
   transformDataColumnFilters,
 } from "@/lib/filters";
-import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
@@ -49,6 +46,7 @@ interface RunOnDatasetDialogProps {
     datasetId: string;
     versionId?: string;
     datasetName: string;
+    datasetType: DATASET_TYPE;
     selectedRuleIds: string[] | null;
     experimentNamePrefix: string;
     filters: Filters;
@@ -58,6 +56,27 @@ interface RunOnDatasetDialogProps {
   initialSelectedRuleIds?: string[] | null;
   initialFilters?: Filters;
 }
+
+const getRunDisabledTooltip = ({
+  isRunning,
+  isDatasetEmpty,
+  hasFilters,
+  isEvaluationSuite,
+}: {
+  isRunning: boolean;
+  isDatasetEmpty: boolean;
+  hasFilters: boolean;
+  isEvaluationSuite: boolean;
+}): string | undefined => {
+  if (isRunning) return "An experiment is already running";
+  if (isDatasetEmpty && hasFilters) return "No items match the current filters";
+  if (isDatasetEmpty) {
+    return `Selected ${
+      isEvaluationSuite ? "evaluation suite" : "dataset"
+    } is empty`;
+  }
+  return undefined;
+};
 
 const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   open,
@@ -75,13 +94,9 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [experimentPrefix, setExperimentPrefix] = useState("");
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
-  const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
-    string | undefined
-  >(undefined);
 
   const isRunning = useIsRunning();
-  const queryClient = useQueryClient();
-  const createProjectMutation = useProjectCreateMutation();
+  const activeProjectId = useActiveProjectId();
 
   const {
     permissions: { canCreateProjects },
@@ -96,16 +111,23 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     }
   }, [open, initialDatasetId, initialSelectedRuleIds, initialFilters]);
 
-  const { data: datasetsData } = useDatasetsList(
-    { workspaceName, page: 1, size: DEFAULT_LOADED_DATASETS },
-    { enabled: open },
-  );
-  const datasets = datasetsData?.content || EMPTY_DATASETS;
-
   const parsedDatasetId = parseDatasetVersionKey(datasetId);
   const plainDatasetId = parsedDatasetId?.datasetId || datasetId;
-  const datasetName =
-    datasets.find((ds) => ds.id === plainDatasetId)?.name || null;
+
+  const { data: datasetsData } = useProjectDatasetsList(
+    {
+      projectId: activeProjectId ?? "",
+      page: 1,
+      size: DEFAULT_LOADED_DATASETS,
+    },
+    { enabled: open && !!activeProjectId },
+  );
+  const datasets = datasetsData?.content || EMPTY_DATASETS;
+  const selectedDataset = datasets.find((ds) => ds.id === plainDatasetId);
+  const datasetName = selectedDataset?.name || null;
+  const selectedDatasetType = selectedDataset?.type ?? null;
+  const isEvaluationSuite =
+    selectedDatasetType === DATASET_TYPE.EVALUATION_SUITE;
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: plainDatasetId!, page: 1, size: MAX_VERSIONS_TO_FETCH },
@@ -156,61 +178,16 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     [datasetColumns],
   );
 
-  const {
-    data: playgroundProject,
-    isError: isProjectError,
-    error: projectError,
-  } = useProjectByName(
-    { projectName: PLAYGROUND_PROJECT_NAME },
-    { enabled: !!workspaceName && open, retry: false },
-  );
-
-  const isProjectNotFound =
-    isProjectError &&
-    projectError &&
-    "response" in projectError &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (projectError as any).response?.status === 404;
-
-  const canUsePlayground = !!playgroundProject?.id || canCreateProjects;
-
   const { data: rulesData } = useRulesList(
     {
       workspaceName,
-      projectId: playgroundProject?.id,
+      projectId: activeProjectId ?? undefined,
       page: 1,
       size: 100,
     },
-    { enabled: !!playgroundProject?.id && open },
+    { enabled: !!activeProjectId && open },
   );
   const rules = rulesData?.content || [];
-
-  const handleCreateRuleClick = useCallback(async () => {
-    try {
-      let projectId: string | undefined = playgroundProject?.id;
-      if (!projectId && isProjectNotFound && canCreateProjects) {
-        const result = await createProjectMutation.mutateAsync({
-          project: { name: PLAYGROUND_PROJECT_NAME },
-        });
-        projectId = result.id;
-        await queryClient.refetchQueries({
-          queryKey: ["project", { projectName: PLAYGROUND_PROJECT_NAME }],
-        });
-      }
-      if (projectId || playgroundProject?.id) {
-        setRuleDialogProjectId(projectId || playgroundProject?.id);
-        setIsRuleDialogOpen(true);
-      }
-    } catch (error) {
-      console.error("Failed to create playground project:", error);
-    }
-  }, [
-    playgroundProject,
-    isProjectNotFound,
-    createProjectMutation,
-    queryClient,
-    canCreateProjects,
-  ]);
 
   const handleDatasetChange = useCallback((value: string | null) => {
     setDatasetId(value);
@@ -224,7 +201,8 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
       datasetId,
       versionId: parsedDatasetId?.versionId,
       datasetName,
-      selectedRuleIds,
+      datasetType: selectedDatasetType ?? DATASET_TYPE.DATASET,
+      selectedRuleIds: isEvaluationSuite ? [] : selectedRuleIds,
       experimentNamePrefix: experimentPrefix,
       filters,
     });
@@ -233,6 +211,8 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     datasetId,
     datasetName,
     parsedDatasetId?.versionId,
+    selectedDatasetType,
+    isEvaluationSuite,
     selectedRuleIds,
     experimentPrefix,
     filters,
@@ -255,23 +235,23 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader className="pb-0">
-            <DialogTitle>Run on dataset</DialogTitle>
+            <DialogTitle>Test on dataset</DialogTitle>
             <DialogDescription>
-              Run your prompt suite against a dataset and score results with
-              selected metrics.
+              Run your prompt suite against a dataset or evaluation suite and
+              score results with selected metrics.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 overflow-y-auto pb-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Dataset</Label>
+              <Label>Dataset / Evaluation suite</Label>
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <DatasetVersionSelectBox
                     value={datasetId}
                     versionName={versionName}
                     onChange={handleDatasetChange}
-                    workspaceName={workspaceName}
+                    projectId={activeProjectId ?? undefined}
                     buttonClassName="w-full"
                   />
                 </div>
@@ -287,19 +267,21 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label>Metrics</Label>
-              <MetricSelector
-                rules={rules}
-                selectedRuleIds={selectedRuleIds}
-                onSelectionChange={setSelectedRuleIds}
-                datasetId={datasetId}
-                onCreateRuleClick={handleCreateRuleClick}
-                workspaceName={workspaceName}
-                projectId={playgroundProject?.id}
-                canUsePlayground={canUsePlayground}
-              />
-            </div>
+            {plainDatasetId && selectedDataset && !isEvaluationSuite && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Metrics</Label>
+                <MetricSelector
+                  rules={rules}
+                  selectedRuleIds={selectedRuleIds}
+                  onSelectionChange={setSelectedRuleIds}
+                  datasetId={datasetId}
+                  onCreateRuleClick={() => setIsRuleDialogOpen(true)}
+                  workspaceName={workspaceName}
+                  projectId={activeProjectId ?? undefined}
+                  canUsePlayground={!!activeProjectId || canCreateProjects}
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -307,22 +289,19 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               <Button variant="outline">Cancel</Button>
             </DialogClose>
             <TooltipWrapper
-              content={
-                isRunning
-                  ? "An experiment is already running"
-                  : isDatasetEmpty && filters.length > 0
-                    ? "No items match the current filters"
-                    : isDatasetEmpty
-                      ? "Selected dataset is empty"
-                      : undefined
-              }
+              content={getRunDisabledTooltip({
+                isRunning,
+                isDatasetEmpty,
+                hasFilters: filters.length > 0,
+                isEvaluationSuite,
+              })}
             >
               <Button
                 onClick={handleRun}
                 disabled={isRunDisabled}
                 style={isRunDisabled ? { pointerEvents: "auto" } : {}}
               >
-                Use dataset
+                {isEvaluationSuite ? "Use evaluation suite" : "Use dataset"}
               </Button>
             </TooltipWrapper>
           </DialogFooter>
@@ -331,12 +310,8 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
 
       <AddEditRuleDialog
         open={isRuleDialogOpen}
-        setOpen={(o) => {
-          setIsRuleDialogOpen(o);
-          if (!o) setRuleDialogProjectId(undefined);
-        }}
-        projectId={ruleDialogProjectId || playgroundProject?.id || ""}
-        projectName={PLAYGROUND_PROJECT_NAME}
+        setOpen={setIsRuleDialogOpen}
+        projectId={activeProjectId || ""}
         datasetColumnNames={datasetColumns.map((c) => c.name)}
         hideScopeSelector
       />

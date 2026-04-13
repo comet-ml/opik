@@ -52,21 +52,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     private static final String GET_TRACE_KPI_CARDS = """
-            WITH feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'trace'
-                  AND workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND entity_id >= :uuid_from_time
-                  AND entity_id \\<= :uuid_to_time
-                UNION ALL
+            WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -74,37 +60,37 @@ class KpiCardDAOImpl implements KpiCardDAO {
                        value,
                        last_updated_at,
                        author
-                 FROM authored_feedback_scores FINAL
-                 WHERE entity_type = 'trace'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id >= :uuid_from_time
-                   AND entity_id \\<= :uuid_to_time
-             ),
-             feedback_scores_with_ranking AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
-                 FROM feedback_scores_combined_raw
-             ),
-             feedback_scores_combined AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author
-                 FROM feedback_scores_with_ranking
-                 WHERE rn = 1
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND entity_id >= :uuid_from_time
+                      AND entity_id \\<= :uuid_to_time
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND entity_id >= :uuid_from_time
+                      AND entity_id \\<= :uuid_to_time
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -113,7 +99,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), guardrails_agg AS (
                 SELECT
@@ -205,29 +191,15 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_errors,
                 AVGIf(tf.duration, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_duration,
                 AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
-                AVGIf(tc.cost, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_cost,
-                AVGIf(tc.cost, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_cost
+                SUMIf(tc.cost, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_total_cost,
+                SUMIf(tc.cost, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_total_cost
             FROM traces_filtered tf
             LEFT JOIN trace_costs tc ON tf.id = tc.trace_id
             SETTINGS log_comment = '<log_comment>';
             """;
 
     private static final String GET_SPAN_KPI_CARDS = """
-            WITH feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND entity_id >= :uuid_from_time
-                  AND entity_id \\<= :uuid_to_time
-                UNION ALL
+            WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -235,37 +207,37 @@ class KpiCardDAOImpl implements KpiCardDAO {
                        value,
                        last_updated_at,
                        author
-                 FROM authored_feedback_scores FINAL
-                 WHERE entity_type = 'span'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id >= :uuid_from_time
-                   AND entity_id \\<= :uuid_to_time
-             ),
-             feedback_scores_with_ranking AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
-                 FROM feedback_scores_combined_raw
-             ),
-             feedback_scores_combined AS (
-                 SELECT workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        value,
-                        last_updated_at,
-                        author
-                 FROM feedback_scores_with_ranking
-                 WHERE rn = 1
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'span'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND entity_id >= :uuid_from_time
+                      AND entity_id \\<= :uuid_to_time
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'span'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND entity_id >= :uuid_from_time
+                      AND entity_id \\<= :uuid_to_time
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -274,7 +246,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
             <if(feedback_scores_empty_filters)>
@@ -339,8 +311,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start) AS previous_errors,
                 AVGIf(duration, id >= :id_current_start AND id \\<= :id_end) AS current_avg_duration,
                 AVGIf(duration, id >= :id_prior_start AND id \\< :id_current_start) AS previous_avg_duration,
-                AVGIf(total_estimated_cost, id >= :id_current_start AND id \\<= :id_end) AS current_avg_cost,
-                AVGIf(total_estimated_cost, id >= :id_prior_start AND id \\< :id_current_start) AS previous_avg_cost
+                SUMIf(total_estimated_cost, id >= :id_current_start AND id \\<= :id_end) AS current_total_cost,
+                SUMIf(total_estimated_cost, id >= :id_prior_start AND id \\< :id_current_start) AS previous_total_cost
             FROM spans_filtered
             SETTINGS log_comment = '<log_comment>';
             """;
@@ -371,21 +343,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 AND project_id = :project_id
                 AND id >= :uuid_from_time
                 AND id \\<= :uuid_to_time
-            ), feedback_scores_combined_raw AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    value,
-                    last_updated_at,
-                    last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                UNION ALL
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -393,36 +351,36 @@ class KpiCardDAOImpl implements KpiCardDAO {
                        value,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-            ),
-            feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ),
-            feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
+                FROM (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -431,7 +389,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
             <if(thread_feedback_scores_empty_filters)>
@@ -512,8 +470,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 COUNTIf(tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_count,
                 AVGIf(tf.duration, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_avg_duration,
                 AVGIf(tf.duration, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_avg_duration,
-                AVGIf(tc.cost, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_avg_cost,
-                AVGIf(tc.cost, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_avg_cost
+                SUMIf(tc.cost, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_total_cost,
+                SUMIf(tc.cost, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_total_cost
             FROM threads_filtered tf
             LEFT JOIN thread_costs tc ON tf.id = tc.thread_id
             SETTINGS log_comment = '<log_comment>';
@@ -575,7 +533,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private ST buildTemplate(String query, KpiCardCriteria criteria, String workspaceId,
             String queryName) {
-        return getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, criteria.projectId().toString());
+        return getSTWithLogComment(query, "KpiCards_" + queryName, workspaceId, "", criteria.projectId().toString());
     }
 
     private Statement buildStatement(Connection connection, ST template,
@@ -668,9 +626,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     .build());
 
             stats.add(KpiMetric.builder()
-                    .type(KpiMetricType.AVG_COST)
-                    .currentValue(filterNan(row.get("current_avg_cost", Double.class)))
-                    .previousValue(filterNan(row.get("previous_avg_cost", Double.class)))
+                    .type(KpiMetricType.TOTAL_COST)
+                    .currentValue(filterNan(row.get("current_total_cost", Double.class)))
+                    .previousValue(filterNan(row.get("previous_total_cost", Double.class)))
                     .build());
 
             if (entityType != EntityType.THREADS) {

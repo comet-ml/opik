@@ -21,64 +21,108 @@ Exports specific data types from the specified workspace to local files.
 
 **Arguments:**
 - `WORKSPACE`: The workspace name to export from
-- `TYPE`: The type of data to export (`dataset`, `project`, `experiment`, or `prompt`)
-- `NAME`: Exact name of the item to export
+- `TYPE`: The type of data to export (`all`, `dataset`, `project`, `experiment`, or `prompt`)
+- `NAME`: Exact name of the item to export (not used with `all`)
 
 **Options:**
 - `--path, -p`: Directory to save exported data (default: `opik_exports`)
 - `--max-results`: Maximum number of items to export per data type (default: 1000)
-- `--filter`: Filter string using Opik Query Language (OQL) to narrow down the search (for projects only)
+- `--filter`: OQL filter string applied to traces — works with `project`, `experiment`, and `all`
 - `--force`: Re-download items even if they already exist locally
 - `--format`: Format for exporting data (`json` or `csv`, default: `json`)
 - `--debug`: Enable debug output to show detailed information about the export process
+- `--no-attachments`: Skip downloading attachment files.
+- `--page-size INTEGER`: Number of traces to fetch per API request when exporting projects (1–1000, default: `500`). Applies to `project` and `all`. Increase for fewer round-trips; decrease if you hit persistent rate-limit errors.
 
-**Experiment-specific options:**
+**`all`-specific options:**
+- `--include`: Comma-separated list of data types to include (`datasets`, `prompts`, `projects`, `experiments`). Defaults to all four.
+
+**`experiment`-specific options:**
 - `--dataset NAME`: Filter experiments by dataset name (only experiments using this dataset will be exported)
 - `--max-traces INTEGER`: Maximum number of traces to export (limits total traces downloaded)
 
 **Examples:**
+
+{/* These examples are maintained by hand. The canonical source of truth for
+    all flags and defaults is `sdks/python/src/opik/cli/`. Re-verify against
+    `opik export --help` whenever CLI options change. */}
+
+Use `all` when you want to export every data type in one shot — useful for full workspace backups or bulk migrations:
+```bash
+# Export every data type (datasets, prompts, projects, experiments)
+opik export my-workspace all
+
+# Export only datasets and prompts — skip projects and experiments
+opik export my-workspace all --include datasets,prompts
+
+# Export all traces logged after a given date across every project
+opik export my-workspace all --filter 'created_at >= "2024-01-01T00:00:00Z"'
+```
+
+Use `dataset`, `project`, `experiment`, or `prompt` when you need to export a single named item:
 ```bash
 # Export specific dataset by exact name
 opik export my-workspace dataset "my-test-dataset"
 
 # Export specific project by exact name
-opik export my-workspace project "my-project" --filter "status = 'completed'"
+opik export my-workspace project "my-project"
 
-# Export specific experiment by exact name
+# Export specific experiment by exact name (--force re-downloads even if local files exist)
 opik export my-workspace experiment "my-experiment" --force
-
-# Export experiment with dataset filtering
-opik export my-workspace experiment "my-experiment" --dataset "my-dataset"
-
-# Export experiment with trace limit
-opik export my-workspace experiment "my-experiment" --max-traces 100
 
 # Export specific prompt by exact name
 opik export my-workspace prompt "my-template"
+```
 
-# Export with custom output directory
+Use `--filter` to narrow exports to a time window or any OQL predicate — avoids downloading data you don't need:
+```bash
+# Export project traces logged after a given date
+opik export my-workspace project "my-project" --filter 'created_at >= "2024-01-01T00:00:00Z"'
+
+# Export project traces in a date range
+opik export my-workspace project "my-project" --filter 'created_at >= "2024-01-01T00:00:00Z" AND created_at < "2024-02-01T00:00:00Z"'
+
+# Export experiment traces logged after a given date
+opik export my-workspace experiment "my-experiment" --filter 'created_at >= "2024-06-01T00:00:00Z"'
+```
+
+Use experiment-specific options to scope large experiment exports:
+```bash
+# Export only traces from experiments that used a specific dataset
+opik export my-workspace experiment "my-experiment" --dataset "my-dataset"
+
+# Cap total traces downloaded (useful for very large experiments)
+opik export my-workspace experiment "my-experiment" --max-traces 100
+```
+
+Use `--format csv` when the target is a spreadsheet or analysis tool rather than a re-import:
+```bash
+# Export project traces as CSV for analysis in Excel, Google Sheets, or pandas
+opik export my-workspace project "my-project" --format csv --path ./csv_data
+```
+
+Use `--no-attachments` to skip downloading attachment files (faster exports when you only need trace/span data):
+```bash
+# Export project without downloading attachments
+opik export my-workspace project "my-project" --no-attachments
+
+# Export all data without attachments
+opik export my-workspace all --no-attachments
+```
+
+Miscellaneous options:
+```bash
+# Save to a custom directory
 opik export my-workspace dataset "my-dataset" --path ./backup_data
 
-# Export using default directory (opik_exports)
-opik export my-workspace dataset "my-dataset"
+# Combine filter, result cap, and custom path
+opik export my-workspace project "my-project" --filter 'start_time >= "2024-01-01T00:00:00Z"' --max-results 100
 
-# Export with filter and limit
-opik export my-workspace project "my-project" --filter "start_time >= '2024-01-01T00:00:00Z'" --max-results 100
-
-# Export traces in CSV format for analysis
-opik export my-workspace project "my-project" --format csv --path ./csv_data
-
-# Export with debug output
+# Show detailed API call and file I/O information during export
 opik export my-workspace dataset "my-dataset" --debug --force
 
-# Export datasets in CSV format for analysis
-opik export my-workspace dataset "my-dataset" --format csv --path ./analysis_data
-
-# Export prompts in CSV format for analysis
-opik export my-workspace prompt "my-template" --format csv --path ./analysis_data
-
-# Export experiments in CSV format for analysis
-opik export my-workspace experiment "my-experiment" --format csv --path ./analysis_data
+# Reduce page size if you are hitting persistent rate-limit errors on large projects
+opik export my-workspace project "my-project" --page-size 100
 ```
 
 ## `opik import WORKSPACE TYPE NAME`
@@ -94,6 +138,7 @@ Imports specific data types from local files to the specified workspace.
 - `--path, -p`: Directory containing exported data (default: `opik_exports`)
 - `--dry-run`: Show what would be imported without actually importing
 - `--force`: Discard the migration manifest and re-import everything from scratch
+- `--no-attachments`: Skip uploading attachment files.
 - `--debug`: Enable debug output to show detailed information about the import process
 
 **Note:** Experiment imports automatically recreate experiments where possible. No additional flags are needed.
@@ -121,35 +166,62 @@ Import already completed. Use --force to re-import.
 Use `--force` to discard the manifest and start fresh.
 
 **Examples:**
+
+{/* These examples are maintained by hand. The canonical source of truth for
+    all flags and defaults is `sdks/python/src/opik/cli/`. Re-verify against
+    `opik import --help` whenever CLI options change. */}
+
+Basic imports — reads from the default `opik_exports` directory created by `opik export`:
 ```bash
-# Import datasets from default directory (opik_exports)
+# Import a dataset by exact name
 opik import my-workspace dataset "my-dataset"
 
-# Import projects from default directory
+# Import a project by exact name
 opik import my-workspace project "my-project"
 
-# Import experiments from default directory (automatically recreates experiments)
+# Import an experiment (automatically recreates the experiment record)
 opik import my-workspace experiment "my-experiment"
 
-# Import prompts from default directory
+# Import a prompt by exact name
 opik import my-workspace prompt "my-prompt"
+```
 
-# Import with name pattern matching
+Use a name pattern when you want to import multiple items whose names share a substring:
+```bash
+# Import every dataset whose name contains "test"
 opik import my-workspace dataset "test"
+```
 
-# Import from custom path
+Use `--path` when your exported data is not in the default `opik_exports` directory:
+```bash
 opik import my-workspace dataset "my-dataset" --path ./custom-exports
+```
 
-# Dry run to see what would be imported
+Use `--dry-run` to preview what would be imported before committing — helpful to verify names and counts:
+```bash
 opik import my-workspace project "my-project" --dry-run
+```
 
-# Resume an interrupted import (automatic — just re-run the same command)
+Resuming and forcing — the manifest in `--path` handles resumption automatically; use `--force` only to start over:
+```bash
+# Interrupted import: just re-run the same command — progress is resumed from the manifest
 opik import my-workspace project "my-project" --path ./migration_data
 
-# Discard progress and restart from scratch
+# Discard the manifest and re-import everything from scratch
 opik import my-workspace project "my-project" --path ./migration_data --force
+```
 
-# Import with debug output
+Use `--no-attachments` to skip uploading attachment files (faster imports when you only need trace/span data):
+```bash
+# Import project without uploading attachments
+opik import my-workspace project "my-project" --no-attachments
+
+# Import all data without attachments
+opik import my-workspace all --no-attachments
+```
+
+Use `--debug` to see per-file status and API call details:
+```bash
 opik import my-workspace experiment "my-experiment" --debug
 ```
 
@@ -169,7 +241,14 @@ OUTPUT_DIR/
     ├── projects/
     │   └── PROJECT_NAME/
     │       ├── trace_TRACE_ID_1.json
-    │       └── trace_TRACE_ID_2.json
+    │       ├── trace_TRACE_ID_2.json
+    │       └── attachments/
+    │           ├── trace/
+    │           │   └── TRACE_ID/
+    │           │       └── image.png
+    │           └── span/
+    │               └── SPAN_ID/
+    │                   └── document.pdf
     ├── experiments/
     │   ├── experiment_EXPERIMENT_NAME_1.json
     │   └── experiment_EXPERIMENT_NAME_2.json
@@ -204,6 +283,18 @@ Each trace file contains:
       "type": "general",
       "model": "gpt-4",
       "provider": "openai"
+    }
+  ],
+  "attachments": [
+    {
+      "entity_type": "trace",
+      "entity_id": "trace-uuid",
+      "file_name": "image.png"
+    },
+    {
+      "entity_type": "span",
+      "entity_id": "span-uuid",
+      "file_name": "document.pdf"
     }
   ],
   "downloaded_at": "2024-01-01T00:00:00Z",
@@ -371,15 +462,21 @@ opik export my-workspace experiment "my-experiment" --path ./backup_$(date +%Y%m
 ### 3. Environment Sync
 ```bash
 # Sync from staging to production
-opik export my-workspace project "staging-project" --filter "tags contains 'ready-for-prod'"
+opik export my-workspace project "staging-project" --filter 'tags contains "ready-for-prod"'
 opik import my-workspace project "staging-project"
 ```
 
 ### 4. Data Analysis
 ```bash
-# Export specific traces for analysis
-opik export my-workspace project "my-project" --filter "start_time >= '2024-01-01T00:00:00Z'" --max-results 1000
-# Analyze the JSON files locally
+# Export traces for a specific time window
+opik export my-workspace project "my-project" \
+  --filter 'created_at >= "2024-01-01T00:00:00Z" AND created_at < "2024-04-01T00:00:00Z"'
+
+# Export all traces logged before a cutoff date across every project
+opik export my-workspace all --filter 'created_at < "2024-01-01T00:00:00Z"'
+
+# Export recent experiment traces only
+opik export my-workspace experiment "my-experiment" --filter 'created_at >= "2024-06-01T00:00:00Z"'
 ```
 
 ### 5. Dataset Management
@@ -433,6 +530,9 @@ opik export my-workspace experiment "my-experiment" --path ./experiment_data
 
 # Export experiment with dataset filtering
 opik export my-workspace experiment "evaluation-exp" --dataset "test-dataset"
+
+# Export only traces logged after a given date
+opik export my-workspace experiment "large-experiment" --filter 'created_at >= "2024-06-01T00:00:00Z"'
 
 # Export experiment with trace limit (useful for large experiments)
 opik export my-workspace experiment "large-experiment" --max-traces 50
@@ -492,6 +592,10 @@ opik import my-workspace experiment "evaluation" --path ./experiment_data
    - Verify the dataset name is correct
    - Use `--debug` to see detailed search information
 
+10. **Export is slow or keeps hitting rate limits**
+    - The exporter automatically retries 429 responses, honouring `Retry-After` headers where present
+    - Reduce `--page-size` (e.g. `--page-size 100`) to lower the per-request payload and decrease the chance of triggering rate limits
+    - The exporter pauses between pages and uses at most 3 concurrent workers to stay within server-side limits; no extra configuration is needed
 
 ### Getting Help
 

@@ -894,8 +894,8 @@ class RawProjectsClient:
         *,
         entity_type: KpiCardRequestEntityType,
         interval_start: dt.datetime,
-        interval_end: dt.datetime,
         filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[KpiCardResponse]:
         """
@@ -909,9 +909,9 @@ class RawProjectsClient:
 
         interval_start : dt.datetime
 
-        interval_end : dt.datetime
-
         filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1077,6 +1077,7 @@ class RawProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectStatsSummary]:
@@ -1090,6 +1091,8 @@ class RawProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -1108,6 +1111,7 @@ class RawProjectsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "filters": filters,
                 "sorting": sorting,
             },
             request_options=request_options,
@@ -2057,8 +2061,8 @@ class AsyncRawProjectsClient:
         *,
         entity_type: KpiCardRequestEntityType,
         interval_start: dt.datetime,
-        interval_end: dt.datetime,
         filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[KpiCardResponse]:
         """
@@ -2072,9 +2076,9 @@ class AsyncRawProjectsClient:
 
         interval_start : dt.datetime
 
-        interval_end : dt.datetime
-
         filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2240,6 +2244,7 @@ class AsyncRawProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectStatsSummary]:
@@ -2253,6 +2258,8 @@ class AsyncRawProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -2271,6 +2278,7 @@ class AsyncRawProjectsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "filters": filters,
                 "sorting": sorting,
             },
             request_options=request_options,

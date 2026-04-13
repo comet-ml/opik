@@ -14,6 +14,7 @@ interface BuildPayloadOptions {
   tags?: string[];
   changeDescription?: string;
   override?: boolean;
+  baseVersionOverride?: string;
 }
 
 interface UseEvaluationSuiteSavePayloadOptions {
@@ -45,7 +46,12 @@ export function useEvaluationSuiteSavePayload({
   const queryClient = useQueryClient();
 
   const buildPayload = useCallback(
-    ({ tags, changeDescription, override = false }: BuildPayloadOptions) => {
+    ({
+      tags,
+      changeDescription,
+      override = false,
+      baseVersionOverride,
+    }: BuildPayloadOptions) => {
       const state = useEvaluationSuiteDraftStore.getState();
 
       if (!suite) {
@@ -54,12 +60,8 @@ export function useEvaluationSuiteSavePayload({
         );
       }
 
-      const baseVersion = suite.latest_version?.id ?? "";
-      if (!baseVersion) {
-        throw new Error(
-          "Base version is missing. The evaluation suite may not have been fully loaded.",
-        );
-      }
+      const baseVersion =
+        baseVersionOverride ?? suite.latest_version?.id ?? null;
 
       const isEvaluationSuite = suite.type === DATASET_TYPE.EVALUATION_SUITE;
 
@@ -142,5 +144,40 @@ export function useEvaluationSuiteSavePayload({
     [suiteId, suite, versionEvaluators, queryClient],
   );
 
-  return { buildPayload };
+  const hasNoVersion = !suite?.latest_version?.id;
+
+  const buildInitialVersionPayload = useCallback(
+    ({ tags, changeDescription }: BuildPayloadOptions) => {
+      const state = useEvaluationSuiteDraftStore.getState();
+      const isEvaluationSuite = suite?.type === DATASET_TYPE.EVALUATION_SUITE;
+
+      let evaluators: Evaluator[] | undefined;
+      const executionPolicy = state.executionPolicy ?? undefined;
+
+      if (isEvaluationSuite && state.suiteAssertions !== null) {
+        const originalEvaluator = versionEvaluators[0];
+        evaluators = [packAssertions(state.suiteAssertions, originalEvaluator)];
+      }
+
+      return {
+        datasetId: suiteId,
+        payload: {
+          added_items: [] as DatasetItem[],
+          edited_items: [] as Partial<DatasetItem>[],
+          deleted_ids: [] as string[],
+          base_version: null,
+          tags,
+          change_description: changeDescription,
+          ...(evaluators !== undefined && { evaluators }),
+          ...(executionPolicy !== undefined && {
+            execution_policy: executionPolicy,
+          }),
+        },
+        override: true,
+      };
+    },
+    [suiteId, suite, versionEvaluators],
+  );
+
+  return { buildPayload, buildInitialVersionPayload, hasNoVersion };
 }

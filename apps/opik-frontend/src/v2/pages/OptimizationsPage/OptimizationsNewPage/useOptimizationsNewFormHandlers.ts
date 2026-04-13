@@ -4,7 +4,7 @@ import { useFormContext } from "react-hook-form";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import { convertFormDataToStudioConfig } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
@@ -40,12 +40,16 @@ export const useOptimizationsNewFormHandlers = () => {
 
   const form = useFormContext<OptimizationConfigFormType>();
 
-  const { data: datasetsData } = useDatasetsList({
-    workspaceName,
-    ...(activeProjectId && { projectId: activeProjectId }),
-    page: 1,
-    size: 1000,
-  });
+  const { data: datasetsData } = useProjectDatasetsList(
+    {
+      projectId: activeProjectId!,
+      page: 1,
+      size: 1000,
+    },
+    {
+      enabled: !!activeProjectId,
+    },
+  );
 
   const datasets = useMemo(
     () => datasetsData?.content || [],

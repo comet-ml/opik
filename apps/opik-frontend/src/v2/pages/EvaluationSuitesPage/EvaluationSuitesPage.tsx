@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { useNavigate } from "@tanstack/react-router";
@@ -12,10 +12,11 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/shared/Loader/Loader";
 import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
+import AddEvaluationSuiteSidebar from "@/v2/pages-shared/datasets/AddEvaluationSuiteSidebar/AddEvaluationSuiteSidebar";
 import DatasetActionsPanel from "@/v2/pages-shared/datasets/DatasetActionsPanel/DatasetActionsPanel";
 import { createDatasetRowActionsCell } from "@/v2/pages-shared/datasets/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/ui/button";
@@ -194,7 +195,6 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
     permissions: { canCreateDatasets, canEditDatasets, canDeleteDatasets },
   } = usePermissions();
 
-  const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -221,20 +221,21 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
-    {
-      workspaceName,
-      projectId: activeProjectId,
-      filters,
-      sorting: sortedColumns,
-      search: search!,
-      page,
-      size,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useProjectDatasetsList(
+      {
+        projectId: activeProjectId!,
+        filters,
+        sorting: sortedColumns,
+        search: search!,
+        page,
+        size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        enabled: !!activeProjectId,
+      },
+    );
 
   const datasets = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(
@@ -332,7 +333,6 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
 
   const handleNewSuiteClick = useCallback(() => {
     setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
   const handleRowClick = useCallback(
@@ -410,7 +410,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           ></ColumnsButton>
           {canCreateDatasets && (
             <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
-              Create new
+              Create evaluation suite
             </Button>
           )}
         </div>
@@ -447,8 +447,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddEditEvaluationSuiteDialog
-        key={resetDialogKeyRef.current}
+      <AddEvaluationSuiteSidebar
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={handleRowClick}

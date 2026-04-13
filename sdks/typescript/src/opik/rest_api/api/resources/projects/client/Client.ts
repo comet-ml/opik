@@ -1178,8 +1178,7 @@ export class ProjectsClient {
      * @example
      *     await client.projects.getProjectKpiCards("id", {
      *         entityType: "traces",
-     *         intervalStart: new Date("2024-01-15T09:30:00.000Z"),
-     *         intervalEnd: new Date("2024-01-15T09:30:00.000Z")
+     *         intervalStart: new Date("2024-01-15T09:30:00.000Z")
      *     })
      */
     public getProjectKpiCards(
@@ -1371,11 +1370,12 @@ export class ProjectsClient {
         request: OpikApi.GetProjectStatsRequest = {},
         requestOptions?: ProjectsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsSummary>> {
-        const { page, size, name, sorting } = request;
+        const { page, size, name, filters, sorting } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             name,
+            filters,
             sorting,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

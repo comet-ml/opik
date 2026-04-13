@@ -454,6 +454,7 @@ public class SpansResource {
                 .projectName(request.projectName())
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
+                .exclude(request.exclude())
                 .sortingFields(List.of())
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))

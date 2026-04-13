@@ -48,7 +48,7 @@ on:
 
 concurrency:
   group: ts-sdk-publish-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest

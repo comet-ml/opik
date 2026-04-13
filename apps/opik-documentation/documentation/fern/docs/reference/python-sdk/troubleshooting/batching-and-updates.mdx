@@ -1,0 +1,105 @@
+---
+headline: Batching and update operations | Opik Documentation
+og:description: Understand how batching affects update operations and how to avoid data loss when using the Opik Python SDK.
+og:site_name: Opik Documentation
+og:title: Batching and Update Operations
+title: Batching and update operations
+---
+
+By default, the Opik Python SDK batches create requests for traces and spans to improve ingestion throughput. While this is the recommended setting for most use cases, it can cause issues when you update a span or trace shortly after creating it.
+
+## What can go wrong
+
+When batching is enabled, create requests are queued and sent to the server in batches. If you call `.end()` or `.update()` on a span or trace before its batched create request has been flushed, the update may arrive at the server first. Since the server has no record of that span or trace yet, the update is silently dropped and the data is lost.
+
+This only affects the low-level client API (`client.trace()`, `client.span()`, `client.update_trace()`, `client.update_span()`, `.end()`, `.update()`). The [`@track` decorator](/docs/opik/tracing/log-traces) and [`start_as_current_span` context manager](/docs/opik/tracing/log-traces) handle lifecycle automatically and are not affected.
+
+## Recommended approaches
+
+### Use decorators or context managers (recommended)
+
+The safest way to create and manage spans and traces is through the [`@track` decorator or `start_as_current_span` context manager](/docs/opik/tracing/log-traces). These handle the full lifecycle — creation, data capture, and finalization — in a single operation with no separate update step.
+
+```python
+import opik
+
+# Using the @track decorator
+@opik.track
+def my_llm_call(prompt: str) -> str:
+    response = call_llm(prompt)
+    return response
+
+# Using context managers
+with opik.start_as_current_span(name="my_span") as span:
+    result = call_llm("Hello")
+```
+
+### Re-send the full payload to overwrite
+
+If you need to use the low-level client API, you can call `client.trace()` or `client.span()` again with the same ID and the complete data. The backend treats each create request as an upsert — if a trace or span with that ID already exists, the new payload overwrites the previous one entirely. This avoids the race condition because you are not relying on a separate update arriving after the original create.
+
+```python
+import datetime
+import opik
+
+client = opik.Opik()
+
+# First call — creates the trace (batched)
+trace = client.trace(
+    name="my_trace",
+    input={"prompt": "Hello"},
+)
+
+# ... do work ...
+
+# Second call with the same ID — overwrites the trace with full data
+client.trace(
+    id=trace.id,
+    name="my_trace",
+    input={"prompt": "Hello"},
+    output={"response": "Hi there"},
+    end_time=datetime.datetime.now(datetime.timezone.utc),
+)
+```
+
+This also works for spans — call `client.span()` with the same `id` and `trace_id` to overwrite.
+
+### Disable batching
+
+If your workflow requires creating spans and then updating them shortly after (for example, to add output data that is only available after an async operation completes), you can disable batching. This ensures each create request is sent immediately, so subsequent updates will always find the span on the server.
+
+```python
+import opik
+
+client = opik.Opik(batching=False)
+
+trace = client.trace(name="my_trace", input={"prompt": "Hello"})
+span = trace.span(name="llm_call", input={"prompt": "Hello"})
+
+# Safe to call .end() because the create was sent immediately
+span.end(output={"response": "Hi there"})
+trace.end(output={"response": "Hi there"})
+```
+
+<Warning>
+Disabling batching reduces ingestion throughput. Only use this option if you need to call `.end()` or `.update()` shortly after creation.
+</Warning>
+
+### Suppress the warning
+
+If you are calling `.end()` or `.update()` well after creation (for example, after a long-running operation completes), the batched create will have already been flushed and there is no risk of data loss. In this case, you can suppress the warning by setting an environment variable:
+
+```bash
+export OPIK_SUPPRESS_BATCHING_UPDATE_WARNING=true
+```
+
+Or in your Opik configuration file (`~/.opik.config`):
+
+```ini
+[opik]
+suppress_batching_update_warning = true
+```
+
+## Use integrations
+
+All Opik integrations (LangChain, LlamaIndex, DSPy, OpenAI, Anthropic, and others) handle span and trace lifecycle internally and are not affected by this issue. If you are using an integration, no changes are needed.

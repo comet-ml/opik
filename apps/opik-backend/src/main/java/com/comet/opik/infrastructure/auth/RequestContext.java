@@ -1,15 +1,22 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.google.inject.servlet.RequestScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @RequestScoped
 @Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class RequestContext {
 
     public static final String WORKSPACE_HEADER = "Comet-Workspace";
@@ -41,6 +48,7 @@ public class RequestContext {
     private List<Quota> quotas;
     private Visibility visibility;
     private String workspaceFallbackMessage;
+    private OpikVersion opikVersion;
 
     public void setWorkspaceFallbackFor(String entityType, String entityName) {
         this.workspaceFallbackMessage = WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted(entityType, entityName);

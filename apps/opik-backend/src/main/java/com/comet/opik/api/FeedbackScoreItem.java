@@ -55,6 +55,11 @@ public abstract sealed class FeedbackScoreItem {
 
     public abstract String threadId();
 
+    @JsonIgnore
+    public ScoreDestination scoreDestination() {
+        return ScoreDestination.fromCategoryName(categoryName);
+    }
+
     // Constructor for subclasses to use
 
     @ToString(callSuper = true)

@@ -1,59 +1,45 @@
-import React, { useMemo } from "react";
-import { Book, GraduationCap } from "lucide-react";
-import noDataTracesImageUrl from "/images/no-data-traces.png";
-import noDataSpansImageUrl from "/images/no-data-spans.png";
-import { Button } from "@/ui/button";
+import React from "react";
+import { Workflow, Link } from "lucide-react";
 import { buildDocsUrl } from "@/lib/utils";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-import NoDataPage from "@/shared/NoDataPage/NoDataPage";
+import DataTableEmptyState from "@/shared/DataTableEmptyState/DataTableEmptyState";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type NoTracesPageProps = {
   type?: TRACE_DATA_TYPE;
 };
 
+const EMPTY_STATE_CONFIG = {
+  [TRACE_DATA_TYPE.traces]: {
+    icon: Workflow,
+    title: "Log your first trace",
+    description:
+      "Capture traces to see how your agent thinks, responds, and uses tools.",
+    docsPath: "/tracing/log_traces",
+  },
+  [TRACE_DATA_TYPE.spans]: {
+    icon: Link,
+    title: "Log your first span",
+    description:
+      "Capture spans to see the individual steps within your traces.",
+    docsPath: "/tracing/log_traces",
+  },
+};
+
 const NoTracesPage: React.FC<NoTracesPageProps> = ({
   type = TRACE_DATA_TYPE.traces,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
-
-  const imageUrl = useMemo(() => {
-    switch (type) {
-      case TRACE_DATA_TYPE.traces:
-        return noDataTracesImageUrl;
-      case TRACE_DATA_TYPE.spans:
-        return noDataSpansImageUrl;
-      default:
-        return noDataTracesImageUrl;
-    }
-  }, [type]);
+  const config = EMPTY_STATE_CONFIG[type];
 
   return (
-    <NoDataPage
-      title="Log your first trace"
-      description="Logging traces helps you understand the flow of your application and identify specific points in your application that may be causing issues."
-      imageUrl={imageUrl}
-      height={188}
-      className="px-6"
-      buttons={
-        <>
-          <Button variant="secondary" asChild>
-            <a
-              href={buildDocsUrl("/tracing/log_traces")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Book className="mr-2 size-4"></Book>
-              Read documentation
-            </a>
-          </Button>
-          <Button onClick={openQuickstart}>
-            <GraduationCap className="mr-2 size-4" />
-            Explore Quickstart guide
-          </Button>
-        </>
-      }
-    ></NoDataPage>
+    <DataTableEmptyState
+      icon={config.icon}
+      title={config.title}
+      description={config.description}
+      docsUrl={buildDocsUrl(config.docsPath)}
+      onQuickstartClick={openQuickstart}
+    />
   );
 };
 

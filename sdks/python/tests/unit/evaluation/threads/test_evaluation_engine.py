@@ -330,7 +330,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
     def test_evaluate_thread(self, load_conversation_thread, decorator_opik_client):
         """Test that evaluate_thread correctly evaluates a thread with metrics."""
         mocked_opik_client = mock.MagicMock(spec=opik_client.Opik)
-        decorator_opik_client.get_client_cached.return_value = mocked_opik_client
+        decorator_opik_client.get_global_client.return_value = mocked_opik_client
 
         # Create a mock conversation thread
         mock_conversation = conversation_thread.ConversationThread()
@@ -393,7 +393,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
     ):
         """Test that evaluate_thread logs errors in metrics."""
         mocked_opik_client = mock.MagicMock(spec=opik_client.Opik)
-        decorator_opik_client.get_client_cached.return_value = mocked_opik_client
+        decorator_opik_client.get_global_client.return_value = mocked_opik_client
 
         # Create a mock thread
         thread = TraceThread(id="thread_1")

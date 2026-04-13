@@ -50,6 +50,7 @@ export const useSortableHeader = <TData,>({
 
   return {
     isSortable,
+    isSorted: Boolean(direction),
     renderSort,
     className: isSortable ? "cursor-pointer group" : undefined,
     onClickHandler: isSortable

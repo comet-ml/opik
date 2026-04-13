@@ -44,6 +44,8 @@ type TraceDetailsPanelProps = {
   open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
+  container?: HTMLElement | null;
+  refetchInterval?: number | false;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -57,6 +59,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onClose,
   open,
   onRowChange,
+  container,
+  refetchInterval,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -94,6 +98,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     {
       placeholderData: keepPreviousData,
       enabled: Boolean(traceId),
+      refetchInterval,
     },
   );
 
@@ -113,6 +118,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     {
       placeholderData: keepPreviousData,
       enabled: Boolean(traceId) && Boolean(projectId),
+      refetchInterval,
     },
   );
 
@@ -293,6 +299,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       horizontalNavigation={horizontalNavigation}
       verticalNavigation={verticalNavigation}
       minWidth={700}
+      container={container}
     >
       {renderContent()}
     </ResizableSidePanel>

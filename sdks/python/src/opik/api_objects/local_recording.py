@@ -50,7 +50,7 @@ def record_traces_locally(
     the client before reading, ensuring all events are captured.
     """
     if client is None:
-        client = opik_client.get_client_cached()
+        client = opik_client.get_global_client()
 
     # Disallow nested/local concurrent recordings in the same process
     existing_local = message_processors_chain.get_local_emulator_message_processor(

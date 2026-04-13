@@ -6,9 +6,10 @@ import uuid
 from llama_index.core.callbacks import schema as llama_index_schema
 from llama_index.core.callbacks import base_handler
 
+import opik
 from opik import context_storage, tracing_runtime_config
 from opik.decorator import arguments_helpers, span_creation_handler
-from opik.api_objects import opik_client, span, trace
+from opik.api_objects import span, trace
 
 from . import event_parsing_utils
 
@@ -60,7 +61,6 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
         self._skip_index_construction_trace = skip_index_construction_trace
         self._project_name = project_name
-        self._opik_client = opik_client.get_client_cached()
         self._opik_context_storage = context_storage.get_current_context_instance()
 
         # Event tracking - shared across contexts, but events have unique IDs
@@ -72,6 +72,10 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self._pending_root_output_updates: Dict[
             str, Union[span.SpanData, trace.TraceData]
         ] = {}
+
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def _send_root_to_backend(
         self, root: Union[span.SpanData, trace.TraceData]
@@ -95,7 +99,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             start_span_arguments=arguments_helpers.StartSpanParameters(
                 name=trace_name,
                 type="general",
-                project_name=self._project_name,
+                project_name=context_storage.resolve_project_name(
+                    self._project_name, "LlamaIndexCallbackHandler"
+                ),
                 metadata=LLAMA_INDEX_METADATA,
             ),
             distributed_trace_headers=None,
@@ -202,7 +208,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                     if event_type == llama_index_schema.CBEventType.LLM
                     else "general"
                 ),
-                project_name=self._project_name,
+                project_name=context_storage.resolve_project_name(
+                    self._project_name, "LlamaIndexCallbackHandler"
+                ),
                 metadata=LLAMA_INDEX_METADATA,
             ),
             distributed_trace_headers=None,

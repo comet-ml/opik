@@ -68,7 +68,7 @@ export const renderCostTooltipValue = ({
  * Formats Y-axis tick values for cost charts
  */
 export const costYTickFormatter = (value: number) =>
-  formatCost(value, { modifier: "kFormat" });
+  formatCost(value, { modifier: "kFormat", noValue: "$0" });
 
 /**
  * Formats Y-axis tick values for token usage charts

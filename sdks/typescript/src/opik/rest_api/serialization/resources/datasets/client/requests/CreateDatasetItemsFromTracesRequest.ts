@@ -3,6 +3,8 @@
 import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
+import { EvaluatorItem } from "../../../../types/EvaluatorItem.js";
+import { ExecutionPolicy } from "../../../../types/ExecutionPolicy.js";
 import { TraceEnrichmentOptions } from "../../../../types/TraceEnrichmentOptions.js";
 
 export const CreateDatasetItemsFromTracesRequest: core.serialization.Schema<
@@ -11,11 +13,15 @@ export const CreateDatasetItemsFromTracesRequest: core.serialization.Schema<
 > = core.serialization.object({
     traceIds: core.serialization.property("trace_ids", core.serialization.list(core.serialization.string())),
     enrichmentOptions: core.serialization.property("enrichment_options", TraceEnrichmentOptions),
+    evaluators: core.serialization.list(EvaluatorItem).optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
 });
 
 export declare namespace CreateDatasetItemsFromTracesRequest {
     export interface Raw {
         trace_ids: string[];
         enrichment_options: TraceEnrichmentOptions.Raw;
+        evaluators?: EvaluatorItem.Raw[] | null;
+        execution_policy?: ExecutionPolicy.Raw | null;
     }
 }

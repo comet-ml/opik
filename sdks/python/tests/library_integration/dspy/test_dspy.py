@@ -395,7 +395,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
 
         opik_callback.flush()
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # Prepare context to have manually created trace data
     trace_data = trace.TraceData(
@@ -474,7 +474,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
 
         opik_callback.flush()
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     span_data = span.SpanData(
         trace_id="some-trace-id",
         name="manually-created-span",

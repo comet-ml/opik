@@ -32,7 +32,7 @@ interface EvaluationSuiteItemFormProps {
   suiteAssertions: string[];
   suitePolicy: ExecutionPolicy;
   onOpenSettings: () => void;
-  showDataDescription?: boolean;
+  showEvaluationCriteria?: boolean;
 }
 
 const DescriptionSection: React.FC = () => {
@@ -51,9 +51,7 @@ const DescriptionSection: React.FC = () => {
   );
 };
 
-const DataSection: React.FC<{ showDescription?: boolean }> = ({
-  showDescription,
-}) => {
+const DataSection: React.FC = () => {
   const theme = useCodemirrorTheme({ editable: true });
   const { control } = useFormContext<EvaluationSuiteItemFormValues>();
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -99,16 +97,14 @@ const DataSection: React.FC<{ showDescription?: boolean }> = ({
             {jsonError && (
               <p className="comet-body-xs mt-1 text-destructive">{jsonError}</p>
             )}
-            {showDescription && (
-              <Description>
-                {
-                  EXPLAINERS_MAP[
-                    EXPLAINER_ID
-                      .what_format_is_this_to_add_my_evaluation_suite_item
-                  ].description
-                }
-              </Description>
-            )}
+            <Description className="comet-body-xs">
+              {
+                EXPLAINERS_MAP[
+                  EXPLAINER_ID
+                    .what_format_is_this_to_add_my_evaluation_suite_item
+                ].description
+              }
+            </Description>
           </>
         )}
       />
@@ -168,15 +164,40 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
 
   return (
     <div>
-      <h3 className="comet-body-accented mb-1">Evaluation criteria</h3>
-      <p className="comet-body-s mb-4 text-light-slate">
+      <div className="flex flex-col gap-1">
+        <span className="comet-body-s-accented">Assertions</span>
+        <div className="flex items-center justify-between">
+          <span className="comet-body-xs text-light-slate">
+            Define the conditions for this evaluation to pass
+          </span>
+          <button
+            type="button"
+            className="comet-body-xs inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
+            onClick={onOpenSettings}
+          >
+            <Settings2 className="size-3.5 shrink-0" />
+            Manage global assertions
+          </button>
+        </div>
+
+        <AssertionsField
+          readOnlyAssertions={suiteAssertions}
+          editableAssertions={fields.map((f) => f.value)}
+          onChangeEditable={(index, value) => update(index, { value })}
+          onRemoveEditable={(index) => remove(index)}
+          onAdd={() => append({ value: "" })}
+        />
+      </div>
+
+      <h3 className="comet-body-s-accented mb-1 mt-6">Evaluation criteria</h3>
+      <p className="comet-body-xs mb-4 text-light-slate">
         Define the conditions required for the evaluation to pass.
       </p>
 
-      <div className="mb-4 flex items-start overflow-hidden rounded-md border">
+      <div className="flex items-start overflow-hidden rounded-md border">
         <div className="flex flex-1 gap-4 p-3">
           <div className="flex flex-1 flex-col gap-1">
-            <Label>Runs for this item</Label>
+            <Label className="comet-body-xs-accented">Runs for this item</Label>
             <Input
               dimension="sm"
               className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
@@ -196,7 +217,7 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
             </span>
           </div>
           <div className="flex flex-1 flex-col gap-1">
-            <Label>Pass threshold</Label>
+            <Label className="comet-body-xs-accented">Pass threshold</Label>
             <Input
               dimension="sm"
               className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
@@ -236,31 +257,6 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
           </button>
         </TooltipWrapper>
       </div>
-
-      <div className="flex flex-col gap-1">
-        <span className="comet-body-s-accented">Assertions</span>
-        <div className="flex items-center justify-between">
-          <span className="comet-body-s text-light-slate">
-            Define the conditions for this evaluation to pass
-          </span>
-          <button
-            type="button"
-            className="comet-body-s inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
-            onClick={onOpenSettings}
-          >
-            <Settings2 className="size-3.5 shrink-0" />
-            Manage global assertions
-          </button>
-        </div>
-
-        <AssertionsField
-          readOnlyAssertions={suiteAssertions}
-          editableAssertions={fields.map((f) => f.value)}
-          onChangeEditable={(index, value) => update(index, { value })}
-          onRemoveEditable={(index) => remove(index)}
-          onAdd={() => append({ value: "" })}
-        />
-      </div>
     </div>
   );
 };
@@ -269,18 +265,22 @@ const EvaluationSuiteItemForm: React.FC<EvaluationSuiteItemFormProps> = ({
   suiteAssertions,
   suitePolicy,
   onOpenSettings,
-  showDataDescription,
+  showEvaluationCriteria = true,
 }) => {
   return (
     <div className="flex flex-col gap-6 p-6 pt-4">
       <DescriptionSection />
-      <DataSection showDescription={showDataDescription} />
-      <Separator />
-      <EvaluationCriteriaSection
-        suiteAssertions={suiteAssertions}
-        suitePolicy={suitePolicy}
-        onOpenSettings={onOpenSettings}
-      />
+      <DataSection />
+      {showEvaluationCriteria && (
+        <>
+          <Separator />
+          <EvaluationCriteriaSection
+            suiteAssertions={suiteAssertions}
+            suitePolicy={suitePolicy}
+            onOpenSettings={onOpenSettings}
+          />
+        </>
+      )}
     </div>
   );
 };

@@ -23,6 +23,7 @@ export interface ServiceTogglesConfig {
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
-    assistantSidebarEnabled: boolean;
+    v2WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
+    v2WorkspaceAllowlist?: string;
 }

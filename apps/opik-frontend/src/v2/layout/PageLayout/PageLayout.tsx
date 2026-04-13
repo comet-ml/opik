@@ -2,28 +2,25 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet } from "@tanstack/react-router";
 import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
-import SidebarToggle from "@/v2/layout/TopBar/SidebarToggle";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
 import WelcomeWizardDialog from "@/v2/pages-shared/WelcomeWizard/WelcomeWizardDialog";
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import useAssistantSidebarConfig from "@/api/assistant-sidebar/useAssistantSidebarConfig";
-import QuickstartDialog from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import LayoutDialogs from "@/v2/layout/LayoutDialogs";
 import { PortalContainerProvider } from "@/lib/portal-container";
 import SilentErrorBoundary from "@/shared/SilentErrorBoundary/SilentErrorBoundary";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
     null,
   );
-  const [storedPinned = true, setStoredPinned] =
-    useLocalStorageState<boolean>("sidebar-pinned");
+  const [storedExpanded = true, setStoredExpanded] =
+    useLocalStorageState<boolean>("sidebar-expanded");
   const [bannerHeight, setBannerHeight] = useState(0);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
-  const [overlayOpen, setOverlayOpen] = useState(false);
   const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(0);
   const sidebarWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -38,21 +35,11 @@ const PageLayout = () => {
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
 
-  const { data: assistantConfig } = useAssistantSidebarConfig({
-    enabled: !!AssistantSidebar,
-  });
-  const showAssistantSidebar = !!AssistantSidebar && !!assistantConfig?.enabled;
+  const showAssistantSidebar = !!AssistantSidebar;
 
-  const isMobile = useMediaQuery("(max-width: 1023px)");
-  const pinned = isMobile ? false : storedPinned;
-
-  const handleTogglePin = useCallback(() => {
-    setStoredPinned((prev) => !prev);
-  }, [setStoredPinned]);
-
-  const handleToggleOverlay = useCallback(() => {
-    setOverlayOpen((prev) => !prev);
-  }, []);
+  const assistantWidth = showAssistantSidebar ? assistantSidebarWidth : 0;
+  const isMobile = useMediaQuery(`(max-width: ${1023 + assistantWidth}px)`);
+  const expanded = isMobile ? false : storedExpanded;
 
   const handleSidebarWidthChange = useCallback((width: number) => {
     if (sidebarWrapperRef.current) {
@@ -86,7 +73,7 @@ const PageLayout = () => {
       style={
         {
           "--banner-height": `${bannerHeight}px`,
-          "--sidebar-width": pinned ? "240px" : "0px",
+          "--sidebar-width": expanded ? "240px" : "54px",
           "--assistant-sidebar-width": `${
             showAssistantSidebar ? assistantSidebarWidth : 0
           }px`,
@@ -104,24 +91,12 @@ const PageLayout = () => {
             ) : null}
 
             <SideBar
-              pinned={pinned}
-              onTogglePin={handleTogglePin}
-              overlayOpen={overlayOpen}
-              onOverlayOpenChange={setOverlayOpen}
-              isMobile={isMobile}
+              expanded={expanded}
+              setExpanded={setStoredExpanded}
+              locked={isMobile}
             />
             <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
-              <TopBar
-                startSlot={
-                  !pinned ? (
-                    <SidebarToggle
-                      onToggle={
-                        isMobile ? handleToggleOverlay : handleTogglePin
-                      }
-                    />
-                  ) : undefined
-                }
-              />
+              <TopBar />
               <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
                 <Outlet />
               </section>
@@ -132,7 +107,7 @@ const PageLayout = () => {
               onClose={handleCloseWelcomeWizard}
             />
 
-            <QuickstartDialog />
+            <LayoutDialogs />
           </div>
         </PortalContainerProvider>
 

@@ -158,10 +158,11 @@ public class WorkspacesResource {
             determination, clients must never derive the version themselves.
 
             Determination logic (priority order):
-            1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-            2) Auth one-way V2 gate (authenticated mode only, not yet implemented)
-            3) Version 1 entity check (entities without project_id)
-            4) Fallback on failure
+            1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
+            2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+            3) Auth one-way V2 gate (authenticated mode only)
+            4) Version 1 entity check (entities without project_id)
+            5) Fallback on failure
 
             In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
             Called by the frontend on workspace load.""", responses = {
@@ -169,10 +170,12 @@ public class WorkspacesResource {
     })
     public Response getWorkspaceVersion() {
         var workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Determining workspace version, workspaceId '{}'", workspaceId);
-        var workspaceVersion = workspaceVersionService.getWorkspaceVersion(workspaceId).block();
-        log.info("Determined workspace, workspaceId '{}', version '{}'",
-                workspaceId, workspaceVersion.opikVersion().getValue());
+        var authSuggestedVersion = requestContext.get().getOpikVersion();
+        log.info("Determining workspace version, workspaceId '{}', authSuggestedVersion '{}'",
+                workspaceId, authSuggestedVersion);
+        var workspaceVersion = workspaceVersionService.getWorkspaceVersion(workspaceId, authSuggestedVersion).block();
+        log.info("Determined workspace, workspaceId '{}', authSuggestedVersion '{}', version '{}'",
+                workspaceId, authSuggestedVersion, workspaceVersion.opikVersion().getValue());
         return Response.ok().entity(workspaceVersion).build();
     }
 

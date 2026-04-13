@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 
-import useAppStore from "@/store/AppStore";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import { DropdownOption } from "@/types/shared";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_LOADED_DATASET_ITEMS = 1000;
 
@@ -23,17 +23,19 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   placeholder = "Select an evaluation suite",
   className,
 }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
   const [isLoadedMore, setIsLoadedMore] = useState(false);
-  const { data, isLoading } = useDatasetsList(
+  const { data, isLoading } = useProjectDatasetsList(
     {
-      workspaceName,
-      ...(projectId && { projectId }),
+      projectId: projectId!,
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },
     {
       placeholderData: keepPreviousData,
+      enabled: canViewDatasets && !!projectId,
     },
   );
 

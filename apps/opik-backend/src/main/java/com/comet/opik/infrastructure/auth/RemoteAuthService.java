@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.ProjectService;
@@ -49,6 +50,7 @@ class RemoteAuthService implements AuthService {
                     Set.of("GET"));
             put("^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/metrics/?$",
                     Set.of("POST"));
+            put("^/v1/private/projects/retrieve/?$", Set.of("POST"));
             put("^/v1/private/spans/?$", Set.of("GET"));
             put("^/v1/private/spans/stats/?$", Set.of("GET"));
             put("^/v1/private/spans/feedback-scores/names/?$", Set.of("GET"));
@@ -87,12 +89,50 @@ class RemoteAuthService implements AuthService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder(toBuilder = true)
-    record AuthResponse(String user, String workspaceId, String workspaceName, List<Quota> quotas) {
+    record AuthResponse(
+            String user, String workspaceId, String workspaceName, List<Quota> quotas, OpikVersion opikVersion) {
     }
 
     @Builder(toBuilder = true)
     record ValidatedAuthCredentials(
-            boolean shouldCache, String userName, String workspaceId, String workspaceName, List<Quota> quotas) {
+            boolean shouldCache,
+            String userName,
+            String workspaceId,
+            String workspaceName,
+            List<Quota> quotas,
+            OpikVersion opikVersion) {
+
+        static ValidatedAuthCredentials from(AuthResponse authResponse) {
+            return ValidatedAuthCredentials.builder()
+                    .shouldCache(true)
+                    .userName(authResponse.user())
+                    .workspaceId(authResponse.workspaceId())
+                    .workspaceName(authResponse.workspaceName())
+                    .quotas(authResponse.quotas())
+                    .opikVersion(authResponse.opikVersion())
+                    .build();
+        }
+
+        static ValidatedAuthCredentials from(CacheService.AuthCredentials authCredentials) {
+            return ValidatedAuthCredentials.builder()
+                    .shouldCache(false)
+                    .userName(authCredentials.userName())
+                    .workspaceId(authCredentials.workspaceId())
+                    .workspaceName(authCredentials.workspaceName())
+                    .quotas(authCredentials.quotas())
+                    .opikVersion(authCredentials.opikVersion())
+                    .build();
+        }
+
+        CacheService.AuthCredentials toAuthCredentials() {
+            return CacheService.AuthCredentials.builder()
+                    .userName(userName)
+                    .workspaceId(workspaceId)
+                    .workspaceName(workspaceName)
+                    .quotas(quotas)
+                    .opikVersion(opikVersion)
+                    .build();
+        }
     }
 
     @Override
@@ -155,10 +195,9 @@ class RemoteAuthService implements AuthService {
                         .path(path)
                         .requiredPermissions(requiredPermissions)
                         .build()))) {
-            var credentials = verifyResponse(response);
-            setCredentialIntoContext(credentials.user(), credentials.workspaceId(),
-                    Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName), credentials.quotas());
-            requestContext.get().setApiKey(sessionToken.getValue());
+            var authResponse = verifyResponse(response);
+            var credentials = ValidatedAuthCredentials.from(authResponse);
+            setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
         }
     }
 
@@ -172,12 +211,9 @@ class RemoteAuthService implements AuthService {
         var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path, requiredPermissions);
         if (credentials.shouldCache()) {
             log.debug("Caching user and workspace id for API key");
-            cacheService.cache(apiKey, workspaceName, requiredPermissions, credentials.userName(),
-                    credentials.workspaceId(), credentials.workspaceName(), credentials.quotas);
+            cacheService.cache(apiKey, workspaceName, requiredPermissions, credentials.toAuthCredentials());
         }
-        setCredentialIntoContext(credentials.userName(), credentials.workspaceId(),
-                Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName), credentials.quotas);
-        requestContext.get().setApiKey(apiKey);
+        setCredentialIntoContext(credentials, workspaceName, apiKey);
     }
 
     private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey, String path,
@@ -199,22 +235,10 @@ class RemoteAuthService implements AuthService {
                             .requiredPermissions(requiredPermissions)
                             .build()))) {
                 var authResponse = verifyResponse(response);
-                return ValidatedAuthCredentials.builder()
-                        .shouldCache(true)
-                        .userName(authResponse.user())
-                        .workspaceId(authResponse.workspaceId())
-                        .workspaceName(authResponse.workspaceName())
-                        .quotas(authResponse.quotas())
-                        .build();
+                return ValidatedAuthCredentials.from(authResponse);
             }
         } else {
-            return ValidatedAuthCredentials.builder()
-                    .shouldCache(false)
-                    .userName(credentials.get().userName())
-                    .workspaceId(credentials.get().workspaceId())
-                    .workspaceName(credentials.get().workspaceName())
-                    .quotas(credentials.get().quotas())
-                    .build();
+            return ValidatedAuthCredentials.from(credentials.get());
         }
     }
 
@@ -242,13 +266,18 @@ class RemoteAuthService implements AuthService {
     }
 
     private void setCredentialIntoContext(
-            String userName, String workspaceId, String workspaceName, List<Quota> quotas) {
-        log.debug("setting credentials into context, userName: {}, workspaceId: {}, workspaceName: {}, quotas: {}",
-                userName, workspaceId, workspaceName, quotas);
-        requestContext.get().setUserName(userName);
-        requestContext.get().setWorkspaceId(workspaceId);
+            ValidatedAuthCredentials credentials, String fallbackWorkspaceName, String apiKey) {
+        var workspaceName = Optional.ofNullable(credentials.workspaceName()).orElse(fallbackWorkspaceName);
+        log.debug(
+                "setting credentials into context, userName: '{}', workspaceId: '{}', workspaceName: '{}', quotas: '{}', opikVersion '{}'",
+                credentials.userName(), credentials.workspaceId(), workspaceName, credentials.quotas(),
+                credentials.opikVersion());
+        requestContext.get().setUserName(credentials.userName());
+        requestContext.get().setWorkspaceId(credentials.workspaceId());
         requestContext.get().setWorkspaceName(workspaceName);
-        requestContext.get().setQuotas(quotas);
+        requestContext.get().setQuotas(credentials.quotas());
+        requestContext.get().setOpikVersion(credentials.opikVersion());
+        requestContext.get().setApiKey(apiKey);
     }
 
     private boolean isEndpointPublic(ContextInfoHolder contextInfo) {

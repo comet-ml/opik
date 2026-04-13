@@ -106,6 +106,7 @@ interface LLMPromptMessageProps {
   improvePromptConfig?: ImprovePromptConfig;
   jsonTreeData?: JsonObject | null;
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
+  compact?: boolean;
 }
 
 const LLMPromptMessage = forwardRef<
@@ -132,9 +133,11 @@ const LLMPromptMessage = forwardRef<
       improvePromptConfig,
       jsonTreeData,
       onJsonPathSelect,
+      compact = false,
     },
     ref,
   ) => {
+    const [isExpanded, setIsExpanded] = useState(false);
     const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
     const [isMediaPopoverOpen, setIsMediaPopoverOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -232,6 +235,7 @@ const LLMPromptMessage = forwardRef<
       }
     };
 
+    const messagePlaceholder = "Type your message";
     const showMediaActions = !disableMedia && role === LLM_MESSAGE_ROLE.user;
     const hasMediaTags =
       images.length > 0 || videos.length > 0 || audios.length > 0;
@@ -348,32 +352,74 @@ const LLMPromptMessage = forwardRef<
             ) : (
               <div className="flex flex-col gap-2 px-2">
                 <div className="relative">
-                  <CodeMirror
-                    onCreateEditor={(view) => {
-                      editorViewRef.current = view;
-                    }}
-                    onFocus={onFocus}
-                    onUpdate={handleEditorUpdate}
-                    theme={codeMirrorPromptTheme}
-                    value={localText}
-                    onChange={handleContentChange}
-                    placeholder="Type your message"
-                    editable
-                    basicSetup={{
-                      foldGutter: false,
-                      allowMultipleSelections: false,
-                      lineNumbers: false,
-                      highlightActiveLine: false,
-                    }}
-                    extensions={[
-                      EditorView.lineWrapping,
-                      mustachePlugin,
-                      ...(braceKeyExtension ? [braceKeyExtension] : []),
-                      ...(hasJsonData
-                        ? variableHintRef.current.getExtension()
-                        : []),
-                    ]}
-                  />
+                  <div
+                    className={
+                      compact && !isExpanded
+                        ? "max-h-[1.5em] cursor-pointer overflow-hidden"
+                        : undefined
+                    }
+                    onClick={
+                      compact && !isExpanded
+                        ? (e) => {
+                            e.stopPropagation();
+                            setIsExpanded(true);
+                          }
+                        : undefined
+                    }
+                  >
+                    <CodeMirror
+                      onCreateEditor={(view) => {
+                        editorViewRef.current = view;
+                      }}
+                      onFocus={onFocus}
+                      onUpdate={handleEditorUpdate}
+                      theme={codeMirrorPromptTheme}
+                      value={localText}
+                      onChange={handleContentChange}
+                      placeholder={messagePlaceholder}
+                      editable
+                      basicSetup={{
+                        foldGutter: false,
+                        allowMultipleSelections: false,
+                        lineNumbers: false,
+                        highlightActiveLine: false,
+                      }}
+                      extensions={[
+                        EditorView.lineWrapping,
+                        mustachePlugin,
+                        ...(braceKeyExtension ? [braceKeyExtension] : []),
+                        ...(hasJsonData
+                          ? variableHintRef.current.getExtension()
+                          : []),
+                      ]}
+                    />
+                  </div>
+                  {compact && !isExpanded && localText && (
+                    <Button
+                      variant="link"
+                      size="2xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsExpanded(true);
+                      }}
+                      className="absolute right-0 top-0 bg-background pl-5 text-muted-slate"
+                    >
+                      Show more
+                    </Button>
+                  )}
+                  {compact && isExpanded && (
+                    <Button
+                      variant="link"
+                      size="2xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsExpanded(false);
+                      }}
+                      className="mt-1 p-0 text-muted-slate"
+                    >
+                      Show less
+                    </Button>
+                  )}
                   {hasJsonData && (
                     <JsonTreePopover
                       data={jsonTreeData || {}}

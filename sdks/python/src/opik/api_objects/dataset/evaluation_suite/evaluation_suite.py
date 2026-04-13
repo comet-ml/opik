@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import functools
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opik.api_objects import opik_client as opik_client_module
 
 from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
@@ -26,22 +29,46 @@ LOGGER = logging.getLogger(__name__)
 LLMTask = Callable[[Dict[str, Any]], Any]
 
 
-def validate_task_result(result: Any) -> Dict[str, Any]:
-    if not isinstance(result, dict):
-        raise TypeError(
-            f"The task function must return a dict with 'input' and "
-            f"'output' keys, but it returned {type(result).__name__}. "
-            f"Example: return {{'input': data, 'output': response}}"
-        )
-    missing = {"input", "output"} - result.keys()
-    if missing:
-        raise ValueError(
-            f"The task function must return a dict with 'input' and "
-            f"'output' keys, but the returned dict is missing: "
-            f"{missing}. Got keys: {set(result.keys())}. "
-            f"Example: return {{'input': data, 'output': response}}"
-        )
-    return result
+def validate_task_result(
+    result: Any,
+    input_data: Any = None,
+) -> Dict[str, Any]:
+    """Normalise the value returned by a task function into a result dict.
+
+    If *result* is already a :class:`dict`, it is returned as-is (the
+    supported keys are ``"input"`` and ``"output"``).
+
+    For any other type the value is wrapped automatically::
+
+        {"output": result}
+
+    When *input_data* is also provided the wrapper becomes::
+
+        {"input": input_data, "output": result}
+
+    Args:
+        result: Value returned by the task callable.
+        input_data: Optional input that was passed to the task. Included in
+            the wrapper dict as ``"input"`` when *result* is not a dict.
+
+    Returns:
+        A dict suitable for use as an experiment trace result.
+    """
+    if isinstance(result, dict):
+        missing = {"input", "output"} - result.keys()
+        if missing:
+            raise ValueError(
+                f"The task function must return a dict with 'input' and "
+                f"'output' keys, but the returned dict is missing: "
+                f"{missing}. Got keys: {set(result.keys())}. "
+                f"Example: return {{'input': data, 'output': response}}"
+            )
+        return result
+
+    wrapped: Dict[str, Any] = {"output": result}
+    if input_data is not None:
+        wrapped["input"] = input_data
+    return wrapped
 
 
 class EvaluationSuite:
@@ -82,6 +109,7 @@ class EvaluationSuite:
         self,
         name: str,
         dataset_: dataset.Dataset,
+        client: Optional["opik_client_module.Opik"] = None,
     ):
         """
         Internal constructor — not part of the public API.
@@ -91,6 +119,7 @@ class EvaluationSuite:
         """
         self._name = name
         self._dataset = dataset_
+        self._client = client
 
     @property
     def name(self) -> str:
@@ -408,11 +437,14 @@ class EvaluationSuite:
         Run the evaluation suite against a task function.
 
         The task function receives each test item's data dict and must return
-        a dict with "input" and "output" keys.
+        either a dict (with ``"input"`` and ``"output"`` as the supported keys)
+        or any other value, which will be automatically wrapped as
+        ``{"input": <item data>, "output": <returned value>}``.
 
         Args:
             task: A callable that takes a dict (the item's data) and returns
-                a dict with "input" and "output" keys.
+                a dict with ``"input"``/``"output"`` keys, or any other value
+                to be auto-wrapped.
             experiment_name_prefix: Optional prefix for auto-generated experiment name.
             experiment_name: Optional explicit name for the experiment.
             project_name: Optional project name for tracking.
@@ -434,7 +466,12 @@ class EvaluationSuite:
             EvaluationSuiteResult with pass/fail status based on execution policy.
 
         Example:
-            >>> def my_llm_task(data: dict) -> dict:
+            >>> # Simplified: return any value it is auto-wrapped internally
+            >>> def my_llm_task(data: dict) -> str:
+            ...     return call_my_llm(data["user_input"], user_tier=data.get("user_tier"))
+            >>>
+            >>> # Explicit: return a dict with "input" and "output" keys directly
+            >>> def my_llm_task_explicit(data: dict) -> dict:
             ...     response = call_my_llm(data["user_input"], user_tier=data.get("user_tier"))
             ...     return {"input": data, "output": response}
             >>>
@@ -456,6 +493,7 @@ class EvaluationSuite:
             model=model,
             generate_report=generate_report,
             report_output_path=report_output_path,
+            client=self._client,
         )
 
     def __internal_api__run_optimization_suite__(
@@ -489,7 +527,8 @@ class EvaluationSuite:
 
         Args:
             task: A callable that takes a dict (the item's data) and returns
-                a dict with "input" and "output" keys.
+                a dict with ``"input"``/``"output"`` keys, or any other value
+                to be auto-wrapped.
             experiment_name_prefix: Optional prefix for auto-generated experiment name.
             experiment_name: Optional explicit name for the experiment.
             project_name: Optional project name for tracking.
@@ -517,7 +556,7 @@ class EvaluationSuite:
 
         @functools.wraps(task)
         def _validated_task(data: Dict[str, Any]) -> Any:
-            return validate_task_result(task(data))
+            return validate_task_result(task(data), input_data=data)
 
         suite_result = opik_evaluator.evaluate_suite(
             dataset=self._dataset,

@@ -73,6 +73,7 @@ const useDatasetItemChangesMutation = (
       queryClient.invalidateQueries({
         queryKey: ["dataset-items", { datasetId: variables.datasetId }],
       });
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

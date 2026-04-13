@@ -17,6 +17,7 @@ import { PLAYGROUND_SELECTED_DATASET_VERSION_KEY } from "@/constants/llm";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import usePromptById from "@/api/prompts/usePromptById";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveProjectId } from "@/store/AppStore";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -68,6 +69,11 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   improvePromptConfig,
 }) => {
   const activeProjectId = useActiveProjectId();
+
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
+
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
   const selectedPromptIdRef = useRef<string | undefined>();
@@ -178,7 +184,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage],
   );
 
-  const saveDisabled = message.content === "";
+  const saveDisabled =
+    message.content === "" || (!canCreatePrompts && !promptId);
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&

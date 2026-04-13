@@ -1,5 +1,5 @@
 import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiError, serialization } from "@/rest_api";
+import { OpikApiError, OpikApiTimeoutError, serialization } from "@/rest_api";
 import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import * as OpikApi from "@/rest_api/api";
 import { FeedbackScoreBatchItemSource } from "@/rest_api/api/types/FeedbackScoreBatchItemSource";
@@ -58,15 +58,16 @@ import {
   serializeFields,
   deserializeToShape,
   matchesBlueprint,
-} from "@/agent-config/typeHelpers";
+} from "@/typeHelpers";
 import { createTypedAgentConfig, type AgentConfig } from "@/agent-config/AgentConfig";
-import { getActiveConfigMask } from "@/agent-config/configContext";
+import { getActiveConfigMask, getActiveConfigBlueprintName } from "@/agent-config/configContext";
 import {
   getCachedBlueprint,
   initBlueprintCacheEntry,
 } from "@/agent-config/blueprintCache";
 import { trackStorage } from "@/decorators/track";
 import { z } from "zod";
+import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -82,6 +83,13 @@ interface AnnotationQueueOptions {
 }
 
 export const clients: OpikClient[] = [];
+
+let defaultProjectWarningEmitted = false;
+
+/** @internal Reset warning state — for tests only. */
+export function resetDefaultProjectWarning() {
+  defaultProjectWarningEmitted = false;
+}
 
 export class OpikClient {
   public api: OpikApiClientTemp;
@@ -140,7 +148,24 @@ export class OpikClient {
    * Resolves the project name, falling back to the client's configured project name.
    */
   public resolveProjectName(projectName?: string): string {
-    return projectName ?? this.config.projectName;
+    if (projectName !== undefined) {
+      return projectName;
+    }
+
+    if (
+      !defaultProjectWarningEmitted &&
+      this.config.projectName === DEFAULT_CONFIG.projectName
+    ) {
+      defaultProjectWarningEmitted = true;
+      logger.warn(
+        'No project name configured. Traces are being logged to "Default Project".\n' +
+          "Set OPIK_PROJECT_NAME environment variable or pass projectName to the Opik client\n" +
+          "to log to a specific project.\n" +
+          "See https://www.comet.com/docs/opik/tracing/sdk_configuration"
+      );
+    }
+
+    return this.config.projectName;
   }
 
   private displayTraceLog = (traceId: string, projectName: string) => {
@@ -159,7 +184,7 @@ export class OpikClient {
 
   public trace = (traceData: TraceData) => {
     logger.debug("Creating new trace with data:", traceData);
-    const projectName = traceData.projectName ?? this.config.projectName;
+    const projectName = this.resolveProjectName(traceData.projectName);
     const trace = new Trace(
       {
         id: generateId(),
@@ -922,6 +947,7 @@ export class OpikClient {
       promptData: OpikApi.PromptPublic,
       versionData: OpikApi.PromptVersionDetail
     ) => T,
+    createUnsyncedInstance: () => T,
     logContext: string,
     projectName?: string
   ): Promise<T> => {
@@ -994,6 +1020,18 @@ export class OpikClient {
 
       return promptInstance;
     } catch (error) {
+      if (
+        error instanceof OpikApiError ||
+        error instanceof OpikApiTimeoutError
+      ) {
+        logger.warn(
+          `Failed to sync ${logContext} '${name}' with the backend. ` +
+            "The prompt will work locally but is not persisted on the server. " +
+            "You can retry by calling .syncWithBackend().",
+          { error }
+        );
+        return createUnsyncedInstance();
+      }
       logger.error(`Failed to create ${logContext}`, { name, error });
       throw error;
     }
@@ -1027,6 +1065,19 @@ export class OpikClient {
       },
       (promptData, versionData) =>
         Prompt.fromApiResponse(promptData, versionData, this),
+      () =>
+        new Prompt(
+          {
+            name: options.name,
+            prompt: options.prompt,
+            metadata: options.metadata,
+            type: options.type ?? PromptType.MUSTACHE,
+            description: options.description,
+            tags: options.tags,
+            synced: false,
+          },
+          this
+        ),
       "prompt",
       resolvedProjectName
     );
@@ -1081,6 +1132,19 @@ export class OpikClient {
       },
       (promptData, versionData) =>
         ChatPrompt.fromApiResponse(promptData, versionData, this),
+      () =>
+        new ChatPrompt(
+          {
+            name: options.name,
+            messages: structuredClone(options.messages),
+            metadata: options.metadata,
+            type: options.type ?? PromptType.MUSTACHE,
+            description: options.description,
+            tags: options.tags,
+            synced: false,
+          },
+          this
+        ),
       "chat prompt",
       resolvedProjectName
     );
@@ -1492,14 +1556,18 @@ export class OpikClient {
     filterString?: string;
     maxResults?: number;
     truncate?: boolean;
+    exclude?: string[];
     waitForAtLeast?: number;
     waitForTimeout?: number;
   }): Promise<OpikApi.TracePublic[]> => {
+    const { exclude, ...rest } = options ?? {};
     return this.executeSearch<OpikApi.TracePublic, OpikApi.TraceFilterPublic>(
       "traces",
-      options ?? {},
+      rest,
       parseFilterString,
-      searchTracesWithFilters
+      (api, projectName, filters, maxResults, truncate) =>
+        searchTracesWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.TraceSearchStreamRequestPublicExcludeItem[] | undefined)
     );
   };
 
@@ -1616,14 +1684,18 @@ export class OpikClient {
     filterString?: string;
     maxResults?: number;
     truncate?: boolean;
+    exclude?: string[];
     waitForAtLeast?: number;
     waitForTimeout?: number;
   }): Promise<OpikApi.SpanPublic[]> => {
+    const { exclude, ...rest } = options ?? {};
     return this.executeSearch<OpikApi.SpanPublic, OpikApi.SpanFilterPublic>(
       "spans",
-      options ?? {},
+      rest,
       parseSpanFilterString,
-      searchSpansWithFilters
+      (api, projectName, filters, maxResults, truncate) =>
+        searchSpansWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.SpanSearchStreamRequestPublicExcludeItem[] | undefined)
     );
   };
 
@@ -1825,22 +1897,24 @@ export class OpikClient {
     }
 
     const maskId = getActiveConfigMask() ?? undefined;
+    const blueprintName = getActiveConfigBlueprintName() ?? undefined;
     const agentConfig = new AgentConfigManager(projectName, this);
 
-    const { extractFieldMetadata } = await import("@/agent-config/typeHelpers");
+    const { extractFieldMetadata } = await import("@/typeHelpers");
     const fieldMeta = extractFieldMetadata(schema, prefix);
 
     // effectiveEnv is null for `latest` and `version` lookups (no env tag involved)
     const effectiveEnv = options.latest || options.version ? null : (options.env ?? "prod");
-    const effectiveVersion = options.version ?? null;
-
+    const effectiveVersion = blueprintName ?? options.version ?? null;
     const cacheEntry = getCachedBlueprint(projectName, effectiveEnv, maskId ?? null, effectiveVersion);
 
     let blueprint = null;
 
     if (cacheEntry.isStale()) {
       try {
-        if (options.latest) {
+        if (blueprintName) {
+          blueprint = await agentConfig.getBlueprint({ name: blueprintName, maskId });
+        } else if (options.latest) {
           blueprint = await agentConfig.getBlueprint({ maskId });
         } else if (options.version) {
           blueprint = await agentConfig.getBlueprint({ name: options.version, maskId });

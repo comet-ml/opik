@@ -139,7 +139,6 @@ type AddEditRuleDialogProps = {
   setOpen: (open: boolean) => void;
   projectId: string;
   rule?: EvaluatorsRule;
-  projectName?: string; // Optional: project name for pre-selected projects
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
   defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
@@ -151,7 +150,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   setOpen,
   projectId,
   rule: defaultRule,
-  projectName,
   datasetColumnNames,
   hideScopeSelector = false,
   defaultScope,
@@ -671,13 +669,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   <LLMJudgeRuleDetails
                     workspaceName={workspaceName}
                     form={form}
-                    projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
                   />
                 ) : (
                   <PythonCodeRuleDetails
                     form={form}
-                    projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
                   />
                 )}

@@ -29,7 +29,6 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -274,11 +273,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
-        cell: TraceCountCell as never,
+        cell: TextCell as never,
         aggregatedCell: TextCell.Aggregation as never,
         customMeta: {
           aggregationKey: "trace_count",
-          tooltip: "View experiment traces",
         },
       },
       {

@@ -30,6 +30,10 @@ class ThreadsClient:
     def __init__(self, client: "opik.Opik"):
         self._opik_client = client
 
+    @property
+    def client(self) -> "opik.Opik":
+        return self._opik_client
+
     def search_threads(
         self,
         project_name: Optional[str] = None,
@@ -102,7 +106,7 @@ class ThreadsClient:
             entity_type="threads",
         )
 
-        project_name = project_name or self._opik_client.project_name
+        project_name = self._opik_client._resolve_project_name(project_name)
 
         threads = rest_stream_parser.read_and_parse_full_stream(
             read_source=lambda current_batch_size,
@@ -133,7 +137,7 @@ class ThreadsClient:
                 scores. If not provided, the project name configured in the Opik client will be used.
                 This parameter is used as a fallback if `project_name` is not specified in the score dictionary.
         """
-        project_name = project_name or self._opik_client.project_name
+        project_name = self._opik_client._resolve_project_name(project_name)
 
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,

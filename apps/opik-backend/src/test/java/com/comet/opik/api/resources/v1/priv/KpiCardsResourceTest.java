@@ -175,13 +175,13 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         double expectedPrevAvgDuration = (DURATION_1 + DURATION_2) / 2.0;
-        double expectedPrevAvgCost = (COST_1 + COST_2) / 2.0;
+        double expectedPrevTotalCost = COST_1 + COST_2;
         double expectedCurrAvgDuration = (DURATION_3 + DURATION_4) / 2.0;
-        double expectedCurrAvgCost = (COST_3 + COST_4) / 2.0;
+        double expectedCurrTotalCost = COST_3 + COST_4;
 
         assertMetric(response, KpiMetricType.COUNT, 2.0, 2.0);
         assertMetric(response, KpiMetricType.AVG_DURATION, expectedCurrAvgDuration, expectedPrevAvgDuration);
-        assertMetric(response, KpiMetricType.AVG_COST, expectedCurrAvgCost, expectedPrevAvgCost);
+        assertMetric(response, KpiMetricType.TOTAL_COST, expectedCurrTotalCost, expectedPrevTotalCost);
 
         if (entityType != EntityType.THREADS) {
             assertMetric(response, KpiMetricType.ERRORS, 1.0, 1.0);
@@ -212,11 +212,44 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         double expectedAvgDuration = (DURATION_1 + DURATION_2) / 2.0;
-        double expectedAvgCost = (COST_1 + COST_2) / 2.0;
+        double expectedTotalCost = COST_1 + COST_2;
 
         assertMetric(response, KpiMetricType.COUNT, 2.0, 0.0);
         assertMetric(response, KpiMetricType.AVG_DURATION, expectedAvgDuration, null);
-        assertMetric(response, KpiMetricType.AVG_COST, expectedAvgCost, null);
+        assertMetric(response, KpiMetricType.TOTAL_COST, expectedTotalCost, 0.0);
+
+        if (entityType != EntityType.THREADS) {
+            assertMetric(response, KpiMetricType.ERRORS, 1.0, 0.0);
+        } else {
+            assertNoMetric(response, KpiMetricType.ERRORS);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(EntityType.class)
+    @DisplayName("returns metrics when intervalEnd is null, defaulting to current time")
+    void nullIntervalEndDefaultsToNow(EntityType entityType) {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+
+        createEntities(entityType, projectName,
+                List.of(DURATION_1, DURATION_2), List.of(true, false), List.of(COST_1, COST_2));
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(entityType)
+                .intervalStart(intervalStart)
+                .intervalEnd(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        double expectedAvgDuration = (DURATION_1 + DURATION_2) / 2.0;
+        double expectedTotalCost = COST_1 + COST_2;
+
+        assertMetric(response, KpiMetricType.COUNT, 2.0, 0.0);
+        assertMetric(response, KpiMetricType.AVG_DURATION, expectedAvgDuration, null);
+        assertMetric(response, KpiMetricType.TOTAL_COST, expectedTotalCost, 0.0);
 
         if (entityType != EntityType.THREADS) {
             assertMetric(response, KpiMetricType.ERRORS, 1.0, 0.0);
@@ -246,11 +279,11 @@ class KpiCardsResourceTest {
                 .build(), API_KEY, WORKSPACE_NAME);
 
         double expectedAvgDuration = (DURATION_1 + DURATION_2) / 2.0;
-        double expectedAvgCost = (COST_1 + COST_2) / 2.0;
+        double expectedTotalCost = COST_1 + COST_2;
 
         assertMetric(response, KpiMetricType.COUNT, 0.0, 2.0);
         assertMetric(response, KpiMetricType.AVG_DURATION, null, expectedAvgDuration);
-        assertMetric(response, KpiMetricType.AVG_COST, null, expectedAvgCost);
+        assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, expectedTotalCost);
 
         if (entityType != EntityType.THREADS) {
             assertMetric(response, KpiMetricType.ERRORS, 0.0, 1.0);
@@ -278,7 +311,7 @@ class KpiCardsResourceTest {
 
         assertMetric(response, KpiMetricType.COUNT, 0.0, 0.0);
         assertMetric(response, KpiMetricType.AVG_DURATION, null, null);
-        assertMetric(response, KpiMetricType.AVG_COST, null, null);
+        assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, 0.0);
 
         if (entityType != EntityType.THREADS) {
             assertMetric(response, KpiMetricType.ERRORS, 0.0, 0.0);
@@ -313,7 +346,7 @@ class KpiCardsResourceTest {
                                 .intervalStart(now.plus(1, ChronoUnit.HOURS))
                                 .intervalEnd(now)
                                 .build(),
-                        "intervalStart must be before intervalEnd"),
+                        "intervalStart must be before intervalEnd or current time"),
                 Arguments.of(
                         KpiCardRequest.builder()
                                 .entityType(null)
@@ -331,10 +364,10 @@ class KpiCardsResourceTest {
                 Arguments.of(
                         KpiCardRequest.builder()
                                 .entityType(EntityType.SPANS)
-                                .intervalStart(now)
+                                .intervalStart(now.plus(1, ChronoUnit.HOURS))
                                 .intervalEnd(null)
                                 .build(),
-                        "intervalEnd must not be null"));
+                        "intervalStart must be before intervalEnd or current time"));
     }
 
     // === Span Filter Tests ===
@@ -993,9 +1026,9 @@ class KpiCardsResourceTest {
                 currentCount > 0 ? (double) FILTER_DURATION_MS : null,
                 previousCount > 0 ? (double) FILTER_DURATION_MS : null);
 
-        assertMetric(response, KpiMetricType.AVG_COST,
-                currentCount > 0 ? FILTER_COST : null,
-                previousCount > 0 ? FILTER_COST : null);
+        assertMetric(response, KpiMetricType.TOTAL_COST,
+                currentCount > 0 ? FILTER_COST * currentCount : 0.0,
+                previousCount > 0 ? FILTER_COST * previousCount : 0.0);
     }
 
     private void assertNoMetric(KpiCardResponse response, KpiMetricType type) {

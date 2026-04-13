@@ -3,7 +3,6 @@ import { register } from "@/runner/registry";
 import { createMockHttpResponsePromise } from "@tests/mockUtils";
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import type { LocalRunnerJob } from "@/rest_api/api/types/LocalRunnerJob";
-import { OpikApiError } from "@/rest_api/errors/OpikApiError";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
 
 function createMockApi() {
@@ -12,9 +11,7 @@ function createMockApi() {
       heartbeat: vi.fn(() =>
         createMockHttpResponsePromise({ cancelledJobIds: [] })
       ),
-      nextJob: vi.fn(() => {
-        throw new OpikApiError({ statusCode: 204 });
-      }),
+      nextJob: vi.fn(() => createMockHttpResponsePromise(null)),
       reportJobResult: vi.fn(() => createMockHttpResponsePromise(undefined)),
       registerAgents: vi.fn(() => createMockHttpResponsePromise(undefined)),
       appendJobLogs: vi.fn(() => createMockHttpResponsePromise(undefined)),
@@ -120,7 +117,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -131,14 +128,61 @@ describe("InProcessRunnerLoop", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     loop.shutdown();
 
-    expect(api.runners.reportJobResult).toHaveBeenCalledWith(
-      "job-1",
-      expect.objectContaining({
-        status: "completed",
-        result: { result: "echo: hello" },
-        traceId: "trace-1",
-      })
+    const calls = (api.runners.reportJobResult as ReturnType<typeof vi.fn>).mock.calls;
+    const runningCall = calls.find((c: unknown[]) => (c[1] as { status: string }).status === "running");
+    const completedCall = calls.find((c: unknown[]) => (c[1] as { status: string }).status === "completed");
+    expect(runningCall).toBeDefined();
+    expect(completedCall).toBeDefined();
+    // traceId is generated client-side and shared between running and completed
+    expect(runningCall![1].traceId).toEqual(completedCall![1].traceId);
+    expect(typeof runningCall![1].traceId).toBe("string");
+    expect(completedCall![1].result).toEqual({ result: "echo: hello" });
+  });
+
+  it("reports running before invoking the agent function", async () => {
+    const api = createMockApi();
+    const job = createJob({ agentName: "ordered-agent" });
+
+    const callOrder: string[] = [];
+
+    (api.runners.reportJobResult as ReturnType<typeof vi.fn>).mockImplementation(
+      (_jobId: string, payload: { status: string }) => {
+        callOrder.push(payload.status);
+        return createMockHttpResponsePromise(undefined);
+      }
     );
+
+    register({
+      func: () => {
+        callOrder.push("func");
+        return "done";
+      },
+      name: "ordered-agent",
+      project: "default",
+      params: [],
+      docstring: "",
+    });
+
+    let callCount = 0;
+    (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(
+      () => {
+        callCount++;
+        if (callCount === 1) {
+          return createMockHttpResponsePromise(job);
+        }
+        return createMockHttpResponsePromise(null);
+      }
+    );
+
+    const loop = new InProcessRunnerLoop(api, "runner-1");
+    loop.start();
+
+    // Drain microtasks — the first poll fires immediately (no timer delay),
+    // picks up the job, and runs executeJob entirely via resolved promises.
+    await vi.advanceTimersByTimeAsync(0);
+    loop.shutdown();
+
+    expect(callOrder).toEqual(["running", "func", "completed"]);
   });
 
   it("reports failure for unknown agent", async () => {
@@ -154,7 +198,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -169,7 +213,7 @@ describe("InProcessRunnerLoop", () => {
       expect.objectContaining({
         status: "failed",
         error: "Unknown agent: nonexistent-agent",
-        traceId: "trace-1",
+        traceId: expect.any(String),
       })
     );
   });
@@ -197,7 +241,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -212,7 +256,7 @@ describe("InProcessRunnerLoop", () => {
       expect.objectContaining({
         status: "failed",
         error: "Error: something broke",
-        traceId: "trace-1",
+        traceId: expect.any(String),
       })
     );
   });
@@ -246,7 +290,7 @@ describe("InProcessRunnerLoop", () => {
           await new Promise((resolve) => setTimeout(resolve, 200));
           return { data: job, rawResponse: {} };
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -266,6 +310,61 @@ describe("InProcessRunnerLoop", () => {
       (call: unknown[]) => call[0] === "cancelled-job-2"
     );
     expect(calledForCancelled).toBe(false);
+  });
+
+  it("casts string-encoded inputs to declared param types before calling the function", async () => {
+    const api = createMockApi();
+    const captured: Record<string, unknown> = {};
+
+    register({
+      func: (query: string, count: number, score: number, active: boolean) => {
+        captured.query = query;
+        captured.count = count;
+        captured.score = score;
+        captured.active = active;
+        return "ok";
+      },
+      name: "typed-agent",
+      project: "default",
+      params: [
+        { name: "query", type: "string" },
+        { name: "count", type: "float" },
+        { name: "score", type: "float" },
+        { name: "active", type: "boolean" },
+      ],
+      docstring: "",
+    });
+
+    const job = createJob({
+      agentName: "typed-agent",
+      inputs: { query: "hello", count: "5", score: "3.14", active: "true" },
+    });
+
+    let callCount = 0;
+    (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return createMockHttpResponsePromise(job);
+      return createMockHttpResponsePromise(null);
+    });
+
+    const loop = new InProcessRunnerLoop(api, "runner-1");
+    loop.start();
+    await vi.advanceTimersByTimeAsync(0);
+    loop.shutdown();
+
+    expect(api.runners.reportJobResult).toHaveBeenCalledWith(
+      "job-1",
+      expect.objectContaining({ status: "completed" })
+    );
+    expect(captured).toMatchObject({
+      query: "hello",
+      count: 5,
+      score: 3.14,
+      active: true,
+    });
+    expect(typeof captured.count).toBe("number");
+    expect(typeof captured.score).toBe("number");
+    expect(typeof captured.active).toBe("boolean");
   });
 
   it("handles dict result without wrapping", async () => {
@@ -289,7 +388,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 

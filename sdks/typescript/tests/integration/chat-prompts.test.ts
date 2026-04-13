@@ -93,7 +93,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       type: PromptType.MUSTACHE,
     });
 
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     // Verify the created prompt
     expect(chatPrompt).toBeInstanceOf(ChatPrompt);
@@ -130,7 +130,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       ],
       type: PromptType.MUSTACHE,
     });
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     // Format the prompt with variables
     const formatted = chatPrompt.format({
@@ -173,7 +173,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       type: PromptType.MUSTACHE,
     });
 
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     expect(chatPrompt).toBeInstanceOf(ChatPrompt);
     expect(chatPrompt.messages).toHaveLength(1);
@@ -199,7 +199,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       ],
       type: PromptType.MUSTACHE,
     });
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     // Update properties
     await chatPrompt.updateProperties({
@@ -249,7 +249,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       ],
     });
 
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     // Format with vision disabled
     const formattedNoVision = chatPrompt.format(
@@ -305,7 +305,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       ],
       type: PromptType.MUSTACHE,
     });
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     const results = await client.searchPrompts();
     const found = results.find((p) => p.name === testPromptName);
@@ -329,7 +329,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       ],
       type: PromptType.MUSTACHE,
     });
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     const versions = await chatPrompt.getVersions();
     expect(versions.length).toBeGreaterThan(0);
@@ -382,7 +382,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       type: PromptType.JINJA2,
     });
 
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     expect(chatPrompt.type).toBe(PromptType.JINJA2);
 
@@ -423,7 +423,7 @@ describe.skipIf(!shouldRunApiTests)("ChatPrompt Integration Tests", () => {
       type: PromptType.MUSTACHE,
     });
 
-    createdPromptIds.push(chatPrompt.id);
+    createdPromptIds.push(chatPrompt.id!);
 
     // Create a new version with modified content
     const updatedPrompt = await client.createChatPrompt({

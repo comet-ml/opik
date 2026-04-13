@@ -1,4 +1,5 @@
 import atexit
+import contextvars
 import datetime
 import functools
 import logging
@@ -70,7 +71,6 @@ from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
-    dataset_public,
     project_public,
     span_public,
     trace_public,
@@ -86,6 +86,7 @@ from ..types import (
     SpanType,
     TraceSource,
 )
+from .. import context_storage
 from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ class Opik:
         workspace: Optional[str] = None,
         host: Optional[str] = None,
         api_key: Optional[str] = None,
+        batching: bool = True,
         _use_batching: bool = False,
         _show_misconfiguration_message: bool = True,
     ) -> None:
@@ -109,12 +111,16 @@ class Opik:
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
 
         Args:
-            project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
             api_key: The API key for Opik. This parameter is ignored for local installations.
-            _use_batching: intended for internal usage in specific conditions only.
-                Enabling it is unsafe and can lead to data loss.
+            batching: If True (default), enables request batching for higher throughput.
+                When enabled, update operations (``update_span``, ``update_trace``,
+                ``Span.update``, ``Trace.update``) may cause data loss if the update
+                arrives at the server before the batched create request is flushed.
+            _use_batching: Deprecated. Use ``batching`` instead.
             _show_misconfiguration_message: intended for internal usage in specific conditions only.
                 Print a warning message if the Opik server is not configured properly.
         Returns:
@@ -137,10 +143,10 @@ class Opik:
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
         self._project_name_most_recent_trace: Optional[str] = None
-        self._use_batching = _use_batching
+        self._use_batching = batching or _use_batching
 
         self._initialize_streamer(
-            use_batching=_use_batching,
+            use_batching=self._use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
@@ -308,8 +314,8 @@ class Opik:
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
             feedback_scores: The list of feedback score dicts associated with the trace. Dicts don't require to have an `id` value.
-            project_name: The name of the project. If not set, the project name which was configured when Opik instance
-                was created will be used.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the client's default.
             error_info: The dictionary with error information (typically used when the trace function has failed).
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
@@ -359,8 +365,7 @@ class Opik:
         )
         last_updated_at = datetime_helpers.local_timestamp()
 
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
@@ -406,6 +411,7 @@ class Opik:
             project_name=project_name,
             url_override=self._config.url_override,
             source=source,
+            config=self._config,
         )
 
     def copy_traces(
@@ -436,7 +442,7 @@ class Opik:
 
         if not self._use_batching:
             raise exceptions.OpikException(
-                "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
+                "In order to use this method, you must enable batching using opik.Opik(batching=True)."
             )
 
         traces_public = self.search_traces(project_name=project_name)
@@ -513,8 +519,8 @@ class Opik:
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require having an `id` value.
-            project_name: The name of the project. If not set, the project name which was configured when the Opik instance
-                was created will be used.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the client's default.
             usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
                 the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens, and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
@@ -581,8 +587,7 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         if trace_id is None:
             trace_id = id_helpers.generate_id()
@@ -635,6 +640,7 @@ class Opik:
             total_cost=total_cost,
             attachments=attachments,
             source=source,
+            config=self._config,
         )
 
     def update_span(
@@ -698,6 +704,12 @@ class Opik:
         Returns:
             None
         """
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_span()",
+        )
+
         span_module.span_client.update_span(
             id=id,
             trace_id=trace_id,
@@ -762,6 +774,12 @@ class Opik:
         Returns:
             None
         """
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_trace()",
+        )
+
         if not trace_id or not project_name:
             raise ValueError(
                 "trace_id and project_name must be provided and can not be None or empty, "
@@ -791,8 +809,8 @@ class Opik:
         Args:
             scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the spans are logged. If not set, the project name
-                which was configured when the Opik instance was created will be used.
+            project_name: The name of the project in which the spans are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
                 Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
@@ -810,7 +828,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self.project_name,
+            project_name=self._resolve_project_name(project_name),
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -840,8 +858,8 @@ class Opik:
         Args:
             scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the traces are logged. If not set, the project name
-                which was configured when the Opik instance was created will be used.
+            project_name: The name of the project in which the traces are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
                 Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
@@ -859,7 +877,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self.project_name,
+            project_name=self._resolve_project_name(project_name),
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -890,8 +908,8 @@ class Opik:
         Args:
             scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a thread id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the threads are logged. If not set, the project name
-                which was configured when the Opik instance was created will be used.
+            project_name: The name of the project in which the threads are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
                 Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
@@ -921,8 +939,8 @@ class Opik:
         """Search for threads in a given project based on specific criteria.
 
         Args:
-            project_name: The name of the project to search the threads for. If not provided,
-                the project name configured when the Client was created will be used.
+            project_name: The name of the project to search the threads for. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: `"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"`
 
@@ -1010,29 +1028,21 @@ class Opik:
 
         Args:
             name: The name of the dataset
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: dataset object associated with the name passed.
         """
         project_name = self._resolve_project_name(project_name)
-        dataset_fern: dataset_public.DatasetPublic = (
-            self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=name, project_name=project_name
-            )
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name, project_name=project_name
         )
 
-        dataset_ = dataset.Dataset(
-            name=name,
-            description=dataset_fern.description,
+        return dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
-            dataset_items_count=dataset_fern.dataset_items_count,
         )
-
-        dataset_.__internal_api__sync_hashes__()
-
-        return dataset_
 
     def get_datasets(
         self,
@@ -1044,7 +1054,7 @@ class Opik:
         Returns all datasets up to the specified limit.
 
         Args:
-            project_name: The name of the project to which the datasets belong. If None, uses the default project name.
+            project_name: The name of the project to which the datasets belong. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: The maximum number of datasets to return.
             sync_items: Whether to sync the hashes of the dataset items. This is used to deduplicate items when fetching the dataset but it can be an expensive operation.
 
@@ -1072,7 +1082,7 @@ class Opik:
         Args:
             dataset_name: The name of the dataset
             max_results: The maximum number of experiments to return.
-            project_name: The name of the project to which the datasets belong. If None, uses the default project name.
+            project_name: The name of the project to which the datasets belong. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             List[experiment.Experiment]: A list of experiment objects.
@@ -1099,7 +1109,7 @@ class Opik:
 
         Args:
             name: The name of the dataset
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
         """
         project_name = self._resolve_project_name(project_name)
         self._rest_client.datasets.delete_dataset_by_name(
@@ -1118,7 +1128,7 @@ class Opik:
         Args:
             name: The name of the dataset.
             description: An optional description of the dataset.
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: The created dataset object.
@@ -1154,7 +1164,7 @@ class Opik:
         Args:
             name: The name of the dataset.
             description: An optional description of the dataset.
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: The dataset object.
@@ -1244,6 +1254,7 @@ class Opik:
         return evaluation_suite.EvaluationSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
     def get_evaluation_suite(
@@ -1266,26 +1277,21 @@ class Opik:
             ApiError: If no dataset with the given name exists (404).
         """
         project_name = self._resolve_project_name(project_name)
-        dataset_fern: dataset_public.DatasetPublic = (
-            self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=name,
-                project_name=project_name,
-            )
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name,
+            project_name=project_name,
         )
 
-        suite_dataset = dataset.Dataset(
-            name=name,
-            description=dataset_fern.description,
+        suite_dataset = dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
-            dataset_items_count=dataset_fern.dataset_items_count,
         )
-
-        suite_dataset.__internal_api__sync_hashes__()
 
         return evaluation_suite.EvaluationSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
     def get_or_create_evaluation_suite(
@@ -1466,7 +1472,7 @@ class Opik:
 
         Args:
             name: The name of the experiment.
-            project_name: The name of the project the experiment belongs to. If None, uses the default project name.
+            project_name: The name of the project the experiment belongs to. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             experiment.Experiment: the API object for an existing experiment.
@@ -1593,6 +1599,7 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[trace_public.TracePublic]:
@@ -1602,7 +1609,7 @@ class Opik:
         within the specified timeout, an exception will be raised.
 
         Args:
-            project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
+            project_name: The name of the project to search traces in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -1642,6 +1649,7 @@ class Opik:
                 If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: Fields to exclude from the response. For example, ["feedback_scores"]
             wait_for_at_least: The minimum number of traces to wait for before returning.
             wait_for_timeout: The timeout for waiting for traces.
 
@@ -1663,6 +1671,7 @@ class Opik:
             filters=filters_,
             max_results=max_results,
             truncate=truncate,
+            exclude=exclude,
         )
 
         if wait_for_at_least is None:
@@ -1689,6 +1698,7 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[span_public.SpanPublic]:
@@ -1699,7 +1709,7 @@ class Opik:
         within the specified timeout, an exception will be raised.
 
         Args:
-            project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
+            project_name: The name of the project to search spans in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
@@ -1740,6 +1750,7 @@ class Opik:
                 If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: List of fields to exclude from the response (e.g., ["feedback_scores", "input", "output"])
             wait_for_at_least: The minimum number of spans to wait for before returning.
             wait_for_timeout: The timeout for waiting for spans.
 
@@ -1761,6 +1772,7 @@ class Opik:
             filters=filters,
             max_results=max_results,
             truncate=truncate,
+            exclude=exclude,
         )
 
         if wait_for_at_least is None:
@@ -1833,7 +1845,7 @@ class Opik:
                 self._rest_client.check.get_workspace_name().workspace_name
             )
 
-        project_name = project_name or self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         return url_helpers.get_project_url_by_workspace(
             workspace=dereferenced_workspace, project_name=project_name
@@ -1868,6 +1880,45 @@ class Opik:
             rest_httpx_client=self._httpx_client,
         )
 
+    def queue_attachment_upload(
+        self,
+        entity_type: Literal["trace", "span"],
+        entity_id: str,
+        project_name: str,
+        file_path: str,
+        file_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> None:
+        """Queue a local file for background upload as an attachment via the streamer.
+
+        This method is non-blocking: the upload is handled by the background streamer
+        which provides parallelization, automatic retries, and monitoring. Call
+        :meth:`flush` to wait for all queued uploads to complete.
+
+        Parameters:
+            entity_type: The type of entity to attach the file to (``"trace"`` or ``"span"``).
+            entity_id: The ID of the trace or span to attach the file to.
+            project_name: The name of the project containing the entity.
+            file_path: Path to the local file to upload.
+            file_name: Name to assign the attachment. Defaults to the file's basename.
+            mime_type: MIME type of the file. Auto-detected from the file name if not provided.
+        """
+        attachment_data = Attachment(
+            data=file_path,
+            file_name=file_name,
+            content_type=mime_type,
+            create_temp_copy=False,
+        )
+        self._streamer.put(
+            attachment_converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                project_name=project_name,
+                url_override=self._config.url_override,
+            )
+        )
+
     def create_prompt(
         self,
         name: str,
@@ -1893,7 +1944,7 @@ class Opik:
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
-            project_name: Optional project name to associate with the prompt. If not provided, the default project will be used.
+            project_name: Optional project name to associate with the prompt. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -1980,7 +2031,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
-            project_name: The name of the project to retrieve the prompt from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
@@ -2018,7 +2069,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
-            project_name: The name of the project to retrieve the prompt from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
@@ -2055,7 +2106,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -2147,7 +2198,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -2235,7 +2286,7 @@ class Opik:
 
         Parameters:
             name: The name of the prompt.
-            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             List[prompt_module.Prompt]: A list of Prompt instances for the given name.
@@ -2252,7 +2303,7 @@ class Opik:
         Retrieve the latest prompt versions (both string and chat prompts) for the given search parameters.
 
         Parameters:
-            project_name: The name of the project to search in. If not provided, the default project will be used.
+            project_name: The name of the project to search in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -2400,8 +2451,7 @@ class Opik:
         feedback_definition_names: Optional[List[str]],
     ) -> QueueT:
         """Helper method to create an annotation queue with the specified scope."""
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, project_name
@@ -2449,7 +2499,7 @@ class Opik:
 
         Args:
             name: The name of the annotation queue.
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             description: An optional description of the queue.
             instructions: Optional instructions for reviewers.
             comments_enabled: Whether to enable comments on items.
@@ -2482,7 +2532,7 @@ class Opik:
 
         Args:
             name: The name of the annotation queue.
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             description: An optional description of the queue.
             instructions: Optional instructions for reviewers.
             comments_enabled: Whether to enable comments on items.
@@ -2546,14 +2596,14 @@ class Opik:
         Get all traces annotation queues for a project.
 
         Args:
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: Maximum number of queues to return. Defaults to 1000.
 
         Returns:
             List[TracesAnnotationQueue]: A list of traces annotation queue objects.
         """
         project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name or self._project_name
+            self._rest_client, self._resolve_project_name(project_name)
         )
 
         return annotation_queue_rest_operations.get_traces_annotation_queues(
@@ -2571,14 +2621,14 @@ class Opik:
         Get all threads annotation queues for a project.
 
         Args:
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: Maximum number of queues to return. Defaults to 1000.
 
         Returns:
             List[ThreadsAnnotationQueue]: A list of threads annotation queue objects.
         """
         project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name or self._project_name
+            self._rest_client, self._resolve_project_name(project_name)
         )
 
         return annotation_queue_rest_operations.get_threads_annotation_queues(
@@ -2608,7 +2658,7 @@ class Opik:
 
         Args:
             config: An instance of a user-defined ``AgentConfig`` subclass.
-            project_name: Opik project name. Defaults to the client's default.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             description: Optional description stored with the version.
 
         Returns:
@@ -2622,7 +2672,7 @@ class Opik:
             )
 
         manager = AgentConfigManager(
-            project_name=project_name or self._project_name,
+            project_name=self._resolve_project_name(project_name),
             rest_client_=self._rest_client,
         )
         return config._create_version(manager, description)
@@ -2652,7 +2702,7 @@ class Opik:
             fallback: An instance of a user-defined ``AgentConfig`` subclass.
                 Used as the return value when the backend has no config, and
                 its type determines the return type.
-            project_name: Opik project name. Defaults to the client's default.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             env: Environment tag to fetch. Defaults to ``"prod"`` when no other
                 selector is provided.
             latest: If ``True``, fetch the latest version regardless of env tags.
@@ -2678,7 +2728,7 @@ class Opik:
         if selectors == 0:
             env = "prod"
 
-        resolved_project = project_name or self._project_name
+        resolved_project = self._resolve_project_name(project_name)
         manager = AgentConfigManager(
             project_name=resolved_project,
             rest_client_=self._rest_client,
@@ -2696,14 +2746,82 @@ class Opik:
             ),
         )
 
-    def _resolve_project_name(self, project_name: Optional[str]) -> str:
-        if project_name is None:
-            return self._project_name
-        return project_name
+    def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
+        return helpers.resolve_project_name(
+            explicitly_passed_value=explicitly_passed_value,
+            value_from_config=self._project_name,
+            value_from_context=context_storage.get_context_project_name(),
+        )
 
 
-@functools.lru_cache()
+_context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.ContextVar(
+    "_context_client_var", default=None
+)
+_global_singleton: Optional[Opik] = None
+
+
+def get_current_client_raw() -> Optional[Opik]:
+    """Return the active Opik client without auto-creating one.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. ``None`` if no client has been set
+    """
+    client = _context_client_var.get()
+    if client is not None:
+        return client
+
+    return _global_singleton
+
+
+def get_global_client() -> Opik:
+    """Get the active Opik client, creating one if needed.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. Auto-created default client (created on first call)
+    """
+    client = get_current_client_raw()
+    if client is not None:
+        return client
+
+    global _global_singleton
+    _global_singleton = Opik()
+    return _global_singleton
+
+
+def set_global_client(client: Opik, context_wise: bool = False) -> None:
+    """Set the active Opik client.
+
+    Args:
+        client: The Opik client instance to use.
+        context_wise: If True, sets the client for the current context only
+            (thread-safe, async-safe). If False, replaces the global singleton.
+    """
+    if context_wise:
+        _context_client_var.set(client)
+    else:
+        global _global_singleton
+        _global_singleton = client
+
+
+def reset_global_client(end_client: bool = True) -> None:
+    """Clear the active Opik client.
+
+    Args:
+        end_client: If True (default), calls ``.end()`` on the global singleton
+            before clearing it. Set to False when the caller manages the client
+            lifecycle independently.
+    """
+    global _global_singleton
+    if _global_singleton is not None:
+        if end_client:
+            _global_singleton.end()
+        _global_singleton = None
+    _context_client_var.set(None)
+
+
 def get_client_cached() -> Opik:
-    client = Opik(_use_batching=True)
-
-    return client
+    return get_global_client()

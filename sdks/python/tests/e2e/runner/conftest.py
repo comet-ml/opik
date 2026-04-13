@@ -40,7 +40,7 @@ def pytest_runtest_makereport(item, call):
 
 @pytest.fixture()
 def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
-    client = opik.api_objects.opik_client.Opik(_use_batching=True)
+    client = opik.api_objects.opik_client.Opik(batching=True)
     yield client
     client.end()
 
@@ -101,7 +101,7 @@ def runner_process(api_client, subprocess_env, project_id, request):
 
     while time.monotonic() < deadline:
         for line in list(output_lines):
-            match = re.search(r"Runner connected \(ID: ([^)]+)\)", line)
+            match = re.search(r"runner: (\S+)", line)
             if match:
                 runner_id = match.group(1)
                 break

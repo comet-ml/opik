@@ -46,6 +46,7 @@ import {
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
 import { useActiveProjectId } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
@@ -89,6 +90,10 @@ const PlaygroundPrompt = ({
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
+
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
 
   const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
     useState(false);
@@ -283,9 +288,9 @@ const PlaygroundPrompt = ({
       <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
         <div className="flex min-w-0 items-center gap-1">
           <div className="flex shrink-0 items-center gap-1 pr-2">
-            <p className="comet-body-s-accented whitespace-nowrap">{name}</p>
+            <p className="comet-body-xs-accented whitespace-nowrap">{name}</p>
             <span
-              className="comet-body-s flex size-6 items-center justify-center rounded-md"
+              className="comet-body-xs flex size-5 items-center justify-center rounded-md"
               style={{
                 backgroundColor: promptColor.bg,
                 color: promptColor.text,
@@ -333,6 +338,7 @@ const PlaygroundPrompt = ({
                   variant="minimal"
                   size="icon-sm"
                   onClick={handleSaveChatPrompt}
+                  disabled={!canCreatePrompts && !selectedChatPromptId}
                 >
                   <Save />
                 </Button>

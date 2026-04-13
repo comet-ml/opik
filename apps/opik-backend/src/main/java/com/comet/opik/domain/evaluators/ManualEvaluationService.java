@@ -2,6 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
@@ -31,6 +32,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -227,6 +229,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                                         .llmAsJudgeCode(rule.getCode())
                                         .workspaceId(workspaceId)
                                         .userName(userName)
+                                        .scoreNameMapping(Map.of())
+                                        .promptType(PromptType.MUSTACHE)
                                         .build())
                                 .toList();
 

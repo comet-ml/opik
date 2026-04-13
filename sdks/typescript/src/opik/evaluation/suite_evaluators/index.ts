@@ -7,5 +7,5 @@ export {
   validateExecutionPolicy,
 } from "./validators";
 export type { LLMJudgeConfig } from "./llmJudgeConfig";
-export { buildResponseSchema, parseResponse } from "./llmJudgeParsers";
+export { ResponseSchema } from "./llmJudgeParsers";
 export { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from "./llmJudgeTemplate";

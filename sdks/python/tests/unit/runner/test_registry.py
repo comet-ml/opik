@@ -1,3 +1,6 @@
+import logging
+
+
 from opik.runner.registry import Param, extract_params, get_all, register
 
 
@@ -35,17 +38,39 @@ class TestExtractParams:
             pass
 
         params = extract_params(fn)
-        assert [(p.name, p.type) for p in params] == [("x", "int"), ("y", "str")]
+        assert [(p.name, p.type) for p in params] == [("x", "integer"), ("y", "string")]
 
     def test_extract_params__untyped__defaults_to_str(self):
         def fn(x):
             pass
 
         params = extract_params(fn)
-        assert params[0].type == "str"
+        assert params[0].type == "string"
 
     def test_extract_params__no_params(self):
         def fn():
             pass
 
         assert extract_params(fn) == []
+
+    def test_extract_params__unknown_type__defaults_to_string_and_warns(
+        self, capture_log
+    ):
+        class CustomType:
+            pass
+
+        def fn(count: int, first_custom: CustomType, second_custom: CustomType) -> None:
+            pass
+
+        params = extract_params(fn)
+
+        assert [(p.name, p.type) for p in params] == [
+            ("count", "integer"),
+            ("first_custom", "string"),
+            ("second_custom", "string"),
+        ]
+        warnings = [r for r in capture_log.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        warning = warnings[0].getMessage()
+        assert "first_custom" in warning
+        assert "second_custom" in warning

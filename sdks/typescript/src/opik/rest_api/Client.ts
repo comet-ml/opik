@@ -3,7 +3,6 @@
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
-import { AssistantSidebarsClient } from "./api/resources/assistantSidebars/client/Client.js";
 import { AttachmentsClient } from "./api/resources/attachments/client/Client.js";
 import { AutomationRuleEvaluatorsClient } from "./api/resources/automationRuleEvaluators/client/Client.js";
 import { ChatCompletionsClient } from "./api/resources/chatCompletions/client/Client.js";
@@ -20,6 +19,7 @@ import { ManualEvaluationClient } from "./api/resources/manualEvaluation/client/
 import { OllamaClient } from "./api/resources/ollama/client/Client.js";
 import { OllieStateClient } from "./api/resources/ollieState/client/Client.js";
 import { OpenTelemetryIngestionClient } from "./api/resources/openTelemetryIngestion/client/Client.js";
+import { OpikConnectClient } from "./api/resources/opikConnect/client/Client.js";
 import { OptimizationsClient } from "./api/resources/optimizations/client/Client.js";
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
 import { PromptsClient } from "./api/resources/prompts/client/Client.js";
@@ -53,7 +53,6 @@ export class OpikApiClient {
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _alerts: AlertsClient | undefined;
     protected _annotationQueues: AnnotationQueuesClient | undefined;
-    protected _assistantSidebars: AssistantSidebarsClient | undefined;
     protected _attachments: AttachmentsClient | undefined;
     protected _check: CheckClient | undefined;
     protected _automationRuleEvaluators: AutomationRuleEvaluatorsClient | undefined;
@@ -71,6 +70,7 @@ export class OpikApiClient {
     protected _ollama: OllamaClient | undefined;
     protected _ollieState: OllieStateClient | undefined;
     protected _openTelemetryIngestion: OpenTelemetryIngestionClient | undefined;
+    protected _opikConnect: OpikConnectClient | undefined;
     protected _optimizations: OptimizationsClient | undefined;
     protected _projects: ProjectsClient | undefined;
     protected _prompts: PromptsClient | undefined;
@@ -101,10 +101,6 @@ export class OpikApiClient {
 
     public get annotationQueues(): AnnotationQueuesClient {
         return (this._annotationQueues ??= new AnnotationQueuesClient(this._options));
-    }
-
-    public get assistantSidebars(): AssistantSidebarsClient {
-        return (this._assistantSidebars ??= new AssistantSidebarsClient(this._options));
     }
 
     public get attachments(): AttachmentsClient {
@@ -173,6 +169,10 @@ export class OpikApiClient {
 
     public get openTelemetryIngestion(): OpenTelemetryIngestionClient {
         return (this._openTelemetryIngestion ??= new OpenTelemetryIngestionClient(this._options));
+    }
+
+    public get opikConnect(): OpikConnectClient {
+        return (this._opikConnect ??= new OpikConnectClient(this._options));
     }
 
     public get optimizations(): OptimizationsClient {

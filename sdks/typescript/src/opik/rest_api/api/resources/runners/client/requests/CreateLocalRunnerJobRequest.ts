@@ -14,5 +14,6 @@ export interface CreateLocalRunnerJobRequest {
     inputs?: OpikApi.JsonNode;
     projectId: string;
     maskId?: string;
+    blueprintName?: string;
     metadata?: OpikApi.LocalRunnerJobMetadata;
 }

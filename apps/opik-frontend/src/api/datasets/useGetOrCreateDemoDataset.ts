@@ -61,6 +61,7 @@ const useGetOrCreateDemoDataset = () => {
             })),
           });
 
+          queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
           queryClient.invalidateQueries({ queryKey: ["datasets"] });
         }
 

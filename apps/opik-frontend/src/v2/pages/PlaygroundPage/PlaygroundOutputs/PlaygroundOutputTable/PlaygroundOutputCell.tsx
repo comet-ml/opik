@@ -9,17 +9,21 @@ import {
   useOutputValueByPromptDatasetItemId,
   useSelectedRuleIdsByPromptDatasetItemId,
   useTraceIdByPromptDatasetItemId,
+  useDatasetType,
+  useExperimentIdByPromptId,
 } from "@/store/PlaygroundStore";
+import { DATASET_TYPE } from "@/types/datasets";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
+import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputAssertionStatus";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
+import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { cn } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import { generateTracesURL } from "@/lib/annotation-queues";
-import useAppStore from "@/store/AppStore";
-import useProjectByName from "@/api/projects/useProjectByName";
-import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 
@@ -66,21 +70,22 @@ const PlaygroundOutputCell: React.FunctionComponent<
     originalRow.dataItemId,
   );
 
-  const { data: playgroundProject } = useProjectByName(
-    {
-      projectName: PLAYGROUND_PROJECT_NAME,
-    },
-    {
-      enabled: !!traceId && !!workspaceName,
-    },
-  );
+  const datasetType = useDatasetType();
+  const experimentId = useExperimentIdByPromptId(promptId);
+  const { datasetId: versionedDatasetId } = usePlaygroundDataset();
+  const plainDatasetId =
+    parseDatasetVersionKey(versionedDatasetId)?.datasetId || versionedDatasetId;
+
+  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
+
+  const activeProjectId = useActiveProjectId();
 
   const handleTraceLinkClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (traceId && playgroundProject?.id) {
+    if (traceId && activeProjectId) {
       const url = generateTracesURL(
         workspaceName,
-        playgroundProject.id,
+        activeProjectId,
         "traces",
         traceId,
       );
@@ -88,7 +93,8 @@ const PlaygroundOutputCell: React.FunctionComponent<
     }
   };
 
-  const hasOutput = value !== null || isLoading;
+  const hasOutput =
+    value !== null || isLoading || (isEvaluationSuite && !!experimentId);
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -118,7 +124,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
     >
       {hasOutput ? (
         <div className="group relative flex size-full flex-col">
-          {traceId && playgroundProject?.id && (
+          {traceId && activeProjectId && (
             <TooltipWrapper content="Click to open original trace">
               <Button
                 size="icon-xs"
@@ -131,13 +137,24 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </TooltipWrapper>
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
-            <PlaygroundOutputScoresContainer
-              traceId={traceId}
-              selectedRuleIds={selectedRuleIds}
-              stale={stale}
-            />
+            {isEvaluationSuite ? (
+              <PlaygroundOutputAssertionStatus
+                experimentId={experimentId}
+                datasetItemId={originalRow.dataItemId}
+                datasetId={plainDatasetId || ""}
+                stale={stale}
+              />
+            ) : (
+              <PlaygroundOutputScoresContainer
+                traceId={traceId}
+                selectedRuleIds={selectedRuleIds}
+                stale={stale}
+              />
+            )}
           </div>
-          <div className="flex-1 overflow-y-auto">{renderContent()}</div>
+          {!isEvaluationSuite && (
+            <div className="flex-1 overflow-y-auto">{renderContent()}</div>
+          )}
         </div>
       ) : (
         <PlaygroundNoRunsYet color={promptColor.bg} />

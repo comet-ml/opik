@@ -2,8 +2,11 @@ import React from "react";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import HeaderStatistic from "@/shared/DataTableHeaders/HeaderStatistic";
 import { cn } from "@/lib/utils";
-import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
-import { COLUMN_TYPE } from "@/types/shared";
+import {
+  CELL_HORIZONTAL_ALIGNMENT_MAP,
+  HEADER_TEXT_CLASS_MAP,
+} from "@/constants/shared";
+import { COLUMN_TYPE, ROW_HEIGHT } from "@/types/shared";
 
 type CustomColumnMeta = {
   type?: COLUMN_TYPE;
@@ -36,23 +39,31 @@ const HeaderWrapper = <TData,>({
   const statisticDataFormater = metaData?.statisticDataFormater;
   const statisticTooltipFormater = metaData?.statisticTooltipFormater;
   const supportsPercentiles = metaData?.supportsPercentiles;
-  const { columnsStatistic } = tableMetadata || {};
+  const { columnsStatistic, rowHeight } = tableMetadata || {};
 
   const horizontalAlignClass =
     CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
 
-  const heightClass = columnsStatistic ? "h-14" : "h-11";
+  const isSmall = rowHeight === ROW_HEIGHT.small;
+  const hasStats = supportStatistic && columnsStatistic;
 
-  if (supportStatistic && columnsStatistic) {
+  const nameClass = HEADER_TEXT_CLASS_MAP[rowHeight ?? ROW_HEIGHT.small];
+
+  if (hasStats) {
     return (
       <div
-        className={cn("flex flex-col py-2 px-3", heightClass, className)}
+        className={cn(
+          "flex flex-col justify-center px-3",
+          isSmall ? "h-11" : "h-12",
+          className,
+        )}
         onClick={onClick}
         data-header-wrapper="true"
       >
         <div
           className={cn(
-            "flex size-full items-center gap-1",
+            "flex items-center gap-1",
+            nameClass,
             horizontalAlignClass,
           )}
         >
@@ -60,7 +71,7 @@ const HeaderWrapper = <TData,>({
         </div>
         <div
           className={cn(
-            "flex size-full items-center gap-1",
+            "comet-body-xs flex items-center gap-1",
             horizontalAlignClass,
           )}
           onClick={(e) => e.stopPropagation()}
@@ -81,7 +92,8 @@ const HeaderWrapper = <TData,>({
     <div
       className={cn(
         "flex size-full items-center gap-1 px-3",
-        heightClass,
+        nameClass,
+        isSmall ? "h-8" : "h-11",
         horizontalAlignClass,
         className,
       )}

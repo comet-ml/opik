@@ -6,8 +6,9 @@ import opik.datetime_helpers as datetime_helpers
 import opik.llm_usage as llm_usage
 import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
+from opik import config as opik_config
 from opik.types import ErrorInfoDict, SpanType, LLMProvider, TraceSource
-from .. import constants, span
+from .. import constants, helpers, span
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class Trace:
         project_name: str,
         url_override: str,
         source: TraceSource,
+        config: opik_config.OpikConfig,
     ):
         """
         A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
@@ -29,6 +31,7 @@ class Trace:
         self._project_name = project_name
         self._url_override = url_override
         self.source = source
+        self._config = config
 
     def end(
         self,
@@ -45,6 +48,11 @@ class Trace:
 
         This method is similar to the `update` method, but it automatically computes
         the end time if not provided.
+
+        Note: with batching enabled, calling this shortly after trace creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.trace()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates
 
         Args:
             end_time: The end time of the trace. If not provided, the current time will be used.
@@ -63,7 +71,13 @@ class Trace:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        self.update(
+        helpers.warn_if_batching_update(
+            use_batching=self._streamer.use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Trace.end()",
+        )
+
+        self._update(
             end_time=end_time,
             metadata=metadata,
             input=input,
@@ -86,6 +100,11 @@ class Trace:
         """
         Update the trace attributes.
 
+        Note: with batching enabled, calling this shortly after trace creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.trace()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates
+
         Args:
             end_time: The end time of the trace.
             metadata: Additional metadata to be associated with the trace.
@@ -99,6 +118,32 @@ class Trace:
         Returns:
             None
         """
+        helpers.warn_if_batching_update(
+            use_batching=self._streamer.use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Trace.update()",
+        )
+
+        self._update(
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            error_info=error_info,
+            thread_id=thread_id,
+        )
+
+    def _update(
+        self,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
+    ) -> None:
         update_trace(
             trace_id=self.id,
             project_name=self._project_name,
@@ -183,6 +228,7 @@ class Trace:
             total_cost=total_cost,
             attachments=attachments,
             source=self.source,
+            config=self._config,
         )
 
     def log_feedback_score(

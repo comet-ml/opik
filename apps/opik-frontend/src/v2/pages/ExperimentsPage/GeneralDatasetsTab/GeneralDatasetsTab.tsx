@@ -24,7 +24,6 @@ import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
-import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import Loader from "@/shared/Loader/Loader";
@@ -82,9 +81,6 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
-import { EXPERIMENT_TYPE } from "@/types/datasets";
-
-const ALL_EXPERIMENT_TYPES = Object.values(EXPERIMENT_TYPE);
 const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
@@ -274,11 +270,10 @@ const GeneralDatasetsTab: React.FC = () => {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
-        cell: TraceCountCell as never,
+        cell: TextCell as never,
         aggregatedCell: TextCell.Aggregation as never,
         customMeta: {
           aggregationKey: "trace_count",
-          tooltip: "View experiment traces",
         },
       },
       {
@@ -377,7 +372,6 @@ const GeneralDatasetsTab: React.FC = () => {
       filters,
       sorting: sortedColumns,
       groups,
-      types: ALL_EXPERIMENT_TYPES,
       search: search!,
       page: page!,
       size: size!,

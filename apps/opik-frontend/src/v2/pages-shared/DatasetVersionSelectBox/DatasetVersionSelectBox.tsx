@@ -46,7 +46,7 @@ interface DatasetVersionSelectBoxProps {
   value: string | null; // "datasetId::versionId" format
   versionName?: string;
   onChange: (value: string | null) => void;
-  workspaceName: string;
+  projectId?: string | null;
   disabled?: boolean;
   showClearButton?: boolean;
   buttonClassName?: string;
@@ -69,7 +69,7 @@ function DatasetVersionSelectBox({
   value,
   versionName,
   onChange,
-  workspaceName,
+  projectId,
   disabled = false,
   showClearButton = true,
   buttonClassName,
@@ -101,7 +101,7 @@ function DatasetVersionSelectBox({
     loadMore,
     hasMore,
   } = useDatasetVersionSelect({
-    workspaceName,
+    projectId,
     search,
     openDatasetId,
   });

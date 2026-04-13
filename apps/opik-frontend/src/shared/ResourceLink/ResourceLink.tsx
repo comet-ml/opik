@@ -285,7 +285,7 @@ function ResourceLink({
           variant="tableLink"
           size="sm"
           disabled={deleted}
-          className="block truncate px-0 leading-8"
+          className="block h-auto truncate px-0 text-[length:inherit] leading-normal"
           asChild
         >
           <span>{text}</span>

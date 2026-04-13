@@ -6,7 +6,6 @@ import httpx
 from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
-from .assistant_sidebars.client import AssistantSidebarsClient, AsyncAssistantSidebarsClient
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
 from .automation_rule_evaluators.client import AsyncAutomationRuleEvaluatorsClient, AutomationRuleEvaluatorsClient
 from .chat_completions.client import AsyncChatCompletionsClient, ChatCompletionsClient
@@ -26,6 +25,7 @@ from .manual_evaluation.client import AsyncManualEvaluationClient, ManualEvaluat
 from .ollama.client import AsyncOllamaClient, OllamaClient
 from .ollie_state.client import AsyncOllieStateClient, OllieStateClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient, OpenTelemetryIngestionClient
+from .opik_connect.client import AsyncOpikConnectClient, OpikConnectClient
 from .optimizations.client import AsyncOptimizationsClient, OptimizationsClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
@@ -105,7 +105,6 @@ class OpikApi:
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
-        self.assistant_sidebars = AssistantSidebarsClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
@@ -123,6 +122,7 @@ class OpikApi:
         self.ollama = OllamaClient(client_wrapper=self._client_wrapper)
         self.ollie_state = OllieStateClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = OpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
+        self.opik_connect = OpikConnectClient(client_wrapper=self._client_wrapper)
         self.optimizations = OptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
@@ -252,7 +252,6 @@ class AsyncOpikApi:
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
-        self.assistant_sidebars = AsyncAssistantSidebarsClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
@@ -270,6 +269,7 @@ class AsyncOpikApi:
         self.ollama = AsyncOllamaClient(client_wrapper=self._client_wrapper)
         self.ollie_state = AsyncOllieStateClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
+        self.opik_connect = AsyncOpikConnectClient(client_wrapper=self._client_wrapper)
         self.optimizations = AsyncOptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)

@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect } from "react";
+import usePageBodyScrollContainer from "@/contexts/usePageBodyScrollContainer";
 
 export const TABLE_WRAPPER_ATTRIBUTE = "data-table-wrapper";
 
@@ -9,9 +10,16 @@ type PageBodyStickyTableWrapperProps = {
 const PageBodyStickyTableWrapper: React.FC<PageBodyStickyTableWrapperProps> = ({
   children,
 }) => {
+  const { recalculateOffsets } = usePageBodyScrollContainer();
+
+  useEffect(() => {
+    recalculateOffsets();
+  }, [recalculateOffsets]);
+
   return (
     <div
-      className="comet-sticky-table border-b"
+      // min-w-fit ensures border-b extends the full table width when scrolling horizontally
+      className="comet-sticky-table min-w-fit border-b"
       {...{
         [TABLE_WRAPPER_ATTRIBUTE]: "",
       }}

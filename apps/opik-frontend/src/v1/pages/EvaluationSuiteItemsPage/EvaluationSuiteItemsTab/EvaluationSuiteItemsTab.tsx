@@ -602,7 +602,7 @@ function EvaluationSuiteItemsTab({
               size="sm"
               onClick={handleNewDatasetItemClick}
             >
-              {isEvaluationSuite ? "Add suite item" : "Add dataset item"}
+              Add suite item
             </Button>
           )}
         </div>

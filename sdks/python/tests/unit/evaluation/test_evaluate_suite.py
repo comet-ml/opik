@@ -1,11 +1,13 @@
 """Unit tests for evaluate_suite function — specifically that it passes
 evaluation_method='evaluation_suite' when creating the experiment."""
 
+import threading
 import unittest.mock as mock
 
 from opik import url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
+from opik.api_objects.dataset.evaluation_suite import evaluation_suite
 from opik.evaluation import evaluator as evaluator_module
 
 from ...testlib import ANY_BUT_NONE, SpanModel, assert_equal
@@ -40,7 +42,7 @@ def test_evaluate_suite__creates_experiment_with_evaluation_method_evaluation_su
     with (
         mock.patch.object(
             evaluator_module.opik_client,
-            "get_client_cached",
+            "get_global_client",
             return_value=mock_client,
         ),
         mock.patch.object(
@@ -86,7 +88,7 @@ def test_evaluate_suite__passes_evaluation_method_not_dataset():
     with (
         mock.patch.object(
             evaluator_module.opik_client,
-            "get_client_cached",
+            "get_global_client",
             return_value=mock_client,
         ),
         mock.patch.object(
@@ -255,3 +257,122 @@ def test_evaluate_suite__with_optimization_id__trace_tree_source_optimization_an
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(expected, fake_backend.trace_trees[0])
+
+
+def test_evaluate_suite__explicit_client__used_for_experiment_creation():
+    """When an explicit client is passed, evaluate_suite uses it instead of the global one."""
+    mock_dataset = _create_mock_dataset()
+    mock_experiment = mock.MagicMock()
+    mock_experiment.id = "exp-explicit"
+    mock_experiment.name = "explicit-experiment"
+
+    explicit_client = mock.MagicMock(spec=opik_client.Opik)
+    explicit_client.create_experiment.return_value = mock_experiment
+
+    with mock.patch.object(
+        evaluator_module.url_helpers,
+        "get_experiment_url_by_id",
+        return_value="http://example.com/exp",
+    ):
+        evaluator_module.evaluate_suite(
+            dataset=mock_dataset,
+            task=lambda item: {"input": item, "output": "response"},
+            client=explicit_client,
+            dataset_item_ids=None,
+            dataset_filter_string=None,
+            experiment_name_prefix=None,
+            experiment_name="explicit-experiment",
+            project_name=None,
+            experiment_config=None,
+            prompts=None,
+            experiment_tags=None,
+            verbose=0,
+            task_threads=1,
+            evaluator_model=None,
+            optimization_id=None,
+            experiment_type=None,
+        )
+
+    explicit_client.create_experiment.assert_called_once()
+
+
+def test_evaluation_suite_run__propagates_stored_client():
+    """EvaluationSuite.run() passes its stored client to evaluate_suite."""
+    mock_dataset = _create_mock_dataset()
+    explicit_client = mock.MagicMock(spec=opik_client.Opik)
+
+    suite = evaluation_suite.EvaluationSuite(
+        name="test-suite",
+        dataset_=mock_dataset,
+        client=explicit_client,
+    )
+
+    with mock.patch.object(
+        evaluator_module,
+        "evaluate_suite",
+        return_value=mock.MagicMock(),
+    ) as mock_evaluate_suite:
+        suite.run(task=lambda item: {"output": "response"}, verbose=0)
+
+    mock_evaluate_suite.assert_called_once()
+    call_kwargs = mock_evaluate_suite.call_args[1]
+    assert call_kwargs["client"] is explicit_client
+
+
+def test_evaluate_suite__explicit_client__propagated_to_worker_threads(
+    fake_backend,
+):
+    """The explicit client is visible via get_global_client() inside worker threads."""
+    items = [
+        dataset_item.DatasetItem(
+            id="item-1", input={"message": "hello"}, reference="ref"
+        ),
+        dataset_item.DatasetItem(
+            id="item-2", input={"message": "world"}, reference="ref"
+        ),
+    ]
+    mock_dataset = _create_mock_dataset(items=items)
+
+    mock_experiment = mock.Mock()
+    mock_experiment.id = "exp-thread"
+    mock_experiment.name = "thread-test-experiment"
+
+    mock_create_experiment = mock.Mock(return_value=mock_experiment)
+    mock_get_url = mock.Mock(return_value="any_url")
+
+    clients_seen_in_threads = []
+
+    def task_that_captures_client(item):
+        client = opik_client.get_global_client()
+        clients_seen_in_threads.append((threading.current_thread().name, id(client)))
+        return {"output": "response"}
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(url_helpers, "get_experiment_url_by_id", mock_get_url):
+            evaluator_module.evaluate_suite(
+                dataset=mock_dataset,
+                task=task_that_captures_client,
+                client=None,
+                dataset_item_ids=None,
+                dataset_filter_string=None,
+                experiment_name_prefix=None,
+                experiment_name="thread-test-experiment",
+                project_name=None,
+                experiment_config=None,
+                prompts=None,
+                experiment_tags=None,
+                verbose=0,
+                task_threads=2,
+                evaluator_model=None,
+                optimization_id=None,
+                experiment_type=None,
+            )
+
+    assert len(clients_seen_in_threads) == 2
+    client_ids = {entry[1] for entry in clients_seen_in_threads}
+    assert len(client_ids) == 1, (
+        f"Worker threads should all see the same client instance, "
+        f"but saw {len(client_ids)} distinct clients"
+    )

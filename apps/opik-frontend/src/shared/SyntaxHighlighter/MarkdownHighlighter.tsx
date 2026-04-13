@@ -22,6 +22,8 @@ export interface MarkdownHighlighterProps {
   scrollRef?: React.RefObject<HTMLDivElement>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   maxHeight?: string;
+  transparent?: boolean;
+  fullHeight?: boolean;
 }
 
 const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
@@ -35,6 +37,8 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   scrollRef,
   onScroll,
   maxHeight,
+  transparent,
+  fullHeight,
 }) => {
   // Use scrollRef for both scroll tracking and search container
   const { searchPlugin, searchPlainText, findNext, findPrev } =
@@ -67,6 +71,8 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
 
   return (
     <SyntaxHighlighterLayout
+      transparent={transparent}
+      fullHeight={fullHeight}
       leftHeader={modeSelector}
       rightHeader={
         <>
