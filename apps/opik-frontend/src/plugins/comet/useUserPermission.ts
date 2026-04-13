@@ -160,6 +160,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreatePrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_CREATE),
+    [checkNullablePermission],
+  );
+
   const canDeletePrompts = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.PROMPT_DELETE),
     [checkNullablePermission],
@@ -242,6 +247,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canEditAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
+    canCreatePrompts,
     canDeletePrompts,
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,

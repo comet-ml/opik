@@ -79,6 +79,7 @@ export enum ManagementPermissionsNames {
   TRACE_TAG = "trace_tag",
   TRACE_DELETE = "trace_delete",
   TRACE_SPAN_THREAD_ANNOTATE = "trace_span_thread_annotate",
+  PROMPT_CREATE = "prompt_create",
   PROMPT_DELETE = "prompt_delete",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
   WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
