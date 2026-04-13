@@ -5,7 +5,6 @@ from opik.rest_api import core as rest_api_core
 from opik.rest_api.core.request_options import RequestOptions
 from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
 from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
-from opik.rest_api.types.agent_config_env import AgentConfigEnv
 from opik.api_objects import rest_helpers
 from opik import id_helpers
 
@@ -14,8 +13,8 @@ from . import types
 from .. import type_helpers
 
 
-class AgentConfigManager:
-    """Project-level agent config entity — internal REST operations."""
+class ConfigManager:
+    """Project-level config entity — internal REST operations."""
 
     def __init__(
         self,
@@ -61,7 +60,7 @@ class AgentConfigManager:
             name: Fetch the blueprint with this version name.
             env: Fetch the blueprint tagged with this environment name.
             mask_id: ID of a mask blueprint to overlay on the result.
-            field_types: Mapping of prefixed field key to Python type used
+            field_types: Mapping of field name to Python type used
                 for deserialising backend values.
             timeout_in_seconds: HTTP request timeout in seconds.
         """
@@ -125,7 +124,7 @@ class AgentConfigManager:
             fields_with_values: Explicit ``{field_name: types.FieldValueSpec(python_type, value)}``
                 mapping, bypassing type inference.
             description: Human-readable description stored with the blueprint.
-            field_types: Mapping of prefixed field key to Python type used
+            field_types: Mapping of field name to Python type used
                 when fetching back the created blueprint.
         """
         resolved_fields_with_values = self._resolve_fields_with_values(
@@ -179,21 +178,6 @@ class AgentConfigManager:
             raw_blueprint=raw,
             field_types=field_types,
             rest_client_=self._rest_client,
-        )
-
-    def tag_blueprint_with_env(self, env: str, blueprint_id: str) -> None:
-        """Associate a blueprint with an environment name.
-
-        Args:
-            env: Environment name (e.g. ``"production"``).
-            blueprint_id: ID of the blueprint to tag.
-        """
-        project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, self._project_name
-        )
-        self._rest_client.agent_configs.create_or_update_envs(
-            project_id=project_id,
-            envs=[AgentConfigEnv(env_name=env, blueprint_id=blueprint_id)],
         )
 
     def create_mask(
@@ -250,7 +234,6 @@ def _build_blueprint_payload(
                 value=type_helpers.python_value_to_backend_value(
                     field_spec.value, field_spec.python_type
                 ),
-                description=field_spec.description,
             )
         )
     return AgentBlueprintWrite(
