@@ -95,9 +95,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   return (
-    <div className="pb-4 pt-6">
+    <div className="py-4">
       <div className="mb-4 flex min-h-8 items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">{title}</h1>
+        <h1 className="comet-title-xs truncate break-words">{title}</h1>
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (

@@ -1,6 +1,14 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
+import { PlusIcon } from "lucide-react";
+import useLocalStorageState from "use-local-storage-state";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -22,7 +30,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
@@ -35,14 +42,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
-import {
-  ColumnPinningState,
-  ColumnSort,
-  RowSelectionState,
-} from "@tanstack/react-table";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -338,14 +337,16 @@ const PromptsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Prompt library</h1>
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">Prompt library</h1>
+        {canCreatePrompts && (
+          <Button variant="default" size="xs" onClick={handleNewPromptClick}>
+            <PlusIcon className="mr-1 size-4" />
+            Create prompt
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_prompt_library]}
-      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -376,11 +377,6 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          {canCreatePrompts && (
-            <Button variant="default" size="sm" onClick={handleNewPromptClick}>
-              Create new prompt
-            </Button>
-          )}
         </div>
       </div>
       <DataTable
@@ -399,7 +395,7 @@ const PromptsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreatePrompts && (
               <Button variant="link" onClick={handleNewPromptClick}>
-                Create new prompt
+                Create prompt
               </Button>
             )}
           </DataTableNoData>

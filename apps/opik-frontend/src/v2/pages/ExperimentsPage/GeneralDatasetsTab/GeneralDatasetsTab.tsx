@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ChartLine, Info, RotateCw } from "lucide-react";
+import React, { useCallback, useMemo, useState } from "react";
+import { ChartLine, RotateCw } from "lucide-react";
 import { ColumnSort, Row, RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
@@ -47,7 +47,6 @@ import {
 } from "@/types/shared";
 import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
-import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
@@ -120,17 +119,16 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
-const GeneralDatasetsTab: React.FC = () => {
+type GeneralDatasetsTabProps = {
+  onNewExperimentClick?: () => void;
+};
+
+const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
+  onNewExperimentClick,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
-  const resetDialogKeyRef = useRef(0);
-  const [query] = useQueryParam("new", JsonParam);
-
-  const [openDialog, setOpenDialog] = useState<boolean>(
-    Boolean(query?.experiment),
-  );
-
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -459,11 +457,6 @@ const GeneralDatasetsTab: React.FC = () => {
 
   const hasGroups = Boolean(groups.length);
 
-  const handleNewExperimentClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
-
   const renderCustomRowCallback = useCallback(
     (row: Row<GroupedExperiment>) => {
       return renderCustomRow(row, setGroupLimit);
@@ -700,14 +693,6 @@ const GeneralDatasetsTab: React.FC = () => {
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new experiment
-          </Button>
         </div>
       </PageBodyStickyContainer>
       <DataTable
@@ -731,8 +716,8 @@ const GeneralDatasetsTab: React.FC = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
-                Create new experiment
+              <Button variant="link" onClick={onNewExperimentClick}>
+                Create experiment
               </Button>
             )}
           </DataTableNoData>
@@ -757,13 +742,6 @@ const GeneralDatasetsTab: React.FC = () => {
           ></DataTablePagination>
         )}
       </PageBodyStickyContainer>
-      <AddExperimentDialog
-        key={resetDialogKeyRef.current}
-        open={openDialog}
-        setOpen={setOpenDialog}
-        datasetName={query?.datasetName}
-        projectId={activeProjectId}
-      />
     </>
   );
 };

@@ -280,7 +280,7 @@ describe("AddToDatasetDialog", () => {
   it("should display create new evaluation suite button", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("Create new evaluation suite")).toBeInTheDocument();
+    expect(screen.getByText("Create evaluation suite")).toBeInTheDocument();
   });
 
   it("should show alert when no valid rows are present", () => {
@@ -324,7 +324,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
 
-    const createButton = screen.getByText("Create new evaluation suite");
+    const createButton = screen.getByText("Create evaluation suite");
     expect(createButton).toBeDisabled();
   });
 

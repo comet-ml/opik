@@ -45,7 +45,7 @@ const LogsPage = () => {
         >
           <h1
             data-testid="traces-page-title"
-            className="comet-title-l truncate break-words"
+            className="comet-title-xs truncate break-words"
           >
             {projectName}
           </h1>

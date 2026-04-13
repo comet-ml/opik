@@ -295,7 +295,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
   }
 
   return (
-    <div className="pt-6">
+    <div className="pt-4">
       <AddVersionDialog
         open={addVersionDialogOpen}
         setOpen={setAddVersionDialogOpen}
@@ -331,7 +331,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
                 Draft
               </Tag>
             )}
-            <h1 className="comet-title-l truncate break-words">
+            <h1 className="comet-title-xs truncate break-words">
               {suite?.name ??
                 (isEvaluationSuite ? "Evaluation suite" : "Dataset")}
             </h1>

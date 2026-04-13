@@ -3,6 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { useNavigate } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 
 import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";
 import AlertsRowActionsCell from "@/v2/pages/AlertsPage/AlertsRowActionsCell";
@@ -329,9 +330,15 @@ const AlertsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
+    <div className="pt-4">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l">Alerts</h1>
+        <h1 className="comet-title-xs">Alerts</h1>
+        {canUpdateAlerts && (
+          <Button variant="default" size="xs" onClick={handleNewAlertClick}>
+            <Plus className="mr-1 size-4" />
+            Create alert
+          </Button>
+        )}
       </div>
       <ExplainerDescription
         className="mb-4"
@@ -367,11 +374,6 @@ const AlertsPage: React.FunctionComponent = () => {
               order={columnsOrder}
               onOrderChange={setColumnsOrder}
             ></ColumnsButton>
-            {canUpdateAlerts && (
-              <Button variant="default" size="sm" onClick={handleNewAlertClick}>
-                Create new alert
-              </Button>
-            )}
           </div>
         </div>
         <DataTable
@@ -389,7 +391,7 @@ const AlertsPage: React.FunctionComponent = () => {
             <DataTableNoData title={noDataText}>
               {noData && canUpdateAlerts && (
                 <Button variant="link" onClick={handleNewAlertClick}>
-                  Create new alert
+                  Create alert
                 </Button>
               )}
             </DataTableNoData>
