@@ -239,7 +239,9 @@ class RunnerServiceImpl implements RunnerService {
             runnerMap.put(FIELD_CAPABILITIES, String.join(",", capabilities));
         }
 
-        List<UUID> cancelledJobs = endpointJobService.get().processHeartbeat(runnerId);
+        List<UUID> cancelledJobs = type == RunnerType.ENDPOINT
+                ? endpointJobService.get().processHeartbeat(runnerId)
+                : List.of();
 
         return LocalRunnerHeartbeatResponse.builder()
                 .cancelledJobIds(cancelledJobs)
@@ -527,16 +529,25 @@ class RunnerServiceImpl implements RunnerService {
             } catch (Exception e) {
                 log.error("Failed to reap runner '{}' in workspace '{}'", runnerId, workspaceId, e);
             }
-            try {
-                endpointJobService.get().reapStuckJobs(runnerId);
-            } catch (Exception e) {
-                log.error("Failed to reap stuck jobs for runner '{}' in workspace '{}'", runnerId, workspaceId, e);
+
+            RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId));
+            String typeStr = runnerMap.get(FIELD_TYPE);
+            RunnerType runnerType = typeStr != null ? RunnerType.fromValue(typeStr) : RunnerType.ENDPOINT;
+
+            if (runnerType == RunnerType.ENDPOINT) {
+                try {
+                    endpointJobService.get().reapStuckJobs(runnerId);
+                } catch (Exception e) {
+                    log.error("Failed to reap stuck jobs for runner '{}' in workspace '{}'", runnerId, workspaceId, e);
+                }
             }
-            try {
-                connectBridgeService.get().reapStaleBridgeCommands(runnerId);
-            } catch (Exception e) {
-                log.error("Failed to reap stale bridge commands for runner '{}' in workspace '{}'", runnerId,
-                        workspaceId, e);
+            if (runnerType == RunnerType.CONNECT) {
+                try {
+                    connectBridgeService.get().reapStaleBridgeCommands(runnerId);
+                } catch (Exception e) {
+                    log.error("Failed to reap stale bridge commands for runner '{}' in workspace '{}'", runnerId,
+                            workspaceId, e);
+                }
             }
             remaining--;
         }
