@@ -12,6 +12,7 @@ from opik.cli.pairing import (
     generate_runner_name,
     hkdf_sha256,
     resolve_project_id,
+    run_headless,
     run_pairing,
     validate_runner_name,
 )
@@ -72,7 +73,25 @@ class TestBuildPairingLink:
         assert payload[16:48] == activation_key
         assert payload[48:64] == uuid.UUID(project_id).bytes
         assert payload[64] == len(runner_name.encode("utf-8"))
-        assert payload[65 : 65 + payload[64]] == runner_name.encode("utf-8")
+        name_end = 65 + payload[64]
+        assert payload[65:name_end] == runner_name.encode("utf-8")
+        # Default runner type is CONNECT (0x00)
+        assert payload[name_end] == 0x00
+
+    def test_build_pairing_link__endpoint_type__encodes_0x01(self):
+        link = build_pairing_link(
+            base_url="http://localhost:5173/api/",
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            activation_key=b"\x00" * 32,
+            project_id="660e8400-e29b-41d4-a716-446655440000",
+            runner_name="r",
+            runner_type=RunnerType.ENDPOINT,
+        )
+        fragment = link.split("#", 1)[1]
+        padding_needed = (4 - len(fragment) % 4) % 4
+        payload = base64.urlsafe_b64decode(fragment + "=" * padding_needed)
+        # name_len=1, name="r", then type byte
+        assert payload[66] == 0x01
 
     def test_build_pairing_link__cloud_url__no_double_opik_path(self):
         link = build_pairing_link(
@@ -304,3 +323,59 @@ class TestRunPairing:
                 base_url="http://localhost:5173/api/",
             )
         assert exc_info.value.status_code == 429
+
+
+class TestRunHeadless:
+    SESSION_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    RUNNER_ID = "11111111-2222-3333-4444-555555555555"
+    PROJECT_ID = "66666666-7777-8888-9999-aaaaaaaaaaaa"
+
+    def _make_api(self):
+        api = MagicMock()
+        project = MagicMock()
+        project.id = self.PROJECT_ID
+        api.projects.retrieve_project.return_value = project
+
+        session_resp = MagicMock()
+        session_resp.session_id = self.SESSION_ID
+        session_resp.runner_id = self.RUNNER_ID
+        api.pairing.create_pairing_session.return_value = session_resp
+        api.pairing.activate_pairing_session.return_value = None
+
+        return api
+
+    def test_run_headless__creates_and_self_activates(self):
+        api = self._make_api()
+        result = run_headless(
+            api=api,
+            project_name="my-proj",
+            runner_name="test-runner",
+            runner_type=RunnerType.ENDPOINT,
+        )
+
+        assert result.runner_id == self.RUNNER_ID
+        assert result.project_id == self.PROJECT_ID
+        assert result.bridge_key == b""
+        api.pairing.create_pairing_session.assert_called_once()
+        api.pairing.activate_pairing_session.assert_called_once()
+
+    def test_run_headless__no_polling(self):
+        api = self._make_api()
+        run_headless(
+            api=api,
+            project_name="my-proj",
+            runner_name="test-runner",
+            runner_type=RunnerType.ENDPOINT,
+        )
+        # No get_runner polling — headless activates immediately
+        api.runners.get_runner.assert_not_called()
+
+    def test_run_headless__connect_type__raises(self):
+        api = self._make_api()
+        with pytest.raises(click.ClickException, match="not supported"):
+            run_headless(
+                api=api,
+                project_name="my-proj",
+                runner_name="test-runner",
+                runner_type=RunnerType.CONNECT,
+            )

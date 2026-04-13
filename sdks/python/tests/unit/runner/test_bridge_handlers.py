@@ -1,3 +1,6 @@
+import glob
+import os
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -247,18 +250,28 @@ class TestBackgroundProcesses:
         t = BackgroundProcessTracker(max_processes=3)
         yield t
         t.shutdown()
+        for f in glob.glob(os.path.join(tempfile.gettempdir(), "opik-bg-*.log")):
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
 
     @pytest.fixture()
     def handler(self, tmp_path: Path, tracker: BackgroundProcessTracker) -> ExecHandler:
-        return ExecHandler(tmp_path, bg_tracker=tracker)
+        return ExecHandler(tmp_path, bg_tracker=tracker, bg_startup_wait=0.5)
 
-    def test_background__returns_pid_immediately(self, handler: ExecHandler) -> None:
+    def test_background__returns_pid_and_log(self, handler: ExecHandler) -> None:
         result = handler.execute(
             {"command": "sleep 60", "background": True}, timeout=30.0
         )
         assert "pid" in result
         assert result["status"] == "running"
         assert isinstance(result["pid"], int)
+        assert "log_file" in result
+        assert result["log_file"].startswith(
+            os.path.join(tempfile.gettempdir(), "opik-bg-")
+        )
+        assert "initial_output" in result
 
     def test_background__no_tracker__errors(self, tmp_path: Path) -> None:
         handler = ExecHandler(tmp_path)
@@ -301,6 +314,25 @@ class TestBackgroundProcesses:
             {"command": "sleep 60", "background": True}, timeout=1.0
         )
         assert result["status"] == "running"
+
+    def test_background__captures_initial_output(self, handler: ExecHandler) -> None:
+        result = handler.execute(
+            {"command": "echo 'hello from background'", "background": True},
+            timeout=30.0,
+        )
+        assert "hello from background" in result["initial_output"]
+        log_path = Path(result["log_file"])
+        assert log_path.exists()
+        assert "hello from background" in log_path.read_text()
+
+    def test_background__detects_immediate_crash(self, handler: ExecHandler) -> None:
+        result = handler.execute(
+            {"command": "echo 'startup failed' >&2; exit 1", "background": True},
+            timeout=30.0,
+        )
+        assert result["status"] == "exited"
+        assert result["exit_code"] == 1
+        assert "startup failed" in result["initial_output"]
 
     def test_background__blocklist_still_applied(self, handler: ExecHandler) -> None:
         with pytest.raises(CommandError) as exc_info:

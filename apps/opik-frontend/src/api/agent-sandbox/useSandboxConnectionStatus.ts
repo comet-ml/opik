@@ -8,6 +8,7 @@ const POLL_INTERVAL_WHILE_CONNECTED = 10000;
 
 type UseRunnerConnectionStatusParams = {
   projectId: string;
+  runnerType?: "connect" | "endpoint";
 };
 
 interface RunnersListResponse {
@@ -18,6 +19,7 @@ interface RunnersListResponse {
 const getConnectedRunner = async (
   projectId: string,
   signal: AbortSignal,
+  runnerType?: "connect" | "endpoint",
 ): Promise<LocalRunner | null> => {
   const { data } = await api.get<RunnersListResponse>(
     LOCAL_RUNNERS_REST_ENDPOINT,
@@ -26,27 +28,37 @@ const getConnectedRunner = async (
       params: { project_id: projectId, size: 50 },
     },
   );
-  // Prefer connected runner; fall back to most recent (e.g. DISCONNECTED after
-  // a connect+disconnect cycle — backend evicts old runners on new connections).
+  const runners = runnerType
+    ? data.content.filter((r) => r.type === runnerType)
+    : data.content;
   return (
-    data.content.find((r) => r.status === RunnerConnectionStatus.CONNECTED) ??
-    data.content[0] ??
+    runners.find((r) => r.status === RunnerConnectionStatus.CONNECTED) ??
+    runners[0] ??
     null
   );
 };
 
 export default function useSandboxConnectionStatus(
-  { projectId }: UseRunnerConnectionStatusParams,
+  { projectId, runnerType }: UseRunnerConnectionStatusParams,
   options?: Partial<UseQueryOptions<LocalRunner | null>>,
 ) {
   return useQuery({
-    queryKey: [AGENT_SANDBOX_KEY, { projectId }, "connection-status"],
-    queryFn: ({ signal }) => getConnectedRunner(projectId, signal),
+    queryKey: [
+      AGENT_SANDBOX_KEY,
+      { projectId, runnerType },
+      "connection-status",
+    ],
+    queryFn: ({ signal }) => getConnectedRunner(projectId, signal, runnerType),
     enabled: !!projectId,
-    refetchInterval: (query) =>
-      query.state.data?.status === RunnerConnectionStatus.CONNECTED
+    refetchInterval: (query) => {
+      const runner = query.state.data;
+      const isFullyReady =
+        runner?.status === RunnerConnectionStatus.CONNECTED &&
+        (runner.agents?.length ?? 0) > 0;
+      return isFullyReady
         ? POLL_INTERVAL_WHILE_CONNECTED
-        : POLL_INTERVAL_WHILE_DISCONNECTED,
+        : POLL_INTERVAL_WHILE_DISCONNECTED;
+    },
     ...options,
   });
 }

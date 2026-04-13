@@ -25,7 +25,7 @@ export default function useRunnerBridgeSync({
   const onStateChangedRef = useRef(onStateChanged);
   onStateChangedRef.current = onStateChanged;
 
-  const pairing = usePairingState(projectId ?? "");
+  const pairing = usePairingState(projectId ?? "", "connect");
 
   useEffect(() => {
     if (!pairing.projectId) return;

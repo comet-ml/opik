@@ -9,7 +9,13 @@ from opik import Opik
 from opik.rest_api.core.api_error import ApiError
 from opik.runner.tui import RunnerTUI
 
-from .pairing import RunnerType, generate_runner_name, launch_supervisor, run_pairing
+from .pairing import (
+    RunnerType,
+    generate_runner_name,
+    launch_supervisor,
+    run_headless,
+    run_pairing,
+)
 
 
 def run_cli_session(
@@ -19,6 +25,7 @@ def run_cli_session(
     runner_type: RunnerType,
     command: Optional[List[str]] = None,
     watch: Optional[bool] = None,
+    headless: bool = False,
 ) -> None:
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     client = Opik(api_key=api_key, _show_misconfiguration_message=False)
@@ -30,14 +37,22 @@ def run_cli_session(
         tui.start()
         tui.print_banner(project_name, url=client.config.url_override)
 
-        result = run_pairing(
-            api=api,
-            project_name=project_name,
-            runner_name=runner_name,
-            runner_type=runner_type,
-            base_url=client.config.url_override,
-            tui=tui,
-        )
+        if headless:
+            result = run_headless(
+                api=api,
+                project_name=project_name,
+                runner_name=runner_name,
+                runner_type=runner_type,
+            )
+        else:
+            result = run_pairing(
+                api=api,
+                project_name=project_name,
+                runner_name=runner_name,
+                runner_type=runner_type,
+                base_url=client.config.url_override,
+                tui=tui,
+            )
 
         launch_supervisor(
             result, api, tui, runner_type=runner_type, command=command, watch=watch

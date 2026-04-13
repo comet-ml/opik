@@ -42,24 +42,27 @@ _CONFIGURATION_PATTERNS = [
 _ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTERNS
 
 
+def _git_files(repo_root: Path) -> Optional[Set[str]]:
+    try:
+        return common.git_ls_files(repo_root)
+    except CommandError:
+        return None
+
+
+def has_entrypoint(repo_root: Path) -> bool:
+    """Return True if any code file under *repo_root* contains an entrypoint marker."""
+    matches = _find_instrumentation(repo_root, _git_files(repo_root), max_matches=None)
+    return any(_matches_any(line, _ENTRYPOINT_PATTERNS) for line in matches)
+
+
 def build_checklist(
     repo_root: Path,
     command: Optional[List[str]],
     runner_type: RunnerType = RunnerType.ENDPOINT,
 ) -> Dict[str, Any]:
-    try:
-        git_files: Optional[Set[str]] = common.git_ls_files(repo_root)
-    except CommandError:
-        # Not a git repo or git unavailable — fall back to os.walk
-        git_files = None
+    git_files = _git_files(repo_root)
     file_tree = _build_file_tree(repo_root, git_files)
     matches = _find_instrumentation(repo_root, git_files)
-
-    has_tracing = any(_matches_any(line, _TRACING_PATTERNS) for line in matches)
-    has_entrypoint = any(_matches_any(line, _ENTRYPOINT_PATTERNS) for line in matches)
-    has_configuration = any(
-        _matches_any(line, _CONFIGURATION_PATTERNS) for line in matches
-    )
 
     return {
         "runner_type": runner_type,
@@ -67,9 +70,13 @@ def build_checklist(
         "platform": platform.system().lower(),
         "file_tree": file_tree,
         "instrumentation": {
-            "tracing": has_tracing,
-            "entrypoint": has_entrypoint,
-            "configuration": has_configuration,
+            "tracing": any(_matches_any(line, _TRACING_PATTERNS) for line in matches),
+            "entrypoint": any(
+                _matches_any(line, _ENTRYPOINT_PATTERNS) for line in matches
+            ),
+            "configuration": any(
+                _matches_any(line, _CONFIGURATION_PATTERNS) for line in matches
+            ),
         },
         "instrumentation_matches": matches,
     }
@@ -120,7 +127,11 @@ def _build_file_tree(repo_root: Path, git_files: Optional[Set[str]]) -> str:
     return "\n".join(entries)
 
 
-def _find_instrumentation(repo_root: Path, git_files: Optional[Set[str]]) -> List[str]:
+def _find_instrumentation(
+    repo_root: Path,
+    git_files: Optional[Set[str]],
+    max_matches: Optional[int] = _INSTRUMENTATION_MAX_MATCHES,
+) -> List[str]:
     matches: List[str] = []
 
     if git_files is not None:
@@ -142,7 +153,7 @@ def _find_instrumentation(repo_root: Path, git_files: Optional[Set[str]]) -> Lis
         code_files.sort()
 
     for rel in code_files:
-        if len(matches) >= _INSTRUMENTATION_MAX_MATCHES:
+        if max_matches is not None and len(matches) >= max_matches:
             break
 
         fpath = repo_root / rel
@@ -162,7 +173,7 @@ def _find_instrumentation(repo_root: Path, git_files: Optional[Set[str]]) -> Lis
             continue
 
         for line_num, line in enumerate(content.splitlines(), 1):
-            if len(matches) >= _INSTRUMENTATION_MAX_MATCHES:
+            if max_matches is not None and len(matches) >= max_matches:
                 break
             for pattern in _ALL_PATTERNS:
                 if pattern.search(line):

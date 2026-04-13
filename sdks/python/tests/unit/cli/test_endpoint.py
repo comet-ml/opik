@@ -9,12 +9,13 @@ from opik.rest_api.core.api_error import ApiError
 
 
 class TestEndpoint:
+    @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli._run.RunnerTUI")
     @patch("opik.cli._run.launch_supervisor")
     @patch("opik.cli._run.run_pairing")
     @patch("opik.cli._run.Opik")
     def test_endpoint__with_command__calls_pairing_and_supervisor(
-        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls
+        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
     ):
         client = MagicMock()
         client.config.url_override = "https://api.test/"
@@ -62,12 +63,13 @@ class TestEndpoint:
         assert result.exit_code == 2
         assert "not found" in result.output.lower()
 
+    @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli._run.RunnerTUI")
     @patch("opik.cli._run.launch_supervisor")
     @patch("opik.cli._run.run_pairing")
     @patch("opik.cli._run.Opik")
     def test_endpoint__network_failure__shows_clean_error(
-        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls
+        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
     ):
         client = MagicMock()
         client.config.url_override = "https://api.test/"
@@ -82,12 +84,13 @@ class TestEndpoint:
         assert result.exit_code != 0
         assert "Could not connect to Opik at https://api.test/" in result.output
 
+    @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli._run.RunnerTUI")
     @patch("opik.cli._run.launch_supervisor")
     @patch("opik.cli._run.run_pairing")
     @patch("opik.cli._run.Opik")
     def test_endpoint__tui_stopped_on_pairing_failure(
-        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls
+        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
     ):
         client = MagicMock()
         client.config.url_override = "https://api.test/"

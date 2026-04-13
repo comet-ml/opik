@@ -1,21 +1,25 @@
-"""list_files bridge command handler."""
+"""list_files bridge command handler — lists directory contents like ls."""
 
-from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List
+import fnmatch
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import BaseHandler, CommandError
 from . import common
 
 
-class ListFilesArgs(BaseModel):
-    pattern: str = "**/*"
-    path: str = ""
-
-
 _MAX_ENTRIES = 1000
 _MAX_BYTES = 512 * 1024
+_MAX_DEPTH = 5
+
+
+class ListFilesArgs(BaseModel):
+    path: str = ""
+    pattern: Optional[str] = None
+    depth: int = Field(default=1, ge=1, le=_MAX_DEPTH)
 
 
 class ListFilesHandler(BaseHandler):
@@ -24,69 +28,68 @@ class ListFilesHandler(BaseHandler):
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         parsed = ListFilesArgs(**args)
-        pattern = parsed.pattern or "**/*"
-        sub_path = parsed.path
 
-        if ".." in pattern.split("/"):
-            raise CommandError("path_traversal", "Pattern cannot contain '..'")
-
-        if sub_path:
-            base = common.validate_path(sub_path, self._repo_root)
+        if parsed.path:
+            base = common.validate_path(parsed.path, self._repo_root)
         else:
             base = self._repo_root
 
         if not base.is_dir():
-            raise CommandError("file_not_found", f"Directory not found: {sub_path}")
+            raise CommandError("file_not_found", f"Directory not found: {parsed.path}")
 
-        common.check_git_repo(self._repo_root)
-        all_files = common.git_ls_files(self._repo_root)
+        entries: List[str] = []
+        self._collect(base, base, parsed.pattern, parsed.depth, entries)
+        entries.sort(key=lambda n: (not n.endswith("/"), n.lower()))
 
-        try:
-            base_rel = str(base.relative_to(self._repo_root))
-        except ValueError:
-            base_rel = ""
-
-        filtered: List[str] = []
-        for rel in all_files:
-            if base_rel and base_rel != "." and not rel.startswith(base_rel + "/"):
-                continue
-            if not _matches_pattern(rel, pattern):
-                continue
-            filtered.append(rel)
-
-        filtered.sort(key=lambda r: _safe_mtime(self._repo_root / r), reverse=True)
-
-        matches: List[str] = []
-        total = len(filtered)
+        total = len(entries)
+        result_entries: List[str] = []
         byte_count = 0
         truncated = False
 
-        for rel in filtered:
-            entry_bytes = len(rel.encode("utf-8")) + 1
-            if len(matches) >= _MAX_ENTRIES or byte_count + entry_bytes > _MAX_BYTES:
+        for name in entries:
+            entry_bytes = len(name.encode("utf-8")) + 1
+            if (
+                len(result_entries) >= _MAX_ENTRIES
+                or byte_count + entry_bytes > _MAX_BYTES
+            ):
                 truncated = True
-                continue
-            matches.append(rel)
+                break
+            result_entries.append(name)
             byte_count += entry_bytes
 
         return {
-            "files": matches,
+            "files": result_entries,
             "total": total,
             "truncated": truncated,
         }
 
-
-def _matches_pattern(rel: str, pattern: str) -> bool:
-    p = PurePosixPath(rel)
-    if p.match(pattern):
-        return True
-    if pattern.startswith("**/"):
-        return p.match(pattern[3:])
-    return False
-
-
-def _safe_mtime(path: Path) -> float:
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0
+    @staticmethod
+    def _collect(
+        current: Path,
+        base: Path,
+        pattern: Optional[str],
+        depth: int,
+        out: List[str],
+    ) -> None:
+        if depth <= 0:
+            return
+        try:
+            for entry in os.scandir(current):
+                is_dir = entry.is_dir(follow_symlinks=False)
+                if is_dir and entry.name in common.WALK_SKIP_DIRS:
+                    continue
+                rel = str(Path(entry.path).relative_to(base))
+                if pattern and not is_dir:
+                    if not fnmatch.fnmatch(entry.name, pattern) and not fnmatch.fnmatch(
+                        rel, pattern
+                    ):
+                        continue
+                if is_dir:
+                    out.append(rel + "/")
+                    ListFilesHandler._collect(
+                        Path(entry.path), base, pattern, depth - 1, out
+                    )
+                else:
+                    out.append(rel)
+        except OSError:
+            pass

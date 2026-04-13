@@ -37,7 +37,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     string | null | undefined
   >("");
 
-  const pairing = usePairingState(projectId);
+  const pairing = usePairingState(projectId, "endpoint");
 
   const isConnected = pairing.status === RunnerConnectionStatus.CONNECTED;
   const agentName = pairing.runner?.agents?.[0]?.name ?? "";

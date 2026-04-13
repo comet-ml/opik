@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from pathlib import Path
 from typing import Optional, Tuple
 
 import click
@@ -33,6 +34,12 @@ def _validate_command(command: Tuple[str, ...]) -> None:
     default=None,
     help="Enable/disable file watcher. Auto-detected from command if omitted.",
 )
+@click.option(
+    "--headless",
+    is_flag=True,
+    default=False,
+    help="Skip browser pairing and self-activate. For programmatic use.",
+)
 @click.argument("command", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def endpoint(
@@ -40,10 +47,21 @@ def endpoint(
     project_name: str,
     name: Optional[str],
     watch: Optional[bool],
+    headless: bool,
     command: Tuple[str, ...],
 ) -> None:
     """Run a local endpoint process connected to Opik."""
     _validate_command(command)
+
+    from opik.runner.snapshot import has_entrypoint
+
+    if not has_entrypoint(Path.cwd()):
+        raise click.ClickException(
+            "No entrypoint found. Mark at least one function with "
+            "@opik.track(entrypoint=True) (Python) or "
+            "track({ entrypoint: true }, fn) (TypeScript) "
+            "before running 'opik endpoint'."
+        )
 
     run_cli_session(
         ctx=ctx,
@@ -52,4 +70,5 @@ def endpoint(
         runner_type=RunnerType.ENDPOINT,
         command=list(command),
         watch=watch,
+        headless=headless,
     )

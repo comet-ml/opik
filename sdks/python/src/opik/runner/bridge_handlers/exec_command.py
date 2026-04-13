@@ -1,11 +1,14 @@
 """exec bridge command handler — runs shell commands in the project root."""
 
+import functools
 import logging
 import os
 import platform
 import re
+import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -22,6 +25,15 @@ _DEFAULT_TIMEOUT_SECONDS = 30
 _MAX_TIMEOUT_SECONDS = 120
 _DEFAULT_MAX_BACKGROUND = 5
 _GRACEFUL_KILL_TIMEOUT_SECONDS = 5
+_BG_STARTUP_WAIT_SECONDS = 3
+_BG_LOG_DIR = Path(tempfile.gettempdir())
+
+
+@functools.cache
+def _has_stdbuf() -> bool:
+    """Check if stdbuf is available (coreutils on Linux, homebrew on macOS)."""
+    return shutil.which("stdbuf") is not None
+
 
 _BLOCKLIST = [
     re.compile(r"\bsudo\b"),
@@ -120,9 +132,11 @@ class ExecHandler(BaseHandler):
         self,
         repo_root: Path,
         bg_tracker: Optional[BackgroundProcessTracker] = None,
+        bg_startup_wait: float = _BG_STARTUP_WAIT_SECONDS,
     ) -> None:
         self._repo_root = repo_root
         self._bg_tracker = bg_tracker
+        self._bg_startup_wait = bg_startup_wait
 
     def execute(self, args: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         parsed = ExecArgs(**args)
@@ -134,11 +148,11 @@ class ExecHandler(BaseHandler):
             if pattern.search(parsed.command):
                 raise CommandError("blocked", "Command blocked by safety filter")
 
-        shell_args = self._shell_args(parsed.command)
-
         if parsed.background:
+            shell_args = self._shell_args(parsed.command, line_buffered=True)
             return self._execute_background(shell_args)
 
+        shell_args = self._shell_args(parsed.command)
         return self._execute_foreground(shell_args, parsed, timeout)
 
     def _execute_background(self, shell_args: list) -> Dict[str, Any]:
@@ -148,21 +162,60 @@ class ExecHandler(BaseHandler):
                 "Background execution is not enabled",
             )
 
-        proc = subprocess.Popen(
-            shell_args,
-            cwd=str(self._repo_root),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        log_file = _BG_LOG_DIR / f"opik-bg-{os.getpid()}-{int(time.time())}.log"
+        fh = open(log_file, "w")  # noqa: SIM115
+
+        try:
+            proc = subprocess.Popen(
+                shell_args,
+                cwd=str(self._repo_root),
+                stdout=fh,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            fh.close()
+            raise
+
+        # Rename to include actual PID for easier identification.
+        final_log = _BG_LOG_DIR / f"opik-bg-{proc.pid}.log"
+        try:
+            log_file.rename(final_log)
+        except OSError:
+            final_log = log_file
+
         try:
             self._bg_tracker.register(proc)
         except CommandError:
             self._kill_process_group(proc)
+            fh.close()
             raise
 
-        return {"pid": proc.pid, "status": "running"}
+        # Wait briefly to capture startup output and detect immediate crashes.
+        time.sleep(self._bg_startup_wait)
+        fh.flush()
+        fh.close()
+
+        initial_output = ""
+        try:
+            initial_output = final_log.read_text(errors="replace")[:_MAX_OUTPUT_BYTES]
+        except OSError:
+            pass
+
+        result: Dict[str, Any] = {
+            "pid": proc.pid,
+            "status": "running",
+            "log_file": str(final_log),
+            "initial_output": initial_output,
+        }
+
+        exit_code = proc.poll()
+        if exit_code is not None:
+            result["status"] = "exited"
+            result["exit_code"] = exit_code
+
+        return result
 
     def _execute_foreground(
         self, shell_args: list, parsed: ExecArgs, timeout: float
@@ -207,9 +260,13 @@ class ExecHandler(BaseHandler):
         proc.wait()
 
     @staticmethod
-    def _shell_args(command: str) -> list:
+    def _shell_args(command: str, *, line_buffered: bool = False) -> list:
         if platform.system() == "Windows":
             return ["cmd", "/c", command]
+        if line_buffered and _has_stdbuf():
+            # Force line-buffered stdout so log files get output promptly
+            # instead of waiting for the default ~4KB block buffer to fill.
+            return ["stdbuf", "-oL", "bash", "-c", command]
         return ["bash", "-c", command]
 
     @staticmethod
