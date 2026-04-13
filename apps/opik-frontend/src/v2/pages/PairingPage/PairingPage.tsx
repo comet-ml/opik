@@ -24,11 +24,14 @@ function uuidToBytes(uuid: string): Uint8Array {
 // Fragment parsing
 // ---------------------------------------------------------------------------
 
+type RunnerType = "connect" | "endpoint";
+
 interface PairingPayload {
   sessionId: string;
   activationKey: Uint8Array;
   projectId: string;
   runnerName: string;
+  runnerType: RunnerType;
 }
 
 function parsePairingPayload(fragment: string): PairingPayload {
@@ -41,11 +44,18 @@ function parsePairingPayload(fragment: string): PairingPayload {
   const nameLen = bytes[64];
   if (bytes.length < 65 + nameLen) throw new Error("bad link");
 
+  const typeOffset = 65 + nameLen;
+  const runnerType: RunnerType =
+    bytes.length > typeOffset && bytes[typeOffset] === 0x01
+      ? "endpoint"
+      : "connect";
+
   return {
     sessionId: uuidFromBytes(bytes.slice(0, 16)),
     activationKey: bytes.slice(16, 48),
     projectId: uuidFromBytes(bytes.slice(48, 64)),
     runnerName: new TextDecoder().decode(bytes.slice(65, 65 + nameLen)),
+    runnerType,
   };
 }
 
@@ -123,14 +133,20 @@ async function activate(payload: PairingPayload): Promise<void> {
     runner_name: payload.runnerName,
     hmac,
   });
-  const bridgeKey = await deriveBridgeKey(
-    payload.activationKey,
-    payload.sessionId,
-  );
-  localStorage.setItem(
-    `opik:bridgeKey:${payload.projectId}`,
-    btoa(String.fromCharCode(...bridgeKey)),
-  );
+
+  // Only CONNECT runners use bridge keys for HMAC-signed file commands.
+  // ENDPOINT runners don't need one — storing it would overwrite the
+  // CONNECT runner's key and break bridge commands.
+  if (payload.runnerType === "connect") {
+    const bridgeKey = await deriveBridgeKey(
+      payload.activationKey,
+      payload.sessionId,
+    );
+    localStorage.setItem(
+      `opik:bridgeKey:${payload.projectId}`,
+      btoa(String.fromCharCode(...bridgeKey)),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

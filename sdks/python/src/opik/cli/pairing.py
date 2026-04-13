@@ -43,7 +43,7 @@ class PairingResult:
     runner_id: str
     project_name: str
     project_id: str
-    bridge_key: bytes
+    bridge_key: bytes = b""
 
 
 def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes:
@@ -62,12 +62,19 @@ def resolve_project_id(api: "OpikApi", project_name: str) -> str:
         )
 
 
+_RUNNER_TYPE_BYTE = {
+    RunnerType.CONNECT: 0x00,
+    RunnerType.ENDPOINT: 0x01,
+}
+
+
 def build_pairing_link(
     base_url: str,
     session_id: str,
     activation_key: bytes,
     project_id: str,
     runner_name: str,
+    runner_type: RunnerType = RunnerType.CONNECT,
 ) -> str:
     session_bytes = uuid.UUID(session_id).bytes
     project_bytes = uuid.UUID(project_id).bytes
@@ -79,6 +86,7 @@ def build_pairing_link(
         + project_bytes
         + bytes([len(runner_name_bytes)])
         + runner_name_bytes
+        + bytes([_RUNNER_TYPE_BYTE[runner_type]])
     )
 
     fragment = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
@@ -128,6 +136,12 @@ def launch_supervisor(
         or isinstance(h, logging.FileHandler)
     ]
 
+    bridge_key = result.bridge_key or None
+    if runner_type == RunnerType.CONNECT and not bridge_key:
+        raise click.ClickException(
+            "CONNECT runner requires a bridge key but none was provided."
+        )
+
     supervisor = Supervisor(
         command=command,
         env=env,
@@ -140,10 +154,78 @@ def launch_supervisor(
         on_command_start=tui.op_start,
         on_command_end=tui.op_end,
         watch=watch,
-        bridge_key=result.bridge_key,
+        bridge_key=bridge_key,
         runner_type=runner_type,
     )
     supervisor.run()
+
+
+def _compute_activation_hmac(
+    activation_key: bytes,
+    session_id: str,
+    runner_name: str,
+) -> str:
+    """Compute the HMAC that the browser PairingPage would normally produce.
+
+    Message = session_id_bytes (16) || SHA-256(runner_name) (32).
+    """
+    session_id_bytes = uuid.UUID(session_id).bytes
+    runner_name_hash = hashlib.sha256(runner_name.encode("utf-8")).digest()
+    message = session_id_bytes + runner_name_hash
+    sig = hmac.new(activation_key, message, hashlib.sha256).digest()
+    return base64.b64encode(sig).decode("ascii")
+
+
+def run_headless(
+    api: "OpikApi",
+    project_name: str,
+    runner_name: str,
+    runner_type: RunnerType,
+    tui: Optional["RunnerTUI"] = None,
+) -> PairingResult:
+    """Register and self-activate a runner without browser pairing.
+
+    Creates a pairing session and immediately activates it by computing
+    the activation HMAC locally. No bridge key is derived — ENDPOINT
+    runners don't use one (bridge commands only run on CONNECT runners).
+    """
+    if runner_type == RunnerType.CONNECT:
+        raise click.ClickException(
+            "Headless mode is not supported for CONNECT runners "
+            "(no bridge key can be derived without browser pairing)."
+        )
+    validate_runner_name(runner_name)
+
+    project_id = resolve_project_id(api, project_name)
+    activation_key = secrets.token_bytes(32)
+    activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
+
+    resp = api.pairing.create_pairing_session(
+        project_id=project_id,
+        activation_key=activation_key_b64,
+        type=runner_type.value,
+        ttl_seconds=DEFAULT_TTL_SECONDS,
+    )
+    if not resp.session_id:
+        raise click.ClickException("Server did not return a session_id.")
+    if not resp.runner_id:
+        raise click.ClickException("Server did not return a runner_id.")
+
+    activation_hmac = _compute_activation_hmac(
+        activation_key, resp.session_id, runner_name
+    )
+    api.pairing.activate_pairing_session(
+        resp.session_id, runner_name=runner_name, hmac=activation_hmac
+    )
+
+    if tui:
+        tui.pairing_completed()
+
+    return PairingResult(
+        runner_id=resp.runner_id,
+        project_name=project_name,
+        project_id=project_id,
+    )
 
 
 def run_pairing(
@@ -176,7 +258,7 @@ def run_pairing(
     runner_id = resp.runner_id
 
     pairing_url = build_pairing_link(
-        base_url, session_id, activation_key, project_id, runner_name
+        base_url, session_id, activation_key, project_id, runner_name, runner_type
     )
 
     if tui:
