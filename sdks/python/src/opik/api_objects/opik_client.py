@@ -12,6 +12,7 @@ from typing import (
     Union,
     Literal,
     cast,
+    overload,
 )
 
 import httpx
@@ -2649,16 +2650,38 @@ class Opik:
             ids=[queue_id]
         )
 
+    @overload
     def get_or_create_config(
         self,
         *,
         fallback: _ConfigT,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> _ConfigT: ...
+
+    @overload
+    def get_or_create_config(
+        self,
+        *,
+        fallback: None = ...,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> Config: ...
+
+    def get_or_create_config(
+        self,
+        *,
+        fallback: Optional[Config] = None,
         project_name: Optional[str] = None,
         env: Optional[str] = None,
         version: Optional[str] = None,
         timeout_in_seconds: Optional[int] = 5,
-    ) -> _ConfigT:
-        """Fetch a config from the backend, auto-creating from fallback when no config exists.
+    ) -> Config:
+        """Fetch a config from the backend, optionally auto-creating from a fallback.
 
         Must be called from inside a function decorated with ``@opik.track``.
 
@@ -2666,35 +2689,45 @@ class Opik:
 
         * ``env`` — fetch the version deployed to an environment (e.g. ``"staging"``).
         * ``version`` — fetch a specific version by name. The special value
-          ``"latest"`` fetches the latest version in the project; when no config exists at all,
-          auto-creates one from ``fallback``.
+          ``"latest"`` fetches the latest version in the project; when no config
+          exists at all and ``fallback`` is provided, auto-creates one from it.
         * Neither — equivalent to ``env="prod"``. If no config exists at all in
-          the project, auto-creates one from ``fallback`` (the backend tags the
-          first version as ``"prod"``).
+          the project and ``fallback`` is provided, auto-creates one from it
+          (the backend tags the first version as ``"prod"``).
 
-        If an explicit ``env`` or named ``version`` is provided and no matching
-        config exists on the backend, raises :class:`~opik.exceptions.ConfigNotFound`.
-        This also applies to the default ``env="prod"`` case when at least one
-        config exists in the project but none is tagged as ``"prod"``.
+        Failure modes depend on whether ``fallback`` is provided:
 
-        If the backend blueprint is missing any field declared on the fallback
-        class, raises :class:`~opik.exceptions.ConfigMismatch`.
+        * **With fallback**: Backend errors (timeouts, network failures) return
+          the fallback instance with ``is_fallback=True``. If an explicit
+          ``env``/``version`` is requested but missing, raises
+          :class:`~opik.exceptions.ConfigNotFound`. If no config exists at all,
+          auto-creates from the fallback. The return value is an instance of
+          ``type(fallback)``.
+        * **Without fallback**: Backend errors are re-raised. If no config
+          exists at all, raises :class:`~opik.exceptions.ConfigNotFound`
+          instead of auto-creating. The return value is a generic ``Config``
+          instance — typed field access is only available when a fallback
+          supplies the subclass.
+
+        If the backend blueprint is missing any field declared on the
+        fallback's class, raises :class:`~opik.exceptions.ConfigMismatch`.
 
         Args:
-            fallback: An instance of a user-defined ``Config`` subclass.
-                Used as the return value when the backend is unreachable,
-                as the initial values when auto-creating, and its type
-                determines the return type.
+            fallback: An instance of a user-defined ``Config`` subclass. When
+                provided, used as the return value if the backend is
+                unreachable and as the initial values when auto-creating.
             project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             env: Environment tag to fetch (e.g. ``"prod"``, ``"staging"``).
             version: Fetch a specific version by its name. Use ``"latest"`` to
                 fetch the latest version.
             timeout_in_seconds: Maximum seconds to wait for the backend
-                response. If the request takes longer, ``fallback`` is returned
-                and the cache continues refreshing in the background. Pass
-                ``None`` to wait indefinitely.
+                response. With a fallback, a timeout returns the fallback and
+                the cache continues refreshing in the background; without one,
+                the timeout is raised. Pass ``None`` to wait indefinitely.
         """
-        if not isinstance(fallback, Config) or type(fallback) is Config:
+        if fallback is not None and (
+            not isinstance(fallback, Config) or type(fallback) is Config
+        ):
             raise TypeError(
                 "fallback must be an instance of a Config subclass, "
                 f"got {type(fallback).__name__}"
@@ -2725,17 +2758,15 @@ class Opik:
             project_name=resolved_project,
             rest_client_=self._rest_client,
         )
-        return cast(
-            _ConfigT,
-            type(fallback)._get_or_create_from_backend(
-                fallback,
-                manager,
-                resolved_project,
-                env=env,
-                version=version,
-                auto_create_if_empty=auto_create_if_empty,
-                timeout_in_seconds=timeout_in_seconds,
-            ),
+        resolved_cls = type(fallback) if fallback is not None else Config
+        return resolved_cls._get_or_create_from_backend(
+            manager,
+            resolved_project,
+            fallback=fallback,
+            env=env,
+            version=version,
+            auto_create_if_empty=auto_create_if_empty,
+            timeout_in_seconds=timeout_in_seconds,
         )
 
     def create_config(

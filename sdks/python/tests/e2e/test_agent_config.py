@@ -110,6 +110,24 @@ def test_get_or_create_and_create_config__happyflow(
     assert by_name.temperature == pytest.approx(0.8)
     assert by_name.hint == "use chain-of-thought"
 
+    # Fetch without a fallback — returns a generic Config and must resolve to
+    # the same underlying blueprint (and values) as the fallback-enabled
+    # ``by_name`` fetch above.
+    get_global_registry().clear()
+
+    @opik.track(project_name=project_name)
+    def fetch_prod_no_fallback():
+        return opik_client.get_or_create_config(project_name=project_name)
+
+    no_fallback_cfg = fetch_prod_no_fallback()
+    assert type(no_fallback_cfg) is opik.Config
+    assert no_fallback_cfg.is_fallback is False
+    # Same blueprint as the fallback-enabled ``by_name`` fetch.
+    assert no_fallback_cfg._state.blueprint_id == by_name._state.blueprint_id
+    assert no_fallback_cfg.temperature == by_name.temperature
+    assert no_fallback_cfg.model == by_name.model
+    assert no_fallback_cfg.hint == by_name.hint
+
 
 def test_prompt_field_and_trace_metadata__happyflow(
     opik_client: opik.Opik,

@@ -1118,6 +1118,107 @@ class TestGetOrCreateConfigFallbackOnError:
 
 
 # ---------------------------------------------------------------------------
+# get_or_create_config without fallback — returns generic Config
+# ---------------------------------------------------------------------------
+
+
+class TestGetOrCreateConfigWithoutFallback:
+    def test_no_fallback__backend_config_exists__returns_generic_config(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Without a fallback, a successful fetch returns a base ``Config`` instance
+        (no typed field access, but ``is_fallback`` is False and state is populated)."""
+
+        bp = AgentBlueprintPublic(
+            id="bp-1",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="temp", type="float", value="0.9"),
+                AgentConfigValuePublic(key="name", type="string", value="backend"),
+            ],
+        )
+        mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
+        mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
+
+        result = mock_opik_client.get_or_create_config()
+
+        assert isinstance(result, Config)
+        assert type(result) is Config
+        assert result.is_fallback is False
+
+    def test_no_fallback__fetch_error__re_raises(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Without a fallback, backend errors propagate instead of being swallowed."""
+        mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = (
+            ConnectionError("network unreachable")
+        )
+
+        with pytest.raises(ConnectionError):
+            mock_opik_client.get_or_create_config()
+
+    def test_no_fallback__api_error__re_raises(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Non-404 ApiError from the backend propagates when no fallback is given."""
+        mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = (
+            rest_api_core.ApiError(status_code=500, body="boom")
+        )
+
+        with pytest.raises(rest_api_core.ApiError):
+            mock_opik_client.get_or_create_config()
+
+    def test_no_fallback__empty_project__raises_config_not_found(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """When the project has no config and no fallback is given, raise
+        ConfigNotFound instead of auto-creating."""
+        # Default conftest: get_blueprint_by_env and get_latest_blueprint both return 404.
+        with pytest.raises(ConfigNotFound):
+            mock_opik_client.get_or_create_config()
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+
+    def test_no_fallback__version_latest_empty_project__raises_config_not_found(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """version='latest' without a fallback raises instead of auto-creating."""
+        with pytest.raises(ConfigNotFound):
+            mock_opik_client.get_or_create_config(version="latest")
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+
+    def test_no_fallback__explicit_env_missing__raises_config_not_found(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Explicit env selector that misses still raises ConfigNotFound."""
+        with pytest.raises(ConfigNotFound):
+            mock_opik_client.get_or_create_config(env="staging")
+
+    def test_no_fallback__prod_missing_but_other_configs_exist__raises_config_not_found(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Default path (env=prod) with prod missing but other configs present still
+        raises even without a fallback."""
+        latest_bp = AgentBlueprintPublic(
+            id="bp-latest", name="v2", type="blueprint", values=[]
+        )
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = latest_bp
+
+        with pytest.raises(ConfigNotFound, match="env='prod'"):
+            mock_opik_client.get_or_create_config()
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+
+    def test_base_config_passed_as_fallback__raises_type_error(self, mock_opik_client):
+        """Passing a plain ``Config()`` instance as fallback is rejected — fallback
+        must be a subclass instance."""
+        with pytest.raises(TypeError, match="Config subclass"):
+            mock_opik_client.get_or_create_config(fallback=Config())
+
+
+# ---------------------------------------------------------------------------
 # @track context guard tests
 # ---------------------------------------------------------------------------
 

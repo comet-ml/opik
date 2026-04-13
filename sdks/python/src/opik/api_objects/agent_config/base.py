@@ -209,8 +209,6 @@ class Config:
 
     __field_names__: typing.ClassVar[typing.Tuple[str, ...]] = ()
 
-    _opik_state: _OpikState
-
     def __init_subclass__(cls, **kwargs: typing.Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -221,6 +219,13 @@ class Config:
             f.name
             for f in dataclasses.fields(cls)  # type: ignore[arg-type]
         )
+
+    def __init__(self) -> None:
+        # Base-class instantiation path used when ``get_or_create_config`` is
+        # called without a fallback. Subclasses override this via the
+        # dataclass-generated ``__init__``, which still triggers
+        # ``__post_init__`` below.
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_opik_state", _OpikState())
@@ -242,11 +247,22 @@ class Config:
         }
 
     def __getattribute__(self, attr: str) -> typing.Any:
-        if attr not in type(self).__field_names__:
-            return object.__getattribute__(self, attr)
-        if self._state.project is None:
-            return object.__getattribute__(self, attr)
-        return self._resolve_field(attr)
+        field_names = type(self).__field_names__
+        if attr in field_names:
+            if self._state.project is None:
+                return object.__getattribute__(self, attr)
+            return self._resolve_field(attr)
+        # Generic ``Config`` instances (no declared schema) resolve unknown
+        # attributes from the live cache so users can access backend values
+        # even when ``get_or_create_config`` was called without a fallback.
+        if (
+            not field_names
+            and not attr.startswith("_")
+            and not hasattr(type(self), attr)
+            and self._state.project is not None
+        ):
+            return self._resolve_field(attr)
+        return object.__getattribute__(self, attr)
 
     def _resolve_field(self, attr: str) -> typing.Any:
         state = self._state
@@ -274,10 +290,10 @@ class Config:
     @classmethod
     def _get_or_create_from_backend(
         cls: typing.Type[T],
-        fallback: T,
         manager: typing.Any,
         project_name: str,
         *,
+        fallback: typing.Optional[T] = None,
         env: typing.Optional[str],
         version: typing.Optional[str],
         auto_create_if_empty: bool = False,
@@ -286,7 +302,12 @@ class Config:
         _require_track_context()
         version, mask_id = _apply_context_overrides(version)
         resolved_env = None if version is not None else env
-        field_types = fallback._infer_field_types()
+        # Field types come from the fallback's runtime values when available;
+        # without a fallback we pass an empty mapping and rely on the
+        # backend-declared type for each value (see Blueprint._convert_primitives).
+        field_types: typing.Dict[str, typing.Any] = (
+            fallback._infer_field_types() if fallback is not None else {}
+        )
 
         try:
             bp = _fetch_by_selector(
@@ -298,6 +319,8 @@ class Config:
                 timeout_in_seconds=timeout_in_seconds,
             )
         except Exception:
+            if fallback is None:
+                raise
             _init_fallback_cache_entry(
                 project_name, resolved_env, mask_id, field_types, manager, version
             )
@@ -329,6 +352,8 @@ class Config:
                     timeout_in_seconds=timeout_in_seconds,
                 )
             except Exception:
+                if fallback is None:
+                    raise
                 _init_fallback_cache_entry(
                     project_name, resolved_env, mask_id, field_types, manager, version
                 )
@@ -339,6 +364,12 @@ class Config:
                     f"but other configs exist. Tag a version with env={env!r} "
                     f"via set_config_env(), or pass an explicit env/version."
                 )
+
+        if fallback is None:
+            raise ConfigNotFound(
+                f"No config found in project {project_name!r}. Pass a `fallback` "
+                f"to auto-create one."
+            )
 
         return cls._create_from_fallback(
             fallback=fallback,
