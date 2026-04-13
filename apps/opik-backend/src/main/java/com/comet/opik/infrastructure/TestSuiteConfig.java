@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Min;
 import lombok.Data;
 
 @Data
-public class EvalSuiteConfig {
+public class TestSuiteConfig {
 
     @Valid @Min(1) @JsonProperty
     private int defaultRunsPerItem = 1;

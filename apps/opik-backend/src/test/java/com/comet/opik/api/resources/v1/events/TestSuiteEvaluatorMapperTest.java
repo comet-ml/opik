@@ -17,8 +17,8 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("EvalSuiteEvaluatorMapper Test")
-class EvalSuiteEvaluatorMapperTest {
+@DisplayName("TestSuiteEvaluatorMapper Test")
+class TestSuiteEvaluatorMapperTest {
 
     @Nested
     @DisplayName("resolveModel")

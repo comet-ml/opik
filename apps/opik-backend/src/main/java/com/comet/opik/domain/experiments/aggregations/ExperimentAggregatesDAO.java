@@ -2275,7 +2275,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         Map<String, Double> usageAvg = row.get("usage_avg", Map.class);
 
         // pass_rate fields are non-nullable in experiment_aggregates (DEFAULT 0)
-        // Convert 0 defaults to null for non-evaluation-suite experiments
+        // Convert 0 defaults to null for non-test-suite experiments
         Long totalCount = row.get("total_count", Long.class);
         boolean hasPassRate = totalCount != null && totalCount > 0;
 

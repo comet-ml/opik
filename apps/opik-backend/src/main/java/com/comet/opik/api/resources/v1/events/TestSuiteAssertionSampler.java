@@ -9,13 +9,13 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
-import com.comet.opik.api.resources.v1.events.EvalSuiteEvaluatorMapper.PreparedEvaluator;
+import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper.PreparedEvaluator;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
-import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.eventbus.Subscribe;
@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Listens for TracesCreated events and checks if traces contain eval suite metadata.
+ * Listens for TracesCreated events and checks if traces contain test suite metadata.
  * When found, reads evaluators from the dataset item (per-item evaluators) and/or
  * dataset version (default evaluators), then enqueues them for LLM-as-judge evaluation
  * via the same Redis pipeline used by online scoring.
@@ -52,7 +52,7 @@ import java.util.stream.Stream;
  */
 @EagerSingleton
 @Slf4j
-public class EvalSuiteAssertionSampler {
+public class TestSuiteAssertionSampler {
 
     public static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
 
@@ -60,24 +60,24 @@ public class EvalSuiteAssertionSampler {
     private final DatasetVersionService datasetVersionService;
     private final OnlineScorePublisher onlineScorePublisher;
     private final IdGenerator idGenerator;
-    private final EvalSuiteConfig evalSuiteConfig;
-    private final EvalSuiteEvaluatorMapper evaluatorMapper;
+    private final TestSuiteConfig testSuiteConfig;
+    private final TestSuiteEvaluatorMapper evaluatorMapper;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
 
     @Inject
-    public EvalSuiteAssertionSampler(
+    public TestSuiteAssertionSampler(
             @NonNull DatasetItemService datasetItemService,
             @NonNull DatasetVersionService datasetVersionService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull IdGenerator idGenerator,
-            @NonNull @Config("evalSuite") EvalSuiteConfig evalSuiteConfig,
-            @NonNull EvalSuiteEvaluatorMapper evaluatorMapper,
+            @NonNull @Config("testSuite") TestSuiteConfig testSuiteConfig,
+            @NonNull TestSuiteEvaluatorMapper evaluatorMapper,
             @NonNull LlmProviderApiKeyService llmProviderApiKeyService) {
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.idGenerator = idGenerator;
-        this.evalSuiteConfig = evalSuiteConfig;
+        this.testSuiteConfig = testSuiteConfig;
         this.evaluatorMapper = evaluatorMapper;
         this.llmProviderApiKeyService = llmProviderApiKeyService;
     }
@@ -97,17 +97,17 @@ public class EvalSuiteAssertionSampler {
                 RequestContext.USER_NAME, tracesBatch.userName(),
                 RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
 
-        Duration fetchTimeout = Duration.ofSeconds(evalSuiteConfig.getFetchTimeoutSeconds());
+        Duration fetchTimeout = Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds());
 
         // Resolve model once per batch: prefer connected provider, fall back to first trace's model
         var connectedProviders = getConnectedProviders(tracesBatch.workspaceId());
         String modelName = SupportedJudgeProvider.resolveModel(connectedProviders)
-                .or(() -> getMetadataString(completeTraces.getFirst(), "eval_suite_model"))
+                .or(() -> getMetadataString(completeTraces.getFirst(), "test_suite_model"))
                 .orElse(null);
 
         if (modelName == null) {
-            log.warn("No LLM model resolved for eval suite batch in workspace '{}' — "
-                    + "no supported provider connected and no eval_suite_model in trace metadata",
+            log.warn("No LLM model resolved for test suite batch in workspace '{}' — "
+                    + "no supported provider connected and no test_suite_model in trace metadata",
                     tracesBatch.workspaceId());
             return;
         }
@@ -117,26 +117,26 @@ public class EvalSuiteAssertionSampler {
 
         List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
                 .flatMap(trace -> {
-                    var evalSuiteDatasetId = getMetadataString(trace, "eval_suite_dataset_id");
-                    if (evalSuiteDatasetId.isEmpty()) {
+                    var testSuiteDatasetId = getMetadataString(trace, "test_suite_dataset_id");
+                    if (testSuiteDatasetId.isEmpty()) {
                         return Stream.empty();
                     }
 
                     UUID datasetId;
                     try {
-                        datasetId = UUID.fromString(evalSuiteDatasetId.get());
+                        datasetId = UUID.fromString(testSuiteDatasetId.get());
                     } catch (IllegalArgumentException e) {
-                        log.warn("Invalid eval_suite_dataset_id '{}' in trace metadata",
-                                evalSuiteDatasetId.get());
+                        log.warn("Invalid test_suite_dataset_id '{}' in trace metadata",
+                                testSuiteDatasetId.get());
                         return Stream.empty();
                     }
 
-                    var versionHash = getMetadataString(trace, "eval_suite_dataset_version_hash")
+                    var versionHash = getMetadataString(trace, "test_suite_dataset_version_hash")
                             .orElse(null);
 
                     var cacheKey = datasetId + ":" + (versionHash != null ? versionHash : "");
                     var preparedDatasetEvaluators = datasetEvaluatorsCache.computeIfAbsent(cacheKey, k -> {
-                        log.info("Fetching eval suite evaluators for dataset '{}', version hash '{}'",
+                        log.info("Fetching test suite evaluators for dataset '{}', version hash '{}'",
                                 datasetId, versionHash != null ? versionHash : "latest");
                         DatasetEvaluatorsResult result = fetchDatasetEvaluators(datasetId, versionHash)
                                 .contextWrite(reactiveContext)
@@ -145,9 +145,9 @@ public class EvalSuiteAssertionSampler {
                         return evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
                     });
 
-                    var datasetItemId = getMetadataString(trace, "eval_suite_dataset_item_id");
+                    var datasetItemId = getMetadataString(trace, "test_suite_dataset_item_id");
                     if (datasetItemId.isEmpty()) {
-                        log.debug("Skipping trace '{}' — no eval_suite_dataset_item_id in metadata",
+                        log.debug("Skipping trace '{}' — no test_suite_dataset_item_id in metadata",
                                 trace.id());
                         return Stream.empty();
                     }
@@ -182,7 +182,7 @@ public class EvalSuiteAssertionSampler {
                 .toList();
 
         if (!messages.isEmpty()) {
-            log.info("Enqueuing '{}' eval suite assertion messages", messages.size());
+            log.info("Enqueuing '{}' test suite assertion messages", messages.size());
             onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
     }
@@ -219,7 +219,7 @@ public class EvalSuiteAssertionSampler {
         try {
             var item = datasetItemService.get(itemId)
                     .contextWrite(reactiveContext)
-                    .timeout(Duration.ofSeconds(evalSuiteConfig.getFetchTimeoutSeconds()))
+                    .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
                     .block();
 
             if (item == null || item.evaluators() == null || item.evaluators().isEmpty()) {
@@ -249,7 +249,7 @@ public class EvalSuiteAssertionSampler {
         try {
             return Optional.of(UUID.fromString(id));
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid UUID for eval_suite_dataset_item_id '{}' in trace '{}'", id, traceId);
+            log.warn("Invalid UUID for test_suite_dataset_item_id '{}' in trace '{}'", id, traceId);
             return Optional.empty();
         }
     }

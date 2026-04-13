@@ -1,16 +1,16 @@
 package com.comet.opik.api.resources.v1.events;
 
 /**
- * Holds the LLM-as-judge prompt templates used for eval suite assertion evaluation.
+ * Holds the LLM-as-judge prompt templates used for test suite assertion evaluation.
  * <p>
  * These are a copy of the prompts defined in the Python SDK
  * ({@code sdks/python/src/opik/evaluation/suite_evaluators/llm_judge/metric.py}).
  * <p>
  * TODO [OPIK-5735]: Consolidate into a single source of truth shared between the SDK and backend.
  */
-final class EvalSuitePromptConstants {
+final class TestSuitePromptConstants {
 
-    private EvalSuitePromptConstants() {
+    private TestSuitePromptConstants() {
     }
 
     static final String SYSTEM_PROMPT = """

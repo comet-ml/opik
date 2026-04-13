@@ -7,7 +7,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudg
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
-import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -29,13 +29,13 @@ import java.util.stream.Stream;
  */
 @Singleton
 @Slf4j
-public class EvalSuiteEvaluatorMapper {
+public class TestSuiteEvaluatorMapper {
 
-    private final EvalSuiteConfig evalSuiteConfig;
+    private final TestSuiteConfig testSuiteConfig;
 
     @Inject
-    public EvalSuiteEvaluatorMapper(@NonNull EvalSuiteConfig evalSuiteConfig) {
-        this.evalSuiteConfig = evalSuiteConfig;
+    public TestSuiteEvaluatorMapper(@NonNull TestSuiteConfig testSuiteConfig) {
+        this.testSuiteConfig = testSuiteConfig;
     }
 
     public record PreparedEvaluator(@NonNull String name, @NonNull LlmAsJudgeCode code,
@@ -49,7 +49,7 @@ public class EvalSuiteEvaluatorMapper {
         if (versionPolicy != null && versionPolicy.runsPerItem() > 0) {
             return versionPolicy.runsPerItem();
         }
-        return evalSuiteConfig.getDefaultRunsPerItem();
+        return testSuiteConfig.getDefaultRunsPerItem();
     }
 
     public List<PreparedEvaluator> prepareEvaluators(List<EvaluatorItem> evaluators,
@@ -86,7 +86,7 @@ public class EvalSuiteEvaluatorMapper {
     LlmAsJudgeCode toScoringCode(JsonNode config, String modelName) {
         LlmAsJudgeCode code = deserializeScoringCode(config, modelName);
         code = renameSchemaToAssertionKeys(code);
-        code = applyEvalSuitePrompt(code);
+        code = applyTestSuitePrompt(code);
         return code;
     }
 
@@ -125,22 +125,22 @@ public class EvalSuiteEvaluatorMapper {
     }
 
     /**
-     * Replaces the evaluator's original messages and variables with the dedicated eval suite
+     * Replaces the evaluator's original messages and variables with the dedicated test suite
      * LLM-as-judge prompt (system + user template) and formats assertions in human-readable style.
      * <p>
-     * The prompt templates are defined in {@link EvalSuitePromptConstants} and mirror the Python SDK's
-     * eval suite LLM judge prompts. Variables use {@code {"input": "input", "output": "output"}}
+     * The prompt templates are defined in {@link TestSuitePromptConstants} and mirror the Python SDK's
+     * test suite LLM judge prompts. Variables use {@code {"input": "input", "output": "output"}}
      * which map to the full trace input/output via the OnlineScoringEngine variable resolution.
      */
-    private LlmAsJudgeCode applyEvalSuitePrompt(LlmAsJudgeCode code) {
+    private LlmAsJudgeCode applyTestSuitePrompt(LlmAsJudgeCode code) {
         var messages = List.of(
                 LlmAsJudgeMessage.builder()
                         .role(ChatMessageType.SYSTEM)
-                        .content(EvalSuitePromptConstants.SYSTEM_PROMPT)
+                        .content(TestSuitePromptConstants.SYSTEM_PROMPT)
                         .build(),
                 LlmAsJudgeMessage.builder()
                         .role(ChatMessageType.USER)
-                        .content(EvalSuitePromptConstants.USER_MESSAGE_TEMPLATE)
+                        .content(TestSuitePromptConstants.USER_MESSAGE_TEMPLATE)
                         .build());
 
         var variables = new HashMap<String, String>();

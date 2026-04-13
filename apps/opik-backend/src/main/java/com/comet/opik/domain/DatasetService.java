@@ -292,7 +292,7 @@ class DatasetServiceImpl implements DatasetService {
             var dao = handle.attach(DatasetDAO.class);
             dao.findById(id, workspaceId).ifPresentOrElse(
                     dataset -> verifyVisibility(dataset, visibility),
-                    // Dataset not found (e.g. deleted evaluation suite) — intentionally do not fail,
+                    // Dataset not found (e.g. deleted test suite) — intentionally do not fail,
                     // so callers can still retrieve experiment items after the dataset is gone.
                     () -> log.debug("Dataset '{}' not found in workspace '{}'; skipping visibility check", id,
                             workspaceId));

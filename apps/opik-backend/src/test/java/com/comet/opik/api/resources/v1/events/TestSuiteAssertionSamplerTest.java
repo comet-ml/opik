@@ -20,7 +20,7 @@ import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
-import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -47,8 +47,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@DisplayName("EvalSuiteAssertionSampler Test")
-class EvalSuiteAssertionSamplerTest {
+@DisplayName("TestSuiteAssertionSampler Test")
+class TestSuiteAssertionSamplerTest {
 
     @Nested
     @DisplayName("onTracesCreated integration")
@@ -70,20 +70,20 @@ class EvalSuiteAssertionSamplerTest {
         @Mock
         LlmProviderApiKeyService llmProviderApiKeyService;
 
-        private EvalSuiteAssertionSampler sampler;
+        private TestSuiteAssertionSampler sampler;
 
         @org.junit.jupiter.api.BeforeEach
         void setUp() {
-            var evalSuiteConfig = new EvalSuiteConfig();
-            var evaluatorMapper = new EvalSuiteEvaluatorMapper(evalSuiteConfig);
+            var testSuiteConfig = new TestSuiteConfig();
+            var evaluatorMapper = new TestSuiteEvaluatorMapper(testSuiteConfig);
             var openAiKey = ProviderApiKey.builder()
                     .provider(LlmProvider.OPEN_AI)
                     .build();
             lenient().when(llmProviderApiKeyService.find(any(String.class)))
                     .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
-            sampler = new EvalSuiteAssertionSampler(
+            sampler = new TestSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    evalSuiteConfig, evaluatorMapper, llmProviderApiKeyService);
+                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService);
         }
 
         @Test
@@ -111,7 +111,7 @@ class EvalSuiteAssertionSamplerTest {
 
             var datasetItemId = Generators.timeBasedEpochGenerator().generate();
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
                             .formatted(datasetId, versionHash, datasetItemId));
 
             var trace = Trace.builder()
@@ -180,7 +180,7 @@ class EvalSuiteAssertionSamplerTest {
             when(idGenerator.generateId()).thenReturn(ruleId);
 
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
                             .formatted(datasetId, versionHash, datasetItemId));
 
             var trace = Trace.builder()
@@ -280,7 +280,7 @@ class EvalSuiteAssertionSamplerTest {
             when(idGenerator.generateId()).thenReturn(ruleId);
 
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
                             .formatted(datasetId, versionHash, datasetItemId));
 
             var trace = Trace.builder()
@@ -306,7 +306,7 @@ class EvalSuiteAssertionSamplerTest {
         }
 
         @Test
-        @DisplayName("skips trace when eval_suite_dataset_item_id is missing from metadata")
+        @DisplayName("skips trace when test_suite_dataset_item_id is missing from metadata")
         void skipsTraceWhenDatasetItemIdMissing() {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
             UUID versionId = Generators.timeBasedEpochGenerator().generate();
@@ -348,7 +348,7 @@ class EvalSuiteAssertionSamplerTest {
                     .thenReturn(datasetVersion);
 
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\"}"
                             .formatted(datasetId, versionHash));
 
             var trace = Trace.builder()
@@ -604,7 +604,7 @@ class EvalSuiteAssertionSamplerTest {
 
         private Trace buildTrace(UUID datasetId, String versionHash, UUID datasetItemId) {
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
                             .formatted(datasetId, versionHash, datasetItemId));
             return Trace.builder()
                     .id(Generators.timeBasedEpochGenerator().generate())
@@ -619,7 +619,7 @@ class EvalSuiteAssertionSamplerTest {
         }
 
         @Test
-        @DisplayName("falls back to latest version when eval_suite_dataset_version_hash is missing")
+        @DisplayName("falls back to latest version when test_suite_dataset_version_hash is missing")
         void fallsBackToLatestVersionWhenVersionHashMissing() {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
             UUID versionId = Generators.timeBasedEpochGenerator().generate();
@@ -660,7 +660,7 @@ class EvalSuiteAssertionSamplerTest {
             when(idGenerator.generateId()).thenReturn(ruleId);
 
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
                             .formatted(datasetId, datasetItemId));
 
             var trace = Trace.builder()
@@ -690,7 +690,7 @@ class EvalSuiteAssertionSamplerTest {
         }
 
         @Test
-        @DisplayName("falls back to eval_suite_model from trace metadata when no provider is connected")
+        @DisplayName("falls back to test_suite_model from trace metadata when no provider is connected")
         void fallsBackToTraceMetadataModel() {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
             UUID versionId = Generators.timeBasedEpochGenerator().generate();
@@ -738,7 +738,7 @@ class EvalSuiteAssertionSamplerTest {
             when(idGenerator.generateId()).thenReturn(ruleId);
 
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"%s\", \"eval_suite_dataset_item_id\": \"%s\", \"eval_suite_model\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\", \"test_suite_model\": \"%s\"}"
                             .formatted(datasetId, versionHash, datasetItemId, traceModel));
 
             var trace = Trace.builder()
@@ -765,7 +765,7 @@ class EvalSuiteAssertionSamplerTest {
         }
 
         @Test
-        @DisplayName("skips evaluation when no provider connected and no eval_suite_model in metadata")
+        @DisplayName("skips evaluation when no provider connected and no test_suite_model in metadata")
         void skipsEvaluationWhenNoModelResolved() {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
             String workspaceId = "test-workspace";
@@ -775,9 +775,9 @@ class EvalSuiteAssertionSamplerTest {
             when(llmProviderApiKeyService.find(workspaceId))
                     .thenReturn(new ProviderApiKey.ProviderApiKeyPage(0, 0, 0, List.of(), List.of()));
 
-            // Metadata has dataset info but no eval_suite_model
+            // Metadata has dataset info but no test_suite_model
             var metadata = JsonUtils.getJsonNodeFromString(
-                    "{\"eval_suite_dataset_id\": \"%s\", \"eval_suite_dataset_version_hash\": \"abc123\", \"eval_suite_dataset_item_id\": \"%s\"}"
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"abc123\", \"test_suite_dataset_item_id\": \"%s\"}"
                             .formatted(datasetId, Generators.timeBasedEpochGenerator().generate()));
 
             var trace = Trace.builder()
