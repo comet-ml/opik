@@ -78,9 +78,12 @@ class ListFilesHandler(BaseHandler):
                 is_dir = entry.is_dir(follow_symlinks=False)
                 if is_dir and entry.name in common.WALK_SKIP_DIRS:
                     continue
-                if pattern and not fnmatch.fnmatch(entry.name, pattern) and not is_dir:
-                    continue
                 rel = str(Path(entry.path).relative_to(base))
+                if pattern and not is_dir:
+                    if not fnmatch.fnmatch(entry.name, pattern) and not fnmatch.fnmatch(
+                        rel, pattern
+                    ):
+                        continue
                 if is_dir:
                     out.append(rel + "/")
                     ListFilesHandler._collect(

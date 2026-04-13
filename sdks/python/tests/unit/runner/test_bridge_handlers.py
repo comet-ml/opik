@@ -1,3 +1,4 @@
+import glob
 import os
 import tempfile
 import threading
@@ -249,6 +250,11 @@ class TestBackgroundProcesses:
         t = BackgroundProcessTracker(max_processes=3)
         yield t
         t.shutdown()
+        for f in glob.glob(os.path.join(tempfile.gettempdir(), "opik-bg-*.log")):
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
 
     @pytest.fixture()
     def handler(self, tmp_path: Path, tracker: BackgroundProcessTracker) -> ExecHandler:

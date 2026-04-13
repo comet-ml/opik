@@ -88,6 +88,15 @@ class TestListFiles:
         result = handler.execute({"path": "src", "pattern": "*.py"}, timeout=30.0)
         assert result["files"] == ["app.py"]
 
+    def test_pattern_matches_relative_path(self, tmp_path: Path) -> None:
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x")
+        (tmp_path / "src" / "util.js").write_text("x")
+        handler = self._handler(tmp_path)
+        result = handler.execute({"pattern": "src/*.py", "depth": 2}, timeout=30.0)
+        assert "src/app.py" in result["files"]
+        assert not any("util" in f for f in result["files"])
+
     def test_empty_dir_returns_empty(self, tmp_path: Path) -> None:
         handler = self._handler(tmp_path)
         result = handler.execute({}, timeout=30.0)
