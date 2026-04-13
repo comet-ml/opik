@@ -201,9 +201,6 @@ def get_datasets(
             break
 
         for dataset_fern in page_datasets.content[: (max_results - len(datasets))]:
-            if dataset_fern.type == "evaluation_suite":
-                continue
-
             dataset_ = dataset.Dataset(
                 name=dataset_fern.name,
                 description=dataset_fern.description,
