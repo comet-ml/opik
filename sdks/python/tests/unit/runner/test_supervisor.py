@@ -265,11 +265,11 @@ class TestShutdown:
 
 
 class TestHeartbeat:
-    def test_sends_heartbeat(self) -> None:
+    def test_sends_heartbeat__endpoint__reports_jobs(self) -> None:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
 
-        sup = _make_supervisor(api=api)
+        sup = _make_supervisor(api=api, runner_type="endpoint")
 
         t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
         t.start()
@@ -279,8 +279,25 @@ class TestHeartbeat:
         t.join(timeout=5)
 
         api.runners.heartbeat.assert_called()
-        call_args = api.runners.heartbeat.call_args
-        assert call_args[0][0] == "runner-1"
+        call_kwargs = api.runners.heartbeat.call_args.kwargs
+        assert call_kwargs["capabilities"] == ["jobs"]
+
+    def test_sends_heartbeat__connect__reports_bridge(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+
+        sup = _make_supervisor(api=api, runner_type="connect")
+
+        t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
+        t.start()
+
+        time.sleep(0.5)
+        sup._shutdown_event.set()
+        t.join(timeout=5)
+
+        api.runners.heartbeat.assert_called()
+        call_kwargs = api.runners.heartbeat.call_args.kwargs
+        assert call_kwargs["capabilities"] == ["bridge"]
 
     def test_410__shuts_down(self) -> None:
         api = MagicMock()

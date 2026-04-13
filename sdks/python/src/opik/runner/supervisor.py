@@ -380,7 +380,8 @@ class Supervisor:
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                self._api.runners.heartbeat(self._runner_id)
+                caps = ["bridge"] if self._runner_type == "connect" else ["jobs"]
+                self._api.runners.heartbeat(self._runner_id, capabilities=caps)
             except ApiError as e:
                 if e.status_code == 410:
                     LOGGER.info("Runner deregistered (410), shutting down")

@@ -4,7 +4,7 @@ import hashlib
 import hmac as hmac_mod
 import json
 import os
-import secrets
+import re
 import shutil
 import subprocess
 import sys
@@ -86,9 +86,41 @@ def _drain_stdout(proc, output_lines):
         output_lines.append(line.rstrip())
 
 
-def _activate_session(
-    api_url, workspace, project_id, activation_key, session_id, runner_name
-):
+def _parse_pairing_url(output_lines, timeout):
+    """Wait for the CLI to print the pairing URL, then parse the fragment.
+
+    The URL may be split across multiple stdout lines by the terminal.
+    Join all output and search for the full URL.
+    """
+    deadline = time.monotonic() + timeout
+    url_pattern = re.compile(r"(https?://\S+/opik/pair/v1#[A-Za-z0-9_\-]+)")
+
+    while time.monotonic() < deadline:
+        joined = "".join(list(output_lines))
+        match = url_pattern.search(joined)
+        if match:
+            url = match.group(1)
+            fragment = url.split("#", 1)[1]
+            padded = fragment + "=" * ((4 - len(fragment) % 4) % 4)
+            raw = base64.urlsafe_b64decode(padded)
+            if len(raw) < 65:
+                time.sleep(0.2)
+                continue
+            name_len = raw[64]
+            if len(raw) < 65 + name_len:
+                time.sleep(0.2)
+                continue
+            return {
+                "session_id": str(uuid.UUID(bytes=raw[0:16])),
+                "activation_key": raw[16:48],
+                "project_id": str(uuid.UUID(bytes=raw[48:64])),
+                "runner_name": raw[65 : 65 + name_len].decode("utf-8"),
+            }
+        time.sleep(0.2)
+    return None
+
+
+def _activate_session(api_url, workspace, activation_key, session_id, runner_name):
     session_id_bytes = uuid.UUID(session_id).bytes
     runner_name_hash = hashlib.sha256(runner_name.encode("utf-8")).digest()
     message = session_id_bytes + runner_name_hash
@@ -111,17 +143,6 @@ def _start_runner(
 ):
     cfg = opik_client.config
 
-    activation_key = secrets.token_bytes(32)
-    activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
-    resp = api_client.opik_connect.create_opik_connect_session(
-        project_id=project_id,
-        activation_key=activation_key_b64,
-        ttl_seconds=300,
-    )
-    session_id = resp.session_id
-    runner_id = resp.runner_id
-    runner_name = f"e2e-runner-{secrets.token_hex(3)}"
-
     proc = subprocess.Popen(
         cli_args,
         stdout=subprocess.PIPE,
@@ -136,13 +157,29 @@ def _start_runner(
     )
     drain_thread.start()
 
+    # Wait for the CLI to print its pairing URL, then parse the fragment
+    payload = _parse_pairing_url(output_lines, timeout=15)
+    if payload is None:
+        proc.terminate()
+        proc.wait(timeout=5)
+        drain_thread.join(timeout=5)
+        pytest.fail(
+            "CLI did not print pairing URL within 15s.\n"
+            "Output:\n" + "\n".join(output_lines)
+        )
+
+    # Activate the CLI's session (simulates browser clicking Connect)
     api_base = cfg.url_override
     workspace = cfg.workspace or "default"
-    time.sleep(1)
     _activate_session(
-        api_base, workspace, project_id, activation_key, session_id, runner_name
+        api_base,
+        workspace,
+        payload["activation_key"],
+        payload["session_id"],
+        payload["runner_name"],
     )
 
+    # Wait for the CLI to detect connected status
     deadline = time.monotonic() + RUNNER_STARTUP_TIMEOUT
     connected = False
     while time.monotonic() < deadline:
@@ -165,9 +202,24 @@ def _start_runner(
             f"Output:\n" + "\n".join(output_lines)
         )
 
+    # Get runner_id by polling the API
+    runners_page = api_client.runners.list_runners(project_id=project_id, size=10)
+    runner_id = None
+    if runners_page.content:
+        for r in runners_page.content:
+            if r.status == "connected":
+                runner_id = r.id
+                break
+
+    if runner_id is None:
+        proc.terminate()
+        proc.wait(timeout=5)
+        drain_thread.join(timeout=5)
+        pytest.fail("No connected runner found after activation")
+
     bridge_key = hkdf_sha256(
-        ikm=activation_key,
-        salt=uuid.UUID(session_id).bytes,
+        ikm=payload["activation_key"],
+        salt=uuid.UUID(payload["session_id"]).bytes,
         info=b"opik-bridge-v1",
     )
 

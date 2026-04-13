@@ -2,6 +2,7 @@ import base64
 import uuid
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 
 from opik.cli.pairing import (
@@ -240,7 +241,7 @@ class TestRunPairing:
         mock_monotonic.side_effect = [0.0, 999.0]
 
         tui = MagicMock()
-        with pytest.raises(Exception, match="timed out"):
+        with pytest.raises(click.ClickException) as exc_info:
             run_pairing(
                 api=api,
                 project_name="my-proj",
@@ -250,6 +251,7 @@ class TestRunPairing:
                 tui=tui,
                 ttl_seconds=300,
             )
+        assert "timed out" in exc_info.value.message
 
         tui.pairing_failed.assert_called_once_with("timed out")
 
