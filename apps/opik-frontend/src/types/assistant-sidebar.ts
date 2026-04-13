@@ -25,8 +25,6 @@ export interface BridgeContext {
 export interface RunnerBridgeState {
   projectId: string;
   status: RunnerConnectionStatus;
-  pairCode: string | null;
-  expiresAt: number | null;
   runnerId: string | null;
 }
 
