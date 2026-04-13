@@ -71,6 +71,11 @@ public interface LocalRunnerService {
 
     LocalRunnerConnectResponse connect(String workspaceId, String userName, LocalRunnerConnectRequest request);
 
+    // Equivalent of connect()'s post-validation steps, for the opik-connect pairing flow.
+    // Caller (OpikConnectService) is responsible for authenticating via activation HMAC.
+    void activateFromOpikConnect(String workspaceId, String userName, UUID projectId, UUID runnerId,
+            String runnerName);
+
     LocalRunner.LocalRunnerPage listRunners(String workspaceId, String userName, UUID projectId,
             LocalRunnerStatus status, int page, int size);
 
@@ -321,6 +326,18 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 .projectId(projectId)
                 .projectName(payload.projectName())
                 .build();
+    }
+
+    @Override
+    public void activateFromOpikConnect(@NonNull String workspaceId, @NonNull String userName,
+            @NonNull UUID projectId, @NonNull UUID runnerId, @NonNull String runnerName) {
+        // Mirrors the post-pairing-code steps of connect(): evict any existing runner for
+        // this (workspace, project, user), register the new runner in the relevant sets,
+        // point the user -> runner bucket at it, and flip the runner row to CONNECTED.
+        evictExistingRunner(workspaceId, projectId, userName, runnerId);
+        registerRunnerInSets(workspaceId, userName, projectId, runnerId);
+        setUserRunner(workspaceId, projectId, userName, runnerId);
+        activateRunner(runnerId, workspaceId, projectId, userName, runnerName);
     }
 
     @Override

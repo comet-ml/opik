@@ -1,8 +1,12 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -35,6 +39,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -48,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -210,7 +218,7 @@ class DatasetsResourceCreateFromTracesTest {
         spanResourceClient.createSpan(span2, apiKey, workspaceName);
 
         // Create request with all enrichment options
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+        var request = CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(trace1.id(), trace2.id()))
                 .enrichmentOptions(TraceEnrichmentOptions.builder()
                         .includeSpans(true)
@@ -305,7 +313,7 @@ class DatasetsResourceCreateFromTracesTest {
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
         // Create request with no enrichment options
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+        var request = CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(trace.id()))
                 .enrichmentOptions(
                         TraceEnrichmentOptions.builder().build())
@@ -338,7 +346,7 @@ class DatasetsResourceCreateFromTracesTest {
 
         UUID nonExistentDatasetId = UUID.randomUUID();
 
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+        var request = CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(UUID.randomUUID()))
                 .enrichmentOptions(
                         TraceEnrichmentOptions.builder().build())
@@ -364,7 +372,7 @@ class DatasetsResourceCreateFromTracesTest {
         var dataset = buildDataset().toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+        var request = CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of())
                 .enrichmentOptions(
                         TraceEnrichmentOptions.builder().build())
@@ -375,6 +383,63 @@ class DatasetsResourceCreateFromTracesTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
         }
+    }
+
+    static Stream<Arguments> evaluatorsWithExecutionPolicyProvider() {
+        return Stream.of(
+                Arguments.of(new ExecutionPolicy(3, 2), "with execution policy"),
+                Arguments.of(null, "without execution policy"));
+    }
+
+    @ParameterizedTest(name = "Success - create dataset items from traces with evaluators {1}")
+    @MethodSource("evaluatorsWithExecutionPolicyProvider")
+    void createDatasetItemsFromTraces__withEvaluators(ExecutionPolicy executionPolicy, String description) {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var dataset = buildDataset().toBuilder().id(null).build();
+        var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+        String projectName = GENERATOR.generate().toString();
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
+                .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response\"}"))
+                .build();
+
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        var evaluatorConfig = JsonUtils.getJsonNodeFromString(
+                "{\"version\":\"1\",\"name\":\"llm_judge\",\"schema\":[{\"name\":\"is_correct\",\"type\":\"BOOLEAN\",\"description\":\"is_correct\"}]}");
+        var evaluator = EvaluatorItem.builder()
+                .name("llm_judge")
+                .type(EvaluatorType.LLM_JUDGE)
+                .config(evaluatorConfig)
+                .build();
+
+        var request = CreateDatasetItemsFromTracesRequest.builder()
+                .traceIds(Set.of(trace.id()))
+                .enrichmentOptions(TraceEnrichmentOptions.builder().build())
+                .evaluators(List.of(evaluator))
+                .executionPolicy(executionPolicy)
+                .build();
+
+        datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName);
+
+        var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName);
+
+        assertThat(actualEntity.content()).hasSize(1);
+
+        var item = actualEntity.content().getFirst();
+        assertThat(item.source()).isEqualTo(DatasetItemSource.TRACE);
+        assertThat(item.evaluators()).hasSize(1);
+        assertThat(item.evaluators().getFirst().name()).isEqualTo("llm_judge");
+        assertThat(item.evaluators().getFirst().type()).isEqualTo(EvaluatorType.LLM_JUDGE);
+
+        assertThat(item.executionPolicy()).isEqualTo(executionPolicy);
     }
 
     @Test
@@ -404,7 +469,7 @@ class DatasetsResourceCreateFromTracesTest {
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
         // Create request with ALL enrichment options enabled
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+        var request = CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(trace.id()))
                 .enrichmentOptions(TraceEnrichmentOptions.builder()
                         .includeSpans(true)
