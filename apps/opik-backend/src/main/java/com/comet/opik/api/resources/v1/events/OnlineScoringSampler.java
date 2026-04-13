@@ -33,6 +33,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -148,15 +149,16 @@ public class OnlineScoringSampler {
             // Non-SDK traces (playground, experiment, optimization) are only scored when
             // they carry selected_rule_ids metadata (explicit user selection from the playground).
             var scorableTraces = new ArrayList<Trace>();
-            var selectedRuleIds = new HashSet<UUID>();
+            var selectedRuleIdsByTrace = new HashMap<UUID, Set<UUID>>();
             for (var trace : projectTraces) {
                 if (isLoggingSource(trace)) {
+                    // For SDK traces all evaluators apply
                     scorableTraces.add(trace);
                 } else {
                     var ruleIds = extractSelectedRuleIds(trace);
                     if (!ruleIds.isEmpty()) {
                         scorableTraces.add(trace);
-                        selectedRuleIds.addAll(ruleIds);
+                        selectedRuleIdsByTrace.put(trace.id(), ruleIds);
                     }
                 }
             }
@@ -173,14 +175,13 @@ public class OnlineScoringSampler {
             List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
                     projectId, workspaceId);
 
-            // If any trace carries explicit rule selections, narrow evaluators to that set.
-            // If no selection found, use all evaluators (default behavior for backward compatibility).
-            evaluators = filterEvaluatorsBySelectedRuleIds(evaluators, selectedRuleIds);
-
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
             evaluators.parallelStream().forEach(evaluator -> {
-                // samples traces for this rule
+                // Samples traces for this rule.
+                // If any trace carries explicit rule selections, filter evaluators to that set.
+                // If no selection found, use all evaluators (default behavior for backward compatibility).
                 var samples = scorableTraces.stream()
+                        .filter(trace -> isEvaluatorSelectedForTrace(evaluator, trace, selectedRuleIdsByTrace))
                         .filter(trace -> shouldSampleTrace(evaluator, workspaceId, trace));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
@@ -307,29 +308,23 @@ public class OnlineScoringSampler {
     }
 
     /**
-     * Filters evaluators to only those whose ID is in the given selected set.
-     * If the selection is empty, all evaluators are returned (default behavior for backward compatibility).
+     * Decides whether the given evaluator applies to the given trace based on per-trace rule selection.
+     * <ul>
+     *   <li>SDK traces (and legacy null-source traces) are absent from {@code selectedRuleIdsByTrace}
+     *       and always run against every evaluator.</li>
+     *   <li>Non-SDK traces (e.g., Playground) that carry {@code selected_rule_ids} metadata are
+     *       present in the map and only run against evaluators whose ID is in their own selection.</li>
+     * </ul>
      *
-     * @param evaluators the list of all evaluators for the project
-     * @param ruleIdsToApply the rule IDs for filtering; empty means no filtering
-     * @return filtered list of evaluators matching the selection, or all evaluators if selection is empty
+     * @param evaluator              the evaluator being considered
+     * @param trace                  the trace being sampled
+     * @param selectedRuleIdsByTrace trace-id to selected rule IDs, populated only for non-SDK traces
+     * @return true if the evaluator applies to the trace
      */
-    private List<? extends AutomationRuleEvaluator<?, ?>> filterEvaluatorsBySelectedRuleIds(
-            List<? extends AutomationRuleEvaluator<?, ?>> evaluators, Set<UUID> ruleIdsToApply) {
-
-        if (ruleIdsToApply.isEmpty()) {
-            return evaluators;
-        }
-
-        log.info("Filtering evaluators based on trace metadata. Selected rule IDs: '{}'", ruleIdsToApply);
-
-        // Filter evaluators to only include those in the selected list
-        List<? extends AutomationRuleEvaluator<?, ?>> filtered = evaluators.stream()
-                .filter(evaluator -> ruleIdsToApply.contains(evaluator.getId()))
-                .toList();
-
-        log.info("Filtered '{}' evaluators out of '{}' based on trace metadata", filtered.size(), evaluators.size());
-        return filtered;
+    private boolean isEvaluatorSelectedForTrace(AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
+            Map<UUID, Set<UUID>> selectedRuleIdsByTrace) {
+        var selectedRuleIds = selectedRuleIdsByTrace.get(trace.id());
+        return selectedRuleIds == null || selectedRuleIds.contains(evaluator.getId());
     }
 
     /**

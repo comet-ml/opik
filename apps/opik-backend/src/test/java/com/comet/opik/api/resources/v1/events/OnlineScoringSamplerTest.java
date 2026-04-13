@@ -208,7 +208,7 @@ class OnlineScoringSamplerTest {
         }
 
         @Test
-        void unionsSelectedRuleIdsAcrossMultipleNonSdkTraces() {
+        void scoresEachNonSdkTraceOnlyByItsOwnSelectedRuleIds() {
             var evalA = createLlmEvaluator(true, 1.0f, List.of());
             var evalB = createLlmEvaluator(true, 1.0f, List.of());
             var unrelated = createLlmEvaluator(true, 1.0f, List.of());
@@ -224,18 +224,18 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(traceA, traceB), workspaceId, userName));
 
-            // evalA and evalB each enqueue once with both traces; unrelated never enqueues
+            // evalA enqueues traceA only; evalB enqueues traceB only; unrelated never enqueues.
             ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
             verify(onlineScorePublisher, times(2)).enqueueMessage(captor.capture(),
                     eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
 
             assertThat(captor.getAllValues()).containsExactlyInAnyOrder(
-                    List.of(toLlmMessage(evalA, traceA), toLlmMessage(evalA, traceB)),
-                    List.of(toLlmMessage(evalB, traceA), toLlmMessage(evalB, traceB)));
+                    List.of(toLlmMessage(evalA, traceA)),
+                    List.of(toLlmMessage(evalB, traceB)));
         }
 
         @Test
-        void scoresMixedBatchAndNarrowsEvaluators() {
+        void scoresSdkTraceByAllEvaluatorsEvenWhenBatchIncludesNonSdkSelection() {
             var selected = createLlmEvaluator(true, 1.0f, List.of());
             var other = createLlmEvaluator(true, 1.0f, List.of());
             var sdkTrace = createTrace(Source.SDK);
@@ -247,9 +247,16 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler
                     .onTracesCreated(new TracesCreated(List.of(sdkTrace, playgroundTrace), workspaceId, userName));
 
-            verify(onlineScorePublisher).enqueueMessage(
+            // Two enqueue calls (one per evaluator, parallelStream):
+            //   - selected: scores both traces (SDK + playground, since playground selected it)
+            //   - other:    scores only the SDK trace (playground did not select it)
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher, times(2)).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            assertThat(captor.getAllValues()).containsExactlyInAnyOrder(
                     List.of(toLlmMessage(selected, sdkTrace), toLlmMessage(selected, playgroundTrace)),
-                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    List.of(toLlmMessage(other, sdkTrace)));
         }
 
         @Test
