@@ -370,14 +370,12 @@ class TestRunHeadless:
         # No get_runner polling — headless activates immediately
         api.runners.get_runner.assert_not_called()
 
-    def test_run_headless__calls_tui_completed(self):
+    def test_run_headless__connect_type__raises(self):
         api = self._make_api()
-        tui = MagicMock()
-        run_headless(
-            api=api,
-            project_name="my-proj",
-            runner_name="test-runner",
-            runner_type=RunnerType.ENDPOINT,
-            tui=tui,
-        )
-        tui.pairing_completed.assert_called_once()
+        with pytest.raises(click.ClickException, match="not supported"):
+            run_headless(
+                api=api,
+                project_name="my-proj",
+                runner_name="test-runner",
+                runner_type=RunnerType.CONNECT,
+            )

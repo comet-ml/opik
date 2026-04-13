@@ -176,12 +176,50 @@ def _compute_activation_hmac(
     return base64.b64encode(sig).decode("ascii")
 
 
+@dataclass
+class _Session:
+    session_id: str
+    runner_id: str
+    project_id: str
+    activation_key: bytes
+
+
+def _create_session(
+    api: "OpikApi",
+    project_name: str,
+    runner_name: str,
+    runner_type: RunnerType,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+) -> _Session:
+    validate_runner_name(runner_name)
+    project_id = resolve_project_id(api, project_name)
+    activation_key = secrets.token_bytes(32)
+    activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
+
+    resp = api.pairing.create_pairing_session(
+        project_id=project_id,
+        activation_key=activation_key_b64,
+        type=runner_type.value,
+        ttl_seconds=ttl_seconds,
+    )
+    if not resp.session_id:
+        raise click.ClickException("Server did not return a session_id.")
+    if not resp.runner_id:
+        raise click.ClickException("Server did not return a runner_id.")
+
+    return _Session(
+        session_id=resp.session_id,
+        runner_id=resp.runner_id,
+        project_id=project_id,
+        activation_key=activation_key,
+    )
+
+
 def run_headless(
     api: "OpikApi",
     project_name: str,
     runner_name: str,
     runner_type: RunnerType,
-    tui: Optional["RunnerTUI"] = None,
 ) -> PairingResult:
     """Register and self-activate a runner without browser pairing.
 
@@ -194,37 +232,20 @@ def run_headless(
             "Headless mode is not supported for CONNECT runners "
             "(no bridge key can be derived without browser pairing)."
         )
-    validate_runner_name(runner_name)
 
-    project_id = resolve_project_id(api, project_name)
-    activation_key = secrets.token_bytes(32)
-    activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
-
-    resp = api.pairing.create_pairing_session(
-        project_id=project_id,
-        activation_key=activation_key_b64,
-        type=runner_type.value,
-        ttl_seconds=DEFAULT_TTL_SECONDS,
-    )
-    if not resp.session_id:
-        raise click.ClickException("Server did not return a session_id.")
-    if not resp.runner_id:
-        raise click.ClickException("Server did not return a runner_id.")
+    session = _create_session(api, project_name, runner_name, runner_type)
 
     activation_hmac = _compute_activation_hmac(
-        activation_key, resp.session_id, runner_name
+        session.activation_key, session.session_id, runner_name
     )
     api.pairing.activate_pairing_session(
-        resp.session_id, runner_name=runner_name, hmac=activation_hmac
+        session.session_id, runner_name=runner_name, hmac=activation_hmac
     )
 
-    if tui:
-        tui.pairing_completed()
-
     return PairingResult(
-        runner_id=resp.runner_id,
+        runner_id=session.runner_id,
         project_name=project_name,
-        project_id=project_id,
+        project_id=session.project_id,
     )
 
 
@@ -237,28 +258,15 @@ def run_pairing(
     tui: Optional["RunnerTUI"] = None,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
 ) -> PairingResult:
-    validate_runner_name(runner_name)
-
-    project_id = resolve_project_id(api, project_name)
-    activation_key = secrets.token_bytes(32)
-
-    activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
-    resp = api.pairing.create_pairing_session(
-        project_id=project_id,
-        activation_key=activation_key_b64,
-        type=runner_type.value,
-        ttl_seconds=ttl_seconds,
-    )
-    if not resp.session_id:
-        raise click.ClickException("Server did not return a session_id.")
-    if not resp.runner_id:
-        raise click.ClickException("Server did not return a runner_id.")
-
-    session_id = resp.session_id
-    runner_id = resp.runner_id
+    session = _create_session(api, project_name, runner_name, runner_type, ttl_seconds)
 
     pairing_url = build_pairing_link(
-        base_url, session_id, activation_key, project_id, runner_name, runner_type
+        base_url,
+        session.session_id,
+        session.activation_key,
+        session.project_id,
+        runner_name,
+        runner_type,
     )
 
     if tui:
@@ -270,7 +278,7 @@ def run_pairing(
     try:
         while time.monotonic() < deadline:
             try:
-                runner = api.runners.get_runner(runner_id)
+                runner = api.runners.get_runner(session.runner_id)
             except NotFoundError:
                 time.sleep(POLL_INTERVAL_SECONDS)
                 continue
@@ -294,16 +302,15 @@ def run_pairing(
             tui.pairing_failed("interrupted")
         raise
 
-    session_id_bytes = uuid.UUID(session_id).bytes
     bridge_key = hkdf_sha256(
-        ikm=activation_key,
-        salt=session_id_bytes,
+        ikm=session.activation_key,
+        salt=uuid.UUID(session.session_id).bytes,
         info=b"opik-bridge-v1",
     )
 
     return PairingResult(
-        runner_id=runner_id,
+        runner_id=session.runner_id,
         project_name=project_name,
-        project_id=project_id,
+        project_id=session.project_id,
         bridge_key=bridge_key,
     )

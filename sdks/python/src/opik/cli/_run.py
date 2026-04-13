@@ -43,7 +43,6 @@ def run_cli_session(
                 project_name=project_name,
                 runner_name=runner_name,
                 runner_type=runner_type,
-                tui=tui,
             )
         else:
             result = run_pairing(
