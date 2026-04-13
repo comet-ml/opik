@@ -2662,16 +2662,20 @@ class Opik:
 
         Must be called from inside a function decorated with ``@opik.track``.
 
-        At most one of ``env`` or ``version`` may be provided. If neither is given,
-        ``env="prod"`` is used.
+        At most one of ``env`` or ``version`` may be provided.
 
-        * ``env`` — fetch the version deployed to an environment (e.g. ``"prod"``).
-        * ``version`` — fetch a specific version by name.
+        * ``env`` — fetch the version deployed to an environment (e.g. ``"staging"``).
+        * ``version`` — fetch a specific version by name. The special value
+          ``"latest"`` fetches the latest version in the project; when no config exists at all,
+          auto-creates one from ``fallback``.
+        * Neither — equivalent to ``env="prod"``. If no config exists at all in
+          the project, auto-creates one from ``fallback`` (the backend tags the
+          first version as ``"prod"``).
 
-        If a selector is provided and no matching config exists on the backend,
-        raises :class:`~opik.exceptions.ConfigNotFound`. If no selector is
-        provided and no config exists at all in the project, a new one is
-        created from ``fallback``.
+        If an explicit ``env`` or named ``version`` is provided and no matching
+        config exists on the backend, raises :class:`~opik.exceptions.ConfigNotFound`.
+        This also applies to the default ``env="prod"`` case when at least one
+        config exists in the project but none is tagged as ``"prod"``.
 
         If the backend blueprint is missing any field declared on the fallback
         class, raises :class:`~opik.exceptions.ConfigMismatch`.
@@ -2682,9 +2686,9 @@ class Opik:
                 as the initial values when auto-creating, and its type
                 determines the return type.
             project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
-            env: Environment tag to fetch. Defaults to ``"prod"`` when no other
-                selector is provided.
-            version: Fetch a specific version by its name.
+            env: Environment tag to fetch (e.g. ``"prod"``, ``"staging"``).
+            version: Fetch a specific version by its name. Use ``"latest"`` to
+                fetch the latest version.
             timeout_in_seconds: Maximum seconds to wait for the backend
                 response. If the request takes longer, ``fallback`` is returned
                 and the cache continues refreshing in the background. Pass
@@ -2701,8 +2705,20 @@ class Opik:
                 "Specify at most one of 'env' (fetch by environment tag) "
                 "or 'version' (fetch by version name)."
             )
-        if env is None and version is None:
+
+        # Resolve selectors:
+        # - version="latest" → fetch latest blueprint; auto-create if empty.
+        # - explicit env or named version → fetch by selector; no auto-create.
+        # - neither → fetch env="prod"; auto-create if no config exists at all.
+        if version == "latest":
+            env = None
+            version = None
+            auto_create_if_empty = True
+        elif env is None and version is None:
             env = "prod"
+            auto_create_if_empty = True
+        else:
+            auto_create_if_empty = False
 
         resolved_project = self._resolve_project_name(project_name)
         manager = ConfigManager(
@@ -2717,6 +2733,7 @@ class Opik:
                 resolved_project,
                 env=env,
                 version=version,
+                auto_create_if_empty=auto_create_if_empty,
                 timeout_in_seconds=timeout_in_seconds,
             ),
         )

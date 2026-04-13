@@ -70,9 +70,8 @@ def test_get_or_create_and_create_config__happyflow(
     )
     assert isinstance(v2_name, str) and v2_name != ""
 
-    # Without env/version selector, get_or_create_config defaults to env="prod".
     # The first auto-created blueprint is tagged as "prod" by the backend, so
-    # fetching by env returns v1 values, not v2.
+    # fetching by env="prod" returns v1 values, not v2.
     get_global_registry().clear()
 
     @opik.track(project_name=project_name)

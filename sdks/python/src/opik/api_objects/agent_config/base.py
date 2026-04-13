@@ -34,6 +34,149 @@ def _infer_python_type(value: typing.Any) -> typing.Any:
     return type(value)
 
 
+def _require_track_context() -> None:
+    """Raise RuntimeError unless called inside an @opik.track function."""
+    from opik import opik_context  # avoid circular import
+
+    if (
+        opik_context.get_current_trace_data() is None
+        and opik_context.get_current_span_data() is None
+    ):
+        raise RuntimeError(
+            "get_or_create_config() must be called inside a function decorated with "
+            "@opik.track. Call get_or_create_config() from within a @opik.track-decorated function."
+        )
+
+
+def _apply_context_overrides(
+    version: typing.Optional[str],
+) -> typing.Tuple[typing.Optional[str], typing.Optional[str]]:
+    """Apply runner-supplied context overrides. Returns ``(version, mask_id)``."""
+    blueprint_name_override = get_active_config_blueprint_name()
+    if blueprint_name_override is not None:
+        version = blueprint_name_override
+    return version, get_active_config_mask()
+
+
+def _fetch_by_selector(
+    manager: typing.Any,
+    *,
+    version: typing.Optional[str],
+    env: typing.Optional[str],
+    mask_id: typing.Optional[str],
+    field_types: typing.Dict[str, typing.Any],
+    timeout_in_seconds: typing.Optional[int],
+) -> typing.Any:
+    """Fetch a blueprint by version, env, or latest (in priority order)."""
+    if version is not None:
+        return manager.get_blueprint(
+            name=version,
+            mask_id=mask_id,
+            field_types=field_types,
+            timeout_in_seconds=timeout_in_seconds,
+        )
+    if env is not None:
+        return manager.get_blueprint(
+            env=env,
+            mask_id=mask_id,
+            field_types=field_types,
+            timeout_in_seconds=timeout_in_seconds,
+        )
+    return manager.get_blueprint(
+        mask_id=mask_id,
+        field_types=field_types,
+        timeout_in_seconds=timeout_in_seconds,
+    )
+
+
+def _init_fallback_cache_entry(
+    project_name: str,
+    resolved_env: typing.Optional[str],
+    mask_id: typing.Optional[str],
+    field_types: typing.Dict[str, typing.Any],
+    manager: typing.Any,
+    version: typing.Optional[str],
+) -> None:
+    """Record a cache entry with no blueprint; subsequent reads will hit it as fallback."""
+    logger.debug("Failed to fetch config from backend, using fallback", exc_info=True)
+    cache_mod.init_cache_entry(
+        project_name,
+        resolved_env,
+        mask_id,
+        field_types,
+        manager,
+        version=version,
+    )
+
+
+def _validate_blueprint_schema(cls: typing.Type["Config"], bp: typing.Any) -> None:
+    """Raise ConfigMismatch if ``bp`` is missing any field declared on ``cls``."""
+    missing_keys = [name for name in cls.__field_names__ if name not in bp.keys()]
+    if missing_keys:
+        version_label = bp.name or bp.id or "unknown"
+        raise ConfigMismatch(
+            f"Config version {version_label!r} is missing expected field(s): "
+            f"{missing_keys}. The retrieved version does not contain all fields "
+            f"declared in {cls.__name__}."
+        )
+
+
+def _build_live_instance(
+    cls: typing.Type[T],
+    bp: typing.Any,
+    *,
+    project_name: str,
+    resolved_env: typing.Optional[str],
+    mask_id: typing.Optional[str],
+    version: typing.Optional[str],
+    manager: typing.Any,
+    field_types: typing.Dict[str, typing.Any],
+) -> T:
+    """Construct a backend-backed Config instance and seed its cache entry."""
+    _validate_blueprint_schema(cls, bp)
+
+    kwargs: typing.Dict[str, typing.Any] = {
+        name: bp[name] for name in cls.__field_names__
+    }
+    instance = cls(**kwargs)
+
+    state = instance._state
+    state.project = project_name
+    state.env = resolved_env
+    state.mask_id = mask_id
+    state.version = version
+    state.manager = manager
+    state.blueprint_id = bp.id
+    state.blueprint_version = bp.name
+    state.is_fallback = False
+
+    cache_mod.init_cache_entry(
+        project_name,
+        resolved_env,
+        mask_id,
+        field_types,
+        manager,
+        blueprint=bp,
+        version=version,
+    )
+    return instance
+
+
+def _missing_config_error(
+    project_name: str,
+    *,
+    env: typing.Optional[str],
+    version: typing.Optional[str],
+) -> ConfigNotFound:
+    if version is not None:
+        return ConfigNotFound(
+            f"No config found for version={version!r} in project {project_name!r}."
+        )
+    return ConfigNotFound(
+        f"No config found for env={env!r} in project {project_name!r}."
+    )
+
+
 class Config:
     """Base class for user-defined configurations.
 
@@ -137,116 +280,73 @@ class Config:
         *,
         env: typing.Optional[str],
         version: typing.Optional[str],
+        auto_create_if_empty: bool = False,
         timeout_in_seconds: typing.Optional[int] = None,
     ) -> T:
-        from opik import opik_context  # avoid circular import
-
-        if (
-            opik_context.get_current_trace_data() is None
-            and opik_context.get_current_span_data() is None
-        ):
-            raise RuntimeError(
-                "get_or_create_config() must be called inside a function decorated with "
-                "@opik.track. Call get_or_create_config() from within a @opik.track-decorated function."
-            )
-
-        blueprint_name_override = get_active_config_blueprint_name()
-        if blueprint_name_override is not None:
-            version = blueprint_name_override
-        mask_id = get_active_config_mask()
+        _require_track_context()
+        version, mask_id = _apply_context_overrides(version)
         resolved_env = None if version is not None else env
-
         field_types = fallback._infer_field_types()
 
         try:
-            if version is not None:
-                bp = manager.get_blueprint(
-                    name=version,
-                    mask_id=mask_id,
-                    field_types=field_types,
-                    timeout_in_seconds=timeout_in_seconds,
-                )
-            elif env is not None:
-                bp = manager.get_blueprint(
-                    env=env,
-                    mask_id=mask_id,
-                    field_types=field_types,
-                    timeout_in_seconds=timeout_in_seconds,
-                )
-            else:
-                bp = manager.get_blueprint(
-                    mask_id=mask_id,
-                    field_types=field_types,
-                    timeout_in_seconds=timeout_in_seconds,
-                )
-        except Exception:
-            logger.debug(
-                "Failed to fetch config from backend, using fallback",
-                exc_info=True,
-            )
-            cache_mod.init_cache_entry(
-                project_name,
-                resolved_env,
-                mask_id,
-                field_types,
+            bp = _fetch_by_selector(
                 manager,
                 version=version,
+                env=env,
+                mask_id=mask_id,
+                field_types=field_types,
+                timeout_in_seconds=timeout_in_seconds,
+            )
+        except Exception:
+            _init_fallback_cache_entry(
+                project_name, resolved_env, mask_id, field_types, manager, version
             )
             return fallback
 
-        if bp is None:
-            if version is not None:
-                raise ConfigNotFound(
-                    f"No config found for version={version!r} in project {project_name!r}."
-                )
-            if env is not None:
-                raise ConfigNotFound(
-                    f"No config found for env={env!r} in project {project_name!r}."
-                )
-            # No selector and nothing on the backend — create from fallback.
-            return cls._create_from_fallback(
-                fallback=fallback,
-                manager=manager,
+        if bp is not None:
+            return _build_live_instance(
+                cls,
+                bp,
                 project_name=project_name,
+                resolved_env=resolved_env,
                 mask_id=mask_id,
+                version=version,
+                manager=manager,
                 field_types=field_types,
             )
 
-        missing_keys = [name for name in cls.__field_names__ if name not in bp.keys()]
-        if missing_keys:
-            version_label = bp.name or bp.id or "unknown"
-            raise ConfigMismatch(
-                f"Config version {version_label!r} is missing expected field(s): "
-                f"{missing_keys}. The retrieved version does not contain all fields "
-                f"declared in {cls.__name__}."
-            )
+        if not auto_create_if_empty:
+            raise _missing_config_error(project_name, env=env, version=version)
 
-        kwargs: typing.Dict[str, typing.Any] = {
-            name: bp[name] for name in cls.__field_names__
-        }
-        instance = cls(**kwargs)
+        # env="prod" default path: the initial fetch filtered by env, so probe
+        # project-wide to distinguish "project empty" (auto-create) from
+        # "prod tag missing while other configs exist" (surface ConfigNotFound).
+        # The version="latest" path already queried the project-wide latest.
+        if env is not None:
+            try:
+                probe = manager.get_blueprint(
+                    field_types=field_types,
+                    timeout_in_seconds=timeout_in_seconds,
+                )
+            except Exception:
+                _init_fallback_cache_entry(
+                    project_name, resolved_env, mask_id, field_types, manager, version
+                )
+                return fallback
+            if probe is not None:
+                raise ConfigNotFound(
+                    f"No config tagged with env={env!r} in project {project_name!r}, "
+                    f"but other configs exist. Tag a version with env={env!r} "
+                    f"via set_config_env(), or pass an explicit env/version."
+                )
 
-        state = instance._state
-        state.project = project_name
-        state.env = resolved_env
-        state.mask_id = mask_id
-        state.version = version
-        state.manager = manager
-        state.blueprint_id = bp.id
-        state.blueprint_version = bp.name
-        state.is_fallback = False
-
-        cache_mod.init_cache_entry(
-            project_name,
-            resolved_env,
-            mask_id,
-            field_types,
-            manager,
-            blueprint=bp,
-            version=version,
+        return cls._create_from_fallback(
+            fallback=fallback,
+            manager=manager,
+            project_name=project_name,
+            mask_id=mask_id,
+            field_types=field_types,
         )
-
-        return instance
 
     @classmethod
     def _create_from_fallback(
@@ -273,41 +373,16 @@ class Config:
                     f"Failed to create or fetch config in project {project_name!r}."
                 )
 
-        missing_keys = [name for name in cls.__field_names__ if name not in bp.keys()]
-        if missing_keys:
-            version_label = bp.name or bp.id or "unknown"
-            raise ConfigMismatch(
-                f"Config version {version_label!r} is missing expected field(s): "
-                f"{missing_keys}. The retrieved version does not contain all fields "
-                f"declared in {cls.__name__}."
-            )
-
-        kwargs: typing.Dict[str, typing.Any] = {
-            name: bp[name] for name in cls.__field_names__
-        }
-        instance = cls(**kwargs)
-
-        state = instance._state
-        state.project = project_name
-        state.env = None
-        state.mask_id = mask_id
-        state.version = None
-        state.manager = manager
-        state.blueprint_id = bp.id
-        state.blueprint_version = bp.name
-        state.is_fallback = False
-
-        cache_mod.init_cache_entry(
-            project_name,
-            None,
-            mask_id,
-            field_types,
-            manager,
-            blueprint=bp,
+        return _build_live_instance(
+            cls,
+            bp,
+            project_name=project_name,
+            resolved_env=None,
+            mask_id=mask_id,
             version=None,
+            manager=manager,
+            field_types=field_types,
         )
-
-        return instance
 
     def _create_from_instance(
         self,

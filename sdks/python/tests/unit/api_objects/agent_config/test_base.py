@@ -82,7 +82,7 @@ class TestConfigBaseClass:
 
 
 class TestGetOrCreateConfig:
-    def test_no_backend_config_with_env__raises_config_not_found(
+    def test_explicit_env_selector_with_no_matching_blueprint__raises_config_not_found(
         self, mock_rest_client, mock_opik_client
     ):
         class MyConfig(Config):
@@ -91,7 +91,7 @@ class TestGetOrCreateConfig:
         fallback = MyConfig(temp=0.5)
 
         with pytest.raises(ConfigNotFound):
-            mock_opik_client.get_or_create_config(fallback=fallback)
+            mock_opik_client.get_or_create_config(fallback=fallback, env="staging")
 
     def test_backend_values__returned_in_result__happyflow(
         self, mock_rest_client, mock_opik_client
@@ -231,7 +231,7 @@ class TestGetOrCreateConfig:
         fallback = MyConfig(temp=0.5)
 
         mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
-        mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = Exception(
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = Exception(
             "timeout"
         )
 
@@ -259,7 +259,9 @@ class TestGetOrCreateConfig:
         mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
         mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
 
-        mock_opik_client.get_or_create_config(fallback=fallback, timeout_in_seconds=3)
+        mock_opik_client.get_or_create_config(
+            fallback=fallback, env="prod", timeout_in_seconds=3
+        )
 
         mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
             env_name="prod",
@@ -287,7 +289,7 @@ class TestGetOrCreateConfig:
         mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
 
         result = mock_opik_client.get_or_create_config(
-            fallback=fallback, timeout_in_seconds=None
+            fallback=fallback, env="prod", timeout_in_seconds=None
         )
 
         assert result.temp == pytest.approx(0.9)
@@ -301,7 +303,7 @@ class TestGetOrCreateConfig:
     def test_no_selector_no_backend__auto_creates_from_fallback(
         self, mock_rest_client, mock_opik_client
     ):
-        """When no env/version given AND no config exists, auto-create from fallback."""
+        """When no env/version given AND no config exists, auto-create from fallback via public API."""
 
         class MyConfig(Config):
             temp: float
@@ -309,48 +311,141 @@ class TestGetOrCreateConfig:
 
         fallback = MyConfig(temp=0.7, model="gpt-4")
 
-        # get_blueprint_by_env returns 404 (default), so bp is None
-        # AND get_latest_blueprint also returns 404 (default)
-        # This means the env lookup returns None, triggering ConfigNotFound.
-        # But when NO selector is given and env defaults to "prod", a 404
-        # means ConfigNotFound is raised. Auto-create only happens when
-        # the code path sees bp is None and NO selector was given.
-        # Actually, re-reading the code: env defaults to "prod" when neither
-        # is given, so bp=None with env="prod" raises ConfigNotFound.
-        # To test auto-create, we need env=None AND version=None at the
-        # _get_or_create_from_backend level. But opik_client sets env="prod"
-        # when both are None. So auto-create from fallback at client level
-        # can never happen (env is always set). Let's test via the internal
-        # method directly instead.
-
-        # Test via _get_or_create_from_backend directly with env=None, version=None
-        from opik.api_objects.agent_config.config import ConfigManager
-
-        manager = mock.Mock(spec=ConfigManager)
-        manager.get_blueprint.return_value = None
-
-        created_bp = Blueprint(
-            AgentBlueprintPublic(
-                id="bp-new",
-                name="v1",
-                type="blueprint",
-                values=[
-                    AgentConfigValuePublic(key="temp", type="float", value="0.7"),
-                    AgentConfigValuePublic(key="model", type="string", value="gpt-4"),
-                ],
-            )
+        # Default fixture: get_latest_blueprint raises 404, so bp is None.
+        # With no selector, _get_or_create_from_backend should auto-create
+        # via manager.create_blueprint → rest_client.agent_configs.create_agent_config.
+        created_raw = AgentBlueprintPublic(
+            id="bp-new",
+            name="v1",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="temp", type="float", value="0.7"),
+                AgentConfigValuePublic(key="model", type="string", value="gpt-4"),
+            ],
         )
-        manager.create_blueprint.return_value = created_bp
+        mock_rest_client.agent_configs.create_agent_config.return_value = None
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = created_raw
 
-        result = MyConfig._get_or_create_from_backend(
-            fallback,
-            manager,
-            "test-project",
-            env=None,
-            version=None,
+        result = mock_opik_client.get_or_create_config(fallback=fallback)
+
+        mock_rest_client.agent_configs.create_agent_config.assert_called_once()
+        assert isinstance(result, MyConfig)
+        assert result.temp == pytest.approx(0.7)
+        assert result.model == "gpt-4"
+        assert result.is_fallback is False
+
+    def test_no_selector_with_prod_blueprint__returns_prod_values(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Default (no env/version): resolves to env="prod" and returns the prod blueprint."""
+
+        class MyConfig(Config):
+            temp: float
+
+        fallback = MyConfig(temp=0.5)
+
+        bp = AgentBlueprintPublic(
+            id="bp-prod",
+            name="v3",
+            type="blueprint",
+            values=[AgentConfigValuePublic(key="temp", type="float", value="0.42")],
+        )
+        mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
+        mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
+
+        result = mock_opik_client.get_or_create_config(fallback=fallback)
+
+        mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
+            env_name="prod",
+            project_id="proj-test",
+            mask_id=None,
+            request_options=RequestOptions(timeout_in_seconds=5),
+        )
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+        assert result.temp == pytest.approx(0.42)
+
+    def test_no_selector_prod_missing_but_other_configs_exist__raises_config_not_found(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Default (env="prod") missing, but other configs exist → ConfigNotFound."""
+
+        class MyConfig(Config):
+            temp: float
+
+        fallback = MyConfig(temp=0.5)
+
+        # prod env lookup returns 404 (default from conftest), but latest returns a bp.
+        latest_bp = AgentBlueprintPublic(
+            id="bp-latest",
+            name="v2",
+            type="blueprint",
+            values=[AgentConfigValuePublic(key="temp", type="float", value="0.8")],
+        )
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = latest_bp
+
+        with pytest.raises(ConfigNotFound, match="env='prod'"):
+            mock_opik_client.get_or_create_config(fallback=fallback)
+
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+
+    def test_version_latest__fetches_latest_blueprint(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """version="latest" is a sentinel that fetches the latest blueprint without env default."""
+
+        class MyConfig(Config):
+            temp: float
+
+        fallback = MyConfig(temp=0.5)
+
+        bp = AgentBlueprintPublic(
+            id="bp-latest",
+            name="v3",
+            type="blueprint",
+            values=[AgentConfigValuePublic(key="temp", type="float", value="0.42")],
+        )
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
+        mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
+
+        result = mock_opik_client.get_or_create_config(
+            fallback=fallback, version="latest"
         )
 
-        manager.create_blueprint.assert_called_once()
+        mock_rest_client.agent_configs.get_latest_blueprint.assert_called_once()
+        mock_rest_client.agent_configs.get_blueprint_by_env.assert_not_called()
+        mock_rest_client.agent_configs.create_agent_config.assert_not_called()
+        assert result.temp == pytest.approx(0.42)
+
+    def test_version_latest__no_config_exists__auto_creates_from_fallback(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """version="latest" auto-creates from fallback when the project is empty."""
+
+        class MyConfig(Config):
+            temp: float
+            model: str
+
+        fallback = MyConfig(temp=0.7, model="gpt-4")
+
+        # get_latest_blueprint returns 404 by default (project empty).
+        created_raw = AgentBlueprintPublic(
+            id="bp-new",
+            name="v1",
+            type="blueprint",
+            values=[
+                AgentConfigValuePublic(key="temp", type="float", value="0.7"),
+                AgentConfigValuePublic(key="model", type="string", value="gpt-4"),
+            ],
+        )
+        mock_rest_client.agent_configs.create_agent_config.return_value = None
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = created_raw
+
+        result = mock_opik_client.get_or_create_config(
+            fallback=fallback, version="latest"
+        )
+
+        mock_rest_client.agent_configs.create_agent_config.assert_called_once()
         assert isinstance(result, MyConfig)
         assert result.temp == pytest.approx(0.7)
         assert result.model == "gpt-4"
@@ -427,7 +522,7 @@ class TestConfigMismatch:
         mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
 
         with pytest.raises(ConfigMismatch, match="v1"):
-            mock_opik_client.get_or_create_config(fallback=fallback)
+            mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
     def test_blueprint_missing_field__fallback_not_used(
         self, mock_rest_client, mock_opik_client
@@ -463,13 +558,13 @@ class TestConfigMismatch:
 
 
 def _make_live_instance(mock_rest_client, mock_opik_client, fallback, bp):
-    """Helper: resolve a live Config instance from a mocked blueprint."""
+    """Helper: resolve a live Config instance from a mocked blueprint (via env="prod")."""
     mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
     mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
     mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
     mock_rest_client.agent_configs.get_latest_blueprint.side_effect = None
     mock_rest_client.agent_configs.get_latest_blueprint.return_value = bp
-    return mock_opik_client.get_or_create_config(fallback=fallback)
+    return mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
 
 class TestLiveInstance:
@@ -512,7 +607,7 @@ class TestIsFallback:
         cfg = MyConfig(temp=0.5)
         assert cfg.is_fallback is True
 
-    def test_no_backend_config__raises_config_not_found(
+    def test_env_selector_with_no_backend_config__raises_config_not_found(
         self, mock_rest_client, mock_opik_client
     ):
         class MyConfig(Config):
@@ -521,7 +616,7 @@ class TestIsFallback:
         fallback = MyConfig(temp=0.5)
 
         with pytest.raises(ConfigNotFound):
-            mock_opik_client.get_or_create_config(fallback=fallback)
+            mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
     def test_backend_config__is_fallback_false(
         self, mock_rest_client, mock_opik_client
@@ -800,7 +895,7 @@ class TestMetadataInjection:
 
         with agent_config_context("mask-abc"):
             live = mock_opik_client.get_or_create_config(
-                fallback=MyConfig(greeting="default")
+                fallback=MyConfig(greeting="default"), env="prod"
             )
 
         with (
@@ -897,7 +992,9 @@ class TestGetOrCreateConfigWithMask:
         mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
 
         with agent_config_context("mask-abc"):
-            result = mock_opik_client.get_or_create_config(fallback=fallback)
+            result = mock_opik_client.get_or_create_config(
+                fallback=fallback, env="prod"
+            )
 
         mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
             env_name="prod",
@@ -928,7 +1025,9 @@ class TestGetOrCreateConfigWithMask:
         mock_rest_client.agent_configs.get_blueprint_by_env.return_value = masked_bp
 
         with agent_config_context("mask-xyz"):
-            result = mock_opik_client.get_or_create_config(fallback=fallback)
+            result = mock_opik_client.get_or_create_config(
+                fallback=fallback, env="prod"
+            )
 
         assert result.greeting == "custom-greeting"
 
@@ -950,7 +1049,7 @@ class TestGetOrCreateConfigWithMask:
         mock_rest_client.agent_configs.get_blueprint_by_env.side_effect = None
         mock_rest_client.agent_configs.get_blueprint_by_env.return_value = bp
 
-        result = mock_opik_client.get_or_create_config(fallback=fallback)
+        result = mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
         mock_rest_client.agent_configs.get_blueprint_by_env.assert_called_once_with(
             env_name="prod",
@@ -972,7 +1071,7 @@ class TestGetOrCreateConfigWithMask:
 
         with agent_config_context("mask-abc"):
             with pytest.raises(ConfigNotFound, match="env='prod'"):
-                mock_opik_client.get_or_create_config(fallback=fallback)
+                mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
 
 # ---------------------------------------------------------------------------
@@ -994,7 +1093,7 @@ class TestGetOrCreateConfigFallbackOnError:
             rest_api_core.ApiError(status_code=500, body="internal server error")
         )
 
-        result = mock_opik_client.get_or_create_config(fallback=fallback)
+        result = mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
         assert result.temp == 0.5
         assert result.is_fallback is True
@@ -1012,7 +1111,7 @@ class TestGetOrCreateConfigFallbackOnError:
             ConnectionError("network unreachable")
         )
 
-        result = mock_opik_client.get_or_create_config(fallback=fallback)
+        result = mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
         assert result.temp == 0.5
         assert result.is_fallback is True
@@ -1061,7 +1160,9 @@ class TestTrackContextGuard:
 
         span = span_data_mod.SpanData(trace_id="fake-trace", name="test-span")
         with context_storage.temporary_context(span, trace_data=None):
-            result = mock_opik_client.get_or_create_config(fallback=fallback)
+            result = mock_opik_client.get_or_create_config(
+                fallback=fallback, env="prod"
+            )
 
         assert result.temp == pytest.approx(0.9)
 
