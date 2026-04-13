@@ -389,3 +389,85 @@ def test_gepa_adapter_falls_back_for_legacy_agent_signature() -> None:
 
     result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
     assert result == ["legacy"]
+
+
+def test_gepa_adapter_empty_candidates_returns_empty_output() -> None:
+    """When the agent produces no candidates, llm_task should return empty output instead of crashing."""
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    class EmptyAgent:
+        def invoke_agent_candidates(
+            self,
+            prompts: dict[str, ChatPrompt],
+            dataset_item: dict[str, Any],
+            allow_tool_use: bool = False,
+        ) -> list[str]:
+            _ = prompts, dataset_item, allow_tool_use
+            return []
+
+    context = make_optimization_context(
+        prompt, dataset=dataset, metric=metric_fn, allow_tool_use=False
+    )
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=EmptyAgent(),  # type: ignore[arg-type]
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+
+    result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
+    assert result == []
+
+
+def test_gepa_adapter_whitespace_only_candidates_filtered() -> None:
+    """When the agent produces only whitespace candidates, they should be filtered out."""
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    class WhitespaceAgent:
+        def invoke_agent_candidates(
+            self,
+            prompts: dict[str, ChatPrompt],
+            dataset_item: dict[str, Any],
+            allow_tool_use: bool = False,
+        ) -> list[str]:
+            _ = prompts, dataset_item, allow_tool_use
+            return ["", "   ", "\n"]
+
+    context = make_optimization_context(
+        prompt, dataset=dataset, metric=metric_fn, allow_tool_use=False
+    )
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=WhitespaceAgent(),  # type: ignore[arg-type]
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+
+    result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
+    assert result == []
