@@ -1809,159 +1809,176 @@ export class OpikClient {
     return this._getOrCreateConfigImpl(options);
   }
 
-  private async _getOrCreateConfigImpl<T extends Record<string, unknown>>(
-    options?: {
-      fallback?: T;
-      projectName?: string;
-      env?: string;
-      version?: string;
+  /** Build a Config from a local fallback object (no backend involved). */
+  private _makeFallbackConfig<T extends Record<string, unknown>>(
+    fallback: T,
+    maskId: string | undefined
+  ): Config<T> {
+    return createTypedConfig<T>({
+      values: fallback,
+      fieldNames: new Set(Object.keys(fallback)),
+      blueprintId: undefined,
+      blueprintVersion: undefined,
+      isFallback: true,
+      maskId,
+    });
+  }
+
+  /**
+   * Fetches a blueprint from the backend (or returns the cached one).
+   * Returns null if the backend returned no result (not an error path).
+   * On network error, returns the fallback config if one is provided; otherwise re-throws.
+   */
+  private async _fetchBlueprintFromBackend<T extends Record<string, unknown>>(
+    manager: ConfigManager,
+    opts: {
+      blueprintName: string | undefined;
+      isLatest: boolean;
+      hasNamedVersion: boolean;
+      namedVersion: string | undefined;
+      effectiveEnv: string | null;
+      maskId: string | undefined;
+      projectName: string;
+      effectiveVersion: string | null;
+      fallback: T | undefined;
     }
-  ): Promise<Config<T>> {
-    if (!trackStorage.getStore()) {
-      throw new Error(
-        "getOrCreateConfig() must be called inside a track() function"
-      );
-    }
-
-    const selectorCount = [options?.version !== undefined, options?.env !== undefined].filter(Boolean).length;
-    if (selectorCount > 1) {
-      throw new Error(
-        "Only one of 'version' or 'env' may be specified in getOrCreateConfig()."
-      );
-    }
-
-    const fallback = options?.fallback;
-    const projectName = options?.projectName ?? this.config.projectName;
-
-    const maskId = getActiveConfigMask() ?? undefined;
-    const blueprintName = getActiveConfigBlueprintName() ?? undefined;
-    // A runner context that pins a specific blueprint name is an explicit version
-    // request — missing it must raise ConfigNotFound, not auto-create (matches Python).
-    const isExplicitBlueprintFromContext = blueprintName !== undefined;
-    const manager = new ConfigManager(projectName, this);
-
-    // "latest" is a sentinel: fetch the most recent blueprint (no name filter),
-    // and behave like "no selector" for auto-create purposes.
-    const isLatest = options?.version === "latest";
-    const hasNamedVersion = options?.version !== undefined && !isLatest;
-
-    const effectiveEnv = options?.version ? null : (options?.env ?? "prod");
-    // Use null as the cache key version for "latest" (same slot as the default env path)
-    const effectiveVersion = blueprintName ?? (hasNamedVersion ? options!.version! : null);
+  ): Promise<Blueprint | null | Config<T>> {
+    const {
+      blueprintName, isLatest, hasNamedVersion, namedVersion,
+      effectiveEnv, maskId, projectName, effectiveVersion, fallback,
+    } = opts;
 
     const cacheEntry = getCachedBlueprint(projectName, effectiveEnv, maskId ?? null, effectiveVersion);
 
-    let blueprint: Blueprint | null = null;
+    if (!cacheEntry.isStale()) {
+      return cacheEntry.getBlueprint();
+    }
 
-    if (cacheEntry.isStale()) {
+    let blueprint: Blueprint | null = null;
+    try {
+      if (blueprintName) {
+        blueprint = await manager.getBlueprint({ name: blueprintName, maskId });
+      } else if (isLatest) {
+        blueprint = await manager.getBlueprint({ maskId });
+      } else if (hasNamedVersion) {
+        blueprint = await manager.getBlueprint({ name: namedVersion!, maskId });
+      } else {
+        blueprint = await manager.getBlueprint({ env: effectiveEnv!, maskId });
+      }
+    } catch (error) {
+      if (fallback !== undefined) {
+        logger.debug("Failed to fetch config from backend, using fallback", { error });
+        return this._makeFallbackConfig(fallback, maskId);
+      }
+      throw error;
+    }
+
+    // Set a background refresh for env-based and "latest" lookups (not pinned versions or masks)
+    const refreshCallback =
+      maskId === undefined && !hasNamedVersion
+        ? isLatest
+          ? () => manager.getBlueprint({ maskId: undefined })
+          : () => manager.getBlueprint({ env: effectiveEnv!, maskId: undefined })
+        : null;
+
+    initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, refreshCallback, effectiveVersion);
+    return blueprint;
+  }
+
+  /**
+   * Handles the case where a blueprint lookup returned null.
+   * - Explicit selector (named version / env / runner context) → throws ConfigNotFoundError.
+   * - Default path: probes project-wide to distinguish "no prod tag" from "empty project".
+   *   When version="latest" the initial fetch was already project-wide — skips the probe.
+   * - Empty project + fallback → auto-creates and returns the new blueprint.
+   * - Empty project + no fallback → throws ConfigNotFoundError.
+   */
+  private async _resolveNullBlueprint<T extends Record<string, unknown>>(
+    manager: ConfigManager,
+    opts: {
+      projectName: string;
+      effectiveEnv: string | null;
+      effectiveVersion: string | null;
+      maskId: string | undefined;
+      hasNamedVersion: boolean;
+      hasExplicitEnv: boolean;
+      isExplicitBlueprintFromContext: boolean;
+      isLatest: boolean;
+      fallback: T | undefined;
+    }
+  ): Promise<Blueprint | Config<T>> {
+    const {
+      projectName, effectiveEnv, effectiveVersion, maskId,
+      hasNamedVersion, hasExplicitEnv, isExplicitBlueprintFromContext,
+      isLatest, fallback,
+    } = opts;
+
+    if (hasNamedVersion || hasExplicitEnv || isExplicitBlueprintFromContext) {
+      throw new ConfigNotFoundError(
+        `No config found for project "${projectName}" with the specified selector`
+      );
+    }
+
+    // Default path (env="prod"): fetch latest to distinguish empty project vs prod tag missing.
+    // When version="latest", the initial fetch was already project-wide — skip the redundant round-trip.
+    if (!isLatest) {
+      let latestBlueprint: Blueprint | null = null;
       try {
-        if (blueprintName) {
-          blueprint = await manager.getBlueprint({ name: blueprintName, maskId });
-        } else if (isLatest) {
-          blueprint = await manager.getBlueprint({ maskId });
-        } else if (hasNamedVersion) {
-          blueprint = await manager.getBlueprint({ name: options!.version!, maskId });
-        } else {
-          blueprint = await manager.getBlueprint({ env: effectiveEnv!, maskId });
-        }
+        latestBlueprint = await manager.getBlueprint({ maskId: undefined });
       } catch (error) {
         if (fallback !== undefined) {
-          logger.debug("Failed to fetch config from backend, using fallback", { error });
-          return createTypedConfig<T>({
-            values: fallback,
-            fieldNames: new Set(Object.keys(fallback)),
-            blueprintId: undefined,
-            blueprintVersion: undefined,
-            isFallback: true,
-            maskId,
-          });
+          logger.debug("Failed to probe project-wide config, using fallback", { error });
+          return this._makeFallbackConfig(fallback, maskId);
         }
         throw error;
       }
 
-      // Set a background refresh for env-based and "latest" lookups (not pinned named versions or masks)
-      const refreshCallback =
-        maskId === undefined && !hasNamedVersion
-          ? isLatest
-            ? () => manager.getBlueprint({ maskId: undefined })
-            : () => manager.getBlueprint({ env: effectiveEnv!, maskId: undefined })
-          : null;
-
-      initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, refreshCallback, effectiveVersion);
-    } else {
-      blueprint = cacheEntry.getBlueprint();
-    }
-
-    // Blueprint is null — no config found
-    if (!blueprint) {
-      // Explicit named version, explicit env, or runner-context blueprint: never auto-create
-      if (hasNamedVersion || options?.env || isExplicitBlueprintFromContext) {
+      if (latestBlueprint !== null) {
         throw new ConfigNotFoundError(
-          `No config found for project "${projectName}" with the specified selector`
+          `No config tagged with env="prod" in project "${projectName}", but other configs exist. ` +
+          `Use setConfigEnv() to tag a version, or pass an explicit env/version.`
         );
       }
-
-      // Default path (env="prod"): probe project-wide to distinguish empty project vs prod tag missing.
-      // When version="latest", the initial fetch was already project-wide (no name/env filter), so
-      // null means the project is genuinely empty — skip the redundant round-trip.
-      let projectWide: Blueprint | null = null;
-      if (!isLatest) {
-        try {
-          projectWide = await manager.getBlueprint({ maskId: undefined });
-        } catch (error) {
-          if (fallback !== undefined) {
-            logger.debug("Failed to probe project-wide config, using fallback", { error });
-            return createTypedConfig<T>({
-              values: fallback,
-              fieldNames: new Set(Object.keys(fallback)),
-              blueprintId: undefined,
-              blueprintVersion: undefined,
-              isFallback: true,
-              maskId,
-            });
-          }
-          throw error;
-        }
-
-        if (projectWide !== null) {
-          // Other configs exist but none tagged "prod"
-          throw new ConfigNotFoundError(
-            `No config tagged with env="prod" in project "${projectName}", but other configs exist. ` +
-            `Use setConfigEnv() to tag a version, or pass an explicit env/version.`
-          );
-        }
-      }
-
-      // Truly empty project
-      if (fallback === undefined) {
-        throw new ConfigNotFoundError(
-          `No config found in project "${projectName}". Pass a fallback to auto-create one.`
-        );
-      }
-
-      // Auto-create from fallback
-      let createdBp: Blueprint | undefined;
-      try {
-        createdBp = await manager.createBlueprint({ values: serializeValuesRecord(fallback as Record<string, unknown>) });
-      } catch (error) {
-        if (error instanceof OpikApiError && error.statusCode === 409) {
-          const refetched = await manager.getBlueprint({ maskId: undefined });
-          if (!refetched) {
-            throw new ConfigNotFoundError(`Failed to create or fetch config in project "${projectName}".`);
-          }
-          blueprint = refetched;
-        } else {
-          throw error;
-        }
-      }
-      if (!blueprint) blueprint = createdBp!;
-
-      initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, null, effectiveVersion);
     }
 
-    // Blueprint found — validate and deserialize
+    if (fallback === undefined) {
+      throw new ConfigNotFoundError(
+        `No config found in project "${projectName}". Pass a fallback to auto-create one.`
+      );
+    }
+
+    // Auto-create from fallback (handle 409 race: another caller created it concurrently)
+    let blueprint: Blueprint;
+    try {
+      blueprint = await manager.createBlueprint({
+        values: serializeValuesRecord(fallback as Record<string, unknown>),
+      });
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 409) {
+        const refetched = await manager.getBlueprint({ maskId: undefined });
+        if (!refetched) {
+          throw new ConfigNotFoundError(`Failed to create or fetch config in project "${projectName}".`);
+        }
+        blueprint = refetched;
+      } else {
+        throw error;
+      }
+    }
+
+    initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, null, effectiveVersion);
+    return blueprint;
+  }
+
+  /**
+   * Validates fallback keys against the blueprint, deserializes values, and returns a typed Config.
+   */
+  private _buildConfigFromBlueprint<T extends Record<string, unknown>>(
+    blueprint: Blueprint,
+    fallback: T | undefined,
+    maskId: string | undefined
+  ): Config<T> {
     const rawValuesMap = Object.fromEntries(
-      blueprint.keys().map((key) => [key, blueprint!.getRawEntry(key)!])
+      blueprint.keys().map((key) => [key, blueprint.getRawEntry(key)!])
     );
 
     if (fallback !== undefined) {
@@ -1981,16 +1998,74 @@ export class OpikClient {
       fallback !== undefined ? Object.keys(fallback) : undefined
     );
 
-    const fieldNames = new Set(Object.keys(fallback ?? resolvedValues));
-
     return createTypedConfig<T>({
       values: resolvedValues as T,
-      fieldNames,
+      fieldNames: new Set(Object.keys(fallback ?? resolvedValues)),
       blueprintId: blueprint.id,
       blueprintVersion: blueprint.name,
       isFallback: false,
       maskId,
     });
+  }
+
+  private async _getOrCreateConfigImpl<T extends Record<string, unknown>>(
+    options?: {
+      fallback?: T;
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>> {
+    if (!trackStorage.getStore()) {
+      throw new Error("getOrCreateConfig() must be called inside a track() function");
+    }
+    if (options?.version !== undefined && options?.env !== undefined) {
+      throw new Error("Only one of 'version' or 'env' may be specified in getOrCreateConfig().");
+    }
+
+    const fallback = options?.fallback;
+    const projectName = options?.projectName ?? this.config.projectName;
+    const maskId = getActiveConfigMask() ?? undefined;
+    const blueprintName = getActiveConfigBlueprintName() ?? undefined;
+    // A runner context that pins a blueprint name is an explicit request — no auto-create.
+    const isExplicitBlueprintFromContext = blueprintName !== undefined;
+    const manager = new ConfigManager(projectName, this);
+
+    // "latest" fetches the most-recent blueprint (no name/env filter); allows auto-create.
+    const isLatest = options?.version === "latest";
+    const hasNamedVersion = options?.version !== undefined && !isLatest;
+    const effectiveEnv = options?.version ? null : (options?.env ?? "prod");
+    // Cache key: null for both "latest" and the default env path
+    const effectiveVersion = blueprintName ?? (hasNamedVersion ? options!.version! : null);
+
+    const fetchResult = await this._fetchBlueprintFromBackend<T>(manager, {
+      blueprintName, isLatest, hasNamedVersion,
+      namedVersion: options?.version,
+      effectiveEnv, maskId, projectName, effectiveVersion, fallback,
+    });
+
+    // _fetchBlueprintFromBackend may return a ready-made fallback Config on network error
+    if (fetchResult !== null && !(fetchResult instanceof Blueprint)) {
+      return fetchResult as Config<T>;
+    }
+
+    let blueprint = fetchResult as Blueprint | null;
+
+    if (!blueprint) {
+      const resolved = await this._resolveNullBlueprint<T>(manager, {
+        projectName, effectiveEnv, effectiveVersion, maskId,
+        hasNamedVersion, hasExplicitEnv: options?.env !== undefined,
+        isExplicitBlueprintFromContext, isLatest, fallback,
+      });
+
+      // _resolveNullBlueprint may return a ready-made fallback Config on network error
+      if (!(resolved instanceof Blueprint)) {
+        return resolved as Config<T>;
+      }
+      blueprint = resolved;
+    }
+
+    return this._buildConfigFromBlueprint<T>(blueprint, fallback, maskId);
   }
 
   /**
