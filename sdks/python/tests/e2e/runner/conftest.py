@@ -125,7 +125,7 @@ def _activate_session(api_client, activation_key, session_id, runner_name):
     sig = hmac_mod.new(activation_key, message, hashlib.sha256).digest()
     hmac_b64 = base64.b64encode(sig).decode("ascii")
 
-    api_client.opik_connect.activate_opik_connect_session(
+    api_client.pairing.activate_pairing_session(
         session_id, runner_name=runner_name, hmac=hmac_b64
     )
 

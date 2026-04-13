@@ -10,19 +10,19 @@ import * as errors from "../../../../errors/index.js";
 import * as serializers from "../../../../serialization/index.js";
 import * as OpikApi from "../../../index.js";
 
-export declare namespace OpikConnectClient {
+export declare namespace PairingClient {
     export type Options = BaseClientOptions;
 
     export interface RequestOptions extends BaseRequestOptions {}
 }
 
 /**
- * Pairing sessions for the `opik connect` CLI command
+ * Pairing sessions for the `opik connect` and `opik endpoint` CLI commands
  */
-export class OpikConnectClient {
-    protected readonly _options: NormalizedClientOptions<OpikConnectClient.Options>;
+export class PairingClient {
+    protected readonly _options: NormalizedClientOptions<PairingClient.Options>;
 
-    constructor(options: OpikConnectClient.Options = {}) {
+    constructor(options: PairingClient.Options = {}) {
         this._options = normalizeClientOptions(options);
     }
 
@@ -31,7 +31,7 @@ export class OpikConnectClient {
      *
      * @param {string} sessionId
      * @param {OpikApi.ActivateRequest} request
-     * @param {OpikConnectClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {PairingClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.ForbiddenError}
      * @throws {@link OpikApi.NotFoundError}
@@ -41,25 +41,23 @@ export class OpikConnectClient {
      * @throws {@link OpikApi.NotImplementedError}
      *
      * @example
-     *     await client.opikConnect.activateOpikConnectSession("sessionId", {
+     *     await client.pairing.activatePairingSession("sessionId", {
      *         runnerName: "runner_name",
      *         hmac: "hmac"
      *     })
      */
-    public activateOpikConnectSession(
+    public activatePairingSession(
         sessionId: string,
         request: OpikApi.ActivateRequest,
-        requestOptions?: OpikConnectClient.RequestOptions,
+        requestOptions?: PairingClient.RequestOptions,
     ): core.HttpResponsePromise<void> {
-        return core.HttpResponsePromise.fromPromise(
-            this.__activateOpikConnectSession(sessionId, request, requestOptions),
-        );
+        return core.HttpResponsePromise.fromPromise(this.__activatePairingSession(sessionId, request, requestOptions));
     }
 
-    private async __activateOpikConnectSession(
+    private async __activatePairingSession(
         sessionId: string,
         request: OpikApi.ActivateRequest,
-        requestOptions?: OpikConnectClient.RequestOptions,
+        requestOptions?: PairingClient.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -73,7 +71,7 @@ export class OpikConnectClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                `v1/private/opik-connect/sessions/${core.url.encodePathParam(sessionId)}/activate`,
+                `v1/private/pairing/sessions/${core.url.encodePathParam(sessionId)}/activate`,
             ),
             method: "POST",
             headers: _headers,
@@ -140,7 +138,7 @@ export class OpikConnectClient {
             _response.error,
             _response.rawResponse,
             "POST",
-            "/v1/private/opik-connect/sessions/{sessionId}/activate",
+            "/v1/private/pairing/sessions/{sessionId}/activate",
         );
     }
 
@@ -148,7 +146,7 @@ export class OpikConnectClient {
      * Register a short-lived pairing session that a local daemon will later activate via HMAC
      *
      * @param {OpikApi.CreateSessionRequest} request
-     * @param {OpikConnectClient.RequestOptions} requestOptions - Request-specific configuration.
+     * @param {PairingClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.NotFoundError}
@@ -157,21 +155,22 @@ export class OpikConnectClient {
      * @throws {@link OpikApi.NotImplementedError}
      *
      * @example
-     *     await client.opikConnect.createOpikConnectSession({
+     *     await client.pairing.createPairingSession({
      *         projectId: "project_id",
-     *         activationKey: "activation_key"
+     *         activationKey: "activation_key",
+     *         type: "connect"
      *     })
      */
-    public createOpikConnectSession(
+    public createPairingSession(
         request: OpikApi.CreateSessionRequest,
-        requestOptions?: OpikConnectClient.RequestOptions,
+        requestOptions?: PairingClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.CreateSessionResponse> {
-        return core.HttpResponsePromise.fromPromise(this.__createOpikConnectSession(request, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__createPairingSession(request, requestOptions));
     }
 
-    private async __createOpikConnectSession(
+    private async __createPairingSession(
         request: OpikApi.CreateSessionRequest,
-        requestOptions?: OpikConnectClient.RequestOptions,
+        requestOptions?: PairingClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.CreateSessionResponse>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -185,7 +184,7 @@ export class OpikConnectClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                "v1/private/opik-connect/sessions",
+                "v1/private/pairing/sessions",
             ),
             method: "POST",
             headers: _headers,
@@ -246,11 +245,6 @@ export class OpikConnectClient {
             }
         }
 
-        return handleNonStatusCodeError(
-            _response.error,
-            _response.rawResponse,
-            "POST",
-            "/v1/private/opik-connect/sessions",
-        );
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/v1/private/pairing/sessions");
     }
 }

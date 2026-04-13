@@ -18,16 +18,17 @@ from ..errors.too_many_requests_error import TooManyRequestsError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.create_session_response import CreateSessionResponse
 from ..types.error_message import ErrorMessage
+from .types.create_session_request_type import CreateSessionRequestType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
 
 
-class RawOpikConnectClient:
+class RawPairingClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    def activate_opik_connect_session(
+    def activate_pairing_session(
         self, session_id: str, *, runner_name: str, hmac: str, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
         """
@@ -49,7 +50,7 @@ class RawOpikConnectClient:
         HttpResponse[None]
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/opik-connect/sessions/{jsonable_encoder(session_id)}/activate",
+            f"v1/private/pairing/sessions/{jsonable_encoder(session_id)}/activate",
             method="POST",
             json={
                 "runner_name": runner_name,
@@ -135,11 +136,12 @@ class RawOpikConnectClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def create_opik_connect_session(
+    def create_pairing_session(
         self,
         *,
         project_id: str,
         activation_key: str,
+        type: CreateSessionRequestType,
         ttl_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[CreateSessionResponse]:
@@ -152,6 +154,8 @@ class RawOpikConnectClient:
 
         activation_key : str
 
+        type : CreateSessionRequestType
+
         ttl_seconds : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
@@ -163,12 +167,13 @@ class RawOpikConnectClient:
             Session created
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/opik-connect/sessions",
+            "v1/private/pairing/sessions",
             method="POST",
             json={
                 "project_id": project_id,
                 "activation_key": activation_key,
                 "ttl_seconds": ttl_seconds,
+                "type": type,
             },
             headers={
                 "content-type": "application/json",
@@ -247,11 +252,11 @@ class RawOpikConnectClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
 
-class AsyncRawOpikConnectClient:
+class AsyncRawPairingClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    async def activate_opik_connect_session(
+    async def activate_pairing_session(
         self, session_id: str, *, runner_name: str, hmac: str, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
         """
@@ -273,7 +278,7 @@ class AsyncRawOpikConnectClient:
         AsyncHttpResponse[None]
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/opik-connect/sessions/{jsonable_encoder(session_id)}/activate",
+            f"v1/private/pairing/sessions/{jsonable_encoder(session_id)}/activate",
             method="POST",
             json={
                 "runner_name": runner_name,
@@ -359,11 +364,12 @@ class AsyncRawOpikConnectClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def create_opik_connect_session(
+    async def create_pairing_session(
         self,
         *,
         project_id: str,
         activation_key: str,
+        type: CreateSessionRequestType,
         ttl_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[CreateSessionResponse]:
@@ -376,6 +382,8 @@ class AsyncRawOpikConnectClient:
 
         activation_key : str
 
+        type : CreateSessionRequestType
+
         ttl_seconds : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
@@ -387,12 +395,13 @@ class AsyncRawOpikConnectClient:
             Session created
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/opik-connect/sessions",
+            "v1/private/pairing/sessions",
             method="POST",
             json={
                 "project_id": project_id,
                 "activation_key": activation_key,
                 "ttl_seconds": ttl_seconds,
+                "type": type,
             },
             headers={
                 "content-type": "application/json",

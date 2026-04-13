@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
+import { CreateSessionRequestType } from "../../types/CreateSessionRequestType.js";
 
 export const CreateSessionRequest: core.serialization.Schema<
     serializers.CreateSessionRequest.Raw,
@@ -11,6 +12,7 @@ export const CreateSessionRequest: core.serialization.Schema<
     projectId: core.serialization.property("project_id", core.serialization.string()),
     activationKey: core.serialization.property("activation_key", core.serialization.string()),
     ttlSeconds: core.serialization.property("ttl_seconds", core.serialization.number().optional()),
+    type: CreateSessionRequestType,
 });
 
 export declare namespace CreateSessionRequest {
@@ -18,5 +20,6 @@ export declare namespace CreateSessionRequest {
         project_id: string;
         activation_key: string;
         ttl_seconds?: number | null;
+        type: CreateSessionRequestType.Raw;
     }
 }

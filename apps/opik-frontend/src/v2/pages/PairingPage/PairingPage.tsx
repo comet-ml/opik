@@ -120,7 +120,7 @@ async function activate(payload: PairingPayload): Promise<void> {
     payload.runnerName,
   );
   await api.post(
-    `/v1/private/opik-connect/sessions/${payload.sessionId}/activate`,
+    `/v1/private/pairing/sessions/${payload.sessionId}/activate`,
     { runner_name: payload.runnerName, hmac },
   );
   const bridgeKey = await deriveBridgeKey(

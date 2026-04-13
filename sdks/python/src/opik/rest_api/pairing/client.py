@@ -5,28 +5,29 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.create_session_response import CreateSessionResponse
-from .raw_client import AsyncRawOpikConnectClient, RawOpikConnectClient
+from .raw_client import AsyncRawPairingClient, RawPairingClient
+from .types.create_session_request_type import CreateSessionRequestType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
 
 
-class OpikConnectClient:
+class PairingClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
-        self._raw_client = RawOpikConnectClient(client_wrapper=client_wrapper)
+        self._raw_client = RawPairingClient(client_wrapper=client_wrapper)
 
     @property
-    def with_raw_response(self) -> RawOpikConnectClient:
+    def with_raw_response(self) -> RawPairingClient:
         """
         Retrieves a raw implementation of this client that returns raw responses.
 
         Returns
         -------
-        RawOpikConnectClient
+        RawPairingClient
         """
         return self._raw_client
 
-    def activate_opik_connect_session(
+    def activate_pairing_session(
         self, session_id: str, *, runner_name: str, hmac: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
@@ -51,18 +52,19 @@ class OpikConnectClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.opik_connect.activate_opik_connect_session(session_id='sessionId', runner_name='runner_name', hmac='hmac', )
+        client.pairing.activate_pairing_session(session_id='sessionId', runner_name='runner_name', hmac='hmac', )
         """
-        _response = self._raw_client.activate_opik_connect_session(
+        _response = self._raw_client.activate_pairing_session(
             session_id, runner_name=runner_name, hmac=hmac, request_options=request_options
         )
         return _response.data
 
-    def create_opik_connect_session(
+    def create_pairing_session(
         self,
         *,
         project_id: str,
         activation_key: str,
+        type: CreateSessionRequestType,
         ttl_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> CreateSessionResponse:
@@ -74,6 +76,8 @@ class OpikConnectClient:
         project_id : str
 
         activation_key : str
+
+        type : CreateSessionRequestType
 
         ttl_seconds : typing.Optional[int]
 
@@ -89,33 +93,34 @@ class OpikConnectClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.opik_connect.create_opik_connect_session(project_id='project_id', activation_key='activation_key', )
+        client.pairing.create_pairing_session(project_id='project_id', activation_key='activation_key', type="connect", )
         """
-        _response = self._raw_client.create_opik_connect_session(
+        _response = self._raw_client.create_pairing_session(
             project_id=project_id,
             activation_key=activation_key,
+            type=type,
             ttl_seconds=ttl_seconds,
             request_options=request_options,
         )
         return _response.data
 
 
-class AsyncOpikConnectClient:
+class AsyncPairingClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
-        self._raw_client = AsyncRawOpikConnectClient(client_wrapper=client_wrapper)
+        self._raw_client = AsyncRawPairingClient(client_wrapper=client_wrapper)
 
     @property
-    def with_raw_response(self) -> AsyncRawOpikConnectClient:
+    def with_raw_response(self) -> AsyncRawPairingClient:
         """
         Retrieves a raw implementation of this client that returns raw responses.
 
         Returns
         -------
-        AsyncRawOpikConnectClient
+        AsyncRawPairingClient
         """
         return self._raw_client
 
-    async def activate_opik_connect_session(
+    async def activate_pairing_session(
         self, session_id: str, *, runner_name: str, hmac: str, request_options: typing.Optional[RequestOptions] = None
     ) -> None:
         """
@@ -142,19 +147,20 @@ class AsyncOpikConnectClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.opik_connect.activate_opik_connect_session(session_id='sessionId', runner_name='runner_name', hmac='hmac', )
+            await client.pairing.activate_pairing_session(session_id='sessionId', runner_name='runner_name', hmac='hmac', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.activate_opik_connect_session(
+        _response = await self._raw_client.activate_pairing_session(
             session_id, runner_name=runner_name, hmac=hmac, request_options=request_options
         )
         return _response.data
 
-    async def create_opik_connect_session(
+    async def create_pairing_session(
         self,
         *,
         project_id: str,
         activation_key: str,
+        type: CreateSessionRequestType,
         ttl_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> CreateSessionResponse:
@@ -166,6 +172,8 @@ class AsyncOpikConnectClient:
         project_id : str
 
         activation_key : str
+
+        type : CreateSessionRequestType
 
         ttl_seconds : typing.Optional[int]
 
@@ -183,12 +191,13 @@ class AsyncOpikConnectClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.opik_connect.create_opik_connect_session(project_id='project_id', activation_key='activation_key', )
+            await client.pairing.create_pairing_session(project_id='project_id', activation_key='activation_key', type="connect", )
         asyncio.run(main())
         """
-        _response = await self._raw_client.create_opik_connect_session(
+        _response = await self._raw_client.create_pairing_session(
             project_id=project_id,
             activation_key=activation_key,
+            type=type,
             ttl_seconds=ttl_seconds,
             request_options=request_options,
         )
