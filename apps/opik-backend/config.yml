@@ -593,14 +593,14 @@ onlineScoring:
       streamMaxLen: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
       streamTrimLimit: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
 
-# Configuration for Evaluation Suite assertions
-evalSuite:
+# Configuration for Test Suite assertions
+testSuite:
   # Default: 1
-  # Description: Number of LLM runs per dataset item during eval suite execution
-  defaultRunsPerItem: ${EVAL_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
+  # Description: Number of LLM runs per dataset item during test suite execution
+  defaultRunsPerItem: ${TEST_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
   # Default: 10
   # Description: Timeout in seconds for fetching dataset evaluators and item evaluators
-  fetchTimeoutSeconds: ${EVAL_SUITE_FETCH_TIMEOUT_SECONDS:-10}
+  fetchTimeoutSeconds: ${TEST_SUITE_FETCH_TIMEOUT_SECONDS:-10}
 
 # Configuration for Experiment Execution (Redis Streams-based processing)
 experimentExecution:

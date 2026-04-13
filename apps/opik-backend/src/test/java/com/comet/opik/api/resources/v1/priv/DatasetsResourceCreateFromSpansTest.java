@@ -6,6 +6,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
@@ -406,8 +407,7 @@ class DatasetsResourceCreateFromSpansTest {
 
     static Stream<Arguments> evaluatorsWithExecutionPolicyProvider() {
         return Stream.of(
-                Arguments.of(ExecutionPolicy.builder().runsPerItem(3).passThreshold(2).build(),
-                        "with execution policy"),
+                Arguments.of(new ExecutionPolicy(3, 2), "with execution policy"),
                 Arguments.of(null, "without execution policy"));
     }
 
@@ -437,7 +437,13 @@ class DatasetsResourceCreateFromSpansTest {
                 .build();
         spanResourceClient.createSpan(span, apiKey, workspaceName);
 
-        var evaluator = factory.manufacturePojo(EvaluatorItem.class);
+        var evaluatorConfig = JsonUtils.getJsonNodeFromString(
+                "{\"version\":\"1\",\"name\":\"llm_judge\",\"schema\":[{\"name\":\"is_correct\",\"type\":\"BOOLEAN\",\"description\":\"is_correct\"}]}");
+        var evaluator = EvaluatorItem.builder()
+                .name("llm_judge")
+                .type(EvaluatorType.LLM_JUDGE)
+                .config(evaluatorConfig)
+                .build();
 
         var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span.id()))
@@ -454,7 +460,9 @@ class DatasetsResourceCreateFromSpansTest {
 
         var item = actualEntity.content().getFirst();
         assertThat(item.source()).isEqualTo(DatasetItemSource.SPAN);
-        assertThat(item.evaluators()).containsExactly(evaluator);
+        assertThat(item.evaluators()).hasSize(1);
+        assertThat(item.evaluators().getFirst().name()).isEqualTo("llm_judge");
+        assertThat(item.evaluators().getFirst().type()).isEqualTo(EvaluatorType.LLM_JUDGE);
 
         assertThat(item.executionPolicy()).isEqualTo(executionPolicy);
     }

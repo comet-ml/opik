@@ -79,13 +79,13 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Summary of the dataset version this experiment is linked to.") DatasetVersionSummary datasetVersionSummary,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Pass rate for evaluation suite experiments (0.0-1.0). Null for regular experiments.") BigDecimal passRate,
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Pass rate for test suite experiments (0.0-1.0). Null for regular experiments.") BigDecimal passRate,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items that passed for evaluation suite experiments. Null for regular experiments.") Long passedCount,
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items that passed for test suite experiments. Null for regular experiments.") Long passedCount,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items for evaluation suite experiments. Null for regular experiments.") Long totalCount,
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items for test suite experiments. Null for regular experiments.") Long totalCount,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments.") List<AssertionScoreAverage> assertionScores){
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Per-assertion average pass rates for test suite experiments. Null for regular experiments.") List<AssertionScoreAverage> assertionScores){
 
     @Builder(toBuilder = true)
     public record ExperimentPage(

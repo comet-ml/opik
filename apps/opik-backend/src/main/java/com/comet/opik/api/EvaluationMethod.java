@@ -11,7 +11,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public enum EvaluationMethod {
     DATASET("dataset"),
-    EVALUATION_SUITE("evaluation_suite");
+    // TODO: OPIK-5795 - migrate DB value from 'evaluation_suite' to 'test_suite'
+    TEST_SUITE("evaluation_suite");
 
     public static final String UNKNOWN_VALUE = "unknown";
 

@@ -10,7 +10,7 @@ import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.events.ExperimentItemToProcess;
-import com.comet.opik.api.resources.v1.events.EvalSuiteEvaluatorMapper;
+import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -42,7 +42,7 @@ public class ExperimentExecutionService {
     private final DatasetVersionService datasetVersionService;
     private final ExperimentItemPublisher itemPublisher;
     private final IdGenerator idGenerator;
-    private final EvalSuiteEvaluatorMapper evalSuiteEvaluatorMapper;
+    private final TestSuiteEvaluatorMapper testSuiteEvaluatorMapper;
     private final ExperimentExecutionConfig experimentExecutionConfig;
 
     @Inject
@@ -52,14 +52,14 @@ public class ExperimentExecutionService {
             @NonNull DatasetVersionService datasetVersionService,
             @NonNull ExperimentItemPublisher itemPublisher,
             @NonNull IdGenerator idGenerator,
-            @NonNull EvalSuiteEvaluatorMapper evalSuiteEvaluatorMapper,
+            @NonNull TestSuiteEvaluatorMapper testSuiteEvaluatorMapper,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig) {
         this.experimentService = experimentService;
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.itemPublisher = itemPublisher;
         this.idGenerator = idGenerator;
-        this.evalSuiteEvaluatorMapper = evalSuiteEvaluatorMapper;
+        this.testSuiteEvaluatorMapper = testSuiteEvaluatorMapper;
         this.experimentExecutionConfig = experimentExecutionConfig;
     }
 
@@ -151,7 +151,7 @@ public class ExperimentExecutionService {
                             .datasetVersionId(request.datasetVersionId())
                             .projectName(projectName)
                             .metadata(metadata)
-                            .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                            .evaluationMethod(EvaluationMethod.TEST_SUITE)
                             .status(ExperimentStatus.RUNNING)
                             .promptVersions(
                                     prompt.promptVersions() != null
@@ -217,7 +217,7 @@ public class ExperimentExecutionService {
     }
 
     private int getEffectiveRunsPerItem(ExecutionPolicy itemPolicy, ExecutionPolicy versionPolicy) {
-        return evalSuiteEvaluatorMapper.getEffectiveRunsPerItem(itemPolicy, versionPolicy);
+        return testSuiteEvaluatorMapper.getEffectiveRunsPerItem(itemPolicy, versionPolicy);
     }
 
     private List<ExperimentItemToProcess> buildMessages(

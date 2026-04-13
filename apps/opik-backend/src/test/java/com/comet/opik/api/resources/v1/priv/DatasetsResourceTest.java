@@ -1479,11 +1479,11 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when type is evaluation_suite, then create and return type in response")
-        void create__whenTypeIsEvaluationSuite__thenReturnTypeInResponse() {
+        @DisplayName("when type is test_suite, then create and return type in response")
+        void create__whenTypeIsTestSuite__thenReturnTypeInResponse() {
             var dataset = buildDataset().toBuilder()
                     .id(null)
-                    .type(DatasetType.EVALUATION_SUITE)
+                    .type(DatasetType.TEST_SUITE)
                     .build();
 
             var id = createAndAssert(dataset);
@@ -3175,7 +3175,7 @@ class DatasetsResourceTest {
         Stream<Arguments> filterByType() {
             return Stream.of(
                     arguments(DatasetType.DATASET, "dataset"),
-                    arguments(DatasetType.EVALUATION_SUITE, "evaluation_suite"));
+                    arguments(DatasetType.TEST_SUITE, "evaluation_suite"));
         }
 
         @Test
@@ -3190,12 +3190,12 @@ class DatasetsResourceTest {
             var regularDataset = buildDataset().toBuilder()
                     .type(DatasetType.DATASET)
                     .build();
-            var evaluationSuite = buildDataset().toBuilder()
-                    .type(DatasetType.EVALUATION_SUITE)
+            var testSuite = buildDataset().toBuilder()
+                    .type(DatasetType.TEST_SUITE)
                     .build();
 
             createAndAssert(regularDataset, apiKey, workspaceName);
-            createAndAssert(evaluationSuite, apiKey, workspaceName);
+            createAndAssert(testSuite, apiKey, workspaceName);
 
             var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .queryParam("size", 100)
@@ -3207,7 +3207,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 2, 2, 1, List.of(evaluationSuite, regularDataset));
+            findAndAssertPage(actualEntity, 2, 2, 1, List.of(testSuite, regularDataset));
         }
 
         @ParameterizedTest
@@ -3224,14 +3224,14 @@ class DatasetsResourceTest {
             var regularDataset = buildDataset().toBuilder()
                     .type(DatasetType.DATASET)
                     .build();
-            var evaluationSuite = buildDataset().toBuilder()
-                    .type(DatasetType.EVALUATION_SUITE)
+            var testSuite = buildDataset().toBuilder()
+                    .type(DatasetType.TEST_SUITE)
                     .build();
 
             createAndAssert(regularDataset, apiKey, workspaceName);
-            createAndAssert(evaluationSuite, apiKey, workspaceName);
+            createAndAssert(testSuite, apiKey, workspaceName);
 
-            var expected = filterType == DatasetType.DATASET ? regularDataset : evaluationSuite;
+            var expected = filterType == DatasetType.DATASET ? regularDataset : testSuite;
 
             var typeFilter = DatasetFilter.builder()
                     .field(DatasetField.TYPE)
@@ -7632,20 +7632,20 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when evaluation suite is deleted, then experiment items should still be retrievable")
-        void find__whenEvaluationSuiteIsDeleted__thenExperimentItemsShouldStillBeRetrievable() {
+        @DisplayName("when test suite is deleted, then experiment items should still be retrievable")
+        void find__whenTestSuiteIsDeleted__thenExperimentItemsShouldStillBeRetrievable() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Create evaluation suite
-            var evaluationSuite = buildDataset().toBuilder()
+            // Create test suite
+            var testSuite = buildDataset().toBuilder()
                     .id(null)
-                    .type(DatasetType.EVALUATION_SUITE)
+                    .type(DatasetType.TEST_SUITE)
                     .build();
-            var datasetId = createAndAssert(evaluationSuite, apiKey, workspaceName);
+            var datasetId = createAndAssert(testSuite, apiKey, workspaceName);
 
             // Create trace
             var trace = factory.manufacturePojo(Trace.class);
@@ -7662,9 +7662,9 @@ class DatasetsResourceTest {
 
             var datasetItem = datasetItemBatch.items().getFirst();
 
-            // Create experiment linked to the evaluation suite
+            // Create experiment linked to the test suite
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .datasetName(evaluationSuite.name())
+                    .datasetName(testSuite.name())
                     .build();
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
 
@@ -7676,13 +7676,13 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
 
-            // Delete the evaluation suite
+            // Delete the test suite
             datasetResourceClient.deleteDatasetItems(DatasetItemsDelete.builder()
                     .datasetId(datasetId)
                     .build(), workspaceName, apiKey);
             datasetResourceClient.deleteDataset(datasetId, apiKey, workspaceName);
 
-            // Since the evaluation suite (and its versions) was deleted, the dataset_items data is gone.
+            // Since the test suite (and its versions) was deleted, the dataset_items data is gone.
             // The legacy fallback query returns synthetic items from experiment_items with null dataset item fields.
             var expectedItem = datasetItem.toBuilder()
                     .traceId(null)
@@ -7715,19 +7715,19 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when evaluation suite is deleted and has assertion scores, then experiment items still return with assertionResults")
-        void find__whenEvaluationSuiteDeletedWithAssertionScores__thenReturnAssertionResults() {
+        @DisplayName("when test suite is deleted and has assertion scores, then experiment items still return with assertionResults")
+        void find__whenTestSuiteDeletedWithAssertionScores__thenReturnAssertionResults() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var evaluationSuite = buildDataset().toBuilder()
+            var testSuite = buildDataset().toBuilder()
                     .id(null)
-                    .type(DatasetType.EVALUATION_SUITE)
+                    .type(DatasetType.TEST_SUITE)
                     .build();
-            var datasetId = createAndAssert(evaluationSuite, apiKey, workspaceName);
+            var datasetId = createAndAssert(testSuite, apiKey, workspaceName);
 
             var trace = factory.manufacturePojo(Trace.class);
             createAndAssert(trace, workspaceName, apiKey);
@@ -7743,8 +7743,8 @@ class DatasetsResourceTest {
             var datasetItem = datasetItemBatch.items().getFirst();
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
-                    .datasetName(evaluationSuite.name())
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .datasetName(testSuite.name())
                     .optimizationId(null)
                     .build();
             var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
@@ -7874,7 +7874,7 @@ class DatasetsResourceTest {
                     workspaceName, apiKey);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -7937,7 +7937,7 @@ class DatasetsResourceTest {
                     workspaceName, apiKey);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -7995,7 +7995,7 @@ class DatasetsResourceTest {
 
             // Suite experiment
             var suiteExperiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8093,7 +8093,7 @@ class DatasetsResourceTest {
             datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8169,7 +8169,7 @@ class DatasetsResourceTest {
             datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8233,7 +8233,7 @@ class DatasetsResourceTest {
 
             // Suite experiment A
             var experimentA = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8241,7 +8241,7 @@ class DatasetsResourceTest {
 
             // Suite experiment B
             var experimentB = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();

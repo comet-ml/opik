@@ -1,0 +1,50 @@
+package com.comet.opik.api.resources.v1.events;
+
+/**
+ * Holds the LLM-as-judge prompt templates used for test suite assertion evaluation.
+ * <p>
+ * These are a copy of the prompts defined in the Python SDK
+ * ({@code sdks/python/src/opik/evaluation/suite_evaluators/llm_judge/metric.py}).
+ * <p>
+ * TODO [OPIK-5735]: Consolidate into a single source of truth shared between the SDK and backend.
+ */
+final class TestSuitePromptConstants {
+
+    private TestSuitePromptConstants() {
+    }
+
+    static final String SYSTEM_PROMPT = """
+            You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
+
+            For each assertion, provide:
+            - score: true if the assertion passes, false if it fails
+            - reason: A brief explanation of your judgment
+            - confidence: A float between 0.0 and 1.0 indicating how confident you are in your judgment
+            """;
+
+    static final String USER_MESSAGE_TEMPLATE = """
+            ## Input
+            The INPUT section contains all data that the agent received. This may include the actual user query, \
+            conversation history, context, metadata, or other structured information. Identify the core user request \
+            within this data.
+
+            ---BEGIN INPUT---
+            {input}
+            ---END INPUT---
+
+            ## Output
+            The OUTPUT section contains all data produced by the agent. This may include the agent's response text, \
+            tool calls, intermediate results, metadata, or other structured information. Focus on the substantive \
+            response when evaluating assertions.
+
+            ---BEGIN OUTPUT---
+            {output}
+            ---END OUTPUT---
+
+            ## Assertions
+            Evaluate each of the following assertions against the agent's output.
+            Use the provided field key as the JSON property name for each assertion result.
+
+            {assertions}
+            """;
+}
