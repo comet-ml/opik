@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.core.request_options import RequestOptions
 from ..rest_api.types.bridge_command_item import BridgeCommandItem
+from . import bridge_auth
 from .bridge_handlers import BaseHandler, CommandError
 from .bridge_handlers import common
 
@@ -58,6 +59,7 @@ class BridgePollLoop:
         shutdown_event: threading.Event,
         on_command_start: Optional[Callable[[str, str, str], None]] = None,
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
+        bridge_key: Optional[bytes] = None,
     ) -> None:
         self._api = api
         self._runner_id = runner_id
@@ -65,6 +67,7 @@ class BridgePollLoop:
         self._shutdown_event = shutdown_event
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
+        self._bridge_key = bridge_key
 
     def run(self) -> None:
         backoff = 1.0
@@ -135,12 +138,32 @@ class BridgePollLoop:
         return (resp.commands or [])[:_MAX_BATCH_SIZE]
 
     def _execute_and_report(self, cmd: BridgeCommandItem) -> None:
+        command_id = cmd.command_id or ""
+        args = dict(cmd.args) if cmd.args else {}
+        cmd_hmac = args.pop("_hmac", None)
+
+        if self._bridge_key:
+            if not bridge_auth.verify(
+                self._bridge_key, cmd.type or "", args, cmd_hmac or ""
+            ):
+                LOGGER.warning("Rejecting command %s: invalid HMAC", command_id)
+                self._report_result(
+                    command_id,
+                    "failed",
+                    None,
+                    {"code": "auth_failed", "message": "Invalid command HMAC"},
+                    None,
+                )
+                if self._on_command_end:
+                    self._on_command_end(command_id, False, "auth_failed")
+                return
+
         summary = _build_op_summary(cmd)
         if self._on_command_start:
-            self._on_command_start(cmd.command_id or "", cmd.type or "", summary)
+            self._on_command_start(command_id, cmd.type or "", summary)
 
         status, result, error, duration_ms = self._execute_command(cmd)
-        self._report_result(cmd.command_id or "", status, result, error, duration_ms)
+        self._report_result(command_id, status, result, error, duration_ms)
 
         if self._on_command_end:
             self._on_command_end(
@@ -205,6 +228,10 @@ class BridgePollLoop:
         error: Optional[Dict],
         duration_ms: Optional[int],
     ) -> None:
+        if self._bridge_key:
+            result = dict(result) if result else {}
+            result["_hmac"] = bridge_auth.sign(self._bridge_key, status, result)
+
         for attempt in range(_REPORT_MAX_RETRIES):
             try:
                 self._api.runners.report_bridge_result(

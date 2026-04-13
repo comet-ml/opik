@@ -38,6 +38,7 @@ import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueu
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
 import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
+import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -95,6 +96,13 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
   id: "workspaceGuardEmptyLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={EmptyPageLayout} />,
+});
+
+// ----------- pairing (root-level, no layout)
+const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/opik/pair/v1",
+  component: PairingPage,
 });
 
 // ----------- base redirect
@@ -534,6 +542,7 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 // ═══════════════════════════════════════════════════════════════
 
 const routeTree = rootRoute.addChildren([
+  pairingRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,

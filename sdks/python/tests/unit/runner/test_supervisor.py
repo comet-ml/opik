@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
+from opik.cli.pairing import RunnerType
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.local_runner_heartbeat_response import (
     LocalRunnerHeartbeatResponse,
@@ -24,6 +25,7 @@ def _make_supervisor(
     runner_id="runner-1",
     api=None,
     watch=None,
+    runner_type=RunnerType.ENDPOINT,
 ) -> Supervisor:
     if command is _SENTINEL:
         command = [sys.executable, "-c", "import time; time.sleep(60)"]
@@ -42,6 +44,7 @@ def _make_supervisor(
         runner_id=runner_id,
         api=api,
         watch=watch,
+        runner_type=runner_type,
     )
 
 
@@ -263,11 +266,11 @@ class TestShutdown:
 
 
 class TestHeartbeat:
-    def test_sends_capabilities(self) -> None:
+    def test_sends_heartbeat__endpoint__reports_jobs(self) -> None:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
 
-        sup = _make_supervisor(api=api)
+        sup = _make_supervisor(api=api, runner_type=RunnerType.ENDPOINT)
 
         t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
         t.start()
@@ -278,7 +281,24 @@ class TestHeartbeat:
 
         api.runners.heartbeat.assert_called()
         call_kwargs = api.runners.heartbeat.call_args.kwargs
-        assert call_kwargs["capabilities"] == ["jobs", "bridge"]
+        assert call_kwargs["capabilities"] == ["jobs"]
+
+    def test_sends_heartbeat__connect__reports_bridge(self) -> None:
+        api = MagicMock()
+        api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
+
+        sup = _make_supervisor(api=api, runner_type=RunnerType.CONNECT)
+
+        t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
+        t.start()
+
+        time.sleep(0.5)
+        sup._shutdown_event.set()
+        t.join(timeout=5)
+
+        api.runners.heartbeat.assert_called()
+        call_kwargs = api.runners.heartbeat.call_args.kwargs
+        assert call_kwargs["capabilities"] == ["bridge"]
 
     def test_410__shuts_down(self) -> None:
         api = MagicMock()
@@ -332,7 +352,7 @@ class TestStandaloneMode:
 
 class TestBridgeIntegration:
     def test_bridge_loop_runs(self) -> None:
-        sup = _make_supervisor(watch=False)
+        sup = _make_supervisor(watch=False, runner_type=RunnerType.CONNECT)
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
