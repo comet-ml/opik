@@ -1073,6 +1073,51 @@ class TestGetOrCreateConfigWithMask:
             with pytest.raises(ConfigNotFound, match="env='prod'"):
                 mock_opik_client.get_or_create_config(fallback=fallback, env="prod")
 
+    def test_blueprint_name_override__missing_blueprint__raises_config_not_found_not_auto_create(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Runner context that pins a specific blueprint name must raise ConfigNotFound
+        when the blueprint is absent, even when the call would otherwise auto-create
+        (default no-selector path that maps to env='prod' + auto_create_if_empty)."""
+
+        class MyConfig(Config):
+            greeting: str
+
+        fallback = MyConfig(greeting="default")
+
+        # Simulate "blueprint does not exist" — ConfigManager.get_blueprint returns
+        # None only on 404, so use side_effect rather than return_value=None.
+        mock_rest_client.agent_configs.get_blueprint_by_name.side_effect = (
+            rest_api_core.ApiError(status_code=404, body="not found")
+        )
+
+        with agent_config_context(mask_id=None, blueprint_name="pinned-v1"):
+            with pytest.raises(ConfigNotFound, match="version='pinned-v1'"):
+                # No env/version supplied — would normally auto-create from fallback
+                # when the project is empty. The context override must suppress that.
+                mock_opik_client.get_or_create_config(fallback=fallback)
+
+    def test_blueprint_name_override__latest_path__missing_blueprint__raises_config_not_found(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Same guarantee for the version='latest' path (which also sets
+        auto_create_if_empty=True before calling _get_or_create_from_backend)."""
+
+        class MyConfig(Config):
+            greeting: str
+
+        fallback = MyConfig(greeting="default")
+
+        mock_rest_client.agent_configs.get_blueprint_by_name.side_effect = (
+            rest_api_core.ApiError(status_code=404, body="not found")
+        )
+
+        with agent_config_context(mask_id=None, blueprint_name="pinned-v1"):
+            with pytest.raises(ConfigNotFound, match="version='pinned-v1'"):
+                mock_opik_client.get_or_create_config(
+                    fallback=fallback, version="latest"
+                )
+
 
 # ---------------------------------------------------------------------------
 # Fallback on unexpected backend errors

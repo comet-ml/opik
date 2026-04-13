@@ -301,6 +301,10 @@ class Config:
     ) -> T:
         _require_track_context()
         version, mask_id = _apply_context_overrides(version)
+        # A runner context that pins a specific blueprint name is an explicit
+        # version request — missing it must raise ConfigNotFound, not auto-create.
+        if get_active_config_blueprint_name() is not None:
+            auto_create_if_empty = False
         resolved_env = None if version is not None else env
         # Field types come from the fallback's runtime values when available;
         # without a fallback we pass an empty mapping and rely on the
