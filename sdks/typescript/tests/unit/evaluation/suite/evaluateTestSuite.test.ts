@@ -183,7 +183,7 @@ describe("evaluateTestSuite", () => {
         name: "suite-experiment",
         datasetName: "test-dataset",
         datasetVersionId: "version-1",
-        evaluationMethod: "test_suite",
+        evaluationMethod: "evaluation_suite",
       })
     );
 

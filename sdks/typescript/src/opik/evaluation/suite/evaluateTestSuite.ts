@@ -108,7 +108,7 @@ export async function evaluateTestSuite<T = Record<string, unknown>>(
     experimentConfig: options.experimentConfig,
     prompts: options.prompts,
     datasetVersionId: versionInfo?.id,
-    evaluationMethod: "test_suite",
+    evaluationMethod: "evaluation_suite",
     tags: options.tags,
     projectName: options.projectName,
   });

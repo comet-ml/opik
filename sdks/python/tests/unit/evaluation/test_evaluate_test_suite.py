@@ -65,11 +65,11 @@ def test_run_tests__creates_experiment_with_evaluation_method_test_suite():
 
     mock_client.create_experiment.assert_called_once()
     call_kwargs = mock_client.create_experiment.call_args[1]
-    assert call_kwargs["evaluation_method"] == "test_suite"
+    assert call_kwargs["evaluation_method"] == "evaluation_suite"
 
 
 def test_run_tests__passes_evaluation_method_not_dataset():
-    """Verify it's specifically 'test_suite', not 'dataset'."""
+    """Verify it's specifically 'evaluation_suite', not 'dataset'."""
     mock_dataset = _create_mock_dataset()
     mock_experiment = mock.MagicMock()
     mock_experiment.id = "exp-456"
@@ -94,7 +94,7 @@ def test_run_tests__passes_evaluation_method_not_dataset():
 
     call_kwargs = mock_client.create_experiment.call_args[1]
     assert call_kwargs["evaluation_method"] != "dataset"
-    assert call_kwargs["evaluation_method"] == "test_suite"
+    assert call_kwargs["evaluation_method"] == "evaluation_suite"
 
 
 def _call_run_tests(items, client=None):

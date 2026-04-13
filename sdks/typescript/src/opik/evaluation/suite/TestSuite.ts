@@ -154,7 +154,7 @@ export class TestSuite {
       id: datasetId,
       name: options.name,
       description: options.description,
-      type: DatasetWriteType.TestSuite,
+      type: DatasetWriteType.EvaluationSuite,
       tags: options.tags,
       projectName: resolvedProjectName,
     });

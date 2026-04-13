@@ -366,7 +366,7 @@ def __internal_api__run_test_suite__(
         dataset_name=suite_dataset.name,
         experiment_config=experiment_config,
         prompts=prompts,
-        evaluation_method="test_suite",
+        evaluation_method="evaluation_suite",
         tags=experiment_tags,
         dataset_version_id=None,
         project_name=project_name,

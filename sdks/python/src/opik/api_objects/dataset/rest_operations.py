@@ -201,7 +201,7 @@ def get_datasets(
             break
 
         for dataset_fern in page_datasets.content[: (max_results - len(datasets))]:
-            if dataset_fern.type == "test_suite":
+            if dataset_fern.type == "evaluation_suite":
                 continue
 
             dataset_ = dataset.Dataset(
@@ -250,7 +250,7 @@ def get_test_suites(
         for dataset_fern in page_datasets.content:
             if len(suites) >= max_results:
                 break
-            if dataset_fern.type != "test_suite":
+            if dataset_fern.type != "evaluation_suite":
                 continue
 
             suite_dataset = dataset.Dataset(
@@ -358,7 +358,7 @@ def create_test_suite_dataset(
         name=dataset_name,
         description=description,
         project_name=project_name,
-        type="test_suite",
+        type="evaluation_suite",
         tags=tags,
     )
 

@@ -80,7 +80,7 @@ describe("TestSuite static methods", () => {
   });
 
   describe("TestSuite.create", () => {
-    it("should create dataset with type test_suite and return TestSuite", async () => {
+    it("should create dataset with type evaluation_suite and return TestSuite", async () => {
       const suite = await TestSuite.create(opikClient, {
         name: "my-suite",
         description: "My test suite",
@@ -93,7 +93,7 @@ describe("TestSuite static methods", () => {
         expect.objectContaining({
           name: "my-suite",
           description: "My test suite",
-          type: "test_suite",
+          type: "evaluation_suite",
         })
       );
       // No evaluators or policy, so applyDatasetItemChanges should not be called
@@ -161,7 +161,7 @@ describe("TestSuite static methods", () => {
         expect.objectContaining({
           name: "my-suite",
           tags: ["prod", "v2"],
-          type: "test_suite",
+          type: "evaluation_suite",
         })
       );
     });
@@ -283,7 +283,7 @@ describe("TestSuite static methods", () => {
         expect.objectContaining({
           name: "new-suite",
           description: "New suite",
-          type: "test_suite",
+          type: "evaluation_suite",
         })
       );
     });
