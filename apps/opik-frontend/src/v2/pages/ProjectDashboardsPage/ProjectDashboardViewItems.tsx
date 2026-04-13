@@ -8,14 +8,14 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { DropdownOption } from "@/types/shared";
 
-export type InsightsViewOption = DropdownOption<string> & {
+export type ProjectDashboardViewOption = DropdownOption<string> & {
   icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   isBuiltIn: boolean;
 };
 
 export interface BuiltInViewItemProps {
-  option: InsightsViewOption;
+  option: ProjectDashboardViewOption;
   isSelected: boolean;
   onSelect: (id: string) => void;
   onDuplicate: () => void;
@@ -73,7 +73,7 @@ export const BuiltInViewItem: React.FC<BuiltInViewItemProps> = ({
 };
 
 export interface CustomViewItemProps {
-  option: InsightsViewOption;
+  option: ProjectDashboardViewOption;
   isSelected: boolean;
   onSelect: (id: string) => void;
   onEdit: () => void;

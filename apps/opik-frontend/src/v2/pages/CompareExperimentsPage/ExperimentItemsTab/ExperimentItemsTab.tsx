@@ -18,6 +18,7 @@ import {
   COLUMN_TYPE,
   COLUMN_USAGE_ID,
   ColumnData,
+  DynamicColumn,
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -85,6 +86,7 @@ const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
 const COLUMN_PASSED_ID = "passed";
 const STORAGE_PREFIX = "compare-experiments";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
+const EVAL_SUITE_ECHOED_OUTPUT_KEY = "input";
 
 function getFilterColumns(
   isEvalSuite: boolean,
@@ -273,10 +275,20 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     ];
   }, [dynamicDatasetColumns, experimentsCount, sortableColumns]);
 
+  const visibleOutputColumns = useMemo(
+    () =>
+      isEvalSuite
+        ? dynamicOutputColumns.filter(
+            (c: DynamicColumn) => c.label !== EVAL_SUITE_ECHOED_OUTPUT_KEY,
+          )
+        : dynamicOutputColumns,
+    [dynamicOutputColumns, isEvalSuite],
+  );
+
   const outputColumnsData = useMemo(() => {
     return [
-      ...dynamicOutputColumns.map(
-        ({ label, id, columnType }) =>
+      ...visibleOutputColumns.map(
+        ({ label, id, columnType }: DynamicColumn) =>
           ({
             id,
             label,
@@ -343,7 +355,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       } as ColumnData<ExperimentsCompare>,
     ];
   }, [
-    dynamicOutputColumns,
+    visibleOutputColumns,
     experiments,
     experimentsIds,
     setTraceId,
@@ -548,14 +560,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
         }),
       ),
-      ...sortBy(dynamicOutputColumns, "label").map(({ id, label }) => ({
+      ...sortBy(visibleOutputColumns, "label").map(({ id, label }) => ({
         id,
         label: `${label} (Output)`,
         type: COLUMN_TYPE.string,
       })),
       ...getFilterColumns(!!isEvalSuite),
     ];
-  }, [dynamicDatasetColumns, dynamicOutputColumns, isEvalSuite]);
+  }, [dynamicDatasetColumns, visibleOutputColumns, isEvalSuite]);
 
   const resizeConfig = useMemo(
     () => ({

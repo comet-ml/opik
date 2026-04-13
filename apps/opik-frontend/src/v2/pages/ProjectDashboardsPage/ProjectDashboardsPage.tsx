@@ -8,7 +8,7 @@ import {
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
-import InsightsViewSelector from "@/v2/pages/InsightsPage/InsightsViewSelector";
+import ProjectDashboardViewSelector from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardViewSelector";
 import ShareDashboardButton from "@/v2/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/v2/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -34,7 +34,7 @@ const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
 const DEFAULT_TEMPLATE = PROJECT_TEMPLATE_LIST[0];
 const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 
-const InsightsPage: React.FunctionComponent = () => {
+const ProjectDashboardsPage: React.FunctionComponent = () => {
   const projectId = useActiveProjectId()!;
   const workspaceName = useActiveWorkspaceName();
 
@@ -113,7 +113,7 @@ const InsightsPage: React.FunctionComponent = () => {
         direction="bidirectional"
         limitWidth
       >
-        <InsightsViewSelector
+        <ProjectDashboardViewSelector
           value={dashboardId || null}
           onChange={setDashboardId}
           onViewCreated={handleDashboardCreated}
@@ -141,4 +141,4 @@ const InsightsPage: React.FunctionComponent = () => {
   );
 };
 
-export default InsightsPage;
+export default ProjectDashboardsPage;

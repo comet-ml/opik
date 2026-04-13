@@ -138,7 +138,7 @@ const OptimizationPage: React.FC = () => {
 
   return (
     <div
-      className={`flex flex-col pt-6 ${isTrialsTab ? "h-full" : "min-h-full"}`}
+      className={`flex flex-col pt-4 ${isTrialsTab ? "h-full" : "min-h-full"}`}
     >
       <div className="shrink-0 pb-4">
         <OptimizationHeader

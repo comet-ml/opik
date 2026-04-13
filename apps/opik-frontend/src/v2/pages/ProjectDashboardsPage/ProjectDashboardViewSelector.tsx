@@ -6,14 +6,14 @@ import { Separator } from "@/ui/separator";
 import { ListAction } from "@/ui/list-action";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import InsightsViewDialog, {
-  InsightsViewDialogMode,
-} from "./InsightsViewDialog";
+import ProjectDashboardViewDialog, {
+  ProjectDashboardViewDialogMode,
+} from "./ProjectDashboardViewDialog";
 import {
   BuiltInViewItem,
   CustomViewItem,
-  InsightsViewOption,
-} from "./InsightsViewItems";
+  ProjectDashboardViewOption,
+} from "./ProjectDashboardViewItems";
 import useInsightsViewsList from "@/api/insights-views/useInsightsViewsList";
 import useInsightsViewBatchDeleteMutation from "@/api/insights-views/useInsightsViewBatchDeleteMutation";
 import useAppStore from "@/store/AppStore";
@@ -31,7 +31,7 @@ import { formatDate } from "@/lib/date";
 const CUSTOM_VIEW_ICON = ChartLine;
 const CUSTOM_VIEW_ICON_COLOR = "text-chart-orange";
 
-interface InsightsViewSelectorProps {
+interface ProjectDashboardViewSelectorProps {
   value: string | null;
   onChange: (id: string | null) => void;
   onViewCreated?: (dashboardId: string) => void;
@@ -40,7 +40,7 @@ interface InsightsViewSelectorProps {
 
 interface DialogState {
   isOpen: boolean;
-  mode: InsightsViewDialogMode;
+  mode: ProjectDashboardViewDialogMode;
   dashboard?: Dashboard;
 }
 
@@ -68,18 +68,19 @@ const formatDashboardDescription = (dashboard: Dashboard): string => {
     .join(", ");
 };
 
-const TEMPLATE_OPTIONS: InsightsViewOption[] = PROJECT_TEMPLATE_LIST.map(
-  (template) => ({
+const TEMPLATE_OPTIONS: ProjectDashboardViewOption[] =
+  PROJECT_TEMPLATE_LIST.map((template) => ({
     value: template.id,
     label: template.name,
     description: template.description,
     icon: template.icon,
     iconColor: template.iconColor,
     isBuiltIn: true,
-  }),
-);
+  }));
 
-const buildDashboardOption = (dashboard: Dashboard): InsightsViewOption => ({
+const buildDashboardOption = (
+  dashboard: Dashboard,
+): ProjectDashboardViewOption => ({
   value: dashboard.id,
   label: dashboard.name,
   description: formatDashboardDescription(dashboard),
@@ -88,12 +89,9 @@ const buildDashboardOption = (dashboard: Dashboard): InsightsViewOption => ({
   isBuiltIn: false,
 });
 
-const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
-  value,
-  onChange,
-  onViewCreated,
-  onViewDeleted,
-}) => {
+const ProjectDashboardViewSelector: React.FC<
+  ProjectDashboardViewSelectorProps
+> = ({ value, onChange, onViewCreated, onViewDeleted }) => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [search, setSearch] = useState("");
   const resetDialogKeyRef = useRef(0);
@@ -328,7 +326,7 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
         </PopoverContent>
       </Popover>
 
-      <InsightsViewDialog
+      <ProjectDashboardViewDialog
         key={resetDialogKeyRef.current}
         mode={dialogState.mode}
         dashboard={dialogState.dashboard}
@@ -350,4 +348,4 @@ const InsightsViewSelector: React.FC<InsightsViewSelectorProps> = ({
   );
 };
 
-export default InsightsViewSelector;
+export default ProjectDashboardViewSelector;
