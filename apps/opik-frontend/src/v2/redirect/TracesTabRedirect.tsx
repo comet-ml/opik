@@ -60,7 +60,6 @@ const TracesTabRedirect = () => {
       return;
     }
 
-    // Legacy ?view=dashboards → dashboards
     if (legacyView === "dashboards") {
       navigateToProjectRoute("/dashboards");
       return;

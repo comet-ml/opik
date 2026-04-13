@@ -410,7 +410,7 @@ const DashboardsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreateDashboards && (
               <Button variant="link" onClick={handleNewDashboardClick}>
-                <Plus className="mr-2 size-4" />
+                <Plus className="mr-1 size-4" />
                 Create dashboard
               </Button>
             )}

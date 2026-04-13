@@ -54,13 +54,13 @@ describe("TracesTabRedirect", () => {
     );
   });
 
-  it("redirects ?tab=insights to /insights", () => {
+  it("redirects ?tab=insights to /dashboards", () => {
     mockSearch = { tab: "insights" };
     render(<TracesTabRedirect />);
     expect(mockNavigate).toHaveBeenCalledWith(projectRoute("/dashboards"));
   });
 
-  it("redirects ?tab=metrics to /insights", () => {
+  it("redirects ?tab=metrics to /dashboards", () => {
     mockSearch = { tab: "metrics" };
     render(<TracesTabRedirect />);
     expect(mockNavigate).toHaveBeenCalledWith(projectRoute("/dashboards"));
@@ -90,7 +90,7 @@ describe("TracesTabRedirect", () => {
 
   // --- Legacy ?type= redirects ---
 
-  it("redirects ?type=metrics to /insights", () => {
+  it("redirects ?type=metrics to /dashboards", () => {
     mockSearch = { type: "metrics" };
     render(<TracesTabRedirect />);
     expect(mockNavigate).toHaveBeenCalledWith(projectRoute("/dashboards"));
@@ -155,7 +155,7 @@ describe("TracesTabRedirect", () => {
 
   // --- Legacy ?view= redirect ---
 
-  it("redirects ?view=dashboards to /insights", () => {
+  it("redirects ?view=dashboards to /dashboards", () => {
     mockSearch = { view: "dashboards" };
     render(<TracesTabRedirect />);
     expect(mockNavigate).toHaveBeenCalledWith(projectRoute("/dashboards"));
