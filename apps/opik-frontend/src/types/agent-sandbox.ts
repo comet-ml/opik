@@ -1,19 +1,5 @@
-export interface SandboxPairCode {
-  pair_code: string;
-  runner_id: string;
-  expires_in_seconds: number;
-  created_at: number;
-}
-
-/**
- * Backend returns: PAIRING, CONNECTED, DISCONNECTED.
- * Client-only states: LOADING (initial fetch), IDLE (no code requested), EXPIRED (code timed out).
- */
 export enum RunnerConnectionStatus {
-  LOADING = "loading",
   IDLE = "idle",
-  PAIRING = "pairing",
-  EXPIRED = "expired",
   CONNECTED = "connected",
   DISCONNECTED = "disconnected",
 }

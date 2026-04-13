@@ -161,9 +161,10 @@ def run_pairing(
     activation_key = secrets.token_bytes(32)
 
     activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
-    resp = api.opik_connect.create_opik_connect_session(
+    resp = api.pairing.create_pairing_session(
         project_id=project_id,
         activation_key=activation_key_b64,
+        type=runner_type.value,
         ttl_seconds=ttl_seconds,
     )
     if not resp.session_id:

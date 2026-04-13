@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
+import crypto from "node:crypto";
 import path from "node:path";
 import { Opik } from "@/index";
 import { AgentConfigManager } from "@/agent-config";
@@ -69,17 +70,29 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
     });
     projectId = project.id!;
 
-    // Generate pairing code
-    const pair = await client.api.runners.generatePairingCode({
+    // Create pairing session and activate via HMAC
+    const activationKey = crypto.randomBytes(32);
+    const runnerName = `ts-e2e-runner-${Date.now()}`;
+
+    const session = await client.api.pairing.createPairingSession({
       projectId,
+      activationKey: activationKey.toString("base64"),
+      type: "endpoint",
     });
 
-    // Connect runner to get runner credentials
-    const connection = await client.api.runners.connectRunner({
-      pairingCode: pair.pairingCode!,
-      runnerName: `ts-e2e-runner-${Date.now()}`,
+    // Compute HMAC-SHA256(activationKey, sessionIdBytes || SHA256(runnerNameBytes))
+    const sessionUuid = session.sessionId!;
+    const uuidHex = sessionUuid.replace(/-/g, "");
+    const sessionIdBytes = Buffer.from(uuidHex, "hex");
+    const runnerNameHash = crypto.createHash("sha256").update(runnerName, "utf-8").digest();
+    const message = Buffer.concat([sessionIdBytes, runnerNameHash]);
+    const hmac = crypto.createHmac("sha256", activationKey).update(message).digest();
+
+    await client.api.pairing.activatePairingSession(sessionUuid, {
+      runnerName,
+      hmac: hmac.toString("base64"),
     });
-    runnerId = connection.runnerId!;
+    runnerId = session.runnerId!;
 
     // Build env for the subprocess
     const env: Record<string, string> = {

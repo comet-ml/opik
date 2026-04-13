@@ -24,7 +24,8 @@ public record LocalRunner(
         Instant connectedAt,
         List<Agent> agents,
         List<String> capabilities,
-        JsonNode checklist) {
+        JsonNode checklist,
+        RunnerType type) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

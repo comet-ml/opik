@@ -7,8 +7,6 @@ import type { PairingState } from "@/hooks/usePairingState";
 import { ReactNode } from "react";
 import { TooltipProvider } from "@/ui/tooltip";
 
-const mockRequestNewCode = vi.fn();
-
 let mockPairingState: PairingState;
 
 vi.mock("@/hooks/usePairingState", () => ({
@@ -29,9 +27,7 @@ vi.mock("@/api/agent-sandbox/useSandboxJobStatus", () => ({
 }));
 
 vi.mock("./AgentRunnerEmptyState", () => {
-  const MockEmptyState = ({ pairCode }: { pairCode: string }) => (
-    <div data-testid="empty-state">Pair code: {pairCode}</div>
-  );
+  const MockEmptyState = () => <div data-testid="empty-state">Empty state</div>;
   MockEmptyState.displayName = "MockEmptyState";
   return { default: MockEmptyState };
 });
@@ -69,29 +65,17 @@ describe("AgentRunnerContent", () => {
     mockPairingState = {
       projectId: "proj-1",
       status: RunnerConnectionStatus.IDLE,
-      pairCode: null,
-      expiresAt: null,
       runnerId: null,
       runner: null,
-      requestNewCode: mockRequestNewCode,
     };
   });
 
-  it("shows empty state with pair code when pairing", () => {
-    mockPairingState = {
-      ...mockPairingState,
-      status: RunnerConnectionStatus.PAIRING,
-      pairCode: "ABC123",
-      expiresAt: Date.now() + 300_000,
-      runnerId: "runner-1",
-    };
-
+  it("shows empty state when idle", () => {
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
     });
 
     expect(screen.getByTestId("empty-state")).toBeInTheDocument();
-    expect(screen.getByText("Pair code: ABC123")).toBeInTheDocument();
   });
 
   it("shows connected state when runner is connected", () => {
@@ -113,7 +97,12 @@ describe("AgentRunnerContent", () => {
     expect(screen.getByTestId("connected-state")).toBeInTheDocument();
   });
 
-  it("shows empty state when disconnected (no pair code)", () => {
+  it("shows empty state when disconnected", () => {
+    mockPairingState = {
+      ...mockPairingState,
+      status: RunnerConnectionStatus.DISCONNECTED,
+    };
+
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
     });

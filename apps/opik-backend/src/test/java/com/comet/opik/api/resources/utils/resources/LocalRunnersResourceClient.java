@@ -8,15 +8,11 @@ import com.comet.opik.api.runner.BridgeCommandSubmitRequest;
 import com.comet.opik.api.runner.BridgeCommandSubmitResponse;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
-import com.comet.opik.api.runner.LocalRunnerConnectRequest;
-import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
-import com.comet.opik.api.runner.LocalRunnerPairRequest;
-import com.comet.opik.api.runner.LocalRunnerPairResponse;
 import com.comet.opik.api.runner.LocalRunnerStatus;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
@@ -40,32 +36,6 @@ public class LocalRunnersResourceClient {
 
     private final ClientSupport client;
     private final String baseURI;
-
-    public LocalRunnerPairResponse generatePairingCode(UUID projectId, String apiKey, String workspaceName) {
-        LocalRunnerPairRequest request = LocalRunnerPairRequest.builder().projectId(projectId).build();
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("pairs")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            return response.readEntity(LocalRunnerPairResponse.class);
-        }
-    }
-
-    public LocalRunnerConnectResponse connect(LocalRunnerConnectRequest request, String apiKey,
-            String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("connections")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            return response.readEntity(LocalRunnerConnectResponse.class);
-        }
-    }
 
     public LocalRunner.LocalRunnerPage listRunners(UUID projectId, String apiKey, String workspaceName) {
         return listRunners(projectId, null, 0, 25, apiKey, workspaceName);
@@ -231,15 +201,6 @@ public class LocalRunnersResourceClient {
                 .post(Entity.json(""))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
-    }
-
-    public Response callConnect(LocalRunnerConnectRequest request, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("connections")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request));
     }
 
     public Response callGetRunner(UUID runnerId, String apiKey, String workspaceName) {
