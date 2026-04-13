@@ -7,6 +7,7 @@ from typing import Optional
 
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.live import Live
+from rich.style import Style
 from rich.text import Text
 
 _R_START, _G_START, _B_START = 0xF5, 0xA6, 0x23
@@ -93,7 +94,6 @@ class RunnerTUI:
         info.append(project_name)
 
         self._console.print(info)
-        self._console.print()
 
     def pairing_started(self, url: str, timeout_seconds: int) -> None:
         with self._lock:
@@ -119,7 +119,6 @@ class RunnerTUI:
         text.append("Paired ", style="green")
         text.append("\u2714", style="green")
         self._print(text)
-        self._console.print()
         self._update_live()
 
     def pairing_failed(self, reason: Optional[str] = None) -> None:
@@ -224,18 +223,18 @@ class RunnerTUI:
         if pairing_active and pairing_deadline is not None and pairing_url is not None:
             remaining = max(0, int(pairing_deadline - time.monotonic()))
             mins, secs = divmod(remaining, 60)
-            sun_on = int(time.monotonic() * 2) % 2 == 0
-            sun_char = "\u2600" if sun_on else " "
+            dot_on = int(time.monotonic() * 2) % 2 == 0
+            dot_char = "\u25cf" if dot_on else " "
 
             lines.append(padding)
             lines.append("Status".ljust(lw), style="dim")
-            lines.append("Pairing... ")
-            lines.append(sun_char, style="yellow")
+            lines.append("Pairing... ", style="yellow")
+            lines.append(dot_char, style="yellow")
             lines.append(f" (timeout in {mins}m {secs:02d}s)", style="dim")
             lines.append(f"\n\n{padding}")
             lines.append("Open this link to pair:")
             lines.append(f"\n{padding}")
-            lines.append(pairing_url, style="bold")
+            lines.append(pairing_url, style=Style(link=pairing_url, bold=True))
             lines.append("\n")
 
         if has_ops:

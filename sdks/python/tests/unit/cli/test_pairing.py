@@ -238,7 +238,17 @@ class TestRunPairing:
         runner.status = "pairing"
         api.runners.get_runner.return_value = runner
 
-        mock_monotonic.side_effect = [0.0, 999.0]
+        # First call sets deadline (0+300=300), second call exceeds it
+        call_count = 0
+
+        def advancing_monotonic():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return 0.0
+            return 999.0
+
+        mock_monotonic.side_effect = advancing_monotonic
 
         tui = MagicMock()
         with pytest.raises(click.ClickException) as exc_info:
