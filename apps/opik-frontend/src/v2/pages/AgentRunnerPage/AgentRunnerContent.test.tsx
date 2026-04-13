@@ -27,9 +27,7 @@ vi.mock("@/api/agent-sandbox/useSandboxJobStatus", () => ({
 }));
 
 vi.mock("./AgentRunnerEmptyState", () => {
-  const MockEmptyState = () => (
-    <div data-testid="empty-state">Empty state</div>
-  );
+  const MockEmptyState = () => <div data-testid="empty-state">Empty state</div>;
   MockEmptyState.displayName = "MockEmptyState";
   return { default: MockEmptyState };
 });
