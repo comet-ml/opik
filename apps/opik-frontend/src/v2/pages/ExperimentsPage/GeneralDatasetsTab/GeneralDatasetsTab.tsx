@@ -89,10 +89,10 @@ const COLUMNS_SORT_KEY = "experiments-columns-sort";
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
+  "pass_rate",
   "created_at",
   "duration.p50",
   "total_estimated_cost_avg",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
 ];
 
@@ -101,13 +101,13 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
   "dataset_version",
+  "pass_rate",
   "trace_count",
   "duration.p50",
   "duration.p90",
   "duration.p99",
   "total_estimated_cost_avg",
   "total_estimated_cost",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   "prompt",
