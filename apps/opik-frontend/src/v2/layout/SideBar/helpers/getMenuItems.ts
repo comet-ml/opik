@@ -25,10 +25,12 @@ const getMenuItems = ({
   projectId,
   canViewExperiments,
   canViewDatasets,
+  canUsePlayground,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
   canViewDatasets: boolean;
+  canUsePlayground: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -110,14 +112,18 @@ const getMenuItems = ({
           label: "Prompt library",
           disabled: !projectPrefix,
         },
-        {
-          id: "playground",
-          path: projectPath("/playground"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Blocks,
-          label: "Playground",
-          disabled: !projectPrefix,
-        },
+        ...(canUsePlayground
+          ? [
+              {
+                id: "playground",
+                path: projectPath("/playground"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Blocks,
+                label: "Playground",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
     {

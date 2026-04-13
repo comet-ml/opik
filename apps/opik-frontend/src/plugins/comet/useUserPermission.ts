@@ -228,6 +228,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canUsePlayground = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PLAYGROUND_USE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -257,6 +262,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
     canTagTrace,
+    canUsePlayground,
     isPending: isEnabled && isPending,
   };
 };
