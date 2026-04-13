@@ -11,11 +11,14 @@ export interface LocalRunnerAgent {
   params?: { name: string; type: string }[];
 }
 
+export type LocalRunnerType = "connect" | "endpoint";
+
 export interface LocalRunner {
   id: string;
   name?: string;
   project_id: string;
   status: RunnerConnectionStatus;
+  type?: LocalRunnerType;
   connected_at?: string;
   agents?: LocalRunnerAgent[];
 }

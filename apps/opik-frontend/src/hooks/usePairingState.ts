@@ -2,6 +2,7 @@ import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnection
 import {
   RunnerConnectionStatus,
   type LocalRunner,
+  type LocalRunnerType,
 } from "@/types/agent-sandbox";
 
 export interface PairingState {
@@ -11,8 +12,14 @@ export interface PairingState {
   runner: LocalRunner | null;
 }
 
-export default function usePairingState(projectId: string): PairingState {
-  const { data: runnerData } = useSandboxConnectionStatus({ projectId });
+export default function usePairingState(
+  projectId: string,
+  runnerType?: LocalRunnerType,
+): PairingState {
+  const { data: runnerData } = useSandboxConnectionStatus({
+    projectId,
+    runnerType,
+  });
 
   const isConnected = runnerData?.status === RunnerConnectionStatus.CONNECTED;
   const isDisconnected =
