@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,12 @@ public enum EvaluationMethod {
 
     @JsonValue
     private final String value;
+
+    @JsonCreator
+    public static EvaluationMethod fromValue(String value) {
+        return fromString(value)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown EvaluationMethod value: " + value));
+    }
 
     public static Optional<EvaluationMethod> fromString(String value) {
         return Arrays.stream(values())
