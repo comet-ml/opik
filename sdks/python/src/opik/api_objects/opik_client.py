@@ -79,7 +79,6 @@ from ..rest_api.types import (
     span_filter_public,
     trace_filter_public,
 )
-from ..rest_api.types.agent_config_env import AgentConfigEnv
 from ..types import (
     BatchFeedbackScoreDict,
     ErrorInfoDict,
@@ -2817,17 +2816,11 @@ class Opik:
             version: Version name of the blueprint to tag.
             env: Environment name (e.g. ``"prod"``, ``"staging"``).
         """
-        project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name
+        manager = ConfigManager(
+            project_name=project_name,
+            rest_client_=self._rest_client,
         )
-        blueprint = self._rest_client.agent_configs.get_blueprint_by_name(
-            project_id=project_id,
-            name=version,
-        )
-        self._rest_client.agent_configs.create_or_update_envs(
-            project_id=project_id,
-            envs=[AgentConfigEnv(env_name=env, blueprint_id=blueprint.id)],
-        )
+        manager.set_env(version=version, env=env)
 
     def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
         return helpers.resolve_project_name(

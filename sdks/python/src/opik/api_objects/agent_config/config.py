@@ -4,12 +4,13 @@ from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.core.request_options import RequestOptions
 from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
+from opik.rest_api.types.agent_config_env import AgentConfigEnv
 from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
 from opik.api_objects import rest_helpers
 from opik import id_helpers
 
 from .blueprint import Blueprint
-from . import types
+from . import cache as cache_mod, types
 from .. import type_helpers
 
 
@@ -178,6 +179,32 @@ class ConfigManager:
             raw_blueprint=raw,
             field_types=field_types,
             rest_client_=self._rest_client,
+        )
+
+    def set_env(self, version: str, env: str) -> None:
+        """Tag a specific blueprint version with an environment name.
+
+        After tagging, ``get_blueprint(env=env)`` will return this version.
+
+        Args:
+            version: Version name of the blueprint to tag.
+            env: Environment name (e.g. ``"prod"``, ``"staging"``).
+        """
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, self._project_name
+        )
+        # Use the cached blueprint_id when available to skip a round-trip.
+        cached = cache_mod.get_cached_config(self._project_name, None, None, version)
+        blueprint_id = cached.blueprint_id
+        if blueprint_id is None:
+            blueprint = self._rest_client.agent_configs.get_blueprint_by_name(
+                project_id=project_id,
+                name=version,
+            )
+            blueprint_id = blueprint.id
+        self._rest_client.agent_configs.create_or_update_envs(
+            project_id=project_id,
+            envs=[AgentConfigEnv(env_name=env, blueprint_id=blueprint_id)],
         )
 
     def create_mask(
