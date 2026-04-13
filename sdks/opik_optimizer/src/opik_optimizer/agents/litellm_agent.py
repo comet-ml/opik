@@ -578,8 +578,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         ]
         if not outputs:
             logger.warning(
-                "LiteLLMAgent: all candidate responses were empty; "
-                "returning empty list"
+                "LiteLLMAgent: all candidate responses were empty; returning empty list"
             )
         return outputs
 
