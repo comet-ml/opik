@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 import click
 
 from ._run import run_cli_session
+from .pairing import RunnerType
 
 
 def _validate_command(command: Tuple[str, ...]) -> None:
@@ -48,7 +49,7 @@ def endpoint(
         ctx=ctx,
         project_name=project_name,
         name=name,
-        runner_type="endpoint",
+        runner_type=RunnerType.ENDPOINT,
         command=list(command),
         watch=watch,
     )

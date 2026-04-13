@@ -5,6 +5,7 @@ from typing import Optional
 import click
 
 from ._run import run_cli_session
+from .pairing import RunnerType
 
 
 @click.command()
@@ -21,5 +22,5 @@ def connect(
         ctx=ctx,
         project_name=project_name,
         name=name,
-        runner_type="connect",
+        runner_type=RunnerType.CONNECT,
     )

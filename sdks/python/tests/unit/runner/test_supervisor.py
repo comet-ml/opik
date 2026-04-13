@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
+from opik.cli.pairing import RunnerType
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.local_runner_heartbeat_response import (
     LocalRunnerHeartbeatResponse,
@@ -24,7 +25,7 @@ def _make_supervisor(
     runner_id="runner-1",
     api=None,
     watch=None,
-    runner_type="endpoint",
+    runner_type=RunnerType.ENDPOINT,
 ) -> Supervisor:
     if command is _SENTINEL:
         command = [sys.executable, "-c", "import time; time.sleep(60)"]
@@ -269,7 +270,7 @@ class TestHeartbeat:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
 
-        sup = _make_supervisor(api=api, runner_type="endpoint")
+        sup = _make_supervisor(api=api, runner_type=RunnerType.ENDPOINT)
 
         t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
         t.start()
@@ -286,7 +287,7 @@ class TestHeartbeat:
         api = MagicMock()
         api.runners.heartbeat.return_value = LocalRunnerHeartbeatResponse()
 
-        sup = _make_supervisor(api=api, runner_type="connect")
+        sup = _make_supervisor(api=api, runner_type=RunnerType.CONNECT)
 
         t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
         t.start()
@@ -351,7 +352,7 @@ class TestStandaloneMode:
 
 class TestBridgeIntegration:
     def test_bridge_loop_runs(self) -> None:
-        sup = _make_supervisor(watch=False, runner_type="connect")
+        sup = _make_supervisor(watch=False, runner_type=RunnerType.CONNECT)
 
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()

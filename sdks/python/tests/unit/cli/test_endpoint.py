@@ -4,7 +4,7 @@ import httpx
 from click.testing import CliRunner
 
 from opik.cli.main import cli
-from opik.cli.pairing import PairingResult
+from opik.cli.pairing import PairingResult, RunnerType
 from opik.rest_api.core.api_error import ApiError
 
 
@@ -36,7 +36,7 @@ class TestEndpoint:
         mock_run_pairing.assert_called_once()
         call_kwargs = mock_run_pairing.call_args[1]
         assert call_kwargs["project_name"] == "my-proj"
-        assert call_kwargs["runner_type"] == "endpoint"
+        assert call_kwargs["runner_type"] == RunnerType.ENDPOINT
 
         mock_launch.assert_called_once()
         launch_kwargs = mock_launch.call_args[1]

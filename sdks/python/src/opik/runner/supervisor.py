@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from ..cli.pairing import RunnerType
 from ..rest_api.core.api_error import ApiError
 from .bridge_handlers import FileLockRegistry
 from .bridge_handlers.edit_file import EditFileHandler
@@ -68,7 +69,7 @@ class Supervisor:
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
         bridge_key: Optional[bytes] = None,
-        runner_type: str = "endpoint",
+        runner_type: RunnerType = RunnerType.ENDPOINT,
     ) -> None:
         self._command = command
         self._env = env
@@ -108,7 +109,7 @@ class Supervisor:
 
         self._bg_tracker = BackgroundProcessTracker()
 
-        if self._runner_type == "connect":
+        if self._runner_type == RunnerType.CONNECT:
             mutation_queue = FileLockRegistry()
             handlers: Dict[str, Any] = {
                 "ReadFile": ReadFileHandler(self._repo_root),
@@ -380,7 +381,9 @@ class Supervisor:
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                caps = ["bridge"] if self._runner_type == "connect" else ["jobs"]
+                caps = (
+                    ["bridge"] if self._runner_type == RunnerType.CONNECT else ["jobs"]
+                )
                 self._api.runners.heartbeat(self._runner_id, capabilities=caps)
             except ApiError as e:
                 if e.status_code == 410:

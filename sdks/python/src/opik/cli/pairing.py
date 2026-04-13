@@ -1,6 +1,7 @@
 """Shared relay-based pairing flow for `opik connect` and `opik endpoint`."""
 
 import base64
+import enum
 import hashlib
 import hmac
 import logging
@@ -25,6 +26,12 @@ LOGGER = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 2
 DEFAULT_TTL_SECONDS = 300
+
+
+class RunnerType(str, enum.Enum):
+    CONNECT = "connect"
+    ENDPOINT = "endpoint"
+
 
 if TYPE_CHECKING:
     from opik.rest_api.client import OpikApi
@@ -100,7 +107,7 @@ def launch_supervisor(
     result: PairingResult,
     api: "OpikApi",
     tui: "RunnerTUI",
-    runner_type: str,
+    runner_type: RunnerType,
     command: Optional[List[str]] = None,
     watch: Optional[bool] = None,
 ) -> None:
@@ -143,7 +150,7 @@ def run_pairing(
     api: "OpikApi",
     project_name: str,
     runner_name: str,
-    runner_type: str,
+    runner_type: RunnerType,
     base_url: str,
     tui: Optional["RunnerTUI"] = None,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,

@@ -7,6 +7,7 @@ import pytest
 
 from opik.cli.pairing import (
     PairingResult,
+    RunnerType,
     build_pairing_link,
     generate_runner_name,
     hkdf_sha256,
@@ -182,7 +183,7 @@ class TestRunPairing:
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
-            runner_type="connect",
+            runner_type=RunnerType.CONNECT,
             base_url="http://localhost:5173/api/",
         )
 
@@ -201,7 +202,7 @@ class TestRunPairing:
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
-            runner_type="connect",
+            runner_type=RunnerType.CONNECT,
             base_url="http://localhost:5173/api/",
             tui=tui,
         )
@@ -221,7 +222,7 @@ class TestRunPairing:
             api=api,
             project_name="my-proj",
             runner_name="test-runner",
-            runner_type="endpoint",
+            runner_type=RunnerType.ENDPOINT,
             base_url="http://localhost:5173/api/",
             ttl_seconds=300,
         )
@@ -256,7 +257,7 @@ class TestRunPairing:
                 api=api,
                 project_name="my-proj",
                 runner_name="test-runner",
-                runner_type="connect",
+                runner_type=RunnerType.CONNECT,
                 base_url="http://localhost:5173/api/",
                 tui=tui,
                 ttl_seconds=300,
@@ -278,7 +279,7 @@ class TestRunPairing:
                 api=api,
                 project_name="my-proj",
                 runner_name="test-runner",
-                runner_type="connect",
+                runner_type=RunnerType.CONNECT,
                 base_url="http://localhost:5173/api/",
                 tui=tui,
             )
@@ -299,7 +300,7 @@ class TestRunPairing:
                 api=api,
                 project_name="my-proj",
                 runner_name="test-runner",
-                runner_type="connect",
+                runner_type=RunnerType.CONNECT,
                 base_url="http://localhost:5173/api/",
             )
         assert exc_info.value.status_code == 429

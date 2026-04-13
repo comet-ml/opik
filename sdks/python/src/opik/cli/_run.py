@@ -9,14 +9,14 @@ from opik import Opik
 from opik.rest_api.core.api_error import ApiError
 from opik.runner.tui import RunnerTUI
 
-from .pairing import generate_runner_name, launch_supervisor, run_pairing
+from .pairing import RunnerType, generate_runner_name, launch_supervisor, run_pairing
 
 
 def run_cli_session(
     ctx: click.Context,
     project_name: str,
     name: Optional[str],
-    runner_type: str,
+    runner_type: RunnerType,
     command: Optional[List[str]] = None,
     watch: Optional[bool] = None,
 ) -> None:

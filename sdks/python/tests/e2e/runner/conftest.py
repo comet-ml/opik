@@ -2,7 +2,6 @@ import base64
 import dataclasses
 import hashlib
 import hmac as hmac_mod
-import json
 import os
 import re
 import shutil
@@ -13,7 +12,6 @@ import time
 import uuid
 
 import pytest
-import urllib.request
 
 import opik
 import opik.api_objects.opik_client
@@ -120,29 +118,21 @@ def _parse_pairing_url(output_lines, timeout):
     return None
 
 
-def _activate_session(api_url, workspace, activation_key, session_id, runner_name):
+def _activate_session(api_client, activation_key, session_id, runner_name):
     session_id_bytes = uuid.UUID(session_id).bytes
     runner_name_hash = hashlib.sha256(runner_name.encode("utf-8")).digest()
     message = session_id_bytes + runner_name_hash
     sig = hmac_mod.new(activation_key, message, hashlib.sha256).digest()
     hmac_b64 = base64.b64encode(sig).decode("ascii")
 
-    base = api_url.rstrip("/")
-    body = json.dumps({"runner_name": runner_name, "hmac": hmac_b64}).encode()
-    req = urllib.request.Request(
-        f"{base}/v1/private/opik-connect/sessions/{session_id}/activate",
-        data=body,
-        headers={"Content-Type": "application/json", "Comet-Workspace": workspace},
-        method="POST",
+    api_client.opik_connect.activate_opik_connect_session(
+        session_id, runner_name=runner_name, hmac=hmac_b64
     )
-    urllib.request.urlopen(req)
 
 
 def _start_runner(
     api_client, subprocess_env, project_id, opik_client, request, cli_args
 ):
-    cfg = opik_client.config
-
     proc = subprocess.Popen(
         cli_args,
         stdout=subprocess.PIPE,
@@ -169,11 +159,8 @@ def _start_runner(
         )
 
     # Activate the CLI's session (simulates browser clicking Connect)
-    api_base = cfg.url_override
-    workspace = cfg.workspace or "default"
     _activate_session(
-        api_base,
-        workspace,
+        api_client,
         payload["activation_key"],
         payload["session_id"],
         payload["runner_name"],
