@@ -802,7 +802,7 @@ def test_test_suite__delete__items_removed(opik_client: opik.Opik, dataset_name:
     assert len(items) == 3
 
     # Verify descriptions are present before deletion
-    descriptions = {i["description"] for i in items}
+    descriptions = {i.get("description") for i in items}
     assert "First question" in descriptions
     assert "Second question" in descriptions
     assert None in descriptions
@@ -1252,12 +1252,12 @@ def test_get_test_suites__returns_only_test_suites(
     assert suite_name in suite_names
     assert dataset_regular_name not in suite_names
 
-    # Also verify get_datasets excludes test suites
+    # get_datasets() returns all datasets including test suites for backward compat
     datasets = opik_client.get_datasets()
     dataset_names = {d.name for d in datasets}
 
     assert dataset_regular_name in dataset_names
-    assert suite_name not in dataset_names
+    assert suite_name in dataset_names
 
     # cleanup
     opik_client.delete_test_suite(name=suite_name)
