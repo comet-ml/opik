@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from pathlib import Path
 from typing import Optional, Tuple
 
 import click
@@ -51,6 +52,16 @@ def endpoint(
 ) -> None:
     """Run a local endpoint process connected to Opik."""
     _validate_command(command)
+
+    from opik.runner.snapshot import has_entrypoint
+
+    if not has_entrypoint(Path.cwd()):
+        raise click.ClickException(
+            "No entrypoint found. Mark at least one function with "
+            "@opik.track(entrypoint=True) (Python) or "
+            "track({ entrypoint: true }, fn) (TypeScript) "
+            "before running 'opik endpoint'."
+        )
 
     run_cli_session(
         ctx=ctx,
