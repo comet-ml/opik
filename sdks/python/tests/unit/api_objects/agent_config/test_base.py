@@ -1190,6 +1190,8 @@ class TestGetOrCreateConfigWithoutFallback:
         assert isinstance(result, Config)
         assert type(result) is Config
         assert result.is_fallback is False
+        assert result.temp == pytest.approx(0.9)
+        assert result.name == "backend"
 
     def test_no_fallback__fetch_error__re_raises(
         self, mock_rest_client, mock_opik_client
