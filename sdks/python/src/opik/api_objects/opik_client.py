@@ -2802,7 +2802,8 @@ class Opik:
 
     def set_config_env(
         self,
-        project_name: str,
+        *,
+        project_name: Optional[str] = None,
         version: str,
         env: str,
     ) -> None:
@@ -2812,12 +2813,13 @@ class Opik:
         return this version.
 
         Args:
-            project_name: Opik project name.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             version: Version name of the blueprint to tag.
             env: Environment name (e.g. ``"prod"``, ``"staging"``).
         """
+        resolved_project = self._resolve_project_name(project_name)
         manager = ConfigManager(
-            project_name=project_name,
+            project_name=resolved_project,
             rest_client_=self._rest_client,
         )
         manager.set_env(version=version, env=env)
