@@ -90,7 +90,7 @@ public class OnlineScoringSpanSampler {
         spansByProject.forEach((projectId, spans) -> {
             // Only score spans from SDK logging source. Non-SDK spans (playground, experiment,
             // optimization) are skipped from online evaluation.
-            var scorableSpans = spans.stream().filter(this::isLoggingSource).toList();
+            var scorableSpans = spans.stream().filter(span -> Source.isLoggingSource(span.source())).toList();
             if (scorableSpans.isEmpty()) {
                 log.info("No scorable spans: source is not SDK, projectId '{}', workspaceId '{}'",
                         projectId, spansBatch.workspaceId());
@@ -172,13 +172,6 @@ public class OnlineScoringSpanSampler {
                 }
             });
         });
-    }
-
-    /**
-     * Returns true for spans originating from SDK logging (source == SDK or null for legacy rows).
-     */
-    private boolean isLoggingSource(Span span) {
-        return span.source() == null || span.source() == Source.SDK;
     }
 
     private void logUnsupportedEvaluatorType(AutomationRuleEvaluator<?, ?> evaluator) {

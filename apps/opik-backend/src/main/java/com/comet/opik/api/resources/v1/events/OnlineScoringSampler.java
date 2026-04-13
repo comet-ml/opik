@@ -151,7 +151,7 @@ public class OnlineScoringSampler {
             var scorableTraces = new ArrayList<Trace>();
             var selectedRuleIdsByTrace = new HashMap<UUID, Set<UUID>>();
             for (var trace : projectTraces) {
-                if (isLoggingSource(trace)) {
+                if (Source.isLoggingSource(trace.source())) {
                     // For SDK traces all evaluators apply
                     scorableTraces.add(trace);
                 } else {
@@ -214,13 +214,6 @@ public class OnlineScoringSampler {
                 }
             });
         });
-    }
-
-    /**
-     * Returns true for traces originating from SDK logging (source == SDK or null for legacy rows).
-     */
-    private boolean isLoggingSource(Trace trace) {
-        return trace.source() == null || trace.source() == Source.SDK;
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {
