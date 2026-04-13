@@ -52,21 +52,17 @@ import {
   TracesAnnotationQueue,
   ThreadsAnnotationQueue,
 } from "@/annotation-queue";
-import { AgentConfigManager } from "@/agent-config";
-import {
-  getSchemaPrefix,
-  serializeFields,
-  deserializeToShape,
-  matchesBlueprint,
-} from "@/typeHelpers";
-import { createTypedAgentConfig, type AgentConfig } from "@/agent-config/AgentConfig";
+import { ConfigManager } from "@/agent-config/ConfigManager";
+import { Blueprint } from "@/agent-config/Blueprint";
+import { serializeValuesRecord, deserializeFromBlueprint, type SupportedValue } from "@/typeHelpers";
+import { createTypedConfig, type Config } from "@/agent-config/Config";
 import { getActiveConfigMask, getActiveConfigBlueprintName } from "@/agent-config/configContext";
 import {
   getCachedBlueprint,
   initBlueprintCacheEntry,
 } from "@/agent-config/blueprintCache";
 import { trackStorage } from "@/decorators/track";
-import { z } from "zod";
+import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
@@ -1767,65 +1763,264 @@ export class OpikClient {
   };
 
   /**
-   * Publishes a typed agent config version to Opik. If an identical version already exists
-   * it is reused; otherwise a new version is created (or the existing config is updated).
+   * Retrieves a typed config and returns it as a `Config<T>` object.
+   * Must be called inside a `track()` function.
    *
-   * Call this once at agent startup — before running inferences — to ensure the config
-   * is registered and can be retrieved by `getAgentConfigVersion()`.
+   * Selectors (mutually exclusive):
+   * - `options.version` — fetches the named version exactly
+   * - `options.env` — fetches the version pinned to that environment (default: `"prod"`)
+   * - neither — equivalent to `env="prod"`
    *
-   * @param schema - Zod object schema that describes the config shape (must have a `.describe()` name)
-   * @param values - Typed config values that conform to the schema
+   * With `fallback`:
+   * - Backend errors return the fallback with `isFallback: true`
+   * - Empty project auto-creates from fallback values
+   * - T is inferred from the fallback type
+   *
+   * Without `fallback`:
+   * - Backend errors are re-thrown
+   * - Empty project throws ConfigNotFoundError
+   * - T defaults to `Record<string, unknown>`; use explicit type arg to assert a shape
+   */
+  public getOrCreateConfig<T extends Record<string, unknown>>(
+    options: {
+      fallback: T;
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>>;
+
+  public getOrCreateConfig<T extends Record<string, unknown> = Record<string, unknown>>(
+    options?: {
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>>;
+
+  public getOrCreateConfig<T extends Record<string, unknown> = Record<string, unknown>>(
+    options?: {
+      fallback?: T;
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>> {
+    return this._getOrCreateConfigImpl(options);
+  }
+
+  private async _getOrCreateConfigImpl<T extends Record<string, unknown>>(
+    options?: {
+      fallback?: T;
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>> {
+    if (!trackStorage.getStore()) {
+      throw new Error(
+        "getOrCreateConfig() must be called inside a track() function"
+      );
+    }
+
+    const selectorCount = [options?.version !== undefined, options?.env !== undefined].filter(Boolean).length;
+    if (selectorCount > 1) {
+      throw new Error(
+        "Only one of 'version' or 'env' may be specified in getOrCreateConfig()."
+      );
+    }
+
+    const fallback = options?.fallback;
+    const projectName = options?.projectName ?? this.config.projectName;
+
+    const maskId = getActiveConfigMask() ?? undefined;
+    const blueprintName = getActiveConfigBlueprintName() ?? undefined;
+    // A runner context that pins a specific blueprint name is an explicit version
+    // request — missing it must raise ConfigNotFound, not auto-create (matches Python).
+    const isExplicitBlueprintFromContext = blueprintName !== undefined;
+    const manager = new ConfigManager(projectName, this);
+
+    // "latest" is a sentinel: fetch the most recent blueprint (no name filter),
+    // and behave like "no selector" for auto-create purposes.
+    const isLatest = options?.version === "latest";
+    const hasNamedVersion = options?.version !== undefined && !isLatest;
+
+    const effectiveEnv = options?.version ? null : (options?.env ?? "prod");
+    // Use null as the cache key version for "latest" (same slot as the default env path)
+    const effectiveVersion = blueprintName ?? (hasNamedVersion ? options!.version! : null);
+
+    const cacheEntry = getCachedBlueprint(projectName, effectiveEnv, maskId ?? null, effectiveVersion);
+
+    let blueprint: Blueprint | null = null;
+
+    if (cacheEntry.isStale()) {
+      try {
+        if (blueprintName) {
+          blueprint = await manager.getBlueprint({ name: blueprintName, maskId });
+        } else if (isLatest) {
+          blueprint = await manager.getBlueprint({ maskId });
+        } else if (hasNamedVersion) {
+          blueprint = await manager.getBlueprint({ name: options!.version!, maskId });
+        } else {
+          blueprint = await manager.getBlueprint({ env: effectiveEnv!, maskId });
+        }
+      } catch (error) {
+        if (fallback !== undefined) {
+          logger.debug("Failed to fetch config from backend, using fallback", { error });
+          return createTypedConfig<T>({
+            values: fallback,
+            fieldNames: new Set(Object.keys(fallback)),
+            blueprintId: undefined,
+            blueprintVersion: undefined,
+            isFallback: true,
+            maskId,
+          });
+        }
+        throw error;
+      }
+
+      // Set a background refresh for env-based and "latest" lookups (not pinned named versions or masks)
+      const refreshCallback =
+        maskId === undefined && !hasNamedVersion
+          ? isLatest
+            ? () => manager.getBlueprint({ maskId: undefined })
+            : () => manager.getBlueprint({ env: effectiveEnv!, maskId: undefined })
+          : null;
+
+      initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, refreshCallback, effectiveVersion);
+    } else {
+      blueprint = cacheEntry.getBlueprint();
+    }
+
+    // Blueprint is null — no config found
+    if (!blueprint) {
+      // Explicit named version, explicit env, or runner-context blueprint: never auto-create
+      if (hasNamedVersion || options?.env || isExplicitBlueprintFromContext) {
+        throw new ConfigNotFoundError(
+          `No config found for project "${projectName}" with the specified selector`
+        );
+      }
+
+      // Default path (env="prod"): probe project-wide to distinguish empty project vs prod tag missing.
+      // When version="latest", the initial fetch was already project-wide (no name/env filter), so
+      // null means the project is genuinely empty — skip the redundant round-trip.
+      let projectWide: Blueprint | null = null;
+      if (!isLatest) {
+        try {
+          projectWide = await manager.getBlueprint({ maskId: undefined });
+        } catch (error) {
+          if (fallback !== undefined) {
+            logger.debug("Failed to probe project-wide config, using fallback", { error });
+            return createTypedConfig<T>({
+              values: fallback,
+              fieldNames: new Set(Object.keys(fallback)),
+              blueprintId: undefined,
+              blueprintVersion: undefined,
+              isFallback: true,
+              maskId,
+            });
+          }
+          throw error;
+        }
+
+        if (projectWide !== null) {
+          // Other configs exist but none tagged "prod"
+          throw new ConfigNotFoundError(
+            `No config tagged with env="prod" in project "${projectName}", but other configs exist. ` +
+            `Use setConfigEnv() to tag a version, or pass an explicit env/version.`
+          );
+        }
+      }
+
+      // Truly empty project
+      if (fallback === undefined) {
+        throw new ConfigNotFoundError(
+          `No config found in project "${projectName}". Pass a fallback to auto-create one.`
+        );
+      }
+
+      // Auto-create from fallback
+      let createdBp: Blueprint | undefined;
+      try {
+        createdBp = await manager.createBlueprint({ values: serializeValuesRecord(fallback as Record<string, unknown>) });
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 409) {
+          const refetched = await manager.getBlueprint({ maskId: undefined });
+          if (!refetched) {
+            throw new ConfigNotFoundError(`Failed to create or fetch config in project "${projectName}".`);
+          }
+          blueprint = refetched;
+        } else {
+          throw error;
+        }
+      }
+      if (!blueprint) blueprint = createdBp!;
+
+      initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, null, effectiveVersion);
+    }
+
+    // Blueprint found — validate and deserialize
+    const rawValuesMap = Object.fromEntries(
+      blueprint.keys().map((key) => [key, blueprint!.getRawEntry(key)!])
+    );
+
+    if (fallback !== undefined) {
+      const missingKeys = Object.keys(fallback).filter((k) => rawValuesMap[k] === undefined);
+      if (missingKeys.length > 0) {
+        const versionLabel = blueprint.name ?? blueprint.id;
+        throw new ConfigMismatchError(
+          `Config version "${versionLabel}" is missing expected field(s): ${missingKeys.join(", ")}. ` +
+          `The retrieved version does not contain all fields declared in the fallback.`
+        );
+      }
+    }
+
+    const resolvedValues = deserializeFromBlueprint(
+      rawValuesMap,
+      blueprint.values,
+      fallback !== undefined ? Object.keys(fallback) : undefined
+    );
+
+    const fieldNames = new Set(Object.keys(fallback ?? resolvedValues));
+
+    return createTypedConfig<T>({
+      values: resolvedValues as T,
+      fieldNames,
+      blueprintId: blueprint.id,
+      blueprintVersion: blueprint.name,
+      isFallback: false,
+      maskId,
+    });
+  }
+
+  /**
+   * Publishes a new config version unconditionally.
+   * Does NOT require a `track()` function.
+   *
+   * @param values - Config field values to publish
    * @param options.projectName - Project to publish under (defaults to client's configured project)
    * @param options.description - Optional human-readable description for this version
    * @returns The version name (or ID) of the published config
-   *
-   * @example
-   * ```typescript
-   * const MyConfig = z.object({ model: z.string(), temperature: z.number() }).describe("MyConfig");
-   * await client.createAgentConfig(MyConfig, { model: "gpt-4o", temperature: 0.7 });
-   * ```
    */
-  public createAgentConfig = async <
-    S extends z.ZodObject<z.ZodRawShape>,
-  >(
-    schema: S,
-    values: z.infer<S>,
+  public createConfig = async (
+    values: Record<string, SupportedValue>,
     options?: { projectName?: string; description?: string }
   ): Promise<string> => {
-    const prefix = getSchemaPrefix(schema);
     const projectName = options?.projectName ?? this.config.projectName;
-    const agentConfig = new AgentConfigManager(projectName, this);
+    const manager = new ConfigManager(projectName, this);
+    const serialized = serializeValuesRecord(values as Record<string, unknown>);
 
-    const serialized = serializeFields(schema, values as Record<string, unknown>, prefix);
+    const latest = await manager.getBlueprint();
+    let blueprint: Blueprint;
 
-    const latest = await agentConfig.getBlueprint();
-
-    if (latest && matchesBlueprint(schema, values as Record<string, unknown>, latest, prefix)) {
-      return latest.name ?? latest.id;
-    }
-
-    let blueprint;
     if (latest) {
-      blueprint = await agentConfig.updateBlueprint({
-        values: serialized,
-        description: options?.description,
-      });
+      blueprint = await manager.updateBlueprint({ values: serialized, description: options?.description });
     } else {
       try {
-        blueprint = await agentConfig.createBlueprint({
-          values: serialized,
-          description: options?.description,
-        });
+        blueprint = await manager.createBlueprint({ values: serialized, description: options?.description });
       } catch (error) {
-        if (error instanceof OpikApiError && error.statusCode === 400) {
-          const refetched = await agentConfig.getBlueprint();
-          if (refetched && matchesBlueprint(schema, values as Record<string, unknown>, refetched, prefix)) {
-            return refetched.name ?? refetched.id;
-          }
-          blueprint = await agentConfig.updateBlueprint({
-            values: serialized,
-            description: options?.description,
-          });
+        if (error instanceof OpikApiError && error.statusCode === 409) {
+          blueprint = await manager.updateBlueprint({ values: serialized, description: options?.description });
         } else {
           throw error;
         }
@@ -1836,155 +2031,33 @@ export class OpikClient {
   };
 
   /**
-   * Retrieves a typed agent config version and returns it as an `AgentConfig<T>` object.
-   * Must be called inside a `track()` function — it automatically attaches the resolved
-   * config metadata to the active trace.
+   * Tags a specific config version with an environment label.
+   * Does NOT require a `track()` function.
    *
-   * Exactly one of the following selectors must be provided (they are mutually exclusive):
-   * - `options.version` — fetches the named version exactly
-   * - `options.latest` — fetches the most recently published version
-   * - `options.env` — fetches the version pinned to that environment label (default: `"prod"`)
-   *
-   * If the remote config cannot be fetched, `options.fallback` is returned as an
-   * `AgentConfig<T>` with `isFallback: true`.
-   *
-   * @param schema - Zod object schema that describes the config shape (must have a `.describe()` name)
-   * @param options.fallback - Values to use when no remote config is available
-   * @param options.projectName - Project to fetch from (defaults to client's configured project)
-   * @param options.env - Environment label to resolve (default: `"prod"`)
-   * @param options.latest - If true, fetch the most recently published version regardless of env
-   * @param options.version - Fetch a specific named version
-   * @returns Typed `AgentConfig<T>` with the resolved values and blueprint metadata
-   *
-   * @example
-   * ```typescript
-   * const MyConfig = z.object({ model: z.string(), temperature: z.number() }).describe("MyConfig");
-   *
-   * const result = await track({ name: "my-agent" }, async () => {
-   *   const config = await client.getAgentConfigVersion(MyConfig, {
-   *     fallback: { model: "gpt-4o-mini", temperature: 0.5 },
-   *   });
-   *   return callLLM(config.model, config.temperature);
-   * });
-   * ```
+   * @param options.version - The version name to tag
+   * @param options.env - The environment label (e.g. "prod", "staging")
+   * @param options.projectName - Project (defaults to client's configured project)
    */
-  public getAgentConfigVersion = async <
-    S extends z.ZodObject<z.ZodRawShape>,
-  >(
-    schema: S,
-    options: {
-      fallback: z.infer<S>;
-      projectName?: string;
-      env?: string;
-      latest?: boolean;
-      version?: string;
-    }
-  ): Promise<AgentConfig<z.infer<S>>> => {
-    const prefix = getSchemaPrefix(schema);
+  public setConfigEnv = async (options: {
+    version: string;
+    env: string;
+    projectName?: string;
+  }): Promise<void> => {
     const projectName = options.projectName ?? this.config.projectName;
-
-    if (!trackStorage.getStore()) {
-      throw new Error(
-        "getAgentConfigVersion() must be called inside a track() function"
-      );
-    }
-
-    const selectorCount = [options.latest, options.version !== undefined, options.env !== undefined].filter(Boolean).length;
-    if (selectorCount > 1) {
-      throw new Error(
-        "Only one of 'latest', 'version', or 'env' may be specified in getAgentConfigVersion()."
-      );
-    }
-
-    const maskId = getActiveConfigMask() ?? undefined;
-    const blueprintName = getActiveConfigBlueprintName() ?? undefined;
-    const agentConfig = new AgentConfigManager(projectName, this);
-
-    const { extractFieldMetadata } = await import("@/typeHelpers");
-    const fieldMeta = extractFieldMetadata(schema, prefix);
-
-    // effectiveEnv is null for `latest` and `version` lookups (no env tag involved)
-    const effectiveEnv = options.latest || options.version ? null : (options.env ?? "prod");
-    const effectiveVersion = blueprintName ?? options.version ?? null;
-    const cacheEntry = getCachedBlueprint(projectName, effectiveEnv, maskId ?? null, effectiveVersion);
-
-    let blueprint = null;
-
-    if (cacheEntry.isStale()) {
-      try {
-        if (blueprintName) {
-          blueprint = await agentConfig.getBlueprint({ name: blueprintName, maskId });
-        } else if (options.latest) {
-          blueprint = await agentConfig.getBlueprint({ maskId });
-        } else if (options.version) {
-          blueprint = await agentConfig.getBlueprint({ name: options.version, maskId });
-        } else {
-          blueprint = await agentConfig.getBlueprint({ env: effectiveEnv!, maskId });
-        }
-      } catch (error) {
-        if (error instanceof OpikApiError && error.statusCode === 404) {
-          blueprint = null;
-        } else {
-          logger.error("Failed to fetch agent config from backend, using fallback", { error });
-          return createTypedAgentConfig({
-            schema,
-            values: options.fallback,
-            fieldMeta,
-            blueprintId: undefined,
-            blueprintVersion: undefined,
-            envs: undefined,
-            isFallback: true,
-            maskId,
-            deployTo: async () => {
-              throw new Error("Cannot deploy fallback config");
-            },
-          });
-        }
-      }
-
-      // Register refresh callback for non-pinned, non-mask lookups
-      const refreshCallback =
-        maskId === undefined && !options.version
-          ? options.latest
-            ? () => agentConfig.getBlueprint({ maskId: undefined })
-            : () => agentConfig.getBlueprint({ env: effectiveEnv!, maskId: undefined })
-          : null;
-
-      initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, refreshCallback, effectiveVersion);
-    } else {
-      blueprint = cacheEntry.getBlueprint();
-    }
-
+    const manager = new ConfigManager(projectName, this);
+    const blueprint = await manager.getBlueprint({ name: options.version });
     if (!blueprint) {
-      throw new Error(
-        `No agent config found for project "${projectName}" with the specified selector`
+      throw new ConfigNotFoundError(
+        `No config version "${options.version}" found in project "${projectName}".`
       );
     }
-
-    const rawValuesMap = Object.fromEntries(
-      blueprint.keys().map((key) => [key, blueprint!.getRawEntry(key)!])
-    );
-
-    const resolvedValues = deserializeToShape(
-      schema,
-      rawValuesMap,
-      prefix,
-      options.fallback,
-      blueprint.values
-    );
-
-    return createTypedAgentConfig({
-      schema,
-      values: resolvedValues,
-      fieldMeta,
-      blueprintId: blueprint.id,
-      blueprintVersion: blueprint.name,
-      envs: blueprint.envs,
-      isFallback: false,
-      maskId,
-      deployTo: async (env: string) => {
-        await agentConfig.tagBlueprintWithEnv(blueprint!.id, env);
-      },
+    const projectResponse = await this.api.projects.retrieveProject({ name: projectName });
+    if (!projectResponse?.id) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+    await this.api.agentConfigs.createOrUpdateEnvs({
+      projectId: projectResponse.id,
+      envs: [{ envName: options.env, blueprintId: blueprint.id }],
     });
   };
 

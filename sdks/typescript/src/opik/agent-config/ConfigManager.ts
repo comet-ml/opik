@@ -17,7 +17,7 @@ export interface GetBlueprintOptions {
   maskId?: string;
 }
 
-export class AgentConfigManager {
+export class ConfigManager {
   private readonly projectName: string;
   private readonly opik: OpikClient;
 
@@ -176,23 +176,5 @@ export class AgentConfigManager {
       });
       throw error;
     }
-  }
-
-  /**
-   * Associates a blueprint with an environment label (e.g. `"prod"`, `"staging"`).
-   * After tagging, `getBlueprint({ env })` will return this blueprint.
-   */
-  async tagBlueprintWithEnv(
-    blueprintId: string,
-    env: string
-  ): Promise<void> {
-    const projectId = await this.getProjectId();
-    logger.debug(
-      `Tagging blueprint "${blueprintId}" with env "${env}" for project "${this.projectName}"`
-    );
-    await this.opik.api.agentConfigs.createOrUpdateEnvs({
-      projectId,
-      envs: [{ envName: env, blueprintId }],
-    });
   }
 }

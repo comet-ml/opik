@@ -27,9 +27,10 @@ export type { FilterExpression } from "@/query";
 export { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queue";
 export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_api/api/types/AnnotationQueuePublicScope";
 
-// AgentConfig exports
-export { Blueprint, AgentConfigManager, agentConfigContext } from "@/agent-config";
-export type { CreateBlueprintOptions, GetBlueprintOptions, AgentConfig, FieldMeta } from "@/agent-config";
+// Config exports
+export { agentConfigContext } from "@/agent-config";
+export type { Config } from "@/agent-config";
+export { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
 
 // Runner exports
 export { activateRunner } from "@/runner/activate";
