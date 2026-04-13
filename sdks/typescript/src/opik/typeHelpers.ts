@@ -71,8 +71,9 @@ export function inferBackendType(
   if (typeof value === "string") return "string";
   if (value instanceof BasePrompt) return "prompt";
   if (value instanceof PromptVersion) return "prompt_commit";
+  if (value === null) return "string";
   if (Array.isArray(value)) return "string";
-  if (typeof value === "object" && value !== null) return "string";
+  if (typeof value === "object") return "string";
   throw new TypeError(`Unsupported value type: ${typeof value}`);
 }
 
