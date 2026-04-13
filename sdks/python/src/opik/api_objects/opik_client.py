@@ -1381,6 +1381,7 @@ class Opik:
             project_name=self._resolve_project_name(project_name),
             rest_client=self._rest_client,
             max_results=max_results,
+            client=self,
         )
 
     def get_test_suite_experiments(
@@ -1424,7 +1425,7 @@ class Opik:
         prompt: Optional[prompt_module.base_prompt.BasePrompt] = None,
         prompts: Optional[List[prompt_module.base_prompt.BasePrompt]] = None,
         type: Literal["regular", "trial", "mini-batch"] = "regular",
-        evaluation_method: Literal["dataset", "test_suite"] = "dataset",
+        evaluation_method: Literal["dataset", "evaluation_suite"] = "dataset",
         optimization_id: Optional[str] = None,
         tags: Optional[List[str]] = None,
         dataset_version_id: Optional[str] = None,

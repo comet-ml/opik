@@ -326,6 +326,7 @@ class TestSuite:
             rest_client=self._dataset._rest_client,
             version_info=version_info,
             project_name=self._dataset.project_name,
+            client=self._dataset.client,
         )
         return TestSuiteVersion(
             name=self._name,

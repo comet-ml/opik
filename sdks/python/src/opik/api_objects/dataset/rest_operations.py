@@ -226,6 +226,7 @@ def get_test_suites(
     project_name: Optional[str],
     rest_client: OpikApi,
     max_results: int = 1000,
+    client: Optional[Any] = None,
 ) -> List[TestSuite]:
     from .test_suite import test_suite as test_suite_module
 
@@ -259,12 +260,14 @@ def get_test_suites(
                 project_name=project_name,
                 rest_client=rest_client,
                 dataset_items_count=dataset_fern.dataset_items_count,
+                client=client,
             )
 
             suites.append(
                 test_suite_module.TestSuite(
                     name=dataset_fern.name,
                     dataset_=suite_dataset,
+                    client=client,
                 )
             )
 
