@@ -9,6 +9,7 @@ import {
 } from "use-query-params";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import { Plus } from "lucide-react";
 
 import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -51,7 +52,6 @@ import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
@@ -437,14 +437,16 @@ const ProjectsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Projects</h1>
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">Projects</h1>
+        {canCreateProjects && (
+          <Button variant="default" size="xs" onClick={handleNewProjectClick}>
+            <Plus className="mr-1 size-4" />
+            Create project
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
-      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search!}
@@ -467,11 +469,6 @@ const ProjectsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          {canCreateProjects && (
-            <Button variant="default" size="sm" onClick={handleNewProjectClick}>
-              Create new project
-            </Button>
-          )}
         </div>
       </div>
       <DataTable
@@ -498,7 +495,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreateProjects && (
               <Button variant="link" onClick={handleNewProjectClick}>
-                Create new project
+                Create project
               </Button>
             )}
           </DataTableNoData>

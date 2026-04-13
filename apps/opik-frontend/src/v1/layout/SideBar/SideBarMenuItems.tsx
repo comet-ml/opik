@@ -27,13 +27,19 @@ interface SideBarMenuItemsProps {
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const {
-    permissions: { canViewExperiments, canViewDashboards, canViewDatasets },
+    permissions: {
+      canViewExperiments,
+      canViewDashboards,
+      canViewDatasets,
+      canUsePlayground,
+    },
   } = usePermissions();
 
   const menuItems = getMenuItems({
     canViewExperiments,
     canViewDashboards,
     canViewDatasets,
+    canUsePlayground,
   });
 
   const { data: projectData } = useProjectsList(

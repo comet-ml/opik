@@ -1,4 +1,5 @@
 import React from "react";
+import Logo from "@/shared/Logo/Logo";
 import AgentOnboardingProvider, {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
@@ -22,7 +23,12 @@ const AgentOnboardingSteps: React.FC = () => {
 const AgentOnboardingOverlay: React.FC = () => {
   return (
     <AgentOnboardingProvider>
-      <AgentOnboardingSteps />
+      <div className="fixed inset-0 z-50 overflow-auto bg-soft-background">
+        <div className="absolute left-[18px] top-[14.5px]">
+          <Logo expanded />
+        </div>
+        <AgentOnboardingSteps />
+      </div>
     </AgentOnboardingProvider>
   );
 };

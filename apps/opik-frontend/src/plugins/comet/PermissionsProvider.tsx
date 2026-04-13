@@ -23,6 +23,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canEditAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
+    canCreatePrompts,
     canDeletePrompts,
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,
@@ -32,6 +33,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
     canTagTrace,
+    canUsePlayground,
     isPending,
   } = useUserPermission();
 
@@ -54,6 +56,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canEditAnnotationQueues,
         canDeleteAnnotationQueues,
         canDeleteTraces,
+        canCreatePrompts,
         canDeletePrompts,
         canDeleteOptimizationRuns,
         canConfigureWorkspaceSettings,
@@ -63,6 +66,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canUpdateAlerts,
         canAnnotateTraceSpanThread,
         canTagTrace,
+        canUsePlayground,
       },
       isPending,
     }),
@@ -83,6 +87,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canEditAnnotationQueues,
       canDeleteAnnotationQueues,
       canDeleteTraces,
+      canCreatePrompts,
       canDeletePrompts,
       canDeleteOptimizationRuns,
       canConfigureWorkspaceSettings,
@@ -92,6 +97,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canUpdateAlerts,
       canAnnotateTraceSpanThread,
       canTagTrace,
+      canUsePlayground,
       isPending,
     ],
   );

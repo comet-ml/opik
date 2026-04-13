@@ -83,7 +83,7 @@ const EditVersionDialog: React.FC<EditVersionDialogProps> = ({
           immutableTags={existingTags}
         />
 
-        <DialogFooter className="gap-3 border-t pt-6 md:gap-0">
+        <DialogFooter className="gap-3 border-t pt-4 md:gap-0">
           <Button
             type="button"
             variant="outline"

@@ -68,9 +68,9 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
   }, [title, setBreadcrumbParam]);
 
   return (
-    <div className="pb-4 pt-6">
+    <div className="py-4">
       <div className="mb-4 flex min-h-8 items-center gap-3">
-        <h1 className="comet-title-l truncate break-words">{title}</h1>
+        <h1 className="comet-title-xs truncate break-words">{title}</h1>
         {trialStatus && (
           <Tag
             variant={STATUS_VARIANT_MAP[trialStatus]}

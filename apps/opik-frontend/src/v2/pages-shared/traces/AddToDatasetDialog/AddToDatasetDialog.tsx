@@ -521,14 +521,14 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               {canCreateDatasets && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   onClick={() => {
                     setOpenDialog(true);
                   }}
                   disabled={noValidRows}
                 >
-                  <Plus className="mr-2 size-4" />
-                  Create new evaluation suite
+                  <Plus className="mr-1 size-4" />
+                  Create evaluation suite
                 </Button>
               )}
             </div>

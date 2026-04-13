@@ -14,6 +14,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import round from "lodash/round";
+import { Plus } from "lucide-react";
 
 import {
   COLUMN_ID_ID,
@@ -49,8 +50,6 @@ import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/A
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -377,16 +376,18 @@ export const OnlineEvaluationPage: React.FC = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">
           Online evaluation
         </h1>
+        {canUpdateOnlineEvaluationRules && (
+          <Button variant="default" size="xs" onClick={handleNewRuleClick}>
+            <Plus className="mr-1 size-4" />
+            Create rule
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
-      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -417,11 +418,6 @@ export const OnlineEvaluationPage: React.FC = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          {canUpdateOnlineEvaluationRules && (
-            <Button variant="default" size="sm" onClick={handleNewRuleClick}>
-              Create new rule
-            </Button>
-          )}
         </div>
       </div>
       <DataTable

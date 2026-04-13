@@ -37,10 +37,10 @@ import {
 import { Dashboard, DASHBOARD_TYPE } from "@/types/dashboard";
 import { useDashboardStore } from "@/store/DashboardStore";
 
-export type InsightsViewDialogMode = "create" | "edit" | "clone";
+export type ProjectDashboardViewDialogMode = "create" | "edit" | "clone";
 
-interface InsightsViewDialogProps {
-  mode: InsightsViewDialogMode;
+interface ProjectDashboardViewDialogProps {
+  mode: ProjectDashboardViewDialogMode;
   dashboard?: Dashboard;
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -72,7 +72,7 @@ const FormSchema = z.object({
 
 type FormData = z.infer<typeof FormSchema>;
 
-const InsightsViewDialog: React.FC<InsightsViewDialogProps> = ({
+const ProjectDashboardViewDialog: React.FC<ProjectDashboardViewDialogProps> = ({
   mode,
   dashboard,
   open,
@@ -101,7 +101,7 @@ const InsightsViewDialog: React.FC<InsightsViewDialogProps> = ({
   });
 
   const showToast = useCallback(
-    (toastMode: InsightsViewDialogMode) => {
+    (toastMode: ProjectDashboardViewDialogMode) => {
       const toastConfigs = {
         create: {
           title: "View created",
@@ -259,7 +259,7 @@ const InsightsViewDialog: React.FC<InsightsViewDialogProps> = ({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            id="insights-view-form"
+            id="project-dashboard-view-form"
             className="flex flex-col gap-4 py-4"
           >
             <FormField
@@ -303,7 +303,11 @@ const InsightsViewDialog: React.FC<InsightsViewDialogProps> = ({
             </Button>
           </DialogClose>
 
-          <Button type="submit" form="insights-view-form" disabled={isPending}>
+          <Button
+            type="submit"
+            form="project-dashboard-view-form"
+            disabled={isPending}
+          >
             {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
             {config.buttonText}
           </Button>
@@ -313,4 +317,4 @@ const InsightsViewDialog: React.FC<InsightsViewDialogProps> = ({
   );
 };
 
-export default InsightsViewDialog;
+export default ProjectDashboardViewDialog;

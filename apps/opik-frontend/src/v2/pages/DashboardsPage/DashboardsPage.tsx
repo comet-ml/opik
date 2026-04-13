@@ -9,6 +9,7 @@ import {
 } from "use-query-params";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
+import { Plus } from "lucide-react";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
@@ -36,8 +37,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
@@ -353,16 +352,16 @@ const DashboardsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <div className="flex items-center">
-          <h1 className="comet-title-l truncate break-words">Dashboards</h1>
-        </div>
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">Dashboards</h1>
+        {canCreateDashboards && (
+          <Button variant="default" size="xs" onClick={handleNewDashboardClick}>
+            <Plus className="mr-1 size-4" />
+            Create dashboard
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_dashboards]}
-      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -393,15 +392,6 @@ const DashboardsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          {canCreateDashboards && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleNewDashboardClick}
-            >
-              Create new dashboard
-            </Button>
-          )}
         </div>
       </div>
       <DataTable
@@ -420,7 +410,8 @@ const DashboardsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreateDashboards && (
               <Button variant="link" onClick={handleNewDashboardClick}>
-                Create new dashboard
+                <Plus className="mr-1 size-4" />
+                Create dashboard
               </Button>
             )}
           </DataTableNoData>

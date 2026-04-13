@@ -488,7 +488,7 @@ const dataset = await client.getOrCreateDataset("${escapedName}");`;
         minWidth={400}
         closeButtonPosition="right"
         headerContent={
-          <span className="comet-title-xxs">Create evaluation suite</span>
+          <span className="comet-title-xs">Create evaluation suite</span>
         }
       >
         <div className="flex size-full flex-col">
