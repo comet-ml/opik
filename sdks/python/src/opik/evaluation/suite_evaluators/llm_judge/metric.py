@@ -338,6 +338,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
             custom_parameters={"reasoning_effort": self._reasoning_effort},
         )
 
+        # NOTE: The backend currently ignores these messages and replaces them
+        # with its own copy (TestSuitePromptConstants.java). Serialized here
+        # only to satisfy the config schema. See OPIK-5735.
         messages = [
             llm_judge_config.LLMJudgeMessage(
                 role="SYSTEM",

@@ -131,6 +131,9 @@ public class TestSuiteEvaluatorMapper {
      * The prompt templates are defined in {@link TestSuitePromptConstants} and mirror the Python SDK's
      * test suite LLM judge prompts. Variables use {@code {"input": "input", "output": "output"}}
      * which map to the full trace input/output via the OnlineScoringEngine variable resolution.
+     * <p>
+     * NOTE: This means the messages serialized by the SDKs and the frontend are discarded.
+     * The backend is the sole authority for the prompt used at evaluation time. See OPIK-5735.
      */
     private LlmAsJudgeCode applyTestSuitePrompt(LlmAsJudgeCode code) {
         var messages = List.of(
