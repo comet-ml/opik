@@ -52,9 +52,7 @@ def test_multi_class_publishes_store_only_sent_values__happyflow(
     opik_client.create_config(
         ConfigA(temperature=0.5, model="gpt-4"), project_name=project_name
     )
-    opik_client.create_config(
-        ConfigB(retries=3), project_name=project_name
-    )
+    opik_client.create_config(ConfigB(retries=3), project_name=project_name)
 
     manager = ConfigManager(
         project_name=project_name,

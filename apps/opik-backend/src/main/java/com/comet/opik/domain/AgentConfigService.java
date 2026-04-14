@@ -8,6 +8,8 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.validation.HasProjectIdentifier;
 import com.comet.opik.infrastructure.AgentConfigConfiguration;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.utils.JsonUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -176,7 +178,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             AgentBlueprint latest = dao.getLatestBlueprint(workspaceId, projectId,
                                     AgentBlueprint.BlueprintType.BLUEPRINT);
-                            if (latest == null || latest.values() == null || latest.values().isEmpty()) {
+                            if (latest == null || CollectionUtils.isEmpty(latest.values())) {
                                 return null;
                             }
 
@@ -201,7 +203,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                     AgentBlueprint.BlueprintType.BLUEPRINT,
                                     name,
                                     description,
-                                    AgentConfigDAO.serializeValues(remaining),
+                                    JsonUtils.writeListOrDefaultEmpty(remaining),
                                     userName,
                                     userName);
 
@@ -292,7 +294,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 blueprint.type(),
                 name,
                 blueprint.description(),
-                AgentConfigDAO.serializeValues(blueprint.values()),
+                JsonUtils.writeListOrDefaultEmpty(blueprint.values()),
                 blueprint.createdBy(),
                 blueprint.lastUpdatedBy());
 
@@ -318,7 +320,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
             AgentBlueprint blueprint = dao.getLatestBlueprint(workspaceId, projectId,
                     AgentBlueprint.BlueprintType.BLUEPRINT);
             if (blueprint == null) {
-                throw new NotFoundException("Blueprint not found");
+                throw new NotFoundException("Blueprint not found for project '%s' in workspace '%s'"
+                        .formatted(projectId, workspaceId));
             }
 
             return enrichBlueprint(dao, workspaceId, blueprint, maskId);
@@ -653,8 +656,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
             AgentBlueprint latest = dao.getLatestBlueprint(workspaceId, projectId,
                     AgentBlueprint.BlueprintType.BLUEPRINT);
-            List<AgentConfigValue> baseValues = latest != null && latest.values() != null
-                    ? latest.values()
+            List<AgentConfigValue> baseValues = latest != null
+                    ? Objects.requireNonNullElse(latest.values(), List.of())
                     : List.of();
 
             return mask.toBuilder()

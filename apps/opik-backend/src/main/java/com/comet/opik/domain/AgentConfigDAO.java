@@ -7,7 +7,6 @@ import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RowUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
-import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -282,11 +281,7 @@ interface AgentConfigDAO {
                 }
             }
 
-            List<AgentConfigValue> values = null;
-            String valuesJson = rs.getString("values");
-            if (StringUtils.isNotBlank(valuesJson)) {
-                values = JsonUtils.readValue(valuesJson, VALUES_TYPE_REF);
-            }
+            List<AgentConfigValue> values = JsonUtils.readValue(rs.getString("values"), VALUES_TYPE_REF);
 
             var typeMapper = ctx.findColumnMapperFor(BlueprintType.class);
             if (typeMapper.isEmpty()) {
@@ -310,7 +305,4 @@ interface AgentConfigDAO {
         }
     }
 
-    @NonNull static String serializeValues(List<AgentConfigValue> values) {
-        return JsonUtils.writeValueAsString(values == null ? List.of() : values);
-    }
 }
