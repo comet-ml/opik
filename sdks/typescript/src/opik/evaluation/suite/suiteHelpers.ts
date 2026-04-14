@@ -72,6 +72,29 @@ export function resolveExecutionPolicy(
 }
 
 /**
+ * Compares two lists of LLMJudge evaluators by their full serialized config.
+ * This covers assertions, model name, temperature, seed, reasoning effort, etc.
+ */
+export function evaluatorsEqual(a: LLMJudge[], b: LLMJudge[]): boolean {
+  if (a.length !== b.length) return false;
+  const serialize = (judges: LLMJudge[]) =>
+    judges.map((e) => JSON.stringify(e.toConfig())).sort();
+  const aSerialized = serialize(a);
+  const bSerialized = serialize(b);
+  return aSerialized.every((val, i) => val === bSerialized[i]);
+}
+
+/**
+ * Compares two resolved execution policies for equality.
+ */
+export function executionPolicyEqual(
+  a: Required<ExecutionPolicy>,
+  b: Required<ExecutionPolicy>
+): boolean {
+  return a.runsPerItem === b.runsPerItem && a.passThreshold === b.passThreshold;
+}
+
+/**
  * Resolves an item-level execution policy against a suite-level default.
  * Missing fields in the item policy fall back to the provided suite-level defaults.
  */

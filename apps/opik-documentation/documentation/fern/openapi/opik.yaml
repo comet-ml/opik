@@ -3971,6 +3971,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner
+      description: Get a single local runner with its registered agents
+      operationId: getRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Runner details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunner"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Runners
+      summary: Disconnect local runner
+      description: "Disconnect a local runner, terminating its connection and failing\
+        \ any pending jobs"
+      operationId: disconnectRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
   /v1/private/local-runners/{runnerId}/bridge/commands/{commandId}:
     get:
       tags:
@@ -4036,33 +4080,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LocalRunnerJob"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/{runnerId}:
-    get:
-      tags:
-      - Runners
-      summary: Get local runner
-      description: Get a single local runner with its registered agents
-      operationId: getRunner
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Runner details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocalRunner"
         "404":
           description: Not found
           content:
@@ -8363,14 +8380,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8388,14 +8397,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     ErrorMessage_Public:
       type: object
       properties:
@@ -8459,14 +8460,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8484,14 +8477,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     BlueprintPage_History:
       type: object
       properties:
@@ -17853,16 +17838,6 @@ components:
           enum:
           - text
           - chat
-        exclude_blueprint_update_for_projects:
-          uniqueItems: true
-          type: array
-          description: Optional set of project IDs to exclude from automatic blueprint
-            creation when this prompt version is committed.
-          items:
-            type: string
-            description: Optional set of project IDs to exclude from automatic blueprint
-              creation when this prompt version is committed.
-            format: uuid
         project_id:
           type: string
           description: Project ID. Takes precedence over project_name when both are
