@@ -10,15 +10,14 @@ import com.comet.opik.api.runner.BridgeCommandSubmitRequest;
 import com.comet.opik.api.runner.BridgeCommandType;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
-import com.comet.opik.api.runner.LocalRunnerConnectRequest;
-import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
-import com.comet.opik.api.runner.LocalRunnerPairResponse;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -71,7 +70,9 @@ class LocalRunnerServiceImplTest {
     private LocalRunnerConfig runnerConfig;
     private IdGenerator idGenerator;
     private ProjectService projectService;
-    private LocalRunnerServiceImpl runnerService;
+    private RunnerServiceImpl runnerService;
+    private EndpointJobServiceImpl endpointJobService;
+    private ConnectBridgeServiceImpl connectBridgeService;
 
     private int uuidCounter = 0;
 
@@ -104,8 +105,15 @@ class LocalRunnerServiceImplTest {
         when(projectService.get(eq(PROJECT_ID), any())).thenReturn(
                 Project.builder().id(PROJECT_ID).name(PROJECT_NAME).build());
 
-        runnerService = new LocalRunnerServiceImpl(stringRedis, redisClient.reactive(), runnerConfig, idGenerator,
-                projectService);
+        RequestContext requestContext = RequestContext.builder()
+                .workspaceId(WORKSPACE_ID)
+                .userName(USER_NAME)
+                .build();
+        runnerService = new RunnerServiceImpl(stringRedis, idGenerator, projectService, runnerConfig,
+                () -> endpointJobService, () -> connectBridgeService, () -> requestContext);
+        endpointJobService = new EndpointJobServiceImpl(stringRedis, redisClient.reactive(), idGenerator,
+                runnerService, runnerConfig);
+        connectBridgeService = new ConnectBridgeServiceImpl(stringRedis, idGenerator, runnerService, runnerConfig);
     }
 
     @BeforeEach
@@ -129,19 +137,16 @@ class LocalRunnerServiceImplTest {
         when(idGenerator.generateId()).thenReturn(nextUUID());
     }
 
-    private UUID pairAndConnect(String workspaceId, String userName, String runnerName) {
+    private UUID connectRunner(String workspaceId, String userName, String runnerName) {
         stubNextId();
-        LocalRunnerPairResponse pair = runnerService.generatePairingCode(workspaceId, userName, PROJECT_ID);
-        LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                .pairingCode(pair.pairingCode())
-                .runnerName(runnerName)
-                .build();
-        LocalRunnerConnectResponse resp = runnerService.connect(workspaceId, userName, req);
+        UUID runnerId = idGenerator.generateId();
+        runnerService.activateFromPairing(workspaceId, userName, PROJECT_ID, runnerId, runnerName,
+                RunnerType.ENDPOINT);
         LocalRunner.Agent agent = LocalRunner.Agent.builder()
                 .name(AGENT_NAME)
                 .build();
-        runnerService.registerAgents(resp.runnerId(), workspaceId, userName, Map.of(AGENT_NAME, agent));
-        return resp.runnerId();
+        endpointJobService.registerAgents(runnerId, workspaceId, userName, Map.of(AGENT_NAME, agent));
+        return runnerId;
     }
 
     private UUID createTestJob(String workspaceId, String userName, String agentName) {
@@ -150,7 +155,7 @@ class LocalRunnerServiceImplTest {
                 .agentName(agentName)
                 .projectId(PROJECT_ID)
                 .build();
-        return runnerService.createJob(workspaceId, userName, req);
+        return endpointJobService.createJob(workspaceId, userName, req);
     }
 
     private void waitForHeartbeatExpiry() throws InterruptedException {
@@ -158,160 +163,11 @@ class LocalRunnerServiceImplTest {
     }
 
     @Nested
-    class GeneratePairingCode {
-
-        @Test
-        void createsPairKeyInRedis() {
-            stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            RBucket<String> pairBucket = stringRedis.getBucket(
-                    "opik:runners:pair:" + resp.pairingCode());
-            assertThat(pairBucket.isExists()).isTrue();
-            String value = pairBucket.get();
-            assertThat(value).contains(resp.runnerId().toString());
-            assertThat(value).contains(WORKSPACE_ID);
-            assertThat(value).contains(PROJECT_ID.toString());
-            assertThat(pairBucket.remainTimeToLive()).isPositive();
-        }
-
-        @Test
-        void createsRunnerHash() {
-            stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            RMap<String, String> runnerMap = stringRedis.getMap(
-                    "opik:runners:runner:" + resp.runnerId());
-            assertThat(runnerMap.get("status")).isEqualTo("pairing");
-            assertThat(runnerMap.get("workspace_id")).isEqualTo(WORKSPACE_ID);
-            assertThat(runnerMap.get("user_name")).isEqualTo(USER_NAME);
-            assertThat(runnerMap.get("project_id")).isEqualTo(PROJECT_ID.toString());
-            assertThat(runnerMap.remainTimeToLive()).isPositive();
-        }
-
-        @Test
-        void addsToWorkspaceSets() {
-            stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            RScoredSortedSet<String> wsRunners = stringRedis.getScoredSortedSet(
-                    "opik:runners:workspace:" + WORKSPACE_ID + ":runners");
-            assertThat(wsRunners.contains(resp.runnerId().toString())).isTrue();
-
-            RSet<String> workspaces = stringRedis.getSet(
-                    "opik:runners:workspaces:with_runners");
-            assertThat(workspaces.contains(WORKSPACE_ID)).isTrue();
-        }
-
-        @Test
-        void doesNotSetUserRunnerMappingUntilConnect() {
-            stubNextId();
-            runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            RBucket<String> userRunner = stringRedis.getBucket(
-                    "opik:runners:workspace:" + WORKSPACE_ID + ":project:" + PROJECT_ID + ":user:" + USER_NAME
-                            + ":runner");
-            assertThat(userRunner.isExists()).isFalse();
-        }
-
-        @Test
-        void addsToProjectRunnersSet() {
-            stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            RSet<String> projectRunners = stringRedis.getSet(
-                    "opik:runners:workspace:" + WORKSPACE_ID + ":project:" + PROJECT_ID + ":runners");
-            assertThat(projectRunners.contains(resp.runnerId().toString())).isTrue();
-        }
-    }
-
-    @Nested
-    class Connect {
-
-        @Test
-        void withPairingCode_claimsPairAndReturnsCredentials() {
-            stubNextId();
-            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                    .pairingCode(pair.pairingCode())
-                    .runnerName(RUNNER_NAME)
-                    .build();
-            LocalRunnerConnectResponse resp = runnerService.connect(WORKSPACE_ID, USER_NAME, req);
-
-            assertThat(resp.runnerId()).isEqualTo(pair.runnerId());
-            assertThat(resp.projectId()).isEqualTo(PROJECT_ID);
-            assertThat(resp.projectName()).isEqualTo(PROJECT_NAME);
-
-            RBucket<String> pairBucket = stringRedis.getBucket(
-                    "opik:runners:pair:" + pair.pairingCode());
-            assertThat(pairBucket.isExists()).isFalse();
-
-            RMap<String, String> runnerMap = stringRedis.getMap(
-                    "opik:runners:runner:" + resp.runnerId());
-            assertThat(runnerMap.get("status")).isEqualTo("connected");
-            assertThat(runnerMap.get("name")).isEqualTo(RUNNER_NAME);
-            assertThat(runnerMap.get("connected_at")).isNotBlank();
-            assertThat(runnerMap.get("project_id")).isEqualTo(PROJECT_ID.toString());
-        }
-
-        @Test
-        void withPairingCode_removesRunnerTTL() {
-            stubNextId();
-            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                    .pairingCode(pair.pairingCode())
-                    .runnerName(RUNNER_NAME)
-                    .build();
-            runnerService.connect(WORKSPACE_ID, USER_NAME, req);
-
-            RMap<String, String> runnerMap = stringRedis.getMap(
-                    "opik:runners:runner:" + pair.runnerId());
-            assertThat(runnerMap.remainTimeToLive()).isEqualTo(-1);
-        }
-
-        @Test
-        void withPairingCode_setsHeartbeat() {
-            stubNextId();
-            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-
-            LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                    .pairingCode(pair.pairingCode())
-                    .runnerName(RUNNER_NAME)
-                    .build();
-            LocalRunnerConnectResponse resp = runnerService.connect(WORKSPACE_ID, USER_NAME, req);
-
-            RBucket<String> hb = stringRedis.getBucket(
-                    "opik:runners:runner:" + resp.runnerId() + ":heartbeat");
-            assertThat(hb.isExists()).isTrue();
-            assertThat(hb.remainTimeToLive()).isPositive();
-        }
-
-        @Test
-        void replacesExistingRunner() {
-            UUID oldRunnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, "old-runner");
-            UUID newRunnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, "new-runner");
-
-            assertThat(newRunnerId).isNotEqualTo(oldRunnerId);
-
-            RBucket<String> oldHb = stringRedis.getBucket(
-                    "opik:runners:runner:" + oldRunnerId + ":heartbeat");
-            assertThat(oldHb.isExists()).isFalse();
-
-            RBucket<String> userRunner = stringRedis.getBucket(
-                    "opik:runners:workspace:" + WORKSPACE_ID + ":project:" + PROJECT_ID + ":user:" + USER_NAME
-                            + ":runner");
-            assertThat(userRunner.get()).isEqualTo(newRunnerId.toString());
-        }
-    }
-
-    @Nested
     class Heartbeat {
 
         @Test
         void refreshesHeartbeatTTL() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             LocalRunnerHeartbeatResponse resp = runnerService.heartbeat(runnerId, WORKSPACE_ID, USER_NAME, null);
             assertThat(resp).isNotNull();
@@ -324,11 +180,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void updatesLastHeartbeatOnActiveJobs() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             stubNextId();
-            LocalRunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            LocalRunnerJob claimed = endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
             assertThat(claimed).isNotNull();
 
             runnerService.heartbeat(runnerId, WORKSPACE_ID, USER_NAME, null);
@@ -344,16 +200,16 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void createsJobAndEnqueues() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             stubNextId();
             CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME)
                     .projectId(PROJECT_ID)
                     .build();
-            UUID jobId = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
+            UUID jobId = endpointJobService.createJob(WORKSPACE_ID, USER_NAME, req);
 
-            LocalRunnerJob job = runnerService.getJob(jobId, WORKSPACE_ID, USER_NAME);
+            LocalRunnerJob job = endpointJobService.getJob(jobId, WORKSPACE_ID, USER_NAME);
             assertThat(job.id()).isEqualTo(jobId);
             assertThat(job.runnerId()).isEqualTo(runnerId);
             assertThat(job.agentName()).isEqualTo(AGENT_NAME);
@@ -375,10 +231,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void removesFromPendingAddsToActive() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
             RList<String> pending = stringRedis.getList(
                     "opik:runners:jobs:" + runnerId + ":pending");
@@ -395,7 +251,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void excludesOtherWorkspaces() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             String fakeJobId = UUID.randomUUID().toString();
@@ -411,19 +267,21 @@ class LocalRunnerServiceImplTest {
                     "opik:runners:runner:" + runnerId + ":jobs");
             runnerJobs.add(Instant.now().toEpochMilli(), fakeJobId);
 
-            LocalRunnerJob.LocalRunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, USER_NAME, 0,
+            LocalRunnerJob.LocalRunnerJobPage page = endpointJobService.listJobs(runnerId, null, WORKSPACE_ID,
+                    USER_NAME, 0,
                     10);
             assertThat(page.content()).hasSize(1);
         }
 
         @Test
         void skipsExpiredJobHashes() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             stringRedis.getMap("opik:runners:job:" + jobId).delete();
 
-            LocalRunnerJob.LocalRunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, USER_NAME, 0,
+            LocalRunnerJob.LocalRunnerJobPage page = endpointJobService.listJobs(runnerId, null, WORKSPACE_ID,
+                    USER_NAME, 0,
                     10);
             assertThat(page.content()).isEmpty();
         }
@@ -434,10 +292,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void appendsEntriesToList() {
-            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            runnerService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
                     List.of(LocalRunnerLogEntry.builder().stream("stdout").text("hello").build()));
 
             RList<String> logsList = stringRedis.getList(
@@ -447,12 +305,12 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void appendsMultipleBatches() {
-            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            runnerService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
                     List.of(LocalRunnerLogEntry.builder().stream("stdout").text("batch1").build()));
-            runnerService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
                     List.of(LocalRunnerLogEntry.builder().stream("stdout").text("batch2").build()));
 
             RList<String> logsList = stringRedis.getList(
@@ -466,14 +324,14 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void completedJob() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
             ObjectNode resultNode = MAPPER.createObjectNode();
             resultNode.put("output", "success");
 
-            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).result(resultNode)
                             .build());
 
@@ -490,11 +348,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void failedJob() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
-            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.FAILED).error("something broke")
                             .build());
 
@@ -507,12 +365,12 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void setsTraceId() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
             UUID traceId = UUID.randomUUID();
-            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).traceId(traceId)
                             .build());
 
@@ -523,14 +381,14 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void setsTTLOnJobAndLogs() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
-            runnerService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.appendLogs(jobId, WORKSPACE_ID, USER_NAME,
                     List.of(LocalRunnerLogEntry.builder().stream("stdout").text("log").build()));
 
-            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).build());
 
             RMap<String, String> jobMap = stringRedis.getMap(
@@ -544,12 +402,12 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void inFlightRunningSetsTraceIdWithoutCompletingJob() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
             UUID traceId = UUID.randomUUID();
-            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.RUNNING).traceId(traceId)
                             .build());
 
@@ -568,18 +426,18 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void inFlightRunningThenTerminalCompletes() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
             UUID traceId = UUID.randomUUID();
-            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.RUNNING).traceId(traceId)
                             .build());
 
             ObjectNode resultNode = MAPPER.createObjectNode();
             resultNode.put("output", "done");
-            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).result(resultNode)
                             .build());
 
@@ -597,11 +455,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void rejectsPendingStatus() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
-            assertThatThrownBy(() -> runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
+            assertThatThrownBy(() -> endpointJobService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.PENDING).build()))
                     .isInstanceOf(ClientErrorException.class);
         }
@@ -612,11 +470,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void cancelActiveJob_addsToCancellationSet() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
-            runnerService.cancelJob(jobId, WORKSPACE_ID, USER_NAME);
+            endpointJobService.cancelJob(jobId, WORKSPACE_ID, USER_NAME);
 
             RMap<String, String> jobMap = stringRedis.getMap(
                     "opik:runners:job:" + jobId);
@@ -630,10 +488,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void cancelPendingJob_removesFromPendingQueue() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            runnerService.cancelJob(jobId, WORKSPACE_ID, USER_NAME);
+            endpointJobService.cancelJob(jobId, WORKSPACE_ID, USER_NAME);
 
             RList<String> pending = stringRedis.getList(
                     "opik:runners:jobs:" + runnerId + ":pending");
@@ -651,23 +509,8 @@ class LocalRunnerServiceImplTest {
     }
 
     @Test
-    void fullFlow_pairConnectCreateJobNextJobReportResult() {
-        stubNextId();
-        LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
-        assertThat(pair.pairingCode()).hasSize(6);
-
-        LocalRunnerConnectRequest connectReq = LocalRunnerConnectRequest.builder()
-                .pairingCode(pair.pairingCode())
-                .runnerName(RUNNER_NAME)
-                .build();
-        LocalRunnerConnectResponse connectResp = runnerService.connect(WORKSPACE_ID, USER_NAME, connectReq);
-        UUID runnerId = connectResp.runnerId();
-        assertThat(runnerId).isEqualTo(pair.runnerId());
-        assertThat(connectResp.projectId()).isEqualTo(PROJECT_ID);
-        assertThat(connectResp.projectName()).isEqualTo(PROJECT_NAME);
-
-        LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().build();
-        runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agentMeta));
+    void fullFlow_connectCreateJobNextJobReportResult() {
+        UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
         LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, USER_NAME, PROJECT_ID, null, 0,
                 25);
@@ -682,12 +525,12 @@ class LocalRunnerServiceImplTest {
                 .projectId(PROJECT_ID)
                 .inputs(inputs)
                 .build();
-        UUID jobId = runnerService.createJob(WORKSPACE_ID, USER_NAME, jobReq);
+        UUID jobId = endpointJobService.createJob(WORKSPACE_ID, USER_NAME, jobReq);
 
-        LocalRunnerJob created = runnerService.getJob(jobId, WORKSPACE_ID, USER_NAME);
+        LocalRunnerJob created = endpointJobService.getJob(jobId, WORKSPACE_ID, USER_NAME);
         assertThat(created.status().getValue()).isEqualTo("pending");
 
-        LocalRunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+        LocalRunnerJob claimed = endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
         assertThat(claimed).isNotNull();
         assertThat(claimed.id()).isEqualTo(jobId);
         assertThat(claimed.status().getValue()).isEqualTo("running");
@@ -695,25 +538,25 @@ class LocalRunnerServiceImplTest {
         LocalRunnerHeartbeatResponse hbResp = runnerService.heartbeat(runnerId, WORKSPACE_ID, USER_NAME, null);
         assertThat(hbResp.cancelledJobIds()).isEmpty();
 
-        runnerService.appendLogs(claimed.id(), WORKSPACE_ID, USER_NAME,
+        endpointJobService.appendLogs(claimed.id(), WORKSPACE_ID, USER_NAME,
                 List.of(LocalRunnerLogEntry.builder().stream("stdout").text("Processing...").build()));
 
         UUID traceId = UUID.randomUUID();
         ObjectNode resultNode = MAPPER.createObjectNode();
         resultNode.put("answer", "world");
-        runnerService.reportResult(claimed.id(), WORKSPACE_ID, USER_NAME,
+        endpointJobService.reportResult(claimed.id(), WORKSPACE_ID, USER_NAME,
                 LocalRunnerJobResultRequest.builder()
                         .status(LocalRunnerJobStatus.COMPLETED)
                         .result(resultNode)
                         .traceId(traceId)
                         .build());
 
-        LocalRunnerJob finalJob = runnerService.getJob(claimed.id(), WORKSPACE_ID, USER_NAME);
+        LocalRunnerJob finalJob = endpointJobService.getJob(claimed.id(), WORKSPACE_ID, USER_NAME);
         assertThat(finalJob.status().getValue()).isEqualTo("completed");
         assertThat(finalJob.traceId()).isEqualTo(traceId);
         assertThat(finalJob.result().get("answer").asText()).isEqualTo("world");
 
-        List<LocalRunnerLogEntry> logs = runnerService.getJobLogs(claimed.id(), 0, WORKSPACE_ID, USER_NAME);
+        List<LocalRunnerLogEntry> logs = endpointJobService.getJobLogs(claimed.id(), 0, WORKSPACE_ID, USER_NAME);
         assertThat(logs).hasSize(1);
         assertThat(logs.get(0).text()).isEqualTo("Processing...");
     }
@@ -725,7 +568,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void listRunners_excludesOtherUsersRunners() {
-            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             LocalRunner.LocalRunnerPage page = runnerService.listRunners(WORKSPACE_ID, OTHER_USER, PROJECT_ID, null, 0,
                     25);
@@ -735,7 +578,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void getRunner_rejectsOtherUser() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.getRunner(WORKSPACE_ID, OTHER_USER, runnerId))
                     .isExactlyInstanceOf(NotFoundException.class)
@@ -744,9 +587,9 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void registerAgents_rejectsOtherUser() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            assertThatThrownBy(() -> runnerService.registerAgents(runnerId, WORKSPACE_ID, OTHER_USER,
+            assertThatThrownBy(() -> endpointJobService.registerAgents(runnerId, WORKSPACE_ID, OTHER_USER,
                     Map.of(AGENT_NAME, LocalRunner.Agent.builder().build())))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("Runner not found");
@@ -754,7 +597,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void heartbeat_rejectsOtherUser() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.heartbeat(runnerId, WORKSPACE_ID, OTHER_USER, null))
                     .isExactlyInstanceOf(ClientErrorException.class)
@@ -763,61 +606,61 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void createJob_rejectsOtherUsersRunner() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME)
                     .projectId(PROJECT_ID)
                     .build();
 
-            assertThatThrownBy(() -> runnerService.createJob(WORKSPACE_ID, OTHER_USER, req))
+            assertThatThrownBy(() -> endpointJobService.createJob(WORKSPACE_ID, OTHER_USER, req))
                     .isExactlyInstanceOf(NotFoundException.class);
         }
 
         @Test
         void nextJob_rejectsOtherUser() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            assertThatThrownBy(() -> runnerService.nextJob(runnerId, WORKSPACE_ID, OTHER_USER))
+            assertThatThrownBy(() -> endpointJobService.nextJob(runnerId, WORKSPACE_ID, OTHER_USER))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("Runner not found");
         }
 
         @Test
         void listJobs_rejectsOtherUser() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            assertThatThrownBy(() -> runnerService.listJobs(runnerId, null, WORKSPACE_ID, OTHER_USER, 0, 10))
+            assertThatThrownBy(() -> endpointJobService.listJobs(runnerId, null, WORKSPACE_ID, OTHER_USER, 0, 10))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("Runner not found");
         }
 
         @Test
         void getJob_rejectsOtherUser() {
-            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            assertThatThrownBy(() -> runnerService.getJob(jobId, WORKSPACE_ID, OTHER_USER))
+            assertThatThrownBy(() -> endpointJobService.getJob(jobId, WORKSPACE_ID, OTHER_USER))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("not found");
         }
 
         @Test
         void getJobLogs_rejectsOtherUser() {
-            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            assertThatThrownBy(() -> runnerService.getJobLogs(jobId, 0, WORKSPACE_ID, OTHER_USER))
+            assertThatThrownBy(() -> endpointJobService.getJobLogs(jobId, 0, WORKSPACE_ID, OTHER_USER))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("not found");
         }
 
         @Test
         void appendLogs_rejectsOtherUser() {
-            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            assertThatThrownBy(() -> runnerService.appendLogs(jobId, WORKSPACE_ID, OTHER_USER,
+            assertThatThrownBy(() -> endpointJobService.appendLogs(jobId, WORKSPACE_ID, OTHER_USER,
                     List.of(LocalRunnerLogEntry.builder().stream("stdout").text("hack").build())))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("not found");
@@ -825,11 +668,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void reportResult_rejectsOtherUser() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
+            endpointJobService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).block();
 
-            assertThatThrownBy(() -> runnerService.reportResult(jobId, WORKSPACE_ID, OTHER_USER,
+            assertThatThrownBy(() -> endpointJobService.reportResult(jobId, WORKSPACE_ID, OTHER_USER,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).build()))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("not found");
@@ -837,10 +680,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void cancelJob_rejectsOtherUser() {
-            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            assertThatThrownBy(() -> runnerService.cancelJob(jobId, WORKSPACE_ID, OTHER_USER))
+            assertThatThrownBy(() -> endpointJobService.cancelJob(jobId, WORKSPACE_ID, OTHER_USER))
                     .isExactlyInstanceOf(NotFoundException.class)
                     .hasMessageContaining("not found");
         }
@@ -848,8 +691,8 @@ class LocalRunnerServiceImplTest {
 
     // ========== Bridge Command Tests ==========
 
-    private UUID pairAndConnectWithBridge(String workspaceId, String userName, String runnerName) {
-        UUID runnerId = pairAndConnect(workspaceId, userName, runnerName);
+    private UUID connectRunnerWithBridge(String workspaceId, String userName, String runnerName) {
+        UUID runnerId = connectRunner(workspaceId, userName, runnerName);
         runnerService.heartbeat(runnerId, workspaceId, userName, List.of("jobs", "bridge"));
         return runnerId;
     }
@@ -861,7 +704,7 @@ class LocalRunnerServiceImplTest {
                 .args(MAPPER.createObjectNode().put("path", "src/main.py"))
                 .timeoutSeconds(10)
                 .build();
-        return runnerService.createBridgeCommand(runnerId, workspaceId, userName, req);
+        return connectBridgeService.createBridgeCommand(runnerId, workspaceId, userName, req);
     }
 
     @Nested
@@ -869,7 +712,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void createsCommandHashInRedis() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
             RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
@@ -884,7 +727,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void pushesToPendingList() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
             RList<String> pending = stringRedis.getList("opik:runners:bridge:" + runnerId + ":pending");
@@ -900,7 +743,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void disconnectedRunner_throws404() throws InterruptedException {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             waitForHeartbeatExpiry();
 
             assertThatThrownBy(() -> submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME))
@@ -909,7 +752,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void noBridgeCapability_throws409() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME))
                     .isExactlyInstanceOf(ClientErrorException.class)
@@ -920,7 +763,7 @@ class LocalRunnerServiceImplTest {
         void queueFull_throws429() {
             runnerConfig.setBridgeMaxPendingPerRunner(2);
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
                 submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
@@ -936,7 +779,7 @@ class LocalRunnerServiceImplTest {
         void rateLimitExceeded_throws429() {
             runnerConfig.setBridgeMaxCommandsPerMinute(2);
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
                 submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
@@ -952,17 +795,17 @@ class LocalRunnerServiceImplTest {
         void writeRateLimitExceeded_throws429() {
             runnerConfig.setBridgeMaxWriteCommandsPerMinute(1);
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 stubNextId();
                 BridgeCommandSubmitRequest writeReq = BridgeCommandSubmitRequest.builder()
                         .type(BridgeCommandType.WRITE_FILE)
                         .args(MAPPER.createObjectNode().put("path", "f.py").put("content", "x"))
                         .build();
-                runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq);
+                connectBridgeService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq);
 
                 stubNextId();
                 assertThatThrownBy(
-                        () -> runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq))
+                        () -> connectBridgeService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, writeReq))
                         .isExactlyInstanceOf(ClientErrorException.class)
                         .hasMessageContaining("429");
             } finally {
@@ -972,14 +815,14 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void clampsTimeoutToMax() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             stubNextId();
             BridgeCommandSubmitRequest req = BridgeCommandSubmitRequest.builder()
                     .type(BridgeCommandType.READ_FILE)
                     .args(MAPPER.createObjectNode().put("path", "f.py"))
                     .timeoutSeconds(9999)
                     .build();
-            UUID commandId = runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
+            UUID commandId = connectBridgeService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
 
             RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             assertThat(cmdMap.get("timeout_seconds")).isEqualTo("120");
@@ -989,7 +832,7 @@ class LocalRunnerServiceImplTest {
         void payloadTooLarge_throws400() {
             runnerConfig.setBridgeMaxPayloadBytes(100);
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 stubNextId();
                 StringBuilder largeValue = new StringBuilder();
                 for (int i = 0; i < 200; i++) {
@@ -1000,7 +843,8 @@ class LocalRunnerServiceImplTest {
                         .args(MAPPER.createObjectNode().put("data", largeValue.toString()))
                         .build();
 
-                assertThatThrownBy(() -> runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req))
+                assertThatThrownBy(
+                        () -> connectBridgeService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req))
                         .isExactlyInstanceOf(ClientErrorException.class)
                         .hasMessageContaining("400");
             } finally {
@@ -1014,10 +858,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void singlePending_returnsOneAndMovesToActive() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
-            BridgeCommandBatchResponse batch = runnerService
+            BridgeCommandBatchResponse batch = connectBridgeService
                     .nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             assertThat(batch.commands()).hasSize(1);
@@ -1034,12 +878,12 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void multiplePending_returnsBatch() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID cmd1 = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
             UUID cmd2 = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
             UUID cmd3 = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
-            BridgeCommandBatchResponse batch = runnerService
+            BridgeCommandBatchResponse batch = connectBridgeService
                     .nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             assertThat(batch.commands()).hasSize(3);
@@ -1049,12 +893,12 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void respectsMaxCommands() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
             submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
             submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
-            BridgeCommandBatchResponse batch = runnerService
+            BridgeCommandBatchResponse batch = connectBridgeService
                     .nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 2).block();
 
             assertThat(batch.commands()).hasSize(2);
@@ -1067,9 +911,9 @@ class LocalRunnerServiceImplTest {
         void noPending_blocksAndReturnsEmpty() {
             runnerConfig.setBridgePollTimeout(Duration.seconds(1));
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-                BridgeCommandBatchResponse batch = runnerService
+                BridgeCommandBatchResponse batch = connectBridgeService
                         .nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
                 assertThat(batch.commands()).isEmpty();
@@ -1084,12 +928,12 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void completed_updatesHashAndRemovesFromActive() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             ObjectNode resultNode = MAPPER.createObjectNode().put("content", "file contents");
-            runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+            connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder()
                             .status(BridgeCommandStatus.COMPLETED)
                             .result(resultNode)
@@ -1108,14 +952,14 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void failed_updatesHashWithError() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             ObjectNode errorNode = MAPPER.createObjectNode()
                     .put("code", "file_not_found")
                     .put("message", "File not found");
-            runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+            connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder()
                             .status(BridgeCommandStatus.FAILED)
                             .error(errorNode)
@@ -1128,15 +972,15 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void duplicate_throws409() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
-            runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+            connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
                             .result(MAPPER.createObjectNode()).build());
 
-            assertThatThrownBy(() -> runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
+            assertThatThrownBy(() -> connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
                     commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
                             .result(MAPPER.createObjectNode()).build()))
                     .isExactlyInstanceOf(ClientErrorException.class)
@@ -1145,24 +989,25 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void commandNotOwned_throws404() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             UUID otherRunner = UUID.randomUUID();
-            assertThatThrownBy(() -> runnerService.reportBridgeCommandResult(otherRunner, WORKSPACE_ID, USER_NAME,
-                    commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
-                            .result(MAPPER.createObjectNode()).build()))
+            assertThatThrownBy(
+                    () -> connectBridgeService.reportBridgeCommandResult(otherRunner, WORKSPACE_ID, USER_NAME,
+                            commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
+                                    .result(MAPPER.createObjectNode()).build()))
                     .isExactlyInstanceOf(NotFoundException.class);
         }
 
         @Test
         void writesDoneSentinel() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
-            runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+            connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
                             .result(MAPPER.createObjectNode()).build());
 
@@ -1172,11 +1017,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void rejectsNonReportableStatus_PENDING() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
-            assertThatThrownBy(() -> runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
+            assertThatThrownBy(() -> connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
                     commandId, BridgeCommandResultRequest.builder().status(BridgeCommandStatus.PENDING).build()))
                     .isExactlyInstanceOf(ClientErrorException.class)
                     .hasMessageContaining("400");
@@ -1184,11 +1029,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void rejectsNonReportableStatus_TIMED_OUT() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
-            assertThatThrownBy(() -> runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
+            assertThatThrownBy(() -> connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
                     commandId,
                     BridgeCommandResultRequest.builder().status(BridgeCommandStatus.TIMED_OUT).build()))
                     .isExactlyInstanceOf(ClientErrorException.class)
@@ -1199,9 +1044,9 @@ class LocalRunnerServiceImplTest {
         void resultPayloadTooLarge_throws400() {
             runnerConfig.setBridgeMaxPayloadBytes(50);
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-                runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+                connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
                 StringBuilder largeValue = new StringBuilder();
                 for (int i = 0; i < 200; i++) {
@@ -1209,7 +1054,8 @@ class LocalRunnerServiceImplTest {
                 }
                 ObjectNode bigResult = MAPPER.createObjectNode().put("data", largeValue.toString());
 
-                assertThatThrownBy(() -> runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME,
+                assertThatThrownBy(() -> connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID,
+                        USER_NAME,
                         commandId,
                         BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED).result(bigResult)
                                 .build()))
@@ -1226,18 +1072,18 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void alreadyCompleted_returnsImmediately() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             ObjectNode resultNode = MAPPER.createObjectNode().put("content", "data");
-            runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+            connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder()
                             .status(BridgeCommandStatus.COMPLETED)
                             .result(resultNode)
                             .build());
 
-            BridgeCommand cmd = runnerService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME,
+            BridgeCommand cmd = connectBridgeService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME,
                     commandId, 5).block();
 
             assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.COMPLETED);
@@ -1246,14 +1092,14 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void pendingThenCompleted_blocksAndReturns() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             Thread reporter = new Thread(() -> {
                 try {
                     Thread.sleep(500);
-                    runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+                    connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                             BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
                                     .result(MAPPER.createObjectNode()).build());
                 } catch (InterruptedException ignored) {
@@ -1261,7 +1107,7 @@ class LocalRunnerServiceImplTest {
             });
             reporter.start();
 
-            BridgeCommand cmd = runnerService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME,
+            BridgeCommand cmd = connectBridgeService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME,
                     commandId, 10).block();
 
             assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.COMPLETED);
@@ -1269,10 +1115,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void timeout_returnsNonTerminal() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
-            BridgeCommand cmd = runnerService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME,
+            BridgeCommand cmd = connectBridgeService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME,
                     commandId, 1).block();
 
             assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.PENDING);
@@ -1280,10 +1126,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void noWait_returnsCurrentState() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
-            BridgeCommand cmd = runnerService.getBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, commandId);
+            BridgeCommand cmd = connectBridgeService.getBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, commandId);
 
             assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.PENDING);
             assertThat(cmd.commandId()).isEqualTo(commandId);
@@ -1292,10 +1138,10 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void timeout_doesNotCreateOrphanedDoneQueueKey() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
 
-            runnerService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, commandId, 1).block();
+            connectBridgeService.awaitBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, commandId, 1).block();
 
             // Redis BLPOP does not create the key on timeout — verify no orphaned done queue
             RList<String> doneList = stringRedis.getList("opik:runners:bridge:command:" + commandId + ":done");
@@ -1304,11 +1150,11 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void doneQueueTtl_isShort() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
-            runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+            connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                     BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
                             .result(MAPPER.createObjectNode()).build());
 
@@ -1325,9 +1171,9 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void concurrentReports_onlyOneSucceeds() throws InterruptedException {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             java.util.concurrent.atomic.AtomicInteger successes = new java.util.concurrent.atomic.AtomicInteger(0);
             java.util.concurrent.atomic.AtomicInteger conflicts = new java.util.concurrent.atomic.AtomicInteger(0);
@@ -1336,7 +1182,7 @@ class LocalRunnerServiceImplTest {
             Runnable reporter = () -> {
                 try {
                     latch.await();
-                    runnerService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
+                    connectBridgeService.reportBridgeCommandResult(runnerId, WORKSPACE_ID, USER_NAME, commandId,
                             BridgeCommandResultRequest.builder().status(BridgeCommandStatus.COMPLETED)
                                     .result(MAPPER.createObjectNode()).build());
                     successes.incrementAndGet();
@@ -1366,7 +1212,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void storesCapabilitiesOnRunner() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             runnerService.heartbeat(runnerId, WORKSPACE_ID, USER_NAME, List.of("jobs", "bridge"));
 
             RMap<String, String> runnerMap = stringRedis.getMap("opik:runners:runner:" + runnerId);
@@ -1375,7 +1221,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void defaultsToJobsWithoutCapabilities() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             runnerService.heartbeat(runnerId, WORKSPACE_ID, USER_NAME, null);
 
             LocalRunner runner = runnerService.getRunner(WORKSPACE_ID, USER_NAME, runnerId);
@@ -1384,7 +1230,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void getRunnerIncludesCapabilities() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             runnerService.heartbeat(runnerId, WORKSPACE_ID, USER_NAME, List.of("jobs", "bridge"));
 
             LocalRunner runner = runnerService.getRunner(WORKSPACE_ID, USER_NAME, runnerId);
@@ -1397,7 +1243,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void patchAndGetChecklist() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             ObjectNode patch = MAPPER.createObjectNode();
             ObjectNode instrumentation = patch.putObject("instrumentation");
@@ -1415,7 +1261,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void patchDeepMergesFields() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             ObjectNode initial = MAPPER.createObjectNode();
             ObjectNode inst = initial.putObject("instrumentation");
@@ -1438,7 +1284,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void getRunnerWithNoChecklist_returnsNull() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             LocalRunner runner = runnerService.getRunner(WORKSPACE_ID, USER_NAME, runnerId);
             assertThat(runner.checklist()).isNull();
         }
@@ -1452,7 +1298,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void patchChecklist_nonObject_throws400() {
-            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunner(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.patchChecklist(runnerId, WORKSPACE_ID, USER_NAME,
                     MAPPER.createArrayNode().add("x")))
@@ -1468,9 +1314,9 @@ class LocalRunnerServiceImplTest {
         void deadRunner_marksCommandsTimedOut() throws InterruptedException {
             runnerConfig.setDeadRunnerPurgeTime(Duration.seconds(0));
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-                runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+                connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
                 waitForHeartbeatExpiry();
                 runnerService.reapDeadRunners();
@@ -1486,9 +1332,9 @@ class LocalRunnerServiceImplTest {
         void deadRunner_writesDoneSentinels() throws InterruptedException {
             runnerConfig.setDeadRunnerPurgeTime(Duration.seconds(0));
             try {
-                UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 UUID commandId = submitTestBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME);
-                runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+                connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
                 waitForHeartbeatExpiry();
                 runnerService.reapDeadRunners();
@@ -1502,7 +1348,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void activeCommandPastDeadline_marksTimedOut() {
-            UUID runnerId = pairAndConnectWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = connectRunnerWithBridge(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             stubNextId();
             BridgeCommandSubmitRequest req = BridgeCommandSubmitRequest.builder()
@@ -1510,13 +1356,13 @@ class LocalRunnerServiceImplTest {
                     .args(MAPPER.createObjectNode().put("path", "f.py"))
                     .timeoutSeconds(1)
                     .build();
-            UUID commandId = runnerService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
-            runnerService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
+            UUID commandId = connectBridgeService.createBridgeCommand(runnerId, WORKSPACE_ID, USER_NAME, req);
+            connectBridgeService.nextBridgeCommands(runnerId, WORKSPACE_ID, USER_NAME, 10).block();
 
             RMap<String, String> cmdMap = stringRedis.getMap("opik:runners:bridge:command:" + commandId);
             cmdMap.put("picked_up_at", Instant.now().minusSeconds(60).toString());
 
-            runnerService.reapStaleBridgeCommands(runnerId);
+            connectBridgeService.reapStaleBridgeCommands(runnerId);
 
             assertThat(cmdMap.get("status")).isEqualTo("timed_out");
         }

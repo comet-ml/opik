@@ -63,7 +63,7 @@ public class ExperimentAggregatesModel {
     }
 
     /**
-     * Aggregated pass rate metrics for an evaluation suite experiment.
+     * Aggregated pass rate metrics for a test suite experiment.
      *
      * @param experimentId The experiment ID
      * @param passRate     The pass rate (passed / total), zero if not applicable

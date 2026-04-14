@@ -1,13 +1,13 @@
 export * from "./types";
 export * from "./suiteResultConstructor";
-export { evaluateSuite } from "./evaluateSuite";
-export type { EvaluateSuiteOptions } from "./evaluateSuite";
-export { EvaluationSuite } from "./EvaluationSuite";
+export { evaluateTestSuite } from "./evaluateTestSuite";
+export type { EvaluateTestSuiteOptions } from "./evaluateTestSuite";
+export { TestSuite } from "./TestSuite";
 export type {
-  EvaluationSuiteRunOptions,
+  TestSuiteRunOptions,
   AddItemOptions,
-  CreateEvaluationSuiteOptions,
-} from "./EvaluationSuite";
+  CreateTestSuiteOptions,
+} from "./TestSuite";
 export {
   serializeEvaluators,
   deserializeEvaluators,

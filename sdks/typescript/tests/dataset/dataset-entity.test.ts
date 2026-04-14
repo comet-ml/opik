@@ -10,7 +10,11 @@ import {
   JsonParseError,
 } from "@/errors/common/errors";
 import { logger } from "@/utils/logger";
-import { mockAPIFunction, mockAPIFunctionWithStream } from "../mockUtils";
+import {
+  createMockHttpResponsePromise,
+  mockAPIFunction,
+  mockAPIFunctionWithStream,
+} from "../mockUtils";
 import { DatasetItemWriteSource } from "@/rest_api/api";
 
 describe("Dataset entity operations", () => {
@@ -480,6 +484,142 @@ describe("Dataset entity operations", () => {
       await expect(dataset.insertFromJson(invalidItemsJson)).rejects.toThrow(
         JsonItemNotObjectError
       );
+    });
+  });
+
+  describe("getItemsCount", () => {
+    it("should return the item count from the API", async () => {
+      vi.spyOn(
+        opikClient.api.datasets,
+        "getDatasetByIdentifier"
+      ).mockReturnValue(
+        createMockHttpResponsePromise({
+          name: "test-dataset",
+          datasetItemsCount: 42,
+        })
+      );
+
+      const count = await dataset.getItemsCount();
+      expect(count).toBe(42);
+    });
+
+    it("should return undefined when the count is not available", async () => {
+      vi.spyOn(
+        opikClient.api.datasets,
+        "getDatasetByIdentifier"
+      ).mockReturnValue(
+        createMockHttpResponsePromise({ name: "test-dataset" })
+      );
+
+      const count = await dataset.getItemsCount();
+      expect(count).toBeUndefined();
+    });
+
+    it("should cache the count and only call the API once", async () => {
+      const spy = vi
+        .spyOn(opikClient.api.datasets, "getDatasetByIdentifier")
+        .mockReturnValue(
+          createMockHttpResponsePromise({
+            name: "test-dataset",
+            datasetItemsCount: 10,
+          })
+        );
+
+      const count1 = await dataset.getItemsCount();
+      const count2 = await dataset.getItemsCount();
+
+      expect(count1).toBe(10);
+      expect(count2).toBe(10);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it("should invalidate cache after insert", async () => {
+      const spy = vi
+        .spyOn(opikClient.api.datasets, "getDatasetByIdentifier")
+        .mockReturnValue(
+          createMockHttpResponsePromise({
+            name: "test-dataset",
+            datasetItemsCount: 5,
+          })
+        );
+
+      // First call: fetches from API
+      await dataset.getItemsCount();
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Insert an item (triggers cache invalidation)
+      await dataset.insert([{ id: "new-item", input: "test" }]);
+
+      // Update mock to return new count
+      spy.mockReturnValue(
+        createMockHttpResponsePromise({
+          name: "test-dataset",
+          datasetItemsCount: 6,
+        })
+      );
+
+      // Second call: should fetch again
+      const count = await dataset.getItemsCount();
+      expect(count).toBe(6);
+      expect(spy).toHaveBeenCalledTimes(2);
+    });
+
+    it("should invalidate cache after delete", async () => {
+      const spy = vi
+        .spyOn(opikClient.api.datasets, "getDatasetByIdentifier")
+        .mockReturnValue(
+          createMockHttpResponsePromise({
+            name: "test-dataset",
+            datasetItemsCount: 5,
+          })
+        );
+
+      // First call: fetches from API
+      await dataset.getItemsCount();
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Delete an item (triggers cache invalidation)
+      await dataset.delete(["item-1"]);
+
+      // Update mock to return new count
+      spy.mockReturnValue(
+        createMockHttpResponsePromise({
+          name: "test-dataset",
+          datasetItemsCount: 4,
+        })
+      );
+
+      // Second call: should fetch again
+      const count = await dataset.getItemsCount();
+      expect(count).toBe(4);
+      expect(spy).toHaveBeenCalledTimes(2);
+    });
+
+    it("should pass the dataset name and project name to the API", async () => {
+      const datasetWithProject = new Dataset(
+        {
+          id: "ds-with-project",
+          name: "test-dataset-proj",
+          projectName: "my-project",
+        },
+        opikClient
+      );
+
+      const spy = vi
+        .spyOn(opikClient.api.datasets, "getDatasetByIdentifier")
+        .mockReturnValue(
+          createMockHttpResponsePromise({
+            name: "test-dataset-proj",
+            datasetItemsCount: 10,
+          })
+        );
+
+      await datasetWithProject.getItemsCount();
+
+      expect(spy).toHaveBeenCalledWith({
+        datasetName: "test-dataset-proj",
+        projectName: "my-project",
+      });
     });
   });
 

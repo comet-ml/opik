@@ -1694,16 +1694,16 @@ class ExperimentAggregatesIntegrationTest {
     }
 
     @Test
-    @DisplayName("Pass rate aggregation reads from assertion_results (not feedback_scores) for evaluation suite experiments")
+    @DisplayName("Pass rate aggregation reads from assertion_results (not feedback_scores) for test suite experiments")
     void passRateAggregationReadsFromAssertionResults() {
         var project = createProject(API_KEY, TEST_WORKSPACE);
         var dataset = createDataset(API_KEY, TEST_WORKSPACE);
 
-        // Create an evaluation_suite experiment
+        // Create an test_suite experiment
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetId(dataset.id())
                 .datasetName(dataset.name())
-                .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                .evaluationMethod(EvaluationMethod.TEST_SUITE)
                 .build();
         experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
@@ -2186,7 +2186,7 @@ class ExperimentAggregatesIntegrationTest {
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetId(dataset.id())
                 .datasetName(dataset.name())
-                .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                .evaluationMethod(EvaluationMethod.TEST_SUITE)
                 .build();
         experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
@@ -2275,7 +2275,7 @@ class ExperimentAggregatesIntegrationTest {
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetId(dataset.id())
                 .datasetName(dataset.name())
-                .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                .evaluationMethod(EvaluationMethod.TEST_SUITE)
                 .build();
         experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 

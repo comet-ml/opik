@@ -2452,13 +2452,13 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Create items from traces for EVALUATION_SUITE only includes unwrapped input")
-        void createFromTraces__whenEvaluationSuite__thenDataContainsOnlyInput() {
-            // Given - Create an EVALUATION_SUITE dataset
+        @DisplayName("Success: Create items from traces for TEST_SUITE only includes unwrapped input")
+        void createFromTraces__whenTestSuite__thenDataContainsOnlyInput() {
+            // Given - Create an TEST_SUITE dataset
             var dataset = buildDataset().toBuilder()
                     .id(null)
                     .name(UUID.randomUUID().toString())
-                    .type(DatasetType.EVALUATION_SUITE)
+                    .type(DatasetType.TEST_SUITE)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
@@ -2509,13 +2509,13 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Create items from spans for EVALUATION_SUITE only includes unwrapped input")
-        void createFromSpans__whenEvaluationSuite__thenDataContainsOnlyInput() {
-            // Given - Create an EVALUATION_SUITE dataset
+        @DisplayName("Success: Create items from spans for TEST_SUITE only includes unwrapped input")
+        void createFromSpans__whenTestSuite__thenDataContainsOnlyInput() {
+            // Given - Create an TEST_SUITE dataset
             var dataset = buildDataset().toBuilder()
                     .id(null)
                     .name(UUID.randomUUID().toString())
-                    .type(DatasetType.EVALUATION_SUITE)
+                    .type(DatasetType.TEST_SUITE)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 

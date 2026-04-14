@@ -45,7 +45,7 @@ type UseAgentConfigurationSaveParams = {
   originalValues: React.RefObject<Record<string, string>>;
   description: string;
   projectId: string;
-  onSaved: () => void;
+  onSaved: (newBlueprintId?: string) => void;
   dirtyPromptKeys?: Record<string, boolean>;
 };
 
@@ -176,7 +176,10 @@ export const useAgentConfigurationSave = ({
     const payload = await validateAndBuildPayload(BlueprintType.BLUEPRINT);
     if (!payload) return;
 
-    createConfig({ agentConfig: payload }, { onSuccess: onSaved });
+    createConfig(
+      { agentConfig: payload },
+      { onSuccess: ({ id }) => onSaved(id) },
+    );
   }, [validateAndBuildPayload, createConfig, onSaved]);
 
   const buildMaskPayload = useCallback(async () => {

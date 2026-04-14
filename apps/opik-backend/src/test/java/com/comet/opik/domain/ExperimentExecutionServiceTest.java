@@ -9,9 +9,9 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
-import com.comet.opik.api.resources.v1.events.EvalSuiteEvaluatorMapper;
-import com.comet.opik.infrastructure.EvalSuiteConfig;
+import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -64,8 +64,8 @@ class ExperimentExecutionServiceTest {
 
     @BeforeEach
     void setUp() {
-        var evalSuiteConfig = new EvalSuiteConfig();
-        var evaluatorMapper = new EvalSuiteEvaluatorMapper(evalSuiteConfig);
+        var testSuiteConfig = new TestSuiteConfig();
+        var evaluatorMapper = new TestSuiteEvaluatorMapper(testSuiteConfig);
         service = new ExperimentExecutionService(
                 experimentService, datasetItemService, datasetVersionService,
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig());
@@ -174,7 +174,7 @@ class ExperimentExecutionServiceTest {
         }
 
         @Test
-        void createAndExecuteSetsEvaluationSuiteMethodAndRunningStatus() {
+        void createAndExecuteSetsTestSuiteMethodAndRunningStatus() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
                     .datasetId(UUID.randomUUID())
@@ -192,7 +192,7 @@ class ExperimentExecutionServiceTest {
             verify(experimentService).create(captor.capture());
 
             var experiment = captor.getValue();
-            assertThat(experiment.evaluationMethod()).isEqualTo(EvaluationMethod.EVALUATION_SUITE);
+            assertThat(experiment.evaluationMethod()).isEqualTo(EvaluationMethod.TEST_SUITE);
             assertThat(experiment.status()).isEqualTo(ExperimentStatus.RUNNING);
         }
 

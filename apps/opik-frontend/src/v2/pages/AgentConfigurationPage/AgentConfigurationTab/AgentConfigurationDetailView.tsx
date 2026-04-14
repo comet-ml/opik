@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Clock, FilePen, Pencil, User } from "lucide-react";
 
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import Loader from "@/shared/Loader/Loader";
+import { cn } from "@/lib/utils";
 import { Card } from "@/ui/card";
 import DeployToPopover from "./DeployToPopover";
 import BlueprintValuesList from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
@@ -19,6 +20,14 @@ import { COLUMN_TYPE } from "@/types/shared";
 import { Separator } from "@/ui/separator";
 import DiffVersionPopover from "./DiffVersionPopover";
 import AgentConfigTagList from "./AgentConfigTagList";
+import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/ExpandAllToggle";
+import { useFieldsCollapse } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
+import {
+  collectMultiLineKeys,
+  hasAnyExpandableField,
+} from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
+
+const DESCRIPTION_TRUNCATE_LENGTH = 80;
 
 type AgentConfigurationDetailViewProps = {
   item: ConfigHistoryItem;
@@ -57,6 +66,7 @@ const AgentConfigurationDetailView: React.FC<
     label: string;
     blueprintId: string;
   } | null>(null);
+  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
     setDiffBase({
@@ -68,6 +78,18 @@ const AgentConfigurationDetailView: React.FC<
 
   const description =
     item.description || generateBlueprintDescription(item.values);
+
+  const descriptionIsLong = description.length > DESCRIPTION_TRUNCATE_LENGTH;
+
+  const collapsibleKeys = useMemo(
+    () => collectMultiLineKeys(agentConfig?.values ?? []),
+    [agentConfig],
+  );
+  const hasExpandableFields = useMemo(
+    () => hasAnyExpandableField(agentConfig?.values ?? []),
+    [agentConfig],
+  );
+  const collapseController = useFieldsCollapse({ collapsibleKeys });
 
   return (
     <>
@@ -113,17 +135,38 @@ const AgentConfigurationDetailView: React.FC<
               />
             )}
             <Button size="xs" variant="outline" onClick={onEdit}>
-              <Pencil className="mr-1.5 size-3.5" />
+              <Pencil className="mr-1.5 size-3.5 text-light-slate" />
               Edit configuration
             </Button>
           </div>
         </div>
-        <p className="comet-body-s flex w-full min-w-0 items-start gap-1 overflow-hidden text-light-slate">
+        <div className="comet-body-s flex w-full min-w-0 items-start gap-1 text-light-slate">
           <FilePen className="mt-1 size-3 shrink-0" />
-          <TooltipWrapper content={description}>
-            <span className="w-fit max-w-full truncate">{description}</span>
-          </TooltipWrapper>
-        </p>
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 items-baseline gap-1",
+              notesExpanded && "flex-wrap",
+            )}
+          >
+            <span
+              className={cn(
+                "min-w-0",
+                notesExpanded ? "break-words" : "truncate",
+              )}
+            >
+              {description}
+            </span>
+            {descriptionIsLong && (
+              <button
+                type="button"
+                className="shrink-0 text-light-slate underline"
+                onClick={() => setNotesExpanded((v) => !v)}
+              >
+                {notesExpanded ? "Show less" : "Show more"}
+              </button>
+            )}
+          </div>
+        </div>
         <div className="comet-body-s mt-1 flex items-center gap-1 text-light-slate">
           <Clock className="size-3 shrink-0" />
           <TooltipWrapper
@@ -136,6 +179,11 @@ const AgentConfigurationDetailView: React.FC<
           </TooltipWrapper>
           <User className="ml-1.5 size-3.5 shrink-0" />
           <span>{item.created_by}</span>
+          {hasExpandableFields && (
+            <div className="ml-auto text-foreground">
+              <ExpandAllToggle controller={collapseController} />
+            </div>
+          )}
         </div>
 
         <Separator className="mb-2 mt-4" />
@@ -143,7 +191,10 @@ const AgentConfigurationDetailView: React.FC<
         {isPending ? (
           <Loader />
         ) : (
-          <BlueprintValuesList values={agentConfig?.values ?? []} />
+          <BlueprintValuesList
+            values={agentConfig?.values ?? []}
+            controller={collapseController}
+          />
         )}
       </Card>
 

@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Supported providers for eval suite LLM-as-judge assertions, ordered by priority.
+ * Supported providers for test suite LLM-as-judge assertions, ordered by priority.
  * First connected provider wins.
  */
 enum SupportedJudgeProvider {
@@ -29,7 +29,7 @@ enum SupportedJudgeProvider {
     }
 
     /**
-     * Resolves the LLM model for eval suite assertions based on connected providers.
+     * Resolves the LLM model for test suite assertions based on connected providers.
      * Returns the model for the highest-priority connected provider, or empty if none match.
      */
     static Optional<String> resolveModel(Set<LlmProvider> connectedProviders) {

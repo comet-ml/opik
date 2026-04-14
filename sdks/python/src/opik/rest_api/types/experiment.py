@@ -62,22 +62,22 @@ class Experiment(UniversalBaseModel):
     dataset_version_summary: typing.Optional[DatasetVersionSummary] = None
     pass_rate: typing.Optional[float] = pydantic.Field(default=None)
     """
-    Pass rate for evaluation suite experiments (0.0-1.0). Null for regular experiments.
+    Pass rate for test suite experiments (0.0-1.0). Null for regular experiments.
     """
 
     passed_count: typing.Optional[int] = pydantic.Field(default=None)
     """
-    Number of items that passed for evaluation suite experiments. Null for regular experiments.
+    Number of items that passed for test suite experiments. Null for regular experiments.
     """
 
     total_count: typing.Optional[int] = pydantic.Field(default=None)
     """
-    Total number of items for evaluation suite experiments. Null for regular experiments.
+    Total number of items for test suite experiments. Null for regular experiments.
     """
 
     assertion_scores: typing.Optional[typing.List[AssertionScoreAverage]] = pydantic.Field(default=None)
     """
-    Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments.
+    Per-assertion average pass rates for test suite experiments. Null for regular experiments.
     """
 
     if IS_PYDANTIC_V2:

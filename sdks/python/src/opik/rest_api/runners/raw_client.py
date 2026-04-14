@@ -21,14 +21,12 @@ from ..types.bridge_command_submit_response import BridgeCommandSubmitResponse
 from ..types.error_message import ErrorMessage
 from ..types.json_node import JsonNode
 from ..types.local_runner import LocalRunner
-from ..types.local_runner_connect_response import LocalRunnerConnectResponse
 from ..types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from ..types.local_runner_job import LocalRunnerJob
 from ..types.local_runner_job_metadata import LocalRunnerJobMetadata
 from ..types.local_runner_job_page import LocalRunnerJobPage
 from ..types.local_runner_log_entry import LocalRunnerLogEntry
 from ..types.local_runner_page import LocalRunnerPage
-from ..types.local_runner_pair_response import LocalRunnerPairResponse
 from .types.bridge_command_result_request_status import BridgeCommandResultRequestStatus
 from .types.bridge_command_submit_request_type import BridgeCommandSubmitRequestType
 from .types.list_runners_request_status import ListRunnersRequestStatus
@@ -188,76 +186,6 @@ class RawRunnersClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def connect_runner(
-        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[LocalRunnerConnectResponse]:
-        """
-        Exchange a pairing code or API key for local runner credentials
-
-        Parameters
-        ----------
-        pairing_code : str
-
-        runner_name : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[LocalRunnerConnectResponse]
-            Runner connected
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            "v1/private/local-runners/connections",
-            method="POST",
-            json={
-                "pairing_code": pairing_code,
-                "runner_name": runner_name,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    LocalRunnerConnectResponse,
-                    parse_obj_as(
-                        type_=LocalRunnerConnectResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -436,62 +364,6 @@ class RawRunnersClient:
                 )
             if _response.status_code == 409:
                 raise ConflictError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def generate_pairing_code(
-        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[LocalRunnerPairResponse]:
-        """
-        Generate a pairing code for a local runner in the current workspace
-
-        Parameters
-        ----------
-        project_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[LocalRunnerPairResponse]
-            Pairing code generated
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            "v1/private/local-runners/pairs",
-            method="POST",
-            json={
-                "project_id": project_id,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    LocalRunnerPairResponse,
-                    parse_obj_as(
-                        type_=LocalRunnerPairResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -1427,76 +1299,6 @@ class AsyncRawRunnersClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def connect_runner(
-        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[LocalRunnerConnectResponse]:
-        """
-        Exchange a pairing code or API key for local runner credentials
-
-        Parameters
-        ----------
-        pairing_code : str
-
-        runner_name : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[LocalRunnerConnectResponse]
-            Runner connected
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/local-runners/connections",
-            method="POST",
-            json={
-                "pairing_code": pairing_code,
-                "runner_name": runner_name,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    LocalRunnerConnectResponse,
-                    parse_obj_as(
-                        type_=LocalRunnerConnectResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
     async def create_bridge_command(
         self,
         runner_id: str,
@@ -1659,62 +1461,6 @@ class AsyncRawRunnersClient:
                 )
             if _response.status_code == 409:
                 raise ConflictError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def generate_pairing_code(
-        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[LocalRunnerPairResponse]:
-        """
-        Generate a pairing code for a local runner in the current workspace
-
-        Parameters
-        ----------
-        project_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[LocalRunnerPairResponse]
-            Pairing code generated
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/local-runners/pairs",
-            method="POST",
-            json={
-                "project_id": project_id,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    LocalRunnerPairResponse,
-                    parse_obj_as(
-                        type_=LocalRunnerPairResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

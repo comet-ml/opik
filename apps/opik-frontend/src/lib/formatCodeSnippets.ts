@@ -1,5 +1,9 @@
 import { maskAPIKey } from "./utils";
 import { BASE_API_URL } from "@/api/api";
+import {
+  PROJECT_NAME_PLACEHOLDER,
+  SNIPPET_PROJECT_NAME,
+} from "@/constants/shared";
 
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
@@ -46,7 +50,13 @@ export const getConfigCode = (
   withHighlight = false,
   projectName?: string,
 ) => {
-  if (!apiKey) return buildOpikUrlOverrideConfig(withHighlight);
+  const projectNameConfig = projectName
+    ? `\n${buildProjectNameConfig(projectName)}`
+    : "";
+
+  if (!apiKey) {
+    return `${buildOpikUrlOverrideConfig(withHighlight)}${projectNameConfig}`;
+  }
 
   const apiKeyConfig = buildApiKeyConfig(
     apiKey,
@@ -57,9 +67,6 @@ export const getConfigCode = (
     workspaceName,
     withHighlight,
   );
-  const projectNameConfig = projectName
-    ? `\n${buildProjectNameConfig(projectName)}`
-    : "";
 
   return `${apiKeyConfig} \n${workspaceConfig}${projectNameConfig}`;
 };
@@ -72,24 +79,24 @@ export const putConfigInCode = ({
   withHighlight = false,
   projectName,
 }: PutConfigInCodeArgs): { code: string; lines: number[] } => {
-  let patchedCode = "";
+  const resolvedProjectName = projectName || SNIPPET_PROJECT_NAME;
+  const codeWithProjectName = code.replaceAll(
+    PROJECT_NAME_PLACEHOLDER,
+    resolvedProjectName,
+  );
 
-  if (apiKey) {
-    const configCode = getConfigCode(
-      workspaceName,
-      apiKey,
-      shouldMaskApiKey,
-      withHighlight,
-      projectName,
-    );
+  const configCode = getConfigCode(
+    workspaceName,
+    apiKey,
+    shouldMaskApiKey,
+    withHighlight,
+    projectName,
+  );
 
-    patchedCode = code.replace(OPIK_API_KEY_TEMPLATE, configCode);
-  } else {
-    patchedCode = code.replace(
-      OPIK_API_KEY_TEMPLATE,
-      buildOpikUrlOverrideConfig(withHighlight),
-    );
-  }
+  const patchedCode = codeWithProjectName.replace(
+    OPIK_API_KEY_TEMPLATE,
+    configCode,
+  );
 
   return {
     code: patchedCode.replaceAll(OPIK_HIGHLIGHT_LINE_TEMPLATE, ""),

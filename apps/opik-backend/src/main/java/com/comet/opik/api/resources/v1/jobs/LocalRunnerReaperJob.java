@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.LocalRunnerService;
+import com.comet.opik.domain.RunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -24,14 +24,14 @@ public class LocalRunnerReaperJob extends Job implements InterruptableJob {
 
     private static final Lock REAPER_LOCK = new Lock("runner_reaper", LocalRunnerReaperJob.class.getSimpleName());
 
-    private final LocalRunnerService runnerService;
+    private final RunnerService runnerService;
     private final LockService lockService;
     private final LocalRunnerConfig runnerConfig;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     @Inject
-    public LocalRunnerReaperJob(@NonNull LocalRunnerService runnerService,
+    public LocalRunnerReaperJob(@NonNull RunnerService runnerService,
             @NonNull LockService lockService,
             @NonNull LocalRunnerConfig runnerConfig) {
         this.runnerService = runnerService;

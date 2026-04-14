@@ -5,7 +5,7 @@ from typing import TypedDict
 
 class ExecutionPolicy(TypedDict, total=False):
     """
-    Execution policy for evaluation suite items.
+    Execution policy for test suite items.
 
     Attributes:
         runs_per_item: Number of times to run evaluation per item.
