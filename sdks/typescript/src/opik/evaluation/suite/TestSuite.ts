@@ -1,6 +1,6 @@
 import { Dataset } from "@/dataset/Dataset";
 import { DatasetItemData, DatasetNotFoundError } from "@/dataset";
-import { OpikClient } from "@/client/Client";
+import type { OpikClient } from "@/client/Client";
 import {
   resolveEvaluators,
   validateExecutionPolicy,

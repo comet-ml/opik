@@ -18,7 +18,7 @@ import {
 } from "@/client/OpikApiClientTemp";
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
-import { TestSuite, type CreateTestSuiteOptions } from "@/evaluation/suite";
+import type { TestSuite, CreateTestSuiteOptions } from "@/evaluation/suite";
 import { Experiment } from "@/experiment/Experiment";
 import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
@@ -376,6 +376,7 @@ export class OpikClient {
     options: CreateTestSuiteOptions
   ): Promise<TestSuite> => {
     logger.debug(`Creating evaluation suite with name "${options.name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
     return TestSuite.create(this, options);
   };
 
@@ -393,6 +394,7 @@ export class OpikClient {
   ): Promise<TestSuite> => {
     const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Getting evaluation suite with name "${name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
     return TestSuite.get(this, name, resolvedProjectName);
   };
 
@@ -408,6 +410,7 @@ export class OpikClient {
     logger.debug(
       `Attempting to retrieve or create evaluation suite with name: "${options.name}"`
     );
+    const { TestSuite } = await import("@/evaluation/suite");
     return TestSuite.getOrCreate(this, options);
   };
 
@@ -422,6 +425,7 @@ export class OpikClient {
     projectName?: string
   ): Promise<void> => {
     logger.debug(`Deleting evaluation suite with name "${name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
     await TestSuite.delete(this, name, projectName);
   };
 
@@ -441,6 +445,7 @@ export class OpikClient {
 
     try {
       const datasets = await this.getDatasets(maxResults, resolvedProjectName);
+      const { TestSuite } = await import("@/evaluation/suite");
 
       const suites: TestSuite[] = [];
       for (const dataset of datasets) {
