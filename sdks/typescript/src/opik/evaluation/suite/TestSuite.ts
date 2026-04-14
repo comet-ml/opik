@@ -18,7 +18,6 @@ import {
   executionPolicyEqual,
 } from "./suiteHelpers";
 import type { EvaluatorItemLike } from "./suiteHelpers";
-import type { LLMJudge } from "../suite_evaluators/LLMJudge";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
 import type { DatasetItemUpdate } from "@/rest_api/api/types/DatasetItemUpdate";
 import { generateId } from "@/utils/generateId";
