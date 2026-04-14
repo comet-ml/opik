@@ -172,10 +172,13 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           assertions: ["Response is helpful"],
         });
 
+        expect(created.projectName).toBeDefined();
+
         const fetched = await TestSuite.get(client, suiteName);
 
         expect(fetched.id).toBe(created.id);
         expect(fetched.name).toBe(suiteName);
+        expect(fetched.projectName).toBe(created.projectName);
       },
       60000
     );
