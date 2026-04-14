@@ -325,3 +325,210 @@ describe("TestSuite static methods", () => {
     });
   });
 });
+
+describe("OpikClient EvaluationSuite methods", () => {
+  let opikClient: OpikClient;
+  let createDatasetSpy: MockInstance;
+  let getDatasetByIdentifierSpy: MockInstance;
+  let deleteDatasetByNameSpy: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    opikClient = new OpikClient({
+      projectName: "opik-sdk-typescript-test",
+    });
+
+    createDatasetSpy = vi
+      .spyOn(opikClient.api.datasets, "createDataset")
+      .mockImplementation(mockAPIFunction);
+
+    getDatasetByIdentifierSpy = vi
+      .spyOn(opikClient.api.datasets, "getDatasetByIdentifier")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({
+          id: "ds-1",
+          name: "test-suite",
+          description: "A test suite",
+        })
+      );
+
+    deleteDatasetByNameSpy = vi
+      .spyOn(opikClient.api.datasets, "deleteDatasetByName")
+      .mockImplementation(mockAPIFunction);
+
+    vi.spyOn(opikClient.datasetBatchQueue, "flush").mockResolvedValue(undefined);
+    vi.spyOn(Dataset.prototype, "syncHashes").mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe("createEvaluationSuite", () => {
+    it("should create an evaluation suite via client", async () => {
+      const suite = await opikClient.createEvaluationSuite({
+        name: "my-suite",
+        description: "My test suite",
+      });
+
+      expect(suite).toBeInstanceOf(TestSuite);
+      expect(suite.name).toBe("my-suite");
+      expect(createDatasetSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "my-suite",
+          description: "My test suite",
+          type: "evaluation_suite",
+        })
+      );
+    });
+  });
+
+  describe("getEvaluationSuite", () => {
+    it("should get an evaluation suite by name via client", async () => {
+      const suite = await opikClient.getEvaluationSuite("test-suite");
+
+      expect(suite).toBeInstanceOf(TestSuite);
+      expect(suite.name).toBe("test-suite");
+      expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "opik-sdk-typescript-test",
+      });
+    });
+
+    it("should get evaluation suite with custom project name", async () => {
+      const suite = await opikClient.getEvaluationSuite("test-suite", "custom-project");
+
+      expect(suite).toBeInstanceOf(TestSuite);
+      expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "custom-project",
+      });
+    });
+  });
+
+  describe("getOrCreateEvaluationSuite", () => {
+    it("should return existing evaluation suite via client", async () => {
+      const suite = await opikClient.getOrCreateEvaluationSuite({
+        name: "test-suite",
+      });
+
+      expect(suite).toBeInstanceOf(TestSuite);
+      expect(suite.name).toBe("test-suite");
+      expect(createDatasetSpy).not.toHaveBeenCalled();
+    });
+
+    it("should create new evaluation suite when not found via client", async () => {
+      getDatasetByIdentifierSpy.mockImplementation(() => {
+        throw new OpikApiError({
+          message: "Not found",
+          statusCode: 404,
+          body: {},
+          rawResponse: {
+            status: 404,
+            headers: {} as Headers,
+            statusText: "Not Found",
+            url: "https://mock.test",
+            redirected: false,
+            type: "basic",
+          },
+        });
+      });
+
+      const suite = await opikClient.getOrCreateEvaluationSuite({
+        name: "new-suite",
+        description: "New suite",
+      });
+
+      expect(suite).toBeInstanceOf(TestSuite);
+      expect(suite.name).toBe("new-suite");
+      expect(createDatasetSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "new-suite",
+          description: "New suite",
+          type: "evaluation_suite",
+        })
+      );
+    });
+  });
+
+  describe("deleteEvaluationSuite", () => {
+    it("should delete an evaluation suite via client", async () => {
+      await opikClient.deleteEvaluationSuite("test-suite");
+
+      expect(deleteDatasetByNameSpy).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "opik-sdk-typescript-test",
+      });
+    });
+
+    it("should delete evaluation suite with custom project name via client", async () => {
+      await opikClient.deleteEvaluationSuite("test-suite", "custom-project");
+
+      expect(deleteDatasetByNameSpy).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "custom-project",
+      });
+    });
+  });
+
+  describe("getEvaluationSuites", () => {
+    let findDatasetsSpy: MockInstance;
+
+    beforeEach(() => {
+      vi.spyOn(opikClient.api.projects, "retrieveProject").mockImplementation(() =>
+        createMockHttpResponsePromise({ id: "project-123", name: "opik-sdk-typescript-test" })
+      );
+
+      findDatasetsSpy = vi
+        .spyOn(opikClient.api.datasets, "findDatasets")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise({
+            content: [
+              { id: "ds-1", name: "suite-1", description: "Suite 1" },
+              { id: "ds-2", name: "suite-2", description: "Suite 2" },
+            ],
+          })
+        );
+    });
+
+    it("should get all evaluation suites via client", async () => {
+      const suites = await opikClient.getEvaluationSuites();
+
+      expect(suites).toHaveLength(2);
+      expect(suites[0]).toBeInstanceOf(TestSuite);
+      expect(suites[0].name).toBe("suite-1");
+      expect(suites[1].name).toBe("suite-2");
+      expect(findDatasetsSpy).toHaveBeenCalledWith({
+        size: 100,
+        projectId: "project-123",
+      });
+    });
+
+    it("should get evaluation suites with custom limit", async () => {
+      await opikClient.getEvaluationSuites(50);
+
+      expect(findDatasetsSpy).toHaveBeenCalledWith({
+        size: 50,
+        projectId: "project-123",
+      });
+    });
+
+    it("should get evaluation suites with custom project name", async () => {
+      vi.spyOn(opikClient.api.projects, "retrieveProject").mockImplementation(
+        () =>
+          createMockHttpResponsePromise({
+            id: "project-custom",
+            name: "custom-project",
+          })
+      );
+
+      await opikClient.getEvaluationSuites(100, "custom-project");
+
+      expect(findDatasetsSpy).toHaveBeenCalledWith({
+        size: 100,
+        projectId: "project-custom",
+      });
+    });
+  });
+});
