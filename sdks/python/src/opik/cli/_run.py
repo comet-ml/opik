@@ -51,6 +51,7 @@ def run_cli_session(
                 runner_name=runner_name,
                 runner_type=runner_type,
                 base_url=client.config.url_override,
+                workspace=client.config.workspace,
                 tui=tui,
             )
 
