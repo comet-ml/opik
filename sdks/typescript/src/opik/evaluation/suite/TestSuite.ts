@@ -104,6 +104,9 @@ export class TestSuite {
     return this.dataset.id;
   }
 
+  /**
+   * The name of the project containing this test suite.
+   */
   get projectName(): string | undefined {
     return this.dataset.projectName;
   }
