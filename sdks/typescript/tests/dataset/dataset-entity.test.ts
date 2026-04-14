@@ -596,20 +596,29 @@ describe("Dataset entity operations", () => {
     });
 
     it("should pass the dataset name and project name to the API", async () => {
+      const datasetWithProject = new Dataset(
+        {
+          id: "ds-with-project",
+          name: "test-dataset-proj",
+          projectName: "my-project",
+        },
+        opikClient
+      );
+
       const spy = vi
         .spyOn(opikClient.api.datasets, "getDatasetByIdentifier")
         .mockReturnValue(
           createMockHttpResponsePromise({
-            name: "test-dataset",
+            name: "test-dataset-proj",
             datasetItemsCount: 10,
           })
         );
 
-      await dataset.getItemsCount();
+      await datasetWithProject.getItemsCount();
 
       expect(spy).toHaveBeenCalledWith({
-        datasetName: "test-dataset",
-        projectName: undefined,
+        datasetName: "test-dataset-proj",
+        projectName: "my-project",
       });
     });
   });

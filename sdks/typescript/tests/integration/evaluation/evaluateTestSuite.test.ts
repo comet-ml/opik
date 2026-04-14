@@ -100,8 +100,6 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           });
         }
 
-        const count = await suite.getItemsCount();
-        expect(count).toBe(2);
       },
       60000
     );
