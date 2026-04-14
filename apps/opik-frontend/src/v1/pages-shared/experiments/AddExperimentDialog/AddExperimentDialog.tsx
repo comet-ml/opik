@@ -214,12 +214,11 @@ const AddExperimentDialog: React.FunctionComponent<
     () => data?.content?.find((d) => d.name === datasetName),
     [data?.content, datasetName],
   );
-  const isEvaluationSuite =
-    selectedDataset?.type === DATASET_TYPE.EVALUATION_SUITE;
+  const isTestSuite = selectedDataset?.type === DATASET_TYPE.TEST_SUITE;
 
-  // When the selected dataset is an evaluation suite, evaluators are defined
+  // When the selected dataset is a test suite, evaluators are defined
   // on the suite itself — skip metrics in the generated code.
-  const effectiveModels = isEvaluationSuite ? [] : models;
+  const effectiveModels = isTestSuite ? [] : models;
 
   const importString =
     effectiveModels.length > 0
@@ -296,7 +295,7 @@ const AddExperimentDialog: React.FunctionComponent<
 
     return result`;
 
-  const suiteName = datasetName || "evaluation suite name placeholder";
+  const suiteName = datasetName || "test suite name placeholder";
   const datasetDisplayName = datasetName || "dataset name placeholder";
 
   const suiteExperimentCode = `import os
@@ -307,7 +306,7 @@ import opik
 # INJECT_OPIK_CONFIGURATION
 
 client = opik.Opik()
-suite = client.get_or_create_evaluation_suite(name="${suiteName}")
+suite = client.get_or_create_test_suite(name="${suiteName}")
 
 ${evaluationTaskCode}
 
@@ -336,7 +335,7 @@ eval_results = evaluate(
   task=evaluation_task${metricsParam}
 )`;
 
-  const experimentCode = isEvaluationSuite
+  const experimentCode = isTestSuite
     ? suiteExperimentCode
     : datasetExperimentCode;
 
@@ -507,19 +506,19 @@ eval_results = evaluate(
         <div className="pb-8">
           <SheetTitle>Create a new experiment</SheetTitle>
           <div className="comet-body-s mx-auto mt-4 max-w-[468px] text-center text-muted-slate">
-            Select an evaluation suite, assign the relevant evaluators, and
-            follow the instructions to track and compare your training runs
+            Select a test suite, assign the relevant evaluators, and follow the
+            instructions to track and compare your training runs
           </div>
         </div>
         <div className="mx-auto flex w-full flex-col gap-6 md:max-w-[1250px] md:flex-row md:items-start">
-          {!isEvaluationSuite && renderEvaluatorsSection()}
+          {!isTestSuite && renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>
-              <CodeSectionTitle>1. Select evaluation suite</CodeSectionTitle>
+              <CodeSectionTitle>1. Select test suite</CodeSectionTitle>
               <LoadableSelectBox
                 options={options}
                 value={datasetName}
-                placeholder="Select an evaluation suite"
+                placeholder="Select a test suite"
                 onChange={setDatasetName}
                 onLoadMore={
                   total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore

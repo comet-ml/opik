@@ -14,7 +14,7 @@ import {
 interface TrialStatusCustomMeta {
   candidates: AggregatedCandidate[];
   bestCandidateId?: string;
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
   isInProgress?: boolean;
   inProgressInfo?: InProgressInfo;
 }
@@ -25,7 +25,7 @@ const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
   const {
     candidates,
     bestCandidateId,
-    isEvaluationSuite,
+    isTestSuite,
     isInProgress,
     inProgressInfo,
   } = (custom ?? {}) as TrialStatusCustomMeta;
@@ -34,11 +34,11 @@ const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
     () =>
       computeCandidateStatuses(
         candidates ?? [],
-        isEvaluationSuite,
+        isTestSuite,
         isInProgress,
         inProgressInfo,
       ),
-    [candidates, isEvaluationSuite, isInProgress, inProgressInfo],
+    [candidates, isTestSuite, isInProgress, inProgressInfo],
   );
 
   const isBest = bestCandidateId === row.candidateId;

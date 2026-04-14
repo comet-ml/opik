@@ -88,9 +88,9 @@ export const TrialStepCell = (context: CellContext<unknown, unknown>) => {
 export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
   const row = context.row.original as AggregatedCandidate;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { baselineCandidate, isEvaluationSuite } = (custom ?? {}) as {
+  const { baselineCandidate, isTestSuite } = (custom ?? {}) as {
     baselineCandidate?: AggregatedCandidate;
-    isEvaluationSuite?: boolean;
+    isTestSuite?: boolean;
   };
 
   const percentage = useBaselinePercentage(
@@ -102,7 +102,7 @@ export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
   );
 
   const passRateFraction =
-    isEvaluationSuite && isNumber(row.score) && row.totalCount > 0
+    isTestSuite && isNumber(row.score) && row.totalCount > 0
       ? ` (${row.passedCount}/${row.totalCount})`
       : "";
 

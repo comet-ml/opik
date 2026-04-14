@@ -7,7 +7,7 @@ import { ExperimentsCompare } from "@/types/datasets";
 import {
   StatusTag,
   getStatusFromExperimentItems,
-} from "@/v2/pages-shared/experiments/EvaluationSuiteExperiment/PassedCell";
+} from "@/v2/pages-shared/experiments/TestSuiteExperiment/PassedCell";
 
 type StatusInfo = ReturnType<typeof getStatusFromExperimentItems>;
 

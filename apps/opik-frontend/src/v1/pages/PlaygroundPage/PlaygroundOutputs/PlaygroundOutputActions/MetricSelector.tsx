@@ -136,7 +136,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const tooltipContent = useMemo(() => {
     if (!datasetId && rules.length > 0) {
-      return "Select an evaluation suite first to choose metrics";
+      return "Select a test suite first to choose metrics";
     }
     if (datasetId && selectedRules.length > 0) {
       return selectedRules.map((rule) => rule.name).join(", ");

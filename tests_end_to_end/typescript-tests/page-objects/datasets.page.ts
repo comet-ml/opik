@@ -3,7 +3,7 @@ import { BasePage } from './base.page';
 
 export class DatasetsPage extends BasePage {
   constructor(page: Page) {
-    super(page, 'evaluation-suites');
+    super(page, 'test-suites');
   }
 
   async createDatasetByName(datasetName: string): Promise<void> {

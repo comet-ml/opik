@@ -75,7 +75,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
         title: "Export failed",
         description:
           currentJob.error_message ||
-          `Failed to export evaluation suite "${datasetName}"`,
+          `Failed to export test suite "${datasetName}"`,
         variant: "destructive",
       });
 

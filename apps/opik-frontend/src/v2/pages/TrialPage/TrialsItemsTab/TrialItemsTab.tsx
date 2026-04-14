@@ -110,7 +110,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [];
 const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
   {
     id: COLUMN_ID_ID,
-    label: "Evaluation suite item ID",
+    label: "Test suite item ID",
     type: COLUMN_TYPE.string,
     accessorFn: (row) => row.dataset_item_id,
     cell: IdCell as never,
@@ -123,7 +123,7 @@ export type TrialItemsTabProps = {
   datasetId: string;
   experimentsIds: string[];
   experiments?: Experiment[];
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
 };
 
 const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
@@ -131,7 +131,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   datasetId,
   experimentsIds = [],
   experiments,
-  isEvaluationSuite = false,
+  isTestSuite = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
@@ -283,7 +283,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   const [passFilter, setPassFilter] = useState<PassFilterValue>("all");
 
   const { rows, passedCount, failedCount } = useMemo(() => {
-    if (!isEvaluationSuite) {
+    if (!isTestSuite) {
       return { rows: allFlatRows, passedCount: 0, failedCount: 0 };
     }
 
@@ -322,7 +322,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     });
 
     return { rows: filtered, passedCount: passed, failedCount: failed };
-  }, [allFlatRows, passFilter, isEvaluationSuite]);
+  }, [allFlatRows, passFilter, isTestSuite]);
 
   const dynamicDatasetColumns = useMemo(() => {
     return (data?.columns ?? [])
@@ -393,7 +393,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   }, [dynamicOutputColumns]);
 
   const scoresColumnsData = useMemo(() => {
-    if (isEvaluationSuite) {
+    if (isTestSuite) {
       return [
         {
           id: "score_passed",
@@ -448,7 +448,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         colorMap,
       },
     })) as ColumnData<FlattenedTrialItem>[];
-  }, [experiments, experimentsIds, objectiveName, isEvaluationSuite]);
+  }, [experiments, experimentsIds, objectiveName, isTestSuite]);
 
   useEffect(() => {
     const scoreColumnIds = scoresColumnsData.map((col) => col.id);
@@ -479,7 +479,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         columnHelper.group({
           id: "dataset",
           meta: {
-            header: "Evaluation suite",
+            header: "Test suite",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
@@ -548,7 +548,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       ...sortBy(dynamicDatasetColumns, "label").map(
         ({ id, label, columnType }) => ({
           id,
-          label: `${label} (Evaluation suite)`,
+          label: `${label} (Test suite)`,
           type: columnType,
         }),
       ),
@@ -619,7 +619,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             onChange={setFilters}
             layout="icon"
           />
-          {isEvaluationSuite && (
+          {isTestSuite && (
             <ToggleGroup
               type="single"
               value={passFilter}

@@ -27,7 +27,7 @@ const DatasetNameCell = (context: CellContext<unknown, unknown>) => {
 
       {row.dataset_id && (
         <Link
-          to="/$workspaceName/projects/$projectId/evaluation-suites/$datasetId/items"
+          to="/$workspaceName/projects/$projectId/test-suites/$datasetId/items"
           params={{
             workspaceName,
             projectId: activeProjectId!,

@@ -132,6 +132,7 @@ export class TestSuite {
       id: datasetId,
       name: options.name,
       description: options.description,
+      // TODO: OPIK-5795 - migrate DB value from 'evaluation_suite' to 'test_suite'
       type: DatasetWriteType.EvaluationSuite,
       tags: options.tags,
       projectName: resolvedProjectName,

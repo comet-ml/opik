@@ -91,8 +91,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
             <Description className="comet-body-xs">
               {
                 EXPLAINERS_MAP[
-                  EXPLAINER_ID
-                    .what_format_is_this_to_add_my_evaluation_suite_item
+                  EXPLAINER_ID.what_format_is_this_to_add_my_test_suite_item
                 ].description
               }
             </Description>
