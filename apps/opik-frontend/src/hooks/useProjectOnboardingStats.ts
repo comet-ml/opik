@@ -7,6 +7,7 @@ import api, {
   AGENT_CONFIGS_KEY,
 } from "@/api/api";
 import { ProjectStats } from "@/types/assistant-sidebar";
+import { generateVisibilityFilters, processFilters } from "@/lib/filters";
 
 function useOnboardingCountQuery(
   key: string,
@@ -15,7 +16,7 @@ function useOnboardingCountQuery(
   params?: Record<string, string>,
 ): UseQueryResult<number> {
   return useQuery({
-    queryKey: [key, "onboarding-count", endpoint],
+    queryKey: [key, "onboarding-count", endpoint, params],
     queryFn: async ({ signal }) => {
       const { data } = await api.get(endpoint, {
         signal,
@@ -45,6 +46,7 @@ export default function useProjectOnboardingStats(
   const { data: traceTotal, isLoading: tracesLoading } =
     useOnboardingCountQuery(TRACES_KEY, TRACES_REST_ENDPOINT, enabled, {
       project_id: projectId!,
+      ...processFilters(undefined, generateVisibilityFilters()),
     });
 
   const { data: experimentTotal, isLoading: experimentsLoading } =
