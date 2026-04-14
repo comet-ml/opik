@@ -43,24 +43,6 @@ vi.mock("@/evaluation/suite_evaluators/validators", async (importOriginal) => {
   };
 });
 
-vi.mock("@/evaluation/suite/evaluateTestSuite", () => ({
-  evaluateTestSuite: vi.fn().mockResolvedValue({
-    experimentId: "exp-1",
-    experimentName: "test-exp",
-    testResults: [
-      {
-        testCase: {
-          traceId: "trace-1",
-          datasetItemId: "item-1",
-          scoringInputs: {},
-          taskOutput: { output: "hello" },
-        },
-        scoreResults: [{ name: "quality", value: 1 }],
-        resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
-      },
-    ],
-  }),
-}));
 
 describe("TestSuite", () => {
   let opikClient: OpikClient;
@@ -216,111 +198,6 @@ describe("TestSuite", () => {
           executionPolicy: { runsPerItem: 3, passThreshold: 2 },
         })
       );
-    });
-  });
-
-  describe("run", () => {
-    it("should delegate to evaluateTestSuite and return TestSuiteResult", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-1",
-        experimentName: "test-exp",
-        testResults: [
-          {
-            testCase: {
-              traceId: "trace-1",
-              datasetItemId: "item-1",
-              scoringInputs: {},
-              taskOutput: { output: "hello" },
-            },
-            scoreResults: [{ name: "quality", value: 1 }],
-            resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
-          },
-        ],
-        errors: [],
-      });
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      const result = await suite.run(mockTask, {
-        experimentName: "test-experiment",
-      });
-
-      // Verify the result structure
-      expect(result).toEqual(
-        expect.objectContaining({
-          experimentId: "exp-1",
-          experimentName: "test-exp",
-          allItemsPassed: true,
-          itemsPassed: 1,
-          itemsTotal: 1,
-          passRate: 1.0,
-        })
-      );
-      expect(result.itemResults).toBeInstanceOf(Map);
-      expect(result.itemResults.has("item-1")).toBe(true);
-    });
-
-    it("should pass model option to evaluateTestSuite as evaluatorModel", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-2",
-        experimentName: "test-exp-2",
-        testResults: [],
-        errors: [],
-      });
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      await suite.run(mockTask, {
-        experimentName: "test-experiment",
-        model: "claude-sonnet-4",
-      });
-
-      expect(evaluateTestSuite).toHaveBeenCalledWith(
-        expect.objectContaining({ evaluatorModel: "claude-sonnet-4" })
-      );
-    });
-
-    it("should not call getVersionInfo separately (evaluateTestSuite handles everything)", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-2",
-        experimentName: "test-exp-2",
-        testResults: [
-          {
-            testCase: {
-              traceId: "trace-2",
-              datasetItemId: "item-2",
-              scoringInputs: {},
-              taskOutput: { output: "world" },
-            },
-            scoreResults: [{ name: "quality", value: 1 }],
-            resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
-          },
-        ],
-        errors: [],
-      });
-
-      const getVersionInfoSpy = vi
-        .spyOn(testDataset, "getVersionInfo")
-        .mockResolvedValue({
-          id: "v1",
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
-        });
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      await suite.run(mockTask, { experimentName: "test-experiment" });
-
-      // getVersionInfo should NOT be called by run() since evaluateTestSuite handles everything
-      expect(getVersionInfoSpy).not.toHaveBeenCalled();
     });
   });
 

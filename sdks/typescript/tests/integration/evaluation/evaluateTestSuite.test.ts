@@ -5,7 +5,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { TestSuite } from "@/evaluation/suite/TestSuite";
+import { runTests } from "@/evaluation/suite/runTests";
 import { searchAndWaitForDone } from "@/utils/searchHelpers";
+import type { ItemResult } from "@/evaluation/suite/types";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -125,7 +127,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         await suite.addItem({ input: "Hello", expected: "Hi" });
         await waitForSuiteItems(suite, 1);
 
-        const result = await suite.run(echoTask);
+        const result = await runTests({ testSuite: suite, task: echoTask });
 
         expect(result.experimentId).toBeDefined();
         expect(result.itemsTotal).toBe(1);
@@ -228,7 +230,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         await waitForSuiteItems(suite, 2);
 
-        const result = await suite.run(echoTask);
+        const result = await runTests({ testSuite: suite, task: echoTask });
 
         expect(result.experimentId).toBeDefined();
         expect(result.itemsTotal).toBe(2);
@@ -271,11 +273,11 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         await waitForSuiteItems(suite, 1);
 
-        const result = await suite.run(echoTask);
+        const result = await runTests({ testSuite: suite, task: echoTask });
 
         expect(result.itemResults.size).toBe(1);
 
-        const itemResult = result.itemResults.values().next().value!;
+        const itemResult: ItemResult = result.itemResults.values().next().value!;
         expect(itemResult.runsTotal).toBe(2);
         expect(itemResult.testResults).toHaveLength(2);
       },
@@ -332,11 +334,11 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         await waitForSuiteItems(suite, 1);
 
-        const result = await suite.run(echoTask);
+        const result = await runTests({ testSuite: suite, task: echoTask });
 
         expect(result.itemResults.size).toBe(1);
 
-        const itemResult = result.itemResults.values().next().value!;
+        const itemResult: ItemResult = result.itemResults.values().next().value!;
         expect(itemResult.testResults.length).toBeGreaterThanOrEqual(1);
 
         const allScoreNames = itemResult.testResults.flatMap((tr) =>

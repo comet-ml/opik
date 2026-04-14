@@ -85,3 +85,31 @@ export function resolveItemExecutionPolicy(
     passThreshold: itemPolicy.passThreshold ?? defaultPolicy.passThreshold,
   };
 }
+
+/**
+ * Validates that a task function returned an object with 'input' and 'output' keys.
+ */
+export function validateTaskResult(
+  result: unknown
+): Record<string, unknown> {
+  if (typeof result !== "object" || result === null) {
+    throw new TypeError(
+      `The task function must return an object with 'input' and 'output' keys, ` +
+        `but it returned ${typeof result}. ` +
+        `Example: return { input: data, output: response }`
+    );
+  }
+  const dict = result as Record<string, unknown>;
+  const missing: string[] = [];
+  if (!("input" in dict)) missing.push("input");
+  if (!("output" in dict)) missing.push("output");
+  if (missing.length > 0) {
+    throw new Error(
+      `The task function must return an object with 'input' and 'output' keys, ` +
+        `but the returned object is missing: ${missing.join(", ")}. ` +
+        `Got keys: ${Object.keys(dict).join(", ")}. ` +
+        `Example: return { input: data, output: response }`
+    );
+  }
+  return dict;
+}
