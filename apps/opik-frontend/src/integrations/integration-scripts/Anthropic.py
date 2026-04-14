@@ -4,7 +4,7 @@ import anthropic
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.anthropic import track_anthropic  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # os.environ["ANTHROPIC_API_KEY"] = "your-api-key-here"
 

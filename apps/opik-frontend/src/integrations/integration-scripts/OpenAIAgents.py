@@ -6,7 +6,7 @@ from agents import Agent, Runner, set_trace_processors, trace
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.openai.agents import OpikTracingProcessor  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # os.environ["OPENAI_API_KEY"] = "YOUR_OPENAI_API_KEY"
 

@@ -12,6 +12,7 @@ import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
 import { useUserApiKey } from "@/store/AppStore";
+import useActiveProjectName from "@/hooks/useActiveProjectName";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
 import HelpLinks from "./HelpLinks";
@@ -32,6 +33,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
   const variant = useFeatureFlagVariantKey("run-button-activation-test");
+  const projectName = useActiveProjectName();
 
   if (!selectedIntegration) {
     return null;
@@ -43,6 +45,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     apiKey,
     shouldMaskApiKey: true,
     withHighlight: true,
+    projectName,
   });
 
   const { code: codeWithConfigToCopy } = putConfigInCode({
@@ -50,6 +53,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     workspaceName,
     apiKey,
     withHighlight: true,
+    projectName,
   });
 
   const canExecuteCode =
