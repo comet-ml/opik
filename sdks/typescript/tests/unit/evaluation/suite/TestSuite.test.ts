@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { DatasetItem } from "@/dataset/DatasetItem";
@@ -1036,10 +1037,10 @@ describe("TestSuite", () => {
     });
 
     describe("initial version creation when no version exists", () => {
-      let applyChangesSpy: ReturnType<typeof vi.spyOn>;
+      let applyChangesSpy: MockInstance;
 
       beforeEach(() => {
-        vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue(null);
+        vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue(undefined);
 
         applyChangesSpy = vi
           .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
