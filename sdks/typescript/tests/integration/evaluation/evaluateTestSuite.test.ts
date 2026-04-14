@@ -3,11 +3,9 @@
  * These tests verify the full suite lifecycle against a real Opik instance.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Opik } from "@/index";
-import { TestSuite } from "@/evaluation/suite/TestSuite";
-import { runTests } from "@/evaluation/suite/runTests";
+import { Opik, TestSuite, runTests } from "@/index";
+import type { ItemResult } from "@/index";
 import { searchAndWaitForDone } from "@/utils/searchHelpers";
-import type { ItemResult } from "@/evaluation/suite/types";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -216,10 +214,13 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const suiteName = `test-suite-run-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
+        const projectName = `test-project-${Date.now()}`;
+
         const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          projectName,
         });
 
         await suite.addItem({ input: "What is 2+2?", expected: "4" });

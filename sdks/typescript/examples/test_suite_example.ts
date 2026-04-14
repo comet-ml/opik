@@ -53,7 +53,6 @@ async function main() {
     testSuite: suite,
     task,
     experimentName: `example-run-${timestamp}`,
-    projectName: "my-project",
   });
 
   console.log(`\nResults:`);
