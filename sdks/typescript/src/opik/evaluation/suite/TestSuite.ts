@@ -22,11 +22,6 @@ import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/Datase
 import type { DatasetItemUpdate } from "@/rest_api/api/types/DatasetItemUpdate";
 import { generateId } from "@/utils/generateId";
 
-export interface AddItemOptions {
-  assertions?: string[];
-  description?: string;
-  executionPolicy?: ExecutionPolicy;
-}
 
 export interface CreateTestSuiteOptions {
   name: string;
@@ -35,6 +30,12 @@ export interface CreateTestSuiteOptions {
   globalExecutionPolicy?: ExecutionPolicy;
   tags?: string[];
   projectName?: string;
+}
+
+export interface UpdateTestSuiteOptions {
+  globalAssertions?: string[];
+  globalExecutionPolicy?: ExecutionPolicy;
+  tags?: string[];
 }
 
 function validateSuiteName(name: string): void {
@@ -51,7 +52,7 @@ function extractAssertions(evaluators: EvaluatorItemLike[] | undefined): string[
 
 function prepareDatasetItemData(
   data: Record<string, unknown>,
-  options?: AddItemOptions
+  options?: Omit<TestSuiteItem, "data">
 ): DatasetItemData {
   if (options?.executionPolicy) {
     validateExecutionPolicy(options.executionPolicy, "item-level execution policy");
@@ -195,14 +196,7 @@ export class TestSuite {
   // Instance methods
   // ---------------------------------------------------------------------------
 
-  async addItem(
-    data: Record<string, unknown>,
-    options?: AddItemOptions
-  ): Promise<void> {
-    await this.dataset.insert([prepareDatasetItemData(data, options)]);
-  }
-
-  async addItems(items: TestSuiteItem[]): Promise<void> {
+  async insert(items: TestSuiteItem[]): Promise<void> {
     const datasetItems: DatasetItemData[] = items.map((item) =>
       prepareDatasetItemData(item.data, item)
     );
@@ -255,11 +249,7 @@ export class TestSuite {
     return resolveExecutionPolicy(versionInfo?.executionPolicy);
   }
 
-  async update(options: {
-    globalAssertions?: string[];
-    globalExecutionPolicy?: ExecutionPolicy;
-    tags?: string[];
-  }): Promise<void> {
+  async update(options: UpdateTestSuiteOptions): Promise<void> {
     if (options.globalExecutionPolicy) {
       validateExecutionPolicy(options.globalExecutionPolicy, "suite update");
     }
@@ -286,7 +276,7 @@ export class TestSuite {
       });
     }
 
-    const hasVersionUpdates = resolvedEvaluators || assertionsProvided || options.globalExecutionPolicy;
+    const hasVersionUpdates = resolvedEvaluators || assertionsProvided || options.globalExecutionPolicy !== undefined;
     if (hasVersionUpdates) {
       const versionInfo = await this.dataset.getVersionInfo();
       if (!versionInfo) {
@@ -333,7 +323,7 @@ export class TestSuite {
     }
   }
 
-  async deleteItems(itemIds: string[]): Promise<void> {
+  async delete(itemIds: string[]): Promise<void> {
     await this.dataset.delete(itemIds);
   }
 
