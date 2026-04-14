@@ -167,6 +167,7 @@ describe("evaluateTestSuite", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
