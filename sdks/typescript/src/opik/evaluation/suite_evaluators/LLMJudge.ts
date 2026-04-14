@@ -84,6 +84,12 @@ export class LLMJudge extends BaseSuiteEvaluator {
         ...(this.seed !== undefined && { seed: this.seed }),
         customParameters: { reasoning_effort: this.reasoningEffort },
       },
+      // NOTE: For test suite evaluators, no consumer reads these messages —
+      // the backend replaces them with its own hardcoded copy. Included here
+      // because the shared LlmAsJudgeCode schema requires @NotNull messages.
+      // The prompt is duplicated in: Python SDK (metric.py), TS SDK
+      // (llmJudgeTemplate.ts), FE (assertion-converters.ts), and BE
+      // (TestSuitePromptConstants.java). See OPIK-5735.
       messages: [
         { role: "SYSTEM", content: SYSTEM_PROMPT },
         { role: "USER", content: userContent },
