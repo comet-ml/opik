@@ -134,6 +134,88 @@ describe("DatasetItem extensions for test suites", () => {
     });
   });
 
+  describe("contentHash", () => {
+    it("should produce different hashes when evaluators differ", async () => {
+      const itemA = new DatasetItem({
+        id: "hash-1a",
+        input: "same",
+        evaluators: [
+          { name: "judge-a", type: "llm_judge", config: { model: "gpt-4o" } },
+        ],
+      });
+      const itemB = new DatasetItem({
+        id: "hash-1b",
+        input: "same",
+        evaluators: [
+          { name: "judge-b", type: "code_metric", config: { threshold: 0.5 } },
+        ],
+      });
+
+      expect(await itemA.contentHash()).not.toBe(await itemB.contentHash());
+    });
+
+    it("should produce different hashes when executionPolicy differs", async () => {
+      const itemA = new DatasetItem({
+        id: "hash-2a",
+        input: "same",
+        executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+      });
+      const itemB = new DatasetItem({
+        id: "hash-2b",
+        input: "same",
+        executionPolicy: { runsPerItem: 5, passThreshold: 4 },
+      });
+
+      expect(await itemA.contentHash()).not.toBe(await itemB.contentHash());
+    });
+
+    it("should produce the same hash for identical evaluators and executionPolicy", async () => {
+      const evaluators: EvaluatorItemWrite[] = [
+        { name: "judge-1", type: "llm_judge", config: { model: "gpt-4o" } },
+      ];
+      const executionPolicy: ExecutionPolicyWrite = {
+        runsPerItem: 3,
+        passThreshold: 2,
+      };
+
+      const itemA = new DatasetItem({
+        id: "hash-3a",
+        input: "same",
+        evaluators,
+        executionPolicy,
+      });
+      const itemB = new DatasetItem({
+        id: "hash-3b",
+        input: "same",
+        evaluators,
+        executionPolicy,
+      });
+
+      expect(await itemA.contentHash()).toBe(await itemB.contentHash());
+    });
+
+    it("should produce unchanged hash when no evaluators or executionPolicy are set", async () => {
+      const itemA = new DatasetItem({ id: "hash-4a", input: "test" });
+      const itemB = new DatasetItem({ id: "hash-4b", input: "test" });
+
+      expect(await itemA.contentHash()).toBe(await itemB.contentHash());
+    });
+
+    it("should treat empty evaluators/executionPolicy the same as omitted", async () => {
+      const itemOmitted = new DatasetItem({ id: "hash-5a", input: "test" });
+      const itemEmpty = new DatasetItem({
+        id: "hash-5b",
+        input: "test",
+        evaluators: [],
+        executionPolicy: {} as ExecutionPolicyWrite,
+      });
+
+      expect(await itemEmpty.contentHash()).toBe(
+        await itemOmitted.contentHash()
+      );
+    });
+  });
+
   describe("fromApiModel", () => {
     it("should preserve evaluators and executionPolicy", () => {
       const evaluators: EvaluatorItemWrite[] = [

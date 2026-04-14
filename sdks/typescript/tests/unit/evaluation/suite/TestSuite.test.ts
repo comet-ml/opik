@@ -92,6 +92,26 @@ describe("TestSuite", () => {
       expect(suite.description).toBe("Test suite");
       expect(suite.id).toBe("suite-ds-id");
     });
+
+    it("should expose projectName from the dataset", () => {
+      const datasetWithProject = new Dataset(
+        {
+          id: "ds-proj-id",
+          name: "project-suite",
+          projectName: "my-project",
+        },
+        opikClient
+      );
+      const suiteWithProject = new TestSuite(
+        datasetWithProject,
+        opikClient
+      );
+      expect(suiteWithProject.projectName).toBe("my-project");
+    });
+
+    it("should return undefined when dataset has no projectName", () => {
+      expect(suite.projectName).toBeUndefined();
+    });
   });
 
   describe("addItem", () => {

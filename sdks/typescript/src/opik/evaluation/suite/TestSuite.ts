@@ -127,6 +127,10 @@ export class TestSuite {
     return this.dataset.id;
   }
 
+  get projectName(): string | undefined {
+    return this.dataset.projectName;
+  }
+
   // ---------------------------------------------------------------------------
   // Static factory methods (replace Client.ts methods — no circular dep)
   // ---------------------------------------------------------------------------
