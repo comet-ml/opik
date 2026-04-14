@@ -229,8 +229,27 @@ describe("Suite helper functions", () => {
   });
 
   describe("evaluatorsEqual", () => {
-    const makeFakeJudge = (assertions: string[]) =>
-      ({ assertions } as unknown as LLMJudge);
+    const makeFakeJudge = (
+      assertions: string[],
+      overrides?: { model?: string; temperature?: number }
+    ) =>
+      ({
+        assertions,
+        toConfig: () => ({
+          name: "llm_judge",
+          model: {
+            name: overrides?.model ?? "gpt-5-nano",
+            ...(overrides?.temperature !== undefined
+              ? { temperature: overrides.temperature }
+              : {}),
+          },
+          schema: assertions.map((a) => ({
+            name: a,
+            type: "BOOLEAN",
+            description: a,
+          })),
+        }),
+      }) as unknown as LLMJudge;
 
     it("should return true for same assertions in same order", () => {
       const a = [makeFakeJudge(["is correct", "is concise"])];
@@ -238,9 +257,9 @@ describe("Suite helper functions", () => {
       expect(evaluatorsEqual(a, b)).toBe(true);
     });
 
-    it("should return true for same assertions in different order", () => {
-      const a = [makeFakeJudge(["is concise", "is correct"])];
-      const b = [makeFakeJudge(["is correct", "is concise"])];
+    it("should return true for same config in different judge order", () => {
+      const a = [makeFakeJudge(["a"]), makeFakeJudge(["b"])];
+      const b = [makeFakeJudge(["b"]), makeFakeJudge(["a"])];
       expect(evaluatorsEqual(a, b)).toBe(true);
     });
 
@@ -255,15 +274,21 @@ describe("Suite helper functions", () => {
     });
 
     it("should return false for different lengths", () => {
-      const a = [makeFakeJudge(["is correct", "is concise"])];
+      const a = [makeFakeJudge(["is correct"]), makeFakeJudge(["is concise"])];
       const b = [makeFakeJudge(["is correct"])];
       expect(evaluatorsEqual(a, b)).toBe(false);
     });
 
-    it("should return true for assertions split across multiple judges", () => {
-      const a = [makeFakeJudge(["a", "b"]), makeFakeJudge(["c"])];
-      const b = [makeFakeJudge(["c", "a"]), makeFakeJudge(["b"])];
-      expect(evaluatorsEqual(a, b)).toBe(true);
+    it("should return false when model differs", () => {
+      const a = [makeFakeJudge(["is correct"], { model: "gpt-5-nano" })];
+      const b = [makeFakeJudge(["is correct"], { model: "claude-sonnet-4" })];
+      expect(evaluatorsEqual(a, b)).toBe(false);
+    });
+
+    it("should return false when temperature differs", () => {
+      const a = [makeFakeJudge(["is correct"], { temperature: 0.5 })];
+      const b = [makeFakeJudge(["is correct"], { temperature: 0.9 })];
+      expect(evaluatorsEqual(a, b)).toBe(false);
     });
   });
 

@@ -216,24 +216,23 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         // 1. Create a suite with known assertions/policy and add an item so a version exists
         const original = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
         await original.addItem({ input: "seed item" });
         await waitForSuiteItems(original, 1);
 
-        // Record version count before getOrCreate
-        const versionsBefore = await client.api.datasets.listDatasetVersions(
-          original.id, { page: 1, size: 1 }
-        );
-        const versionCountBefore = versionsBefore.total ?? 0;
-        expect(versionCountBefore).toBeGreaterThanOrEqual(1);
+        // Record version ID before getOrCreate
+        const datasetBefore = await client.getDataset(suiteName);
+        const versionBefore = await datasetBefore.getVersionInfo();
+        expect(versionBefore).toBeDefined();
+        const versionIdBefore = versionBefore!.id;
 
         // 2. Call getOrCreate with DIFFERENT assertions and policy
         const fetched = await TestSuite.getOrCreate(client, {
           name: suiteName,
-          assertions: ["Completely different assertion"],
-          executionPolicy: { runsPerItem: 5, passThreshold: 4 },
+          globalAssertions: ["Completely different assertion"],
+          globalExecutionPolicy: { runsPerItem: 5, passThreshold: 4 },
           tags: ["should-be-ignored"],
         });
 
@@ -241,19 +240,17 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         expect(fetched.id).toBe(original.id);
 
         // 4. Assertions should NOT have been overwritten
-        const assertions = await fetched.getAssertions();
+        const assertions = await fetched.getGlobalAssertions();
         expect(assertions).toHaveLength(1);
         expect(assertions[0]).toBe("Response is helpful");
 
         // 5. Execution policy should NOT have been overwritten
-        const policy = await fetched.getExecutionPolicy();
+        const policy = await fetched.getGlobalExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 2, passThreshold: 1 });
 
         // 6. No new version should have been created
-        const versionsAfter = await client.api.datasets.listDatasetVersions(
-          original.id, { page: 1, size: 1 }
-        );
-        expect(versionsAfter.total).toBe(versionCountBefore);
+        const versionAfter = await datasetBefore.getVersionInfo();
+        expect(versionAfter!.id).toBe(versionIdBefore);
       },
       60000
     );
@@ -268,38 +265,33 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
 
         await suite.addItem({ input: "seed item" });
         await waitForSuiteItems(suite, 1);
 
-        // Record version state before the no-op update
-        const versionsBefore = await client.api.datasets.listDatasetVersions(
-          suite.id, { page: 1, size: 1 }
-        );
-        const versionCountBefore = versionsBefore.total ?? 0;
-        const versionIdBefore = versionsBefore.content?.[0]?.id;
-        expect(versionCountBefore).toBeGreaterThanOrEqual(1);
+        // Record version ID before the no-op update
+        const datasetRef = await client.getDataset(suiteName);
+        const versionBefore = await datasetRef.getVersionInfo();
+        expect(versionBefore).toBeDefined();
+        const versionIdBefore = versionBefore!.id;
 
         // Call update with the exact same values
         await suite.update({
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
 
         // No new version should exist
-        const versionsAfter = await client.api.datasets.listDatasetVersions(
-          suite.id, { page: 1, size: 1 }
-        );
-        expect(versionsAfter.total).toBe(versionCountBefore);
-        expect(versionsAfter.content?.[0]?.id).toBe(versionIdBefore);
+        const versionAfter = await datasetRef.getVersionInfo();
+        expect(versionAfter!.id).toBe(versionIdBefore);
 
         // Values should remain unchanged
-        const assertions = await suite.getAssertions();
+        const assertions = await suite.getGlobalAssertions();
         expect(assertions).toEqual(["Response is helpful"]);
-        const policy = await suite.getExecutionPolicy();
+        const policy = await suite.getGlobalExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 2, passThreshold: 1 });
       },
       60000
@@ -313,37 +305,36 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
         await suite.addItem({ input: "seed item" });
         await waitForSuiteItems(suite, 1);
 
-        const versionsBefore = await client.api.datasets.listDatasetVersions(
-          suite.id, { page: 1, size: 1 }
-        );
-        const versionCountBefore = versionsBefore.total ?? 0;
+        const datasetRef = await client.getDataset(suiteName);
+        const versionBefore = await datasetRef.getVersionInfo();
+        expect(versionBefore).toBeDefined();
+        const versionIdBefore = versionBefore!.id;
 
         // Update with different assertions
         await suite.update({
-          assertions: ["Response is concise", "Response is accurate"],
-          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+          globalAssertions: ["Response is concise", "Response is accurate"],
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });
 
-        // A new version should have been created
-        const versionsAfter = await client.api.datasets.listDatasetVersions(
-          suite.id, { page: 1, size: 1 }
-        );
-        expect(versionsAfter.total).toBe(versionCountBefore + 1);
+        // A new version should have been created (different version ID)
+        const versionAfter = await datasetRef.getVersionInfo();
+        expect(versionAfter).toBeDefined();
+        expect(versionAfter!.id).not.toBe(versionIdBefore);
 
         // Verify new values are persisted
-        const assertions = await suite.getAssertions();
+        const assertions = await suite.getGlobalAssertions();
         expect(assertions).toHaveLength(2);
         expect(assertions).toContain("Response is concise");
         expect(assertions).toContain("Response is accurate");
 
-        const policy = await suite.getExecutionPolicy();
+        const policy = await suite.getGlobalExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 3, passThreshold: 2 });
       },
       60000
@@ -359,8 +350,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
         await suite.addItem({ input: "seed item" });
@@ -368,16 +359,16 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         // Update only executionPolicy, omit assertions
         await suite.update({
-          executionPolicy: { runsPerItem: 5, passThreshold: 3 },
+          globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
         });
 
         // Assertions should be preserved
-        const assertions = await suite.getAssertions();
+        const assertions = await suite.getGlobalAssertions();
         expect(assertions).toHaveLength(1);
         expect(assertions[0]).toBe("Response is helpful");
 
         // Policy should be updated
-        const policy = await suite.getExecutionPolicy();
+        const policy = await suite.getGlobalExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 5, passThreshold: 3 });
       },
       60000
@@ -391,8 +382,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });
 
         await suite.addItem({ input: "seed item" });
@@ -400,16 +391,16 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         // Update only assertions, omit executionPolicy
         await suite.update({
-          assertions: ["Response is accurate"],
+          globalAssertions: ["Response is accurate"],
         });
 
         // Assertions should be updated
-        const assertions = await suite.getAssertions();
+        const assertions = await suite.getGlobalAssertions();
         expect(assertions).toHaveLength(1);
         expect(assertions[0]).toBe("Response is accurate");
 
         // Policy should be preserved
-        const policy = await suite.getExecutionPolicy();
+        const policy = await suite.getGlobalExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 3, passThreshold: 2 });
       },
       60000

@@ -72,13 +72,16 @@ export function resolveExecutionPolicy(
 }
 
 /**
- * Compares two lists of LLMJudge evaluators by their flattened, sorted assertion strings.
+ * Compares two lists of LLMJudge evaluators by their full serialized config.
+ * This covers assertions, model name, temperature, seed, reasoning effort, etc.
  */
 export function evaluatorsEqual(a: LLMJudge[], b: LLMJudge[]): boolean {
-  const aAssertions = a.flatMap((e) => e.assertions).sort();
-  const bAssertions = b.flatMap((e) => e.assertions).sort();
-  if (aAssertions.length !== bAssertions.length) return false;
-  return aAssertions.every((val, i) => val === bAssertions[i]);
+  if (a.length !== b.length) return false;
+  const serialize = (judges: LLMJudge[]) =>
+    judges.map((e) => JSON.stringify(e.toConfig())).sort();
+  const aSerialized = serialize(a);
+  const bSerialized = serialize(b);
+  return aSerialized.every((val, i) => val === bSerialized[i]);
 }
 
 /**

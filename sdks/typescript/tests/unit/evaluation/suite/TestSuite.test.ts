@@ -819,7 +819,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ assertions: ["is correct"] });
+      await suite.update({ globalAssertions: ["is correct"] });
 
       expect(applyChangesSpy).not.toHaveBeenCalled();
     });
@@ -846,7 +846,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ executionPolicy: { runsPerItem: 3, passThreshold: 2 } });
+      await suite.update({ globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 } });
 
       expect(applyChangesSpy).not.toHaveBeenCalled();
     });
@@ -887,8 +887,8 @@ describe("TestSuite", () => {
         );
 
       await suite.update({
-        assertions: ["is accurate"],
-        executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        globalAssertions: ["is accurate"],
+        globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
       });
 
       expect(applyChangesSpy).not.toHaveBeenCalled();
@@ -929,7 +929,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ assertions: ["is accurate"] });
+      await suite.update({ globalAssertions: ["is accurate"] });
 
       expect(applyChangesSpy).toHaveBeenCalled();
     });
@@ -956,9 +956,44 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ executionPolicy: { runsPerItem: 5, passThreshold: 3 } });
+      await suite.update({ globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 } });
 
       expect(applyChangesSpy).toHaveBeenCalled();
+    });
+
+    it("should merge partial executionPolicy with current values instead of defaults", async () => {
+      (LLMJudge.fromConfig as ReturnType<typeof vi.fn>).mockImplementation(
+        () => new LLMJudge({ assertions: ["existing"] })
+      );
+
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
+        id: "version-1",
+        versionName: "v1",
+        evaluators: [],
+        executionPolicy: { runsPerItem: 3, passThreshold: 5 },
+      });
+
+      const applyChangesSpy = vi
+        .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
+        .mockImplementation(
+          () =>
+            ({
+              then: (cb: (v: unknown) => unknown) => Promise.resolve(cb(undefined)),
+              [Symbol.toStringTag]: "HttpResponsePromise",
+            }) as never
+        );
+
+      // Only provide runsPerItem — passThreshold should inherit from current (5), not default (1)
+      await suite.update({ globalExecutionPolicy: { runsPerItem: 7 } });
+
+      expect(applyChangesSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          body: expect.objectContaining({
+            execution_policy: { runs_per_item: 7, pass_threshold: 5 },
+          }),
+        })
+      );
     });
   });
 
