@@ -1,7 +1,6 @@
 import { getTrackContext } from "@/decorators/track";
-import { z } from "zod";
-import type { FieldMeta, SupportedValue } from "@/typeHelpers";
-import { serializeValue } from "@/typeHelpers";
+import type { SupportedValue } from "@/typeHelpers";
+import { inferBackendType, serializeValue } from "@/typeHelpers";
 
 function toMetadataValue(value: unknown, backendType: string): unknown {
   if (value === null || value === undefined) return undefined;
@@ -11,61 +10,47 @@ function toMetadataValue(value: unknown, backendType: string): unknown {
   return value;
 }
 
-interface AgentConfigMeta {
+interface ConfigMeta {
   readonly blueprintId: string | undefined;
   readonly blueprintVersion: string | undefined;
-  readonly envs: string[] | undefined;
   readonly isFallback: boolean;
-  deployTo(env: string): Promise<void>;
 }
 
-export type AgentConfig<T> = Readonly<T> & AgentConfigMeta;
+export type Config<T> = Readonly<T> & ConfigMeta;
 
 const META_KEYS = new Set<string>([
   "blueprintId",
   "blueprintVersion",
-  "envs",
   "isFallback",
-  "deployTo",
 ]);
 
-export interface AgentConfigOptions<S extends z.ZodObject<z.ZodRawShape>> {
-  schema: S;
-  values: z.infer<S>;
-  fieldMeta: Map<string, FieldMeta>;
+export interface ConfigOptions<T extends Record<string, unknown>> {
+  values: T;
+  fieldNames: Set<string>;
   blueprintId: string | undefined;
   blueprintVersion: string | undefined;
-  envs: string[] | undefined;
   isFallback: boolean;
   maskId: string | undefined;
-  deployTo: (env: string) => Promise<void>;
 }
 
-export function createTypedAgentConfig<S extends z.ZodObject<z.ZodRawShape>>(
-  options: AgentConfigOptions<S>
-): AgentConfig<z.infer<S>> {
+export function createTypedConfig<T extends Record<string, unknown>>(
+  options: ConfigOptions<T>
+): Config<T> {
   const {
-    schema,
     values,
-    fieldMeta,
+    fieldNames,
     blueprintId,
     blueprintVersion,
-    envs,
     isFallback,
     maskId,
-    deployTo,
   } = options;
-
-  const schemaFieldNames = new Set(Object.keys(schema.shape));
 
   const base = { ...(values as Record<string, unknown>) };
 
   Object.defineProperties(base, {
     blueprintId: { value: blueprintId, enumerable: false, writable: false },
     blueprintVersion: { value: blueprintVersion, enumerable: false, writable: false },
-    envs: { value: envs, enumerable: false, writable: false },
     isFallback: { value: isFallback, enumerable: false, writable: false },
-    deployTo: { value: deployTo, enumerable: false, writable: false },
   });
 
   const proxy = new Proxy(base, {
@@ -76,12 +61,12 @@ export function createTypedAgentConfig<S extends z.ZodObject<z.ZodRawShape>>(
         return Reflect.get(target, prop);
       }
 
-      if (schemaFieldNames.has(prop)) {
+      if (fieldNames.has(prop)) {
         injectTraceMetadata({
           blueprintId,
           blueprintVersion,
           maskId,
-          fieldMeta,
+          fieldNames,
           values: values as Record<string, unknown>,
         });
       }
@@ -90,31 +75,30 @@ export function createTypedAgentConfig<S extends z.ZodObject<z.ZodRawShape>>(
     },
   });
 
-  return proxy as AgentConfig<z.infer<S>>;
+  return proxy as Config<T>;
 }
 
 function injectTraceMetadata(opts: {
   blueprintId: string | undefined;
   blueprintVersion: string | undefined;
   maskId: string | undefined;
-  fieldMeta: Map<string, FieldMeta>;
+  fieldNames: Set<string>;
   values: Record<string, unknown>;
 }): void {
   const ctx = getTrackContext();
   if (!ctx) return;
 
-  const { blueprintId, blueprintVersion, maskId, fieldMeta, values } = opts;
+  const { blueprintId, blueprintVersion, maskId, fieldNames, values } = opts;
 
-  const valuesMetadata: Record<
-    string,
-    { value: unknown; type: string; description?: string }
-  > = {};
+  const valuesMetadata: Record<string, { value: unknown; type: string }> = {};
 
-  for (const [fieldName, meta] of fieldMeta.entries()) {
-    valuesMetadata[meta.prefixedKey] = {
-      value: toMetadataValue(values[fieldName], meta.backendType),
-      type: meta.backendType,
-      description: meta.description,
+  for (const fieldName of fieldNames) {
+    const value = values[fieldName];
+    if (value === undefined) continue;
+    const backendType = inferBackendType(value as SupportedValue);
+    valuesMetadata[fieldName] = {
+      value: toMetadataValue(value, backendType),
+      type: backendType,
     };
   }
 

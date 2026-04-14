@@ -1,10 +1,10 @@
 /**
- * Integration tests for EvaluationSuite in the TypeScript SDK.
+ * Integration tests for TestSuite in the TypeScript SDK.
  * These tests verify the full suite lifecycle against a real Opik instance.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
-import { EvaluationSuite } from "@/evaluation/suite/EvaluationSuite";
+import { TestSuite } from "@/evaluation/suite/TestSuite";
 import { searchAndWaitForDone } from "@/utils/searchHelpers";
 import {
   shouldRunIntegrationTests,
@@ -19,7 +19,7 @@ const echoTask = async (item: Record<string, unknown>) => ({
   output: `Echo: ${item.input}`,
 });
 
-describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
+describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
   let client: Opik;
   const createdDatasetNames: string[] = [];
 
@@ -46,7 +46,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
   });
 
   async function waitForSuiteItems(
-    suite: EvaluationSuite,
+    suite: TestSuite,
     expectedCount: number
   ) {
     const items = await searchAndWaitForDone(
@@ -70,7 +70,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-crud-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 2, passThreshold: 1 },
@@ -99,6 +99,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
             passThreshold: 1,
           });
         }
+
       },
       60000
     );
@@ -111,7 +112,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-assertions-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
@@ -138,7 +139,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-item-assertions-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
@@ -167,15 +168,18 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-get-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const created = await EvaluationSuite.create(client, {
+        const created = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
         });
 
-        const fetched = await EvaluationSuite.get(client, suiteName);
+        expect(created.projectName).toBeDefined();
+
+        const fetched = await TestSuite.get(client, suiteName);
 
         expect(fetched.id).toBe(created.id);
         expect(fetched.name).toBe(suiteName);
+        expect(fetched.projectName).toBe(created.projectName);
       },
       60000
     );
@@ -186,14 +190,14 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-getorcreate-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite1 = await EvaluationSuite.getOrCreate(client, {
+        const suite1 = await TestSuite.getOrCreate(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
         });
 
         expect(suite1.name).toBe(suiteName);
 
-        const suite2 = await EvaluationSuite.getOrCreate(client, {
+        const suite2 = await TestSuite.getOrCreate(client, {
           name: suiteName,
         });
 
@@ -210,10 +214,13 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-run-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const projectName = `test-project-${Date.now()}`;
+
+        const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          projectName,
         });
 
         await suite.addItem({ input: "What is 2+2?", expected: "4" });
@@ -224,6 +231,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
 
         await waitForSuiteItems(suite, 2);
 
+        // run() defaults to projectName from the dataset record
         const result = await suite.run(echoTask);
 
         expect(result.experimentId).toBeDefined();
@@ -257,7 +265,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-multi-run-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 2, passThreshold: 1 },
@@ -286,7 +294,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-update-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
@@ -315,7 +323,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-item-eval-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const suite = await TestSuite.create(client, {
           name: suiteName,
           assertions: ["Response is helpful"],
           executionPolicy: { runsPerItem: 1, passThreshold: 1 },
@@ -357,7 +365,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
         const suiteName = `test-suite-delete-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await EvaluationSuite.create(client, {
+        const suite = await TestSuite.create(client, {
           name: suiteName,
         });
 

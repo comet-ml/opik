@@ -10,6 +10,7 @@ import { useParams, useRouter } from "@tanstack/react-router";
 import {
   AssistantSidebarBridge,
   BridgeContext,
+  BridgeSurface,
   HostEventMap,
   RunnerBridgeState,
   SidebarEventMap,
@@ -238,7 +239,10 @@ function emitHostEvent<E extends keyof HostEventMap>(
   }
 }
 
-function useBridgeContext(assistantBackendUrl: string): BridgeContext {
+function useBridgeContext(
+  assistantBackendUrl: string,
+  surface: BridgeSurface,
+): BridgeContext {
   const workspaceName = useActiveWorkspaceName();
   const workspace = useWorkspace();
 
@@ -267,6 +271,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
       theme: "light",
+      surface,
       projectStats,
     }),
     [
@@ -276,6 +281,7 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      surface,
       projectStats,
     ],
   );
@@ -332,10 +338,12 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
 }
 
 interface AssistantSidebarProps {
+  surface?: BridgeSurface;
   onWidthChange: (width: number) => void;
 }
 
 const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
+  surface = "sidebar",
   onWidthChange,
 }) => {
   const {
@@ -347,7 +355,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     retryCount,
   } = useAssistantBackend();
   const meta = useAssistantMeta(backendUrl);
-  const context = useBridgeContext(backendUrl ?? "");
+  const context = useBridgeContext(backendUrl ?? "", surface);
   const router = useRouter();
 
   const { toast } = useToast();
@@ -410,15 +418,24 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     }),
   );
 
-  // Expose bridge and meta on window for iframe access
+  // Expose bridge and meta on window for iframe access.
+  // Guard the cleanup: when another AssistantSidebar instance mounts (e.g.
+  // switching between sidebar and page surface), it overwrites these globals
+  // with its own bridge/meta. A later unmount of the previous instance must
+  // NOT clobber the new values — only clear if the global still matches ours.
   useEffect(() => {
-    window.opikBridge = bridgeRef.current;
+    const bridge = bridgeRef.current;
+    window.opikBridge = bridge;
     if (meta) {
       window.__opikAssistantMeta__ = meta;
     }
     return () => {
-      delete window.opikBridge;
-      delete window.__opikAssistantMeta__;
+      if (window.opikBridge === bridge) {
+        delete window.opikBridge;
+      }
+      if (meta && window.__opikAssistantMeta__ === meta) {
+        delete window.__opikAssistantMeta__;
+      }
     };
   }, [meta]);
 
@@ -449,6 +466,28 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       node.addEventListener("focusin", stopPropagation);
     }
   }, []);
+
+  // On the page surface, the iframe fills the whole main area, so clicks
+  // inside Ollie never bubble to the parent document. Detect the resulting
+  // window blur and synthesize the events Radix's DismissableLayer is
+  // waiting for, so any open popover/select/dropdown closes. Different
+  // Radix versions listen on `pointerdown` and/or `mousedown`; dispatch both.
+  useEffect(() => {
+    if (surface !== "page") return;
+    const handleBlur = () => {
+      // Only dismiss when focus actually moved INTO our iframe (skip
+      // tab/window switches).
+      if (document.activeElement !== iframeRef.current) return;
+      document.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, composed: true }),
+      );
+      document.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, composed: true }),
+      );
+    };
+    window.addEventListener("blur", handleBlur);
+    return () => window.removeEventListener("blur", handleBlur);
+  }, [surface]);
 
   if (!meta || !isBackendReady) {
     if (phase === "disabled") return null;

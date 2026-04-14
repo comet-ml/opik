@@ -6,6 +6,7 @@ import { GoogleColabCardCoreProps } from "@/types/shared";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
+import { BridgeSurface } from "@/types/assistant-sidebar";
 
 type PluginStore = {
   UserMenu: React.ComponentType | null;
@@ -26,6 +27,7 @@ type PluginStore = {
   WorkspaceSelector: React.ComponentType | null;
   SidebarWorkspaceSelector: React.ComponentType<{ expanded?: boolean }> | null;
   AssistantSidebar: React.ComponentType<{
+    surface?: BridgeSurface;
     onWidthChange: (width: number) => void;
   }> | null;
   UpgradeButton: React.ComponentType | null;

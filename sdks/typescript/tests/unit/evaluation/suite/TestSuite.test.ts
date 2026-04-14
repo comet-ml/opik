@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { DatasetItem } from "@/dataset/DatasetItem";
-import { EvaluationSuite } from "@/evaluation/suite/EvaluationSuite";
+import { TestSuite } from "@/evaluation/suite/TestSuite";
 import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import {
   validateEvaluators,
@@ -43,8 +43,8 @@ vi.mock("@/evaluation/suite_evaluators/validators", async (importOriginal) => {
   };
 });
 
-vi.mock("@/evaluation/suite/evaluateSuite", () => ({
-  evaluateSuite: vi.fn().mockResolvedValue({
+vi.mock("@/evaluation/suite/evaluateTestSuite", () => ({
+  evaluateTestSuite: vi.fn().mockResolvedValue({
     experimentId: "exp-1",
     experimentName: "test-exp",
     testResults: [
@@ -62,10 +62,10 @@ vi.mock("@/evaluation/suite/evaluateSuite", () => ({
   }),
 }));
 
-describe("EvaluationSuite", () => {
+describe("TestSuite", () => {
   let opikClient: OpikClient;
   let testDataset: Dataset;
-  let suite: EvaluationSuite;
+  let suite: TestSuite;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -79,7 +79,7 @@ describe("EvaluationSuite", () => {
       opikClient
     );
 
-    suite = new EvaluationSuite(testDataset, opikClient);
+    suite = new TestSuite(testDataset, opikClient);
   });
 
   afterEach(() => {
@@ -91,6 +91,26 @@ describe("EvaluationSuite", () => {
       expect(suite.name).toBe("test-suite");
       expect(suite.description).toBe("Test suite");
       expect(suite.id).toBe("suite-ds-id");
+    });
+
+    it("should expose projectName from the dataset", () => {
+      const datasetWithProject = new Dataset(
+        {
+          id: "ds-proj-id",
+          name: "project-suite",
+          projectName: "my-project",
+        },
+        opikClient
+      );
+      const suiteWithProject = new TestSuite(
+        datasetWithProject,
+        opikClient
+      );
+      expect(suiteWithProject.projectName).toBe("my-project");
+    });
+
+    it("should return undefined when dataset has no projectName", () => {
+      expect(suite.projectName).toBeUndefined();
     });
   });
 
@@ -200,11 +220,11 @@ describe("EvaluationSuite", () => {
   });
 
   describe("run", () => {
-    it("should delegate to evaluateSuite and return EvaluationSuiteResult", async () => {
-      const { evaluateSuite } = await import(
-        "@/evaluation/suite/evaluateSuite"
+    it("should delegate to evaluateTestSuite and return TestSuiteResult", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
       );
-      vi.mocked(evaluateSuite).mockResolvedValue({
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
         experimentId: "exp-1",
         experimentName: "test-exp",
         testResults: [
@@ -243,11 +263,11 @@ describe("EvaluationSuite", () => {
       expect(result.itemResults.has("item-1")).toBe(true);
     });
 
-    it("should pass model option to evaluateSuite as evaluatorModel", async () => {
-      const { evaluateSuite } = await import(
-        "@/evaluation/suite/evaluateSuite"
+    it("should pass model option to evaluateTestSuite as evaluatorModel", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
       );
-      vi.mocked(evaluateSuite).mockResolvedValue({
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
         experimentId: "exp-2",
         experimentName: "test-exp-2",
         testResults: [],
@@ -261,16 +281,16 @@ describe("EvaluationSuite", () => {
         model: "claude-sonnet-4",
       });
 
-      expect(evaluateSuite).toHaveBeenCalledWith(
+      expect(evaluateTestSuite).toHaveBeenCalledWith(
         expect.objectContaining({ evaluatorModel: "claude-sonnet-4" })
       );
     });
 
-    it("should not call getVersionInfo separately (evaluateSuite handles everything)", async () => {
-      const { evaluateSuite } = await import(
-        "@/evaluation/suite/evaluateSuite"
+    it("should not call getVersionInfo separately (evaluateTestSuite handles everything)", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
       );
-      vi.mocked(evaluateSuite).mockResolvedValue({
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
         experimentId: "exp-2",
         experimentName: "test-exp-2",
         testResults: [
@@ -299,8 +319,63 @@ describe("EvaluationSuite", () => {
 
       await suite.run(mockTask, { experimentName: "test-experiment" });
 
-      // getVersionInfo should NOT be called by run() since evaluateSuite handles everything
+      // getVersionInfo should NOT be called by run() since evaluateTestSuite handles everything
       expect(getVersionInfoSpy).not.toHaveBeenCalled();
+    });
+
+    it("should pass explicit projectName to evaluateTestSuite", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
+      );
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
+        experimentId: "exp-3",
+        experimentName: "test-exp-3",
+        testResults: [],
+        errors: [],
+      });
+
+      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
+
+      await suite.run(mockTask, {
+        experimentName: "test-experiment",
+        projectName: "explicit-project",
+      });
+
+      expect(evaluateTestSuite).toHaveBeenCalledWith(
+        expect.objectContaining({ projectName: "explicit-project" })
+      );
+    });
+
+    it("should fall back to dataset.projectName when run options omit projectName", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
+      );
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
+        experimentId: "exp-4",
+        experimentName: "test-exp-4",
+        testResults: [],
+        errors: [],
+      });
+
+      const datasetWithProject = new Dataset(
+        {
+          id: "ds-with-project",
+          name: "test-suite-with-project",
+          projectName: "dataset-project",
+        },
+        opikClient
+      );
+      const suiteWithProject = new TestSuite(datasetWithProject, opikClient);
+
+      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
+
+      await suiteWithProject.run(mockTask, {
+        experimentName: "test-experiment",
+      });
+
+      expect(evaluateTestSuite).toHaveBeenCalledWith(
+        expect.objectContaining({ projectName: "dataset-project" })
+      );
     });
   });
 
@@ -402,6 +477,27 @@ describe("EvaluationSuite", () => {
       const tags = await suite.getTags();
 
       expect(tags).toEqual([]);
+    });
+  });
+
+  describe("getItemsCount", () => {
+    it("should delegate to dataset.getItemsCount and return the count", async () => {
+      const getItemsCountSpy = vi
+        .spyOn(testDataset, "getItemsCount")
+        .mockResolvedValue(42);
+
+      const count = await suite.getItemsCount();
+
+      expect(getItemsCountSpy).toHaveBeenCalled();
+      expect(count).toBe(42);
+    });
+
+    it("should return undefined when dataset has no items count", async () => {
+      vi.spyOn(testDataset, "getItemsCount").mockResolvedValue(undefined);
+
+      const count = await suite.getItemsCount();
+
+      expect(count).toBeUndefined();
     });
   });
 
@@ -692,20 +788,20 @@ describe("EvaluationSuite", () => {
   describe("input validation", () => {
     it("should throw Error when creating suite with empty name", async () => {
       await expect(
-        EvaluationSuite.create(opikClient, { name: "" })
-      ).rejects.toThrow("Evaluation suite name must be a non-empty string");
+        TestSuite.create(opikClient, { name: "" })
+      ).rejects.toThrow("Test suite name must be a non-empty string");
     });
 
     it("should throw Error when creating suite with whitespace-only name", async () => {
       await expect(
-        EvaluationSuite.create(opikClient, { name: "   " })
-      ).rejects.toThrow("Evaluation suite name must be a non-empty string");
+        TestSuite.create(opikClient, { name: "   " })
+      ).rejects.toThrow("Test suite name must be a non-empty string");
     });
 
     it("should throw Error in getOrCreate with empty name", async () => {
       await expect(
-        EvaluationSuite.getOrCreate(opikClient, { name: "" })
-      ).rejects.toThrow("Evaluation suite name must be a non-empty string");
+        TestSuite.getOrCreate(opikClient, { name: "" })
+      ).rejects.toThrow("Test suite name must be a non-empty string");
     });
 
     it("should call validateExecutionPolicy when executionPolicy is provided in create", async () => {
@@ -727,7 +823,7 @@ describe("EvaluationSuite", () => {
           }) as never
       );
 
-      await EvaluationSuite.create(opikClient, {
+      await TestSuite.create(opikClient, {
         name: "valid-suite",
         executionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });

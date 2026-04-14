@@ -10,7 +10,7 @@ class BaseSuiteEvaluator(base_metric.BaseMetric):
     """
     Base class for suite evaluators.
 
-    Suite evaluators are designed for use with evaluation suites and provide
+    Suite evaluators are designed for use with test suites and provide
     serialization support via `to_config()` and `from_config()` methods for
     compatibility with the backend's online evaluation system.
 
