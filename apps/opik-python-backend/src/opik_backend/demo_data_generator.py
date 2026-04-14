@@ -331,6 +331,12 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
         try:
             project_name = "Opik Demo Agent Observability"
 
+            # Short-circuit if project already exists (also implicitly validates the API key)
+            if project_exists(base_url, workspace_name, comet_api_key, project_name):
+                logger.info("%s project already exists", project_name)
+                return
+
+            # If project doesn't exist, it could be because the API key isn't ready yet.
             # Wait for API key to be ready (exponential backoff: 0.5s, 1s, 2s, 4s, 8s ≈ 15.5s total)
             max_retries = 5
             for attempt in range(max_retries):
@@ -340,10 +346,6 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                     logger.error("API key not ready for workspace %s after %d retries, aborting demo data creation", workspace_name, max_retries)
                     return
                 time.sleep(0.5 * (2 ** attempt))
-
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
 
             client = opik.Opik(
                 project_name=project_name,
@@ -360,7 +362,8 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             process_spans_with_time_shift(demo_spans, time_shift, context, client)
             flush_result = client.flush()
             if not flush_result:
-                logger.error("Failed to flush demo traces for workspace %s project %s", workspace_name, project_name)
+                logger.error("Failed to flush demo traces for workspace %s project %s, aborting", workspace_name, project_name)
+                return
 
             # Wait for project to be queryable (exponential backoff: 0.5s, 1s, 2s, 4s, 8s ≈ 15.5s total)
             for attempt in range(max_retries):
@@ -381,7 +384,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                     done = True
                     attempts = 0
                 except Exception as e:
-                    logger.error(f"Error closing threads for workspace {workspace_name} attempt {attempts}: status={getattr(e, 'status_code', 'unknown')}, body={getattr(e, 'body', str(e))}")
+                    logger.error("Error closing threads for workspace %s attempt %d: status=%s, body=%s", workspace_name, attempts, getattr(e, 'status_code', 'unknown'), getattr(e, 'body', str(e)))
                     attempts += 1
                     time.sleep(0.5)
 
@@ -415,13 +418,13 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                         done = True
                         attempts = 0
                     except Exception as e:
-                        logger.error(f"Error scoring batch of threads for workspace {workspace_name} attempt {attempts}: status={getattr(e, 'status_code', 'unknown')}, body={getattr(e, 'body', str(e))}")
+                        logger.error("Error scoring batch of threads for workspace %s attempt %d: status=%s, body=%s", workspace_name, attempts, getattr(e, 'status_code', 'unknown'), getattr(e, 'body', str(e)))
                         attempts += 1
                         time.sleep(0.5)
                 if not done:
                     logger.error("Failed to score batch of threads for workspace %s after %d attempts", workspace_name, max_attempts)
         except Exception as e:
-            logger.error(f"Error creating demo chatbot project for workspace {workspace_name}: {e}")
+            logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e)
         finally:
             # Close the client
             if client:
