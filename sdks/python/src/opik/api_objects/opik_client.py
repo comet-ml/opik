@@ -12,6 +12,7 @@ from typing import (
     Union,
     Literal,
     cast,
+    overload,
 )
 
 import httpx
@@ -44,8 +45,8 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
-from .agent_config.base import AgentConfig
-from .agent_config.config import AgentConfigManager
+from .agent_config.base import Config
+from .agent_config.config import ConfigManager
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
 from .. import config as opik_config
@@ -92,7 +93,7 @@ from ..file_upload import upload_manager
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-_AgentConfigT = TypeVar("_AgentConfigT", bound=AgentConfig)
+_ConfigT = TypeVar("_ConfigT", bound=Config)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
 
@@ -2712,103 +2713,180 @@ class Opik:
             ids=[queue_id]
         )
 
-    def create_agent_config_version(
+    @overload
+    def get_or_create_config(
         self,
-        config: AgentConfig,
+        *,
+        fallback: _ConfigT,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> _ConfigT: ...
+
+    @overload
+    def get_or_create_config(
+        self,
+        *,
+        fallback: None = ...,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> Config: ...
+
+    def get_or_create_config(
+        self,
+        *,
+        fallback: Optional[Config] = None,
+        project_name: Optional[str] = None,
+        env: Optional[str] = None,
+        version: Optional[str] = None,
+        timeout_in_seconds: Optional[int] = 5,
+    ) -> Config:
+        """Fetch a config from the backend, optionally auto-creating from a fallback.
+
+        Must be called from inside a function decorated with ``@opik.track``.
+
+        At most one of ``env`` or ``version`` may be provided.
+
+        * ``env`` — fetch the version deployed to an environment (e.g. ``"staging"``).
+        * ``version`` — fetch a specific version by name. The special value
+          ``"latest"`` fetches the latest version in the project; when no config
+          exists at all and ``fallback`` is provided, auto-creates one from it.
+        * Neither — equivalent to ``env="prod"``. If no config exists at all in
+          the project and ``fallback`` is provided, auto-creates one from it
+          (the backend tags the first version as ``"prod"``).
+
+        Failure modes depend on whether ``fallback`` is provided:
+
+        * **With fallback**: Backend errors (timeouts, network failures) return
+          the fallback instance with ``is_fallback=True``. If an explicit
+          ``env``/``version`` is requested but missing, raises
+          :class:`~opik.exceptions.ConfigNotFound`. If no config exists at all,
+          auto-creates from the fallback. The return value is an instance of
+          ``type(fallback)``.
+        * **Without fallback**: Backend errors are re-raised. If no config
+          exists at all, raises :class:`~opik.exceptions.ConfigNotFound`
+          instead of auto-creating. The return value is a generic ``Config``
+          instance — typed field access is only available when a fallback
+          supplies the subclass.
+
+        If the backend blueprint is missing any field declared on the
+        fallback's class, raises :class:`~opik.exceptions.ConfigMismatch`.
+
+        Args:
+            fallback: An instance of a user-defined ``Config`` subclass. When
+                provided, used as the return value if the backend is
+                unreachable and as the initial values when auto-creating.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            env: Environment tag to fetch (e.g. ``"prod"``, ``"staging"``).
+            version: Fetch a specific version by its name. Use ``"latest"`` to
+                fetch the latest version.
+            timeout_in_seconds: Maximum seconds to wait for the backend
+                response. With a fallback, a timeout returns the fallback and
+                the cache continues refreshing in the background; without one,
+                the timeout is raised. Pass ``None`` to wait indefinitely.
+        """
+        if fallback is not None and (
+            not isinstance(fallback, Config) or type(fallback) is Config
+        ):
+            raise TypeError(
+                "fallback must be an instance of a Config subclass, "
+                f"got {type(fallback).__name__}"
+            )
+
+        if env is not None and version is not None:
+            raise ValueError(
+                "Specify at most one of 'env' (fetch by environment tag) "
+                "or 'version' (fetch by version name)."
+            )
+
+        # Resolve selectors:
+        # - version="latest" → fetch latest blueprint; auto-create if empty.
+        # - explicit env or named version → fetch by selector; no auto-create.
+        # - neither → fetch env="prod"; auto-create if no config exists at all.
+        if version == "latest":
+            env = None
+            version = None
+            auto_create_if_empty = True
+        elif env is None and version is None:
+            env = "prod"
+            auto_create_if_empty = True
+        else:
+            auto_create_if_empty = False
+
+        resolved_project = self._resolve_project_name(project_name)
+        manager = ConfigManager(
+            project_name=resolved_project,
+            rest_client_=self._rest_client,
+        )
+        resolved_cls = type(fallback) if fallback is not None else Config
+        return resolved_cls._get_or_create_from_backend(
+            manager,
+            resolved_project,
+            fallback=fallback,
+            env=env,
+            version=version,
+            auto_create_if_empty=auto_create_if_empty,
+            timeout_in_seconds=timeout_in_seconds,
+        )
+
+    def create_config(
+        self,
+        config: Config,
         project_name: Optional[str] = None,
         description: Optional[str] = None,
     ) -> str:
-        """Write a config version to the backend. No-op if nothing changed.
+        """Write a config version to the backend unconditionally.
+
+        Unlike :meth:`get_or_create_config`, this does not require a
+        ``@opik.track`` context and always performs a write — the new version's
+        values overwrite the latest blueprint's values.
 
         Args:
-            config: An instance of a user-defined ``AgentConfig`` subclass.
+            config: An instance of a user-defined ``Config`` subclass.
             project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             description: Optional description stored with the version.
 
         Returns:
-            The version name — either the newly created version or the
-            existing version when values already match.
+            The version name of the newly written blueprint.
         """
-        if not isinstance(config, AgentConfig) or type(config) is AgentConfig:
+        if not isinstance(config, Config) or type(config) is Config:
             raise TypeError(
-                "config must be an instance of an AgentConfig subclass, "
+                "config must be an instance of a Config subclass, "
                 f"got {type(config).__name__}"
             )
 
-        manager = AgentConfigManager(
+        manager = ConfigManager(
             project_name=self._resolve_project_name(project_name),
             rest_client_=self._rest_client,
         )
-        return config._create_version(manager, description)
+        return config._create_from_instance(manager, description)
 
-    def get_agent_config(
+    def set_config_env(
         self,
         *,
-        fallback: _AgentConfigT,
         project_name: Optional[str] = None,
-        env: Optional[str] = None,
-        latest: bool = False,
-        version: Optional[str] = None,
-        timeout_in_seconds: Optional[int] = 5,
-    ) -> _AgentConfigT:
-        """Fetch an agent config from the backend.
+        version: str,
+        env: str,
+    ) -> None:
+        """Tag a specific config version with an environment name.
 
-        Exactly one selector must be used to specify which version to fetch
-        (passing more than one raises ``ValueError``):
-
-        * ``env`` — fetch the version deployed to an environment (e.g. ``"prod"``).
-          This is the default when no selector is provided.
-        * ``latest=True`` — fetch the most recently published version.
-        * ``version`` — fetch a specific version by name, as returned by
-          ``create_agent_config_version``.
+        After tagging, ``get_or_create_config(env=env)`` for the project will
+        return this version.
 
         Args:
-            fallback: An instance of a user-defined ``AgentConfig`` subclass.
-                Used as the return value when the backend has no config, and
-                its type determines the return type.
             project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
-            env: Environment tag to fetch. Defaults to ``"prod"`` when no other
-                selector is provided.
-            latest: If ``True``, fetch the latest version regardless of env tags.
-            version: Fetch a specific version by its name.
-            timeout_in_seconds: Maximum seconds to wait for the backend
-                response. If the request takes longer, ``fallback`` is returned
-                and the cache continues refreshing in the background. Pass
-                ``None`` to wait indefinitely.
+            version: Version name of the blueprint to tag.
+            env: Environment name (e.g. ``"prod"``, ``"staging"``).
         """
-        if not isinstance(fallback, AgentConfig) or type(fallback) is AgentConfig:
-            raise TypeError(
-                "fallback must be an instance of an AgentConfig subclass, "
-                f"got {type(fallback).__name__}"
-            )
-
-        selectors = sum([env is not None, latest, version is not None])
-        if selectors > 1:
-            raise ValueError(
-                "Specify exactly one of 'env' (fetch by environment tag), "
-                "'latest=True' (fetch the newest version), "
-                "or 'version' (fetch by version name)."
-            )
-        if selectors == 0:
-            env = "prod"
-
         resolved_project = self._resolve_project_name(project_name)
-        manager = AgentConfigManager(
+        manager = ConfigManager(
             project_name=resolved_project,
             rest_client_=self._rest_client,
         )
-        return cast(
-            _AgentConfigT,
-            type(fallback)._resolve_from_backend(
-                fallback,
-                manager,
-                resolved_project,
-                env=env,
-                latest=latest,
-                version=version,
-                timeout_in_seconds=timeout_in_seconds,
-            ),
-        )
+        manager.set_env(version=version, env=env)
 
     def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
         return helpers.resolve_project_name(

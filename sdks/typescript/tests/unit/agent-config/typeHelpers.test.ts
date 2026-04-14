@@ -1,8 +1,6 @@
-import { z } from "zod";
 import {
   serializeValue,
   deserializeValue,
-  getSchemaPrefix,
 } from "@/typeHelpers";
 import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
@@ -140,18 +138,6 @@ describe("serializeValue — explicit backendType for prompt types", () => {
   it('serializes PromptVersion with backendType "prompt_commit" → returns commit', () => {
     const pv = makePromptVersion("commit-xyz789");
     expect(serializeValue(pv, "prompt_commit")).toBe("commit-xyz789");
-  });
-});
-
-describe("getSchemaPrefix", () => {
-  it("throws TypeError when schema is missing .describe()", () => {
-    const Schema = z.object({ x: z.number() });
-    expect(() => getSchemaPrefix(Schema)).toThrow(TypeError);
-  });
-
-  it("returns the schema description as prefix", () => {
-    const Schema = z.object({ x: z.number() }).describe("MyConfig");
-    expect(getSchemaPrefix(Schema)).toBe("MyConfig");
   });
 });
 

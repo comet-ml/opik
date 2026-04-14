@@ -1,10 +1,10 @@
 /**
- * Integration test for AgentConfigManager CRUD operations in the TypeScript SDK.
+ * Integration test for ConfigManager CRUD operations in the TypeScript SDK.
  * Requires a running Opik backend. See tests/integration/api/shouldRunIntegrationTests.ts.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { Opik } from "@/index";
-import { AgentConfigManager, Blueprint } from "@/agent-config";
+import { ConfigManager, Blueprint } from "@/agent-config";
 import { Prompt } from "@/prompt/Prompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 import {
@@ -15,7 +15,7 @@ import {
 const shouldRunApiTests = shouldRunIntegrationTests();
 
 describe.skipIf(!shouldRunApiTests)(
-  "AgentConfigManager CRUD Integration Test",
+  "ConfigManager CRUD Integration Test",
   () => {
     let client: Opik;
 
@@ -31,7 +31,7 @@ describe.skipIf(!shouldRunApiTests)(
 
     it("should create a blueprint and retrieve it by latest", async () => {
       const testProjectName = `test-agent-config-${Date.now()}`;
-      const manager = new AgentConfigManager(testProjectName, client);
+      const manager = new ConfigManager(testProjectName, client);
 
       const created = await manager.createBlueprint({
         values: [
@@ -62,7 +62,7 @@ describe.skipIf(!shouldRunApiTests)(
 
     it("should retrieve a blueprint by ID", async () => {
       const testProjectName = `test-agent-config-${Date.now()}`;
-      const manager = new AgentConfigManager(testProjectName, client);
+      const manager = new ConfigManager(testProjectName, client);
 
       const created = await manager.createBlueprint({
         values: [{ key: "temperature", value: "0.7", type: "string" }],
@@ -76,7 +76,7 @@ describe.skipIf(!shouldRunApiTests)(
 
     it("should create a mask blueprint", async () => {
       const testProjectName = `test-agent-config-${Date.now()}`;
-      const manager = new AgentConfigManager(testProjectName, client);
+      const manager = new ConfigManager(testProjectName, client);
 
       const baseBp = await manager.createBlueprint({
         values: [
@@ -100,9 +100,9 @@ describe.skipIf(!shouldRunApiTests)(
       expect(masked?.id).toBe(baseBp.id);
     });
 
-    it("should tag a blueprint with an env label and retrieve it by env", async () => {
+    it("should tag a blueprint with an env label via setConfigEnv and retrieve it by env", async () => {
       const testProjectName = `test-agent-config-${Date.now()}`;
-      const manager = new AgentConfigManager(testProjectName, client);
+      const manager = new ConfigManager(testProjectName, client);
 
       const created = await manager.createBlueprint({
         values: [
@@ -113,7 +113,11 @@ describe.skipIf(!shouldRunApiTests)(
       });
 
       const envLabel = `test-env-${Date.now()}`;
-      await manager.tagBlueprintWithEnv(created.id, envLabel);
+      await client.setConfigEnv({
+        version: created.name ?? created.id,
+        env: envLabel,
+        projectName: testProjectName,
+      });
 
       const fetched = await manager.getBlueprint({ env: envLabel });
       expect(fetched).not.toBeNull();
@@ -135,7 +139,7 @@ describe.skipIf(!shouldRunApiTests)(
       expect(promptVersionV1.commit).toBe(commitV1);
 
       const testProjectName = `test-agent-config-${Date.now()}`;
-      const manager = new AgentConfigManager(testProjectName, client);
+      const manager = new ConfigManager(testProjectName, client);
 
       const created = await manager.createBlueprint({
         values: [
@@ -181,7 +185,7 @@ describe.skipIf(!shouldRunApiTests)(
 
     it("should return null for nonexistent blueprint ID", async () => {
       const testProjectName = `test-agent-config-${Date.now()}`;
-      const manager = new AgentConfigManager(testProjectName, client);
+      const manager = new ConfigManager(testProjectName, client);
 
       const result = await manager.getBlueprint({
         id: "00000000-0000-0000-0000-000000000000",
