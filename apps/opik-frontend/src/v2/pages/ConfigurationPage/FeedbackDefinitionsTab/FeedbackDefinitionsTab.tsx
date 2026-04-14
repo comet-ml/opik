@@ -10,7 +10,8 @@ import FeedbackDefinitionsValueCell from "@/shared/DataTableCells/FeedbackDefini
 import FeedbackDefinitionsRowActionsCell from "@/v2/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsRowActionsCell";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import Loader from "@/shared/Loader/Loader";
@@ -145,9 +146,6 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search;
-  const noDataText = noData
-    ? "There are no feedback definitions yet"
-    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY_V2,
@@ -257,13 +255,21 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewFeedbackDefinitionClick}>
-                Create feedback definition
-              </Button>
-            )}
-          </DataTableNoData>
+          noData ? (
+            <DataTableEmptyContent
+              title="No feedback definitions yet"
+              description="Create a feedback definition to start evaluating your agent."
+            >
+              <button
+                onClick={handleNewFeedbackDefinitionClick}
+                className="comet-body-s underline underline-offset-4 hover:text-primary"
+              >
+                Add feedback definition
+              </button>
+            </DataTableEmptyContent>
+          ) : (
+            <DataTableNoMatchingData />
+          )
         }
         showLoadingOverlay={isPlaceholderData && isFetching}
       />

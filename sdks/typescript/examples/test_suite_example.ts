@@ -21,8 +21,8 @@ async function main() {
 
   const suite = await TestSuite.create(client, {
     name: suiteName,
-    assertions: ["Response answers the question"],
-    executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+    globalAssertions: ["Response answers the question"],
+    globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
     projectName: "my-project",
   });
 

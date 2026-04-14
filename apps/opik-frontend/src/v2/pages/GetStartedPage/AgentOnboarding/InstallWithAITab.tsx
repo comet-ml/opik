@@ -1,65 +1,14 @@
 import React from "react";
-import { Check, LoaderCircle } from "lucide-react";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
 import { buildDocsUrl, maskAPIKey } from "@/lib/utils";
-import CopyButton from "@/shared/CopyButton/CopyButton";
+import TimelineStep from "@/shared/TimelineStep/TimelineStep";
+import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 import claudeCodeLogo from "/images/integrations/claude_code.svg";
 import codexLogo from "/images/integrations/codex.svg";
 import cursorLogo from "/images/integrations/cursor.svg";
 
 const INSTALL_COMMAND = "npx skills add comet-ml/opik-skills -g --all";
-
-const TimelineStep: React.FC<{
-  number?: number;
-  isLast?: boolean;
-  completed?: boolean;
-  children: React.ReactNode;
-}> = ({ number, isLast, completed, children }) => (
-  <div className="flex gap-3">
-    <div className="flex flex-col items-center">
-      {number != null ? (
-        <div className="flex size-4 shrink-0 items-center justify-center rounded-full border border-[var(--timeline-connector)] text-[8px] font-semibold text-[var(--timeline-connector)]">
-          {number}
-        </div>
-      ) : completed ? (
-        <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary">
-          <Check className="size-2.5 text-primary-foreground" />
-        </div>
-      ) : (
-        <div className="relative flex size-4 shrink-0 items-center justify-center">
-          <div className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
-          <LoaderCircle className="relative size-3.5 animate-spin text-primary" />
-        </div>
-      )}
-      {!isLast && (
-        <div className="w-px flex-1 bg-[var(--timeline-connector)] opacity-50" />
-      )}
-    </div>
-    <div className="flex-1 pb-6">{children}</div>
-  </div>
-);
-
-const CodeBlockWithHeader: React.FC<{
-  title: string;
-  code: string;
-  copyText?: string;
-}> = ({ title, code, copyText }) => (
-  <div className="overflow-hidden rounded-md border bg-primary-foreground">
-    <div className="flex items-center justify-between border-b px-2.5 py-1">
-      <span className="comet-body-xs text-muted-slate">{title}</span>
-      <CopyButton
-        text={copyText ?? code}
-        message="Successfully copied"
-        tooltipText="Copy"
-        size="icon-3xs"
-      />
-    </div>
-    <pre className="whitespace-pre-wrap break-words px-2.5 py-2 font-code text-[13px] leading-snug">
-      {code}
-    </pre>
-  </div>
-);
 
 interface InstallWithAITabProps {
   traceReceived: boolean;
@@ -109,7 +58,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
               Install the Opik skill so it&apos;s available in Claude Code,
               Codex, Cursor, Windsurf, and other AI editors.
             </p>
-            <CodeBlockWithHeader title="Terminal" code={INSTALL_COMMAND} />
+            <CodeSnippet title="Terminal" code={INSTALL_COMMAND} />
           </div>
         </TimelineStep>
 
@@ -122,7 +71,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
               Navigate to the repo you want to instrument and paste this prompt.
               It will instrument your agent with Opik tracing automatically.
             </p>
-            <CodeBlockWithHeader
+            <CodeSnippet
               title="Prompt"
               code={displayPromptText}
               copyText={promptText}

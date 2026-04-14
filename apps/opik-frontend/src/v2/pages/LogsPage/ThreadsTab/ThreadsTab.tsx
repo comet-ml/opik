@@ -12,7 +12,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw } from "lucide-react";
+import { ExternalLink, RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
@@ -42,7 +42,11 @@ import {
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
-import NoThreadsPage from "@/v2/pages/LogsPage/ThreadsTab/NoThreadsPage";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import { buildDocsUrl } from "@/lib/utils";
+import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { Button } from "@/ui/button";
@@ -289,6 +293,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   logsType,
   onLogsTypeChange,
 }) => {
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
   const {
@@ -774,7 +779,32 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       <DataTableStateHandler
         isLoading={isTableLoading}
         isEmpty={showEmptyState}
-        emptyState={<NoThreadsPage />}
+        emptyState={
+          <DataTableEmptyContent
+            title="No threads yet"
+            description="Threads will appear here once your agent starts receiving requests."
+            lightImageUrl={emptyLogsLightUrl}
+            darkImageUrl={emptyLogsDarkUrl}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={openQuickstart}
+                className="comet-body-s underline underline-offset-4 hover:text-primary"
+              >
+                Quickstart guide
+              </button>
+              <a
+                href={buildDocsUrl("/tracing/log_chat_conversations")}
+                target="_blank"
+                rel="noreferrer"
+                className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"
+              >
+                View docs
+                <ExternalLink className="size-3" />
+              </a>
+            </div>
+          </DataTableEmptyContent>
+        }
         skeleton
       >
         <DataTable

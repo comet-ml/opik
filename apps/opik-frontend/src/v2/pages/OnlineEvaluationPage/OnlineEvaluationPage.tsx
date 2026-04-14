@@ -44,8 +44,10 @@ import StatusCell from "@/shared/DataTableCells/StatusCell";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import useRulesList from "@/api/automations/useRulesList";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import NoDataPage from "@/shared/NoDataPage/NoDataPage";
-import NoRulesPage from "@/v2/pages-shared/automations/NoRulesPage";
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyOnlineEvalLightUrl from "/images/empty-online-eval-light.svg";
+import emptyOnlineEvalDarkUrl from "/images/empty-online-eval-dark.svg";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
@@ -359,26 +361,12 @@ export const OnlineEvaluationPage: React.FC = () => {
     return <Loader />;
   }
 
-  if (noData && rows.length === 0 && page === 1) {
-    return (
-      <>
-        <NoRulesPage openModal={handleNewRuleClick} Wrapper={NoDataPage} />
-        <AddEditRuleDialog
-          key={resetDialogKeyRef.current}
-          open={isDialogOpen}
-          setOpen={handleCloseDialog}
-          rule={dialogRule}
-          mode={dialogMode}
-          projectId={projectId}
-        />
-      </>
-    );
-  }
+  const isEmpty = noData && rows.length === 0 && page === 1;
 
   return (
-    <div className="pt-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-xs truncate break-words">
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">
           Online evaluation
         </h1>
         {canUpdateOnlineEvaluationRules && (
@@ -388,61 +376,77 @@ export const OnlineEvaluationPage: React.FC = () => {
           </Button>
         )}
       </div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search as string}
-            setSearchText={setSearch}
-            placeholder="Search by ID"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyOnlineEvalLightUrl}
+          darkImageUrl={emptyOnlineEvalDarkUrl}
+          title="No online evaluations yet"
+          description={
+            "Create a rule to automatically score your model's outputs.\nDefine criteria, evaluate responses in real time, and track quality over time."
+          }
+          primaryActionLabel="Create your first rule"
+          onPrimaryAction={handleNewRuleClick}
+          docsUrl={buildDocsUrl("/production/rules")}
+        />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search as string}
+                setSearchText={setSearch}
+                placeholder="Search by ID"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {canUpdateOnlineEvaluationRules && (
+                <>
+                  <RulesActionsPanel rules={selectedRows} />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </>
+              )}
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              ></ColumnsButton>
+            </div>
+          </div>
+          <DataTable
+            columns={columns}
+            data={rows}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={<DataTableNoData title={noDataText} />}
+            showLoadingOverlay={isPlaceholderData && isFetching}
           />
-        </div>
-        <div className="flex items-center gap-2">
-          {canUpdateOnlineEvaluationRules && (
-            <>
-              <RulesActionsPanel rules={selectedRows} />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </>
-          )}
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={rows}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        showLoadingOverlay={isPlaceholderData && isFetching}
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-        ></DataTablePagination>
-      </div>
+          <div className="py-4">
+            <DataTablePagination
+              page={page as number}
+              pageChange={setPage}
+              size={size as number}
+              sizeChange={setSize}
+              total={data?.total ?? 0}
+            ></DataTablePagination>
+          </div>
+        </>
+      )}
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
