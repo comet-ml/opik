@@ -441,7 +441,7 @@ class OpikConfigurator:
             return False
 
         # Case 3: No project name is provided, prompt the user
-        default_project_name = config.OPIK_PROJECT_DEFAULT_NAME
+        default_project_name = self._get_suggested_project_name()
         use_default_project_name = (
             True
             if self.automatic_approvals
@@ -456,6 +456,27 @@ class OpikConfigurator:
             self._ask_for_project_name()
 
         return True
+
+    def _get_suggested_project_name(self) -> str:
+        """
+        Returns the best project name to suggest during configuration.
+        Tries to fetch the most recently created project from the API,
+        falling back to the hardcoded default if the API call fails.
+        """
+        api_url = self._get_api_url()
+        recent_project = opik_rest_helpers.get_most_recent_project_name(
+            api_key=self.api_key,
+            workspace=self.workspace,
+            api_url=api_url,
+            base_url=url_helpers.ensure_ending_slash(self.base_url),
+        )
+        return recent_project or config.OPIK_PROJECT_DEFAULT_NAME
+
+    def _get_api_url(self) -> str:
+        if not self.use_local:
+            return urllib.parse.urljoin(self.base_url, "opik/api/")
+        else:
+            return urllib.parse.urljoin(self.base_url, "/api/")
 
     def _ask_for_project_name(self) -> None:
         user_input_project_name = input("Please enter the project name: ")

@@ -112,6 +112,87 @@ export async function isOpikAccessible(
   }
 }
 
+const SORTING_CREATED_AT_DESC = '[{"field":"created_at","direction":"DESC"}]';
+
+/**
+ * Fetches the most recently created project name from the Opik API.
+ * Tries the standard API path first (with /api/ or /opik/api/ prefix),
+ * then falls back to the direct backend path (no prefix) for direct
+ * backend connections (e.g., http://localhost:8080).
+ *
+ * @param host - The base host URL (e.g., "http://localhost:5173/" or "https://www.comet.com/")
+ * @param apiKey - Optional API key for authenticated requests
+ * @param workspace - Optional workspace name
+ * @returns The most recent project name, or null if none found or request fails
+ */
+export async function getMostRecentProjectName(
+  host: string,
+  apiKey?: string,
+  workspace?: string,
+): Promise<string | null> {
+  const normalizedHost = host.endsWith('/') ? host.slice(0, -1) : host;
+  const isLocalHost =
+    normalizedHost.includes('localhost') ||
+    normalizedHost.includes('127.0.0.1');
+  const apiPath = isLocalHost ? '/api' : '/opik/api';
+
+  // Try API-prefixed URL first, then direct backend URL as fallback
+  const urlsToTry = [
+    `${normalizedHost}${apiPath}/v1/private/projects`,
+    `${normalizedHost}/v1/private/projects`,
+  ];
+
+  for (const projectsUrl of urlsToTry) {
+    const result = await tryFetchMostRecentProject(
+      projectsUrl,
+      apiKey,
+      workspace,
+    );
+    if (result !== null) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+async function tryFetchMostRecentProject(
+  projectsUrl: string,
+  apiKey?: string,
+  workspace?: string,
+): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (apiKey) {
+      headers['Authorization'] = apiKey;
+    }
+    if (workspace) {
+      headers['Comet-Workspace'] = workspace;
+    }
+
+    const response = await axios.get(projectsUrl, {
+      headers,
+      params: {
+        page: 1,
+        size: 1,
+        sorting: SORTING_CREATED_AT_DESC,
+      },
+      timeout: 5000,
+    });
+
+    const projects = response.data?.content;
+    if (Array.isArray(projects) && projects.length > 0) {
+      return projects[0].name || null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Validates and normalizes an Opik URL
  * @param url - The URL to validate

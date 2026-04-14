@@ -168,6 +168,102 @@ class TestIsWorkspaceNameCorrect:
             )
 
 
+class TestGetMostRecentProjectName:
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
+    def test_returns_most_recent_project_name(self, mock_httpx_client):
+        mock_client_instance = MagicMock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "content": [
+                {"name": "My Onboarding Agent"},
+                {"name": "Default Project"},
+            ]
+        }
+
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.__exit__.return_value = False
+        mock_client_instance.get.return_value = mock_response
+        mock_httpx_client.return_value = mock_client_instance
+
+        result = opik_rest_helpers.get_most_recent_project_name(
+            api_key="key", workspace="default", api_url="http://localhost:5173/api/"
+        )
+        assert result == "My Onboarding Agent"
+
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
+    def test_returns_none_when_no_projects(self, mock_httpx_client):
+        mock_client_instance = MagicMock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"content": []}
+
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.__exit__.return_value = False
+        mock_client_instance.get.return_value = mock_response
+        mock_httpx_client.return_value = mock_client_instance
+
+        result = opik_rest_helpers.get_most_recent_project_name(
+            api_key="key", workspace="default", api_url="http://localhost:5173/api/"
+        )
+        assert result is None
+
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
+    def test_returns_none_on_non_200_response(self, mock_httpx_client):
+        mock_client_instance = MagicMock()
+        mock_response = Mock()
+        mock_response.status_code = 500
+
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.__exit__.return_value = False
+        mock_client_instance.get.return_value = mock_response
+        mock_httpx_client.return_value = mock_client_instance
+
+        result = opik_rest_helpers.get_most_recent_project_name(
+            api_key="key", workspace="default", api_url="http://localhost:5173/api/"
+        )
+        assert result is None
+
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
+    def test_returns_none_on_exception(self, mock_httpx_client):
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.__exit__.return_value = False
+        mock_client_instance.get.side_effect = Exception("connection refused")
+        mock_httpx_client.return_value = mock_client_instance
+
+        result = opik_rest_helpers.get_most_recent_project_name(
+            api_key="key", workspace="default", api_url="http://localhost:5173/api/"
+        )
+        assert result is None
+
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
+    def test_falls_back_to_base_url_on_api_url_failure(self, mock_httpx_client):
+        """When api_url returns 404, falls back to base_url (direct backend)."""
+        mock_client_instance = MagicMock()
+
+        mock_404 = Mock()
+        mock_404.status_code = 404
+
+        mock_200 = Mock()
+        mock_200.status_code = 200
+        mock_200.json.return_value = {"content": [{"name": "My Agent"}]}
+
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.__exit__.return_value = False
+        mock_client_instance.get.side_effect = [mock_404, mock_200]
+        mock_httpx_client.return_value = mock_client_instance
+
+        result = opik_rest_helpers.get_most_recent_project_name(
+            api_key=None,
+            workspace="default",
+            api_url="http://localhost:8080/api/",
+            base_url="http://localhost:8080/",
+        )
+        assert result == "My Agent"
+        assert mock_client_instance.get.call_count == 2
+
+
 class TestIsApiKeyCorrect:
     @pytest.mark.parametrize(
         "status_code, expected_result",
