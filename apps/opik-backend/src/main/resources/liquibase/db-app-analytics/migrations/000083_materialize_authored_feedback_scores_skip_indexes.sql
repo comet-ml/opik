@@ -6,4 +6,4 @@
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}'
     MATERIALIZE INDEX idx_authored_feedback_scores_created_at;
 
---rollback -- no-op: MATERIALIZE INDEX cannot be rolled back; the index definition remains
+--rollback empty
