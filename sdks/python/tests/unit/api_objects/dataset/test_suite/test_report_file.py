@@ -1,14 +1,14 @@
-"""Unit tests for evaluation suite result file generation."""
+"""Unit tests for test suite result file generation."""
 
 import json
 import os
 
 
-from opik.api_objects.dataset.evaluation_suite import (
+from opik.api_objects.dataset.test_suite import (
     suite_result_constructor,
     types as suite_types,
 )
-from opik.api_objects.dataset.evaluation_suite.report_processors import file_writer
+from opik.api_objects.dataset.test_suite.report_processors import file_writer
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import evaluation_result, test_result, test_case
 from opik.evaluation.metrics import score_result
@@ -55,7 +55,7 @@ def _make_suite_result(
     test_results_list: list[test_result.TestResult],
     suite_name: str | None = None,
     total_time: float | None = None,
-) -> suite_types.EvaluationSuiteResult:
+) -> suite_types.TestSuiteResult:
     eval_result = evaluation_result.EvaluationResult(
         experiment_id="exp-123",
         dataset_id="dataset-456",
@@ -279,7 +279,7 @@ class TestBuildDefaultReportPath:
         assert os.path.basename(path) == "my_suite.json"
 
 
-class TestEvaluationSuiteResultMethods:
+class TestTestSuiteResultMethods:
     def test_to_dict__passing_suite__returns_dict_with_suite_passed_true(self):
         test_results_list = [
             _make_test_result(

@@ -1,4 +1,4 @@
-"""EvaluationSuiteResult and ItemResult types."""
+"""TestSuiteResult and ItemResult types."""
 
 from __future__ import annotations
 
@@ -19,13 +19,16 @@ def is_score_passed(score: ScoreResult) -> bool:
 
 @dataclasses.dataclass
 class ItemResult:
-    """Result for a single evaluation suite item."""
+    """Result for a single test suite item."""
 
     dataset_item_id: str
     """The ID of the dataset item."""
 
     passed: bool
     """Whether this item passed based on its execution policy."""
+
+    has_assertions: bool
+    """Whether this item had any assertions evaluated."""
 
     runs_passed: int
     """Number of runs that passed for this item."""
@@ -43,9 +46,9 @@ class ItemResult:
     """Individual test results for each run of this item."""
 
 
-class EvaluationSuiteResult:
+class TestSuiteResult:
     """
-    Result of running an evaluation suite.
+    Result of running a test suite.
 
     Contains pass/fail status for each item based on execution policy,
     as well as overall suite pass/fail status.
@@ -89,14 +92,22 @@ class EvaluationSuiteResult:
 
     @property
     def pass_rate(self) -> Optional[float]:
-        """Pass rate: items_passed / items_total (0.0 to 1.0), or None if no items."""
-        if self._items_total == 0:
+        """Pass rate among items that had assertions.
+
+        Items without any assertions are excluded from the calculation.
+        Returns None if no items had assertions.
+        """
+        items_with_assertions = [
+            r for r in self._item_results.values() if r.has_assertions
+        ]
+        if not items_with_assertions:
             return None
-        return self._items_passed / self._items_total
+        passed = sum(1 for r in items_with_assertions if r.passed)
+        return passed / len(items_with_assertions)
 
     @property
     def suite_name(self) -> Optional[str]:
-        """The name of the evaluation suite."""
+        """The name of the test suite."""
         return self._suite_name
 
     @property
