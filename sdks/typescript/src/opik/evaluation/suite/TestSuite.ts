@@ -263,7 +263,7 @@ export class TestSuite {
       dataset: this.dataset,
       task: validatedTask,
       experimentName: options?.experimentName,
-      projectName: options?.projectName,
+      projectName: options?.projectName ?? this.dataset.projectName,
       experimentConfig: options?.experimentConfig,
       prompts: options?.prompts,
       evaluatorModel: options?.model,

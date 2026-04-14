@@ -51,7 +51,6 @@ async function main() {
   console.log("\nRunning evaluation...");
   const result = await suite.run(task, {
     experimentName: `example-run-${timestamp}`,
-    projectName: "my-project",
   });
 
   console.log(`\nResults:`);

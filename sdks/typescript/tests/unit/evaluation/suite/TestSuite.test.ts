@@ -322,6 +322,61 @@ describe("TestSuite", () => {
       // getVersionInfo should NOT be called by run() since evaluateTestSuite handles everything
       expect(getVersionInfoSpy).not.toHaveBeenCalled();
     });
+
+    it("should pass explicit projectName to evaluateTestSuite", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
+      );
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
+        experimentId: "exp-3",
+        experimentName: "test-exp-3",
+        testResults: [],
+        errors: [],
+      });
+
+      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
+
+      await suite.run(mockTask, {
+        experimentName: "test-experiment",
+        projectName: "explicit-project",
+      });
+
+      expect(evaluateTestSuite).toHaveBeenCalledWith(
+        expect.objectContaining({ projectName: "explicit-project" })
+      );
+    });
+
+    it("should fall back to dataset.projectName when run options omit projectName", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
+      );
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
+        experimentId: "exp-4",
+        experimentName: "test-exp-4",
+        testResults: [],
+        errors: [],
+      });
+
+      const datasetWithProject = new Dataset(
+        {
+          id: "ds-with-project",
+          name: "test-suite-with-project",
+          projectName: "dataset-project",
+        },
+        opikClient
+      );
+      const suiteWithProject = new TestSuite(datasetWithProject, opikClient);
+
+      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
+
+      await suiteWithProject.run(mockTask, {
+        experimentName: "test-experiment",
+      });
+
+      expect(evaluateTestSuite).toHaveBeenCalledWith(
+        expect.objectContaining({ projectName: "dataset-project" })
+      );
+    });
   });
 
   describe("getAssertions", () => {
