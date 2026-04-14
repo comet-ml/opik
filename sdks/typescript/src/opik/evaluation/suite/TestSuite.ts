@@ -6,12 +6,9 @@ import {
   validateExecutionPolicy,
 } from "../suite_evaluators/validators";
 import type {
-  TestSuiteResult,
   TestSuiteItem,
   ExecutionPolicy,
 } from "./types";
-import { buildSuiteResult } from "./suiteResultConstructor";
-import { evaluateTestSuite } from "./evaluateTestSuite";
 import {
   serializeEvaluators,
   deserializeEvaluators,
@@ -19,19 +16,8 @@ import {
   resolveItemExecutionPolicy,
 } from "./suiteHelpers";
 import type { EvaluatorItemLike } from "./suiteHelpers";
-import type { EvaluationTask } from "../types";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
-import type { Prompt } from "@/prompt/Prompt";
 import { generateId } from "@/utils/generateId";
-
-export interface TestSuiteRunOptions {
-  experimentName?: string;
-  projectName?: string;
-  experimentConfig?: Record<string, unknown>;
-  prompts?: Prompt[];
-  experimentTags?: string[];
-  model?: string;
-}
 
 export interface AddItemOptions {
   assertions?: string[];
@@ -86,41 +72,26 @@ function prepareDatasetItemData(
   };
 }
 
-function validateTaskResult(
-  result: unknown
-): Record<string, unknown> {
-  if (typeof result !== "object" || result === null) {
-    throw new TypeError(
-      `The task function must return an object with 'input' and 'output' keys, ` +
-        `but it returned ${typeof result}. ` +
-        `Example: return { input: data, output: response }`
-    );
-  }
-  const dict = result as Record<string, unknown>;
-  const missing: string[] = [];
-  if (!("input" in dict)) missing.push("input");
-  if (!("output" in dict)) missing.push("output");
-  if (missing.length > 0) {
-    throw new Error(
-      `The task function must return an object with 'input' and 'output' keys, ` +
-        `but the returned object is missing: ${missing.join(", ")}. ` +
-        `Got keys: ${Object.keys(dict).join(", ")}. ` +
-        `Example: return { input: data, output: response }`
-    );
-  }
-  return dict;
-}
-
 export class TestSuite {
   public readonly name: string;
   public readonly description?: string;
 
   constructor(
-    private readonly dataset: Dataset,
-    private readonly client: OpikClient
+    private readonly _dataset: Dataset,
+    private readonly _client: OpikClient
   ) {
-    this.name = dataset.name;
-    this.description = dataset.description;
+    this.name = _dataset.name;
+    this.description = _dataset.description;
+  }
+
+  /** @internal */
+  get dataset(): Dataset {
+    return this._dataset;
+  }
+
+  /** @internal */
+  get client(): OpikClient {
+    return this._client;
   }
 
   get id(): string {
@@ -248,30 +219,6 @@ export class TestSuite {
     );
 
     await this.dataset.insert(datasetItems);
-  }
-
-  async run(
-    task: EvaluationTask,
-    options?: TestSuiteRunOptions
-  ): Promise<TestSuiteResult> {
-    const validatedTask: EvaluationTask = async (item) => {
-      const result = await task(item);
-      return validateTaskResult(result);
-    };
-
-    const evalResult = await evaluateTestSuite({
-      dataset: this.dataset,
-      task: validatedTask,
-      experimentName: options?.experimentName,
-      projectName: options?.projectName ?? this.dataset.projectName,
-      experimentConfig: options?.experimentConfig,
-      prompts: options?.prompts,
-      evaluatorModel: options?.model,
-      tags: options?.experimentTags,
-      client: this.client,
-    });
-
-    return buildSuiteResult(evalResult);
   }
 
   async getItems(): Promise<

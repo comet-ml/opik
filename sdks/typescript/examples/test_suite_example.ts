@@ -9,7 +9,7 @@
  *
  * Requires a running Opik server. Set OPIK_URL_OVERRIDE in .env or env vars.
  */
-import { Opik, TestSuite } from "opik";
+import { Opik, TestSuite, runTests } from "opik";
 
 async function main() {
   const timestamp = Date.now();
@@ -49,7 +49,9 @@ async function main() {
 
   // --- Run the evaluation ---
   console.log("\nRunning evaluation...");
-  const result = await suite.run(task, {
+  const result = await runTests({
+    testSuite: suite,
+    task,
     experimentName: `example-run-${timestamp}`,
   });
 
