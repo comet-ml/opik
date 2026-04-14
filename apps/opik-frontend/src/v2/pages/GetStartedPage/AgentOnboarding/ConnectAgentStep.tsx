@@ -208,7 +208,7 @@ const ConnectAgentStep: React.FC = () => {
 
         {showOllieTab && (
           <TabsContent value="connect-to-ollie">
-            <ConnectToOllieTab projectId={projectId} />
+            <ConnectToOllieTab connected={connected} />
           </TabsContent>
         )}
 

@@ -3,27 +3,19 @@ import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
 import { buildDocsUrl, maskAPIKey } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
-import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
-import { RunnerConnectionStatus } from "@/types/agent-sandbox";
 
 const INSTALL_COMMAND = "pip install opik";
 
 interface ConnectToOllieTabProps {
-  projectId?: string;
+  connected: boolean;
 }
 
-const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ projectId }) => {
+const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
   const { agentName } = useAgentOnboarding();
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
-
-  const { data: runner } = useSandboxConnectionStatus(
-    { projectId: projectId ?? "", runnerType: "connect" },
-    { enabled: !!projectId },
-  );
-  const connected = runner?.status === RunnerConnectionStatus.CONNECTED;
 
   const buildEnvVars = (shouldMaskAPIKey: boolean) => {
     if (apiKey) {

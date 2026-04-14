@@ -15,7 +15,7 @@ import {
 import { buildDocsUrl } from "@/lib/utils";
 import InstallWithAITab from "./InstallWithAITab";
 
-const INSTALL_WITH_AI = "install-with-ai" as const;
+const INSTALL_WITH_AI = "install-with-ai";
 
 type ManualIntegrationListProps = {
   onSelectIntegration: (id: string) => void;
