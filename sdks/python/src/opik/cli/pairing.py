@@ -75,6 +75,7 @@ def build_pairing_link(
     project_id: str,
     runner_name: str,
     runner_type: RunnerType = RunnerType.CONNECT,
+    workspace: Optional[str] = None,
 ) -> str:
     session_bytes = uuid.UUID(session_id).bytes
     project_bytes = uuid.UUID(project_id).bytes
@@ -91,6 +92,8 @@ def build_pairing_link(
 
     fragment = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
     domain_root = get_base_url(base_url)
+    if workspace:
+        return f"{domain_root}{workspace}/opik/pair/v1#{fragment}"
     return f"{domain_root}opik/pair/v1#{fragment}"
 
 
@@ -255,6 +258,7 @@ def run_pairing(
     runner_name: str,
     runner_type: RunnerType,
     base_url: str,
+    workspace: Optional[str] = None,
     tui: Optional["RunnerTUI"] = None,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
 ) -> PairingResult:
@@ -267,6 +271,7 @@ def run_pairing(
         session.project_id,
         runner_name,
         runner_type,
+        workspace=workspace,
     )
 
     if tui:

@@ -99,9 +99,15 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 });
 
 // ----------- pairing (root-level, no layout)
+// OSS: /opik/pair/v1   Cloud: /$workspaceName/opik/pair/v1
 const pairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/opik/pair/v1",
+  component: PairingPage,
+});
+const workspacePairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/$workspaceName/opik/pair/v1",
   component: PairingPage,
 });
 
@@ -543,6 +549,7 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 
 const routeTree = rootRoute.addChildren([
   pairingRoute,
+  workspacePairingRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
