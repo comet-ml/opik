@@ -233,7 +233,7 @@ describe("TestSuite static methods", () => {
       expect(createDatasetSpy).not.toHaveBeenCalled();
     });
 
-    it("should call update() when existing suite found and options have globalAssertions/tags/globalExecutionPolicy", async () => {
+    it("should NOT call update() when existing suite found, even with globalAssertions/tags/globalExecutionPolicy", async () => {
       const updateSpy = vi
         .spyOn(TestSuite.prototype, "update")
         .mockResolvedValue(undefined);
@@ -248,11 +248,7 @@ describe("TestSuite static methods", () => {
       expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("test-suite");
       expect(createDatasetSpy).not.toHaveBeenCalled();
-      expect(updateSpy).toHaveBeenCalledWith({
-        globalAssertions: ["is accurate"],
-        tags: ["prod"],
-        globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
-      });
+      expect(updateSpy).not.toHaveBeenCalled();
     });
 
     it("should create new suite when not found (404)", async () => {

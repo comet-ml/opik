@@ -6,6 +6,8 @@ import {
   deserializeEvaluators,
   resolveExecutionPolicy,
   resolveItemExecutionPolicy,
+  evaluatorsEqual,
+  executionPolicyEqual,
 } from "@/evaluation/suite/suiteHelpers";
 import type { EvaluatorItemPublic } from "@/rest_api/api/types/EvaluatorItemPublic";
 import type { ExecutionPolicyPublic } from "@/rest_api/api/types/ExecutionPolicyPublic";
@@ -223,6 +225,99 @@ describe("Suite helper functions", () => {
       const result = resolveItemExecutionPolicy(itemPolicy, defaultPolicy);
 
       expect(result).toEqual({ runsPerItem: 5, passThreshold: 2 });
+    });
+  });
+
+  describe("evaluatorsEqual", () => {
+    const makeFakeJudge = (
+      assertions: string[],
+      overrides?: { model?: string; temperature?: number }
+    ) =>
+      ({
+        assertions,
+        toConfig: () => ({
+          name: "llm_judge",
+          model: {
+            name: overrides?.model ?? "gpt-5-nano",
+            ...(overrides?.temperature !== undefined
+              ? { temperature: overrides.temperature }
+              : {}),
+          },
+          schema: assertions.map((a) => ({
+            name: a,
+            type: "BOOLEAN",
+            description: a,
+          })),
+        }),
+      }) as unknown as LLMJudge;
+
+    it("should return true for same assertions in same order", () => {
+      const a = [makeFakeJudge(["is correct", "is concise"])];
+      const b = [makeFakeJudge(["is correct", "is concise"])];
+      expect(evaluatorsEqual(a, b)).toBe(true);
+    });
+
+    it("should return true for same config in different judge order", () => {
+      const a = [makeFakeJudge(["a"]), makeFakeJudge(["b"])];
+      const b = [makeFakeJudge(["b"]), makeFakeJudge(["a"])];
+      expect(evaluatorsEqual(a, b)).toBe(true);
+    });
+
+    it("should return false for different assertions", () => {
+      const a = [makeFakeJudge(["is correct"])];
+      const b = [makeFakeJudge(["is accurate"])];
+      expect(evaluatorsEqual(a, b)).toBe(false);
+    });
+
+    it("should return true for two empty lists", () => {
+      expect(evaluatorsEqual([], [])).toBe(true);
+    });
+
+    it("should return false for different lengths", () => {
+      const a = [makeFakeJudge(["is correct"]), makeFakeJudge(["is concise"])];
+      const b = [makeFakeJudge(["is correct"])];
+      expect(evaluatorsEqual(a, b)).toBe(false);
+    });
+
+    it("should return false when model differs", () => {
+      const a = [makeFakeJudge(["is correct"], { model: "gpt-5-nano" })];
+      const b = [makeFakeJudge(["is correct"], { model: "claude-sonnet-4" })];
+      expect(evaluatorsEqual(a, b)).toBe(false);
+    });
+
+    it("should return false when temperature differs", () => {
+      const a = [makeFakeJudge(["is correct"], { temperature: 0.5 })];
+      const b = [makeFakeJudge(["is correct"], { temperature: 0.9 })];
+      expect(evaluatorsEqual(a, b)).toBe(false);
+    });
+  });
+
+  describe("executionPolicyEqual", () => {
+    it("should return true for identical policies", () => {
+      expect(
+        executionPolicyEqual(
+          { runsPerItem: 3, passThreshold: 2 },
+          { runsPerItem: 3, passThreshold: 2 }
+        )
+      ).toBe(true);
+    });
+
+    it("should return false when runsPerItem differs", () => {
+      expect(
+        executionPolicyEqual(
+          { runsPerItem: 3, passThreshold: 2 },
+          { runsPerItem: 5, passThreshold: 2 }
+        )
+      ).toBe(false);
+    });
+
+    it("should return false when passThreshold differs", () => {
+      expect(
+        executionPolicyEqual(
+          { runsPerItem: 3, passThreshold: 2 },
+          { runsPerItem: 3, passThreshold: 1 }
+        )
+      ).toBe(false);
     });
   });
 });

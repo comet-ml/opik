@@ -84,7 +84,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
             <h4 className="comet-body-s-accented text-primary">
               {traceReceived
                 ? "First trace received! You're all set."
-                : "Waiting for first trace…"}
+                : "Waiting for first trace\u2026"}
             </h4>
             <p className="comet-body-xs text-muted-slate">
               {traceReceived ? (
