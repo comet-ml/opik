@@ -367,81 +367,81 @@ export class OpikClient {
   };
 
   /**
-   * Creates a new evaluation suite with the given options.
+   * Creates a new test suite with the given options.
    *
-   * @param options - The options for creating the evaluation suite
+   * @param options - The options for creating the test suite
    * @returns The created TestSuite object
    */
-  public createEvaluationSuite = async (
+  public createTestSuite = async (
     options: CreateTestSuiteOptions
   ): Promise<TestSuite> => {
-    logger.debug(`Creating evaluation suite with name "${options.name}"`);
+    logger.debug(`Creating test suite with name "${options.name}"`);
     const { TestSuite } = await import("@/evaluation/suite");
     return TestSuite.create(this, options);
   };
 
   /**
-   * Retrieves an existing evaluation suite by name.
+   * Retrieves an existing test suite by name.
    *
-   * @param name The name of the evaluation suite to retrieve
+   * @param name The name of the test suite to retrieve
    * @param projectName Optional project name to scope the lookup. If not provided, uses the client's configured project.
    * @returns A TestSuite object
-   * @throws DatasetNotFoundError if the evaluation suite doesn't exist
+   * @throws DatasetNotFoundError if the test suite doesn't exist
    */
-  public getEvaluationSuite = async (
+  public getTestSuite = async (
     name: string,
     projectName?: string
   ): Promise<TestSuite> => {
     const resolvedProjectName = this.resolveProjectName(projectName);
-    logger.debug(`Getting evaluation suite with name "${name}"`);
+    logger.debug(`Getting test suite with name "${name}"`);
     const { TestSuite } = await import("@/evaluation/suite");
     return TestSuite.get(this, name, resolvedProjectName);
   };
 
   /**
-   * Retrieves an existing evaluation suite by name or creates a new one if it doesn't exist.
+   * Retrieves an existing test suite by name or creates a new one if it doesn't exist.
    *
-   * @param options - The options for creating the evaluation suite if it doesn't exist
+   * @param options - The options for creating the test suite if it doesn't exist
    * @returns A TestSuite object (existing or newly created)
    */
-  public getOrCreateEvaluationSuite = async (
+  public getOrCreateTestSuite = async (
     options: CreateTestSuiteOptions
   ): Promise<TestSuite> => {
     logger.debug(
-      `Attempting to retrieve or create evaluation suite with name: "${options.name}"`
+      `Attempting to retrieve or create test suite with name: "${options.name}"`
     );
     const { TestSuite } = await import("@/evaluation/suite");
     return TestSuite.getOrCreate(this, options);
   };
 
   /**
-   * Deletes an evaluation suite by name.
+   * Deletes a test suite by name.
    *
-   * @param name The name of the evaluation suite to delete
+   * @param name The name of the test suite to delete
    * @param projectName Optional project name to scope the lookup. If not provided, uses the client's configured project.
    */
-  public deleteEvaluationSuite = async (
+  public deleteTestSuite = async (
     name: string,
     projectName?: string
   ): Promise<void> => {
-    logger.debug(`Deleting evaluation suite with name "${name}"`);
+    logger.debug(`Deleting test suite with name "${name}"`);
     const { TestSuite } = await import("@/evaluation/suite");
     await TestSuite.delete(this, name, projectName);
   };
 
   /**
-   * Returns all evaluation suites up to the specified limit.
+   * Returns all test suites up to the specified limit.
    *
-   * @param maxResults Maximum number of evaluation suites to return (default: 100)
+   * @param maxResults Maximum number of test suites to return (default: 100)
    * @param projectName Optional project name to filter by. If not provided, uses the client's configured project.
    * @returns List of TestSuite objects
    */
-  public getEvaluationSuites = async (
+  public getTestSuites = async (
     maxResults: number = 100,
     projectName?: string
   ): Promise<TestSuite[]> => {
     const resolvedProjectName = this.resolveProjectName(projectName);
-    logger.debug(`Getting all evaluation suites (limit: ${maxResults})`);
+    logger.debug(`Getting all test suites (limit: ${maxResults})`);
 
     try {
       const datasets = await this.getDatasets(maxResults, resolvedProjectName);
@@ -454,11 +454,11 @@ export class OpikClient {
         }
       }
 
-      logger.info(`Retrieved ${suites.length} evaluation suites`);
+      logger.info(`Retrieved ${suites.length} test suites`);
       return suites;
     } catch (error) {
-      logger.error("Failed to retrieve evaluation suites", { error });
-      throw new Error("Failed to retrieve evaluation suites");
+      logger.error("Failed to retrieve test suites", { error });
+      throw new Error("Failed to retrieve test suites");
     }
   };
 

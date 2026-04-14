@@ -329,7 +329,7 @@ describe("TestSuite static methods", () => {
   });
 });
 
-describe("OpikClient EvaluationSuite methods", () => {
+describe("OpikClient TestSuite methods", () => {
   let opikClient: OpikClient;
   let createDatasetSpy: MockInstance;
   let getDatasetByIdentifierSpy: MockInstance;
@@ -368,9 +368,9 @@ describe("OpikClient EvaluationSuite methods", () => {
     vi.restoreAllMocks();
   });
 
-  describe("createEvaluationSuite", () => {
-    it("should create an evaluation suite via client", async () => {
-      const suite = await opikClient.createEvaluationSuite({
+  describe("createTestSuite", () => {
+    it("should create a test suite via client", async () => {
+      const suite = await opikClient.createTestSuite({
         name: "my-suite",
         description: "My test suite",
       });
@@ -388,9 +388,9 @@ describe("OpikClient EvaluationSuite methods", () => {
     });
   });
 
-  describe("getEvaluationSuite", () => {
-    it("should get an evaluation suite by name via client", async () => {
-      const suite = await opikClient.getEvaluationSuite("test-suite");
+  describe("getTestSuite", () => {
+    it("should get a test suite by name via client", async () => {
+      const suite = await opikClient.getTestSuite("test-suite");
 
       expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("test-suite");
@@ -400,8 +400,8 @@ describe("OpikClient EvaluationSuite methods", () => {
       });
     });
 
-    it("should get evaluation suite with custom project name", async () => {
-      const suite = await opikClient.getEvaluationSuite("test-suite", "custom-project");
+    it("should get test suite with custom project name", async () => {
+      const suite = await opikClient.getTestSuite("test-suite", "custom-project");
 
       expect(suite).toBeInstanceOf(TestSuite);
       expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
@@ -411,9 +411,9 @@ describe("OpikClient EvaluationSuite methods", () => {
     });
   });
 
-  describe("getOrCreateEvaluationSuite", () => {
-    it("should return existing evaluation suite via client", async () => {
-      const suite = await opikClient.getOrCreateEvaluationSuite({
+  describe("getOrCreateTestSuite", () => {
+    it("should return existing test suite via client", async () => {
+      const suite = await opikClient.getOrCreateTestSuite({
         name: "test-suite",
       });
 
@@ -422,7 +422,7 @@ describe("OpikClient EvaluationSuite methods", () => {
       expect(createDatasetSpy).not.toHaveBeenCalled();
     });
 
-    it("should create new evaluation suite when not found via client", async () => {
+    it("should create new test suite when not found via client", async () => {
       getDatasetByIdentifierSpy.mockImplementation(() => {
         throw new OpikApiError({
           message: "Not found",
@@ -439,7 +439,7 @@ describe("OpikClient EvaluationSuite methods", () => {
         });
       });
 
-      const suite = await opikClient.getOrCreateEvaluationSuite({
+      const suite = await opikClient.getOrCreateTestSuite({
         name: "new-suite",
         description: "New suite",
       });
@@ -456,9 +456,9 @@ describe("OpikClient EvaluationSuite methods", () => {
     });
   });
 
-  describe("deleteEvaluationSuite", () => {
-    it("should delete an evaluation suite via client", async () => {
-      await opikClient.deleteEvaluationSuite("test-suite");
+  describe("deleteTestSuite", () => {
+    it("should delete a test suite via client", async () => {
+      await opikClient.deleteTestSuite("test-suite");
 
       expect(deleteDatasetByNameSpy).toHaveBeenCalledWith({
         datasetName: "test-suite",
@@ -466,8 +466,8 @@ describe("OpikClient EvaluationSuite methods", () => {
       });
     });
 
-    it("should delete evaluation suite with custom project name via client", async () => {
-      await opikClient.deleteEvaluationSuite("test-suite", "custom-project");
+    it("should delete test suite with custom project name via client", async () => {
+      await opikClient.deleteTestSuite("test-suite", "custom-project");
 
       expect(deleteDatasetByNameSpy).toHaveBeenCalledWith({
         datasetName: "test-suite",
@@ -476,7 +476,7 @@ describe("OpikClient EvaluationSuite methods", () => {
     });
   });
 
-  describe("getEvaluationSuites", () => {
+  describe("getTestSuites", () => {
     let findDatasetsSpy: MockInstance;
 
     beforeEach(() => {
@@ -496,8 +496,8 @@ describe("OpikClient EvaluationSuite methods", () => {
         );
     });
 
-    it("should get all evaluation suites via client", async () => {
-      const suites = await opikClient.getEvaluationSuites();
+    it("should get all test suites via client", async () => {
+      const suites = await opikClient.getTestSuites();
 
       expect(suites).toHaveLength(2);
       expect(suites[0]).toBeInstanceOf(TestSuite);
@@ -509,8 +509,8 @@ describe("OpikClient EvaluationSuite methods", () => {
       });
     });
 
-    it("should get evaluation suites with custom limit", async () => {
-      await opikClient.getEvaluationSuites(50);
+    it("should get test suites with custom limit", async () => {
+      await opikClient.getTestSuites(50);
 
       expect(findDatasetsSpy).toHaveBeenCalledWith({
         size: 50,
@@ -518,7 +518,7 @@ describe("OpikClient EvaluationSuite methods", () => {
       });
     });
 
-    it("should get evaluation suites with custom project name", async () => {
+    it("should get test suites with custom project name", async () => {
       vi.spyOn(opikClient.api.projects, "retrieveProject").mockImplementation(
         () =>
           createMockHttpResponsePromise({
@@ -527,7 +527,7 @@ describe("OpikClient EvaluationSuite methods", () => {
           })
       );
 
-      await opikClient.getEvaluationSuites(100, "custom-project");
+      await opikClient.getTestSuites(100, "custom-project");
 
       expect(findDatasetsSpy).toHaveBeenCalledWith({
         size: 100,
