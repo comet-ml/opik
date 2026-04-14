@@ -7922,6 +7922,8 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .duration(actual.duration())
                     .projectId(projectId)
+                    .passedCount(0L)
+                    .totalCount(0L)
                     .build();
             getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
         }
