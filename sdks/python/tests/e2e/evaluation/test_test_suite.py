@@ -1396,7 +1396,7 @@ def test_test_suite__create_without_metadata_then_update__metadata_persisted(
 
     assert suite.get_version_info() is None
 
-    suite.update(
+    suite.update_test_settings(
         global_assertions=[assertion],
         global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
     )
