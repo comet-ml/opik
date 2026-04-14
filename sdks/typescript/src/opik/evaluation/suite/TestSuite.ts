@@ -21,6 +21,7 @@ import {
 import type { EvaluatorItemLike } from "./suiteHelpers";
 import type { EvaluationTask } from "../types";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
+import type { EvaluatorItem } from "@/rest_api/api/types/EvaluatorItem";
 import type { Prompt } from "@/prompt/Prompt";
 import { generateId } from "@/utils/generateId";
 
@@ -386,5 +387,82 @@ export class TestSuite {
 
   async deleteItems(itemIds: string[]): Promise<void> {
     await this.dataset.delete(itemIds);
+  }
+
+  async updateItemAssertions(
+    itemId: string,
+    assertions: string[]
+  ): Promise<void> {
+    this.validateItemId(itemId);
+
+    const evaluators = this.resolveAndSerializeEvaluators(assertions);
+
+    await this.client.api.datasets.batchUpdateDatasetItems({
+      ids: [itemId],
+      update: { evaluators: evaluators as EvaluatorItem[] },
+    });
+  }
+
+  async updateItemExecutionPolicy(
+    itemId: string,
+    executionPolicy: ExecutionPolicy
+  ): Promise<void> {
+    this.validateItemId(itemId);
+    validateExecutionPolicy(executionPolicy, "item-level execution policy update");
+
+    await this.client.api.datasets.batchUpdateDatasetItems({
+      ids: [itemId],
+      update: { executionPolicy },
+    });
+  }
+
+  async updateItem(
+    itemId: string,
+    options: { assertions?: string[]; executionPolicy?: ExecutionPolicy }
+  ): Promise<void> {
+    this.validateItemId(itemId);
+
+    if (options.assertions === undefined && options.executionPolicy === undefined) {
+      throw new Error(
+        "At least one of 'assertions' or 'executionPolicy' must be provided."
+      );
+    }
+
+    if (options.executionPolicy) {
+      validateExecutionPolicy(options.executionPolicy, "item-level execution policy update");
+    }
+
+    const update: Record<string, unknown> = {};
+
+    if (options.assertions !== undefined) {
+      update.evaluators = this.resolveAndSerializeEvaluators(options.assertions);
+    }
+
+    if (options.executionPolicy !== undefined) {
+      update.executionPolicy = options.executionPolicy;
+    }
+
+    await this.client.api.datasets.batchUpdateDatasetItems({
+      ids: [itemId],
+      update,
+    });
+  }
+
+  private validateItemId(itemId: string): void {
+    if (!itemId || itemId.trim() === "") {
+      throw new Error("itemId must be a non-empty string");
+    }
+  }
+
+  private resolveAndSerializeEvaluators(assertions: string[]): EvaluatorItem[] {
+    const resolvedEvaluators = resolveEvaluators(
+      assertions,
+      undefined,
+      "item-level assertions update"
+    );
+
+    return (resolvedEvaluators
+      ? serializeEvaluators(resolvedEvaluators)
+      : []) as EvaluatorItem[];
   }
 }
