@@ -21,7 +21,7 @@ import {
 import type { EvaluatorItemLike } from "./suiteHelpers";
 import type { EvaluationTask } from "../types";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
-import type { EvaluatorItem } from "@/rest_api/api/types/EvaluatorItem";
+import type { DatasetItemUpdate } from "@/rest_api/api/types/DatasetItemUpdate";
 import type { Prompt } from "@/prompt/Prompt";
 import { generateId } from "@/utils/generateId";
 
@@ -419,7 +419,7 @@ export class TestSuite {
       validateExecutionPolicy(options.executionPolicy, "item-level execution policy update");
     }
 
-    const update: Record<string, unknown> = {};
+    const update: DatasetItemUpdate = {};
 
     if (options.assertions !== undefined) {
       update.evaluators = this.resolveAndSerializeEvaluators(options.assertions);
@@ -441,15 +441,15 @@ export class TestSuite {
     }
   }
 
-  private resolveAndSerializeEvaluators(assertions: string[]): EvaluatorItem[] {
+  private resolveAndSerializeEvaluators(assertions: string[]) {
     const resolvedEvaluators = resolveEvaluators(
       assertions,
       undefined,
       "item-level assertions update"
     );
 
-    return (resolvedEvaluators
+    return resolvedEvaluators
       ? serializeEvaluators(resolvedEvaluators)
-      : []) as EvaluatorItem[];
+      : [];
   }
 }
