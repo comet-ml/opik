@@ -11,9 +11,11 @@ interface LLMJudgeBESchemaItem {
 
 // Keep in sync with the backend's expected config structure for the llm_judge type.
 // The `schema` array is populated dynamically from FE assertions.
-// NOTE: The backend currently ignores the `messages` field and replaces it
-// with its own copy (TestSuitePromptConstants.java). Included here only to
-// satisfy the config schema. See OPIK-5735.
+// NOTE: No consumer reads the `messages` field — every component uses its
+// own hardcoded copy of the prompt. Included only to satisfy the config
+// schema. Duplicated in: Python SDK (metric.py), TS SDK
+// (llmJudgeTemplate.ts), FE (assertion-converters.ts), and BE
+// (TestSuitePromptConstants.java). See OPIK-5735.
 export const DEFAULT_LLM_JUDGE_BE_CONFIG = {
   version: "1",
   name: "llm_judge",

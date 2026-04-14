@@ -84,9 +84,11 @@ export class LLMJudge extends BaseSuiteEvaluator {
         ...(this.seed !== undefined && { seed: this.seed }),
         customParameters: { reasoning_effort: this.reasoningEffort },
       },
-      // NOTE: The backend currently ignores these messages and replaces them
-      // with its own copy (TestSuitePromptConstants.java). Serialized here
-      // only to satisfy the config schema. See OPIK-5735.
+      // NOTE: No consumer reads these messages — every component uses its own
+      // hardcoded copy of the prompt. Included only to satisfy the config
+      // schema. Duplicated in: Python SDK (metric.py), TS SDK
+      // (llmJudgeTemplate.ts), FE (assertion-converters.ts), and BE
+      // (TestSuitePromptConstants.java). See OPIK-5735.
       messages: [
         { role: "SYSTEM", content: SYSTEM_PROMPT },
         { role: "USER", content: userContent },
