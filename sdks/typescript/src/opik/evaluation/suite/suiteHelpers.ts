@@ -72,6 +72,26 @@ export function resolveExecutionPolicy(
 }
 
 /**
+ * Compares two lists of LLMJudge evaluators by their flattened, sorted assertion strings.
+ */
+export function evaluatorsEqual(a: LLMJudge[], b: LLMJudge[]): boolean {
+  const aAssertions = a.flatMap((e) => e.assertions).sort();
+  const bAssertions = b.flatMap((e) => e.assertions).sort();
+  if (aAssertions.length !== bAssertions.length) return false;
+  return aAssertions.every((val, i) => val === bAssertions[i]);
+}
+
+/**
+ * Compares two resolved execution policies for equality.
+ */
+export function executionPolicyEqual(
+  a: Required<ExecutionPolicy>,
+  b: Required<ExecutionPolicy>
+): boolean {
+  return a.runsPerItem === b.runsPerItem && a.passThreshold === b.passThreshold;
+}
+
+/**
  * Resolves an item-level execution policy against a suite-level default.
  * Missing fields in the item policy fall back to the provided suite-level defaults.
  */

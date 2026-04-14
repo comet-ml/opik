@@ -6,6 +6,8 @@ import {
   deserializeEvaluators,
   resolveExecutionPolicy,
   resolveItemExecutionPolicy,
+  evaluatorsEqual,
+  executionPolicyEqual,
 } from "@/evaluation/suite/suiteHelpers";
 import type { EvaluatorItemPublic } from "@/rest_api/api/types/EvaluatorItemPublic";
 import type { ExecutionPolicyPublic } from "@/rest_api/api/types/ExecutionPolicyPublic";
@@ -223,6 +225,74 @@ describe("Suite helper functions", () => {
       const result = resolveItemExecutionPolicy(itemPolicy, defaultPolicy);
 
       expect(result).toEqual({ runsPerItem: 5, passThreshold: 2 });
+    });
+  });
+
+  describe("evaluatorsEqual", () => {
+    const makeFakeJudge = (assertions: string[]) =>
+      ({ assertions } as unknown as LLMJudge);
+
+    it("should return true for same assertions in same order", () => {
+      const a = [makeFakeJudge(["is correct", "is concise"])];
+      const b = [makeFakeJudge(["is correct", "is concise"])];
+      expect(evaluatorsEqual(a, b)).toBe(true);
+    });
+
+    it("should return true for same assertions in different order", () => {
+      const a = [makeFakeJudge(["is concise", "is correct"])];
+      const b = [makeFakeJudge(["is correct", "is concise"])];
+      expect(evaluatorsEqual(a, b)).toBe(true);
+    });
+
+    it("should return false for different assertions", () => {
+      const a = [makeFakeJudge(["is correct"])];
+      const b = [makeFakeJudge(["is accurate"])];
+      expect(evaluatorsEqual(a, b)).toBe(false);
+    });
+
+    it("should return true for two empty lists", () => {
+      expect(evaluatorsEqual([], [])).toBe(true);
+    });
+
+    it("should return false for different lengths", () => {
+      const a = [makeFakeJudge(["is correct", "is concise"])];
+      const b = [makeFakeJudge(["is correct"])];
+      expect(evaluatorsEqual(a, b)).toBe(false);
+    });
+
+    it("should return true for assertions split across multiple judges", () => {
+      const a = [makeFakeJudge(["a", "b"]), makeFakeJudge(["c"])];
+      const b = [makeFakeJudge(["c", "a"]), makeFakeJudge(["b"])];
+      expect(evaluatorsEqual(a, b)).toBe(true);
+    });
+  });
+
+  describe("executionPolicyEqual", () => {
+    it("should return true for identical policies", () => {
+      expect(
+        executionPolicyEqual(
+          { runsPerItem: 3, passThreshold: 2 },
+          { runsPerItem: 3, passThreshold: 2 }
+        )
+      ).toBe(true);
+    });
+
+    it("should return false when runsPerItem differs", () => {
+      expect(
+        executionPolicyEqual(
+          { runsPerItem: 3, passThreshold: 2 },
+          { runsPerItem: 5, passThreshold: 2 }
+        )
+      ).toBe(false);
+    });
+
+    it("should return false when passThreshold differs", () => {
+      expect(
+        executionPolicyEqual(
+          { runsPerItem: 3, passThreshold: 2 },
+          { runsPerItem: 3, passThreshold: 1 }
+        )
+      ).toBe(false);
     });
   });
 });
