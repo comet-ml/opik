@@ -27,12 +27,14 @@ async function main() {
   });
 
   // --- Add test items ---
-  await suite.addItem({ input: "What is 2+2?", expected: "4" });
-  await suite.addItem({ input: "Capital of France?", expected: "Paris" });
-  await suite.addItem(
-    { input: "Explain gravity briefly", expected: "A force of attraction" },
-    { assertions: ["Response is concise"] }
-  );
+  await suite.insert([
+    { data: { input: "What is 2+2?", expected: "4" } },
+    { data: { input: "Capital of France?", expected: "Paris" } },
+    {
+      data: { input: "Explain gravity briefly", expected: "A force of attraction" },
+      assertions: ["Response is concise"],
+    },
+  ]);
   console.log("Added 3 test items");
 
   // Wait for items to be available

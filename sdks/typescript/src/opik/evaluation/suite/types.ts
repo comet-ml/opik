@@ -13,7 +13,7 @@ export const DEFAULT_EXECUTION_POLICY: Required<ExecutionPolicy> = {
 };
 
 /**
- * A single item to be added to a test suite via `addItems()`.
+ * A single item to be inserted into a test suite via `insert()`.
  */
 export interface TestSuiteItem {
   data: Record<string, unknown>;

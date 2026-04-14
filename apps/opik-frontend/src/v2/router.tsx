@@ -48,9 +48,9 @@ import AlertsRouteWrapper from "@/v2/pages/AlertsPage/AlertsRouteWrapper";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
-import EvaluationSuitesPage from "@/v2/pages/EvaluationSuitesPage/EvaluationSuitesPage";
-import EvaluationSuitePage from "@/v2/pages/EvaluationSuitePage/EvaluationSuitePage";
-import EvaluationSuiteItemsPage from "@/v2/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
+import TestSuitesPage from "@/v2/pages/TestSuitesPage/TestSuitesPage";
+import TestSuitePage from "@/v2/pages/TestSuitePage/TestSuitePage";
+import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage";
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
@@ -240,35 +240,35 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
-// ----------- evaluation suites (project-scoped)
-const evaluationSuitesRoute = createRoute({
-  path: "/evaluation-suites",
+// ----------- test suites (project-scoped)
+const testSuitesRoute = createRoute({
+  path: "/test-suites",
   getParentRoute: () => projectScopedRoute,
   component: DatasetsPageGuard,
   staticData: {
-    title: "Evaluation suites",
+    title: "Test suites",
   },
 });
 
-const evaluationSuitesListRoute = createRoute({
+const testSuitesListRoute = createRoute({
   path: "/",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitesPage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitesPage,
 });
 
-const evaluationSuiteRoute = createRoute({
+const testSuiteRoute = createRoute({
   path: "/$suiteId",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitePage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitePage,
   staticData: {
     param: "suiteId",
   },
 });
 
-const evaluationSuiteItemsRoute = createRoute({
+const testSuiteItemsRoute = createRoute({
   path: "/items",
-  getParentRoute: () => evaluationSuiteRoute,
-  component: EvaluationSuiteItemsPage,
+  getParentRoute: () => testSuiteRoute,
+  component: TestSuiteItemsPage,
 });
 
 // ----------- prompts (project-scoped)
@@ -562,9 +562,9 @@ const routeTree = rootRoute.addChildren([
             experimentsListRoute,
             compareExperimentsRoute,
           ]),
-          evaluationSuitesRoute.addChildren([
-            evaluationSuitesListRoute,
-            evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
+          testSuitesRoute.addChildren([
+            testSuitesListRoute,
+            testSuiteRoute.addChildren([testSuiteItemsRoute]),
           ]),
           promptsRoute.addChildren([promptsListRoute, promptRoute]),
           playgroundRoute.addChildren([playgroundIndexRoute]),

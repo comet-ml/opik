@@ -177,9 +177,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
               <span
                 className={cn(
                   "comet-body-s-accented block w-full truncate text-left hover:underline hover:underline-offset-4",
-                  isOnProjectHome
-                    ? "text-primary underline underline-offset-4"
-                    : "text-foreground",
+                  isOnProjectHome ? "text-primary" : "text-foreground",
                 )}
               >
                 {activeProject.name}

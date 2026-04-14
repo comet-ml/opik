@@ -1,14 +1,14 @@
 import {
   EVALUATION_METHOD,
   Experiment,
-  EvalSuiteExperiment,
+  TestSuiteExperiment,
 } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
 
-export function isEvalSuiteExperiment(
+export function isTestSuiteExperiment(
   experiment: Experiment | null | undefined,
-): experiment is EvalSuiteExperiment {
-  return experiment?.evaluation_method === EVALUATION_METHOD.EVALUATION_SUITE;
+): experiment is TestSuiteExperiment {
+  return experiment?.evaluation_method === EVALUATION_METHOD.TEST_SUITE;
 }
 
 export const calculateLineHeight = (

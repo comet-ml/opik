@@ -96,13 +96,13 @@ describe("TestSuite", () => {
     });
   });
 
-  describe("addItem", () => {
-    it("should insert item via dataset with plain data", async () => {
+  describe("insert", () => {
+    it("should insert single item via dataset with plain data", async () => {
       const insertSpy = vi
         .spyOn(testDataset, "insert")
         .mockResolvedValue(undefined);
 
-      await suite.addItem({ input: "hello", expected: "world" });
+      await suite.insert([{ data: { input: "hello", expected: "world" } }]);
 
       expect(insertSpy).toHaveBeenCalledWith([
         { input: "hello", expected: "world" },
@@ -115,10 +115,12 @@ describe("TestSuite", () => {
         .spyOn(testDataset, "insert")
         .mockResolvedValue(undefined);
 
-      await suite.addItem(
-        { input: "test" },
-        { executionPolicy: { runsPerItem: 3, passThreshold: 2 } }
-      );
+      await suite.insert([
+        {
+          data: { input: "test" },
+          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        },
+      ]);
 
       expect(insertSpy).toHaveBeenCalledWith([
         expect.objectContaining({
@@ -133,10 +135,12 @@ describe("TestSuite", () => {
         .spyOn(testDataset, "insert")
         .mockResolvedValue(undefined);
 
-      await suite.addItem(
-        { input: "test" },
-        { assertions: ["is accurate", "is concise"] }
-      );
+      await suite.insert([
+        {
+          data: { input: "test" },
+          assertions: ["is accurate", "is concise"],
+        },
+      ]);
 
       expect(insertSpy).toHaveBeenCalledWith([
         expect.objectContaining({
@@ -150,15 +154,13 @@ describe("TestSuite", () => {
         }),
       ]);
     });
-  });
 
-  describe("addItems", () => {
     it("should batch insert items via dataset", async () => {
       const insertSpy = vi
         .spyOn(testDataset, "insert")
         .mockResolvedValue(undefined);
 
-      await suite.addItems([
+      await suite.insert([
         { data: { input: "hello", expected: "world" } },
         { data: { input: "foo" }, assertions: ["is correct"] },
       ]);
@@ -179,26 +181,6 @@ describe("TestSuite", () => {
       );
     });
 
-    it("should pass executionPolicy per item", async () => {
-      const insertSpy = vi
-        .spyOn(testDataset, "insert")
-        .mockResolvedValue(undefined);
-
-      await suite.addItems([
-        {
-          data: { input: "test" },
-          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
-        },
-      ]);
-
-      const insertedItems = insertSpy.mock.calls[0][0] as unknown[];
-      expect(insertedItems[0]).toEqual(
-        expect.objectContaining({
-          input: "test",
-          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
-        })
-      );
-    });
   });
 
   describe("getGlobalAssertions", () => {
@@ -454,13 +436,13 @@ describe("TestSuite", () => {
     });
   });
 
-  describe("deleteItems", () => {
+  describe("delete", () => {
     it("should delegate to dataset.delete", async () => {
       const deleteSpy = vi
         .spyOn(testDataset, "delete")
         .mockResolvedValue(undefined);
 
-      await suite.deleteItems(["item-1", "item-2"]);
+      await suite.delete(["item-1", "item-2"]);
 
       expect(deleteSpy).toHaveBeenCalledWith(["item-1", "item-2"]);
     });
@@ -1103,13 +1085,15 @@ describe("TestSuite", () => {
       );
     });
 
-    it("should call validateExecutionPolicy when executionPolicy is provided in addItem", async () => {
+    it("should call validateExecutionPolicy when executionPolicy is provided in insert", async () => {
       vi.spyOn(testDataset, "insert").mockResolvedValue(undefined);
 
-      await suite.addItem(
-        { input: "test" },
-        { executionPolicy: { runsPerItem: 2, passThreshold: 1 } }
-      );
+      await suite.insert([
+        {
+          data: { input: "test" },
+          executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        },
+      ]);
 
       expect(validateExecutionPolicy).toHaveBeenCalledWith(
         { runsPerItem: 2, passThreshold: 1 },

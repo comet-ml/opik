@@ -1,4 +1,4 @@
-import { LLMJudgeConfig, MetricType } from "@/types/evaluation-suites";
+import { LLMJudgeConfig, MetricType } from "@/types/test-suites";
 import { Evaluator } from "@/types/datasets";
 
 const ASSERTION_SCHEMA_TYPE = "BOOLEAN";
