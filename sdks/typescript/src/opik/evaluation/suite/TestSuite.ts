@@ -4,9 +4,10 @@ import { OpikClient } from "@/client/Client";
 import {
   resolveEvaluators,
   validateExecutionPolicy,
-} from "../suite_evaluators/validators";
+} from "@/evaluation";
 import type {
   TestSuiteItem,
+  UpdateTestSuiteItem,
   ExecutionPolicy,
 } from "./types";
 import {
@@ -14,7 +15,7 @@ import {
   deserializeEvaluators,
   resolveExecutionPolicy,
   resolveItemExecutionPolicy,
-} from "./suiteHelpers";
+} from "@/evaluation";
 import type { EvaluatorItemLike } from "./suiteHelpers";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
 import { generateId } from "@/utils/generateId";
@@ -106,6 +107,13 @@ export class TestSuite {
   // Static factory methods (replace Client.ts methods — no circular dep)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Deletes a test suite by name and project name.
+   *
+   * @param client - The Opik client instance.
+   * @param name - The name of the test suite to delete.
+   * @param projectName - The name of the project containing the test suite. If not provided, the default project is used.
+   */
   static async delete(client: OpikClient, name: string, projectName?: string): Promise<void> {
     validateSuiteName(name);
     const resolvedProjectName = client.resolveProjectName(projectName);
@@ -228,6 +236,24 @@ export class TestSuite {
     );
 
     await this.dataset.insert(datasetItems);
+  }
+
+  /**
+   * Updates a list of items in the dataset with the provided data.
+   *
+   * @param {UpdateTestSuiteItem[]} items - An array of items to update, where each item contains data, assertions, description, and execution policies.
+   * @return {Promise<void>} A promise that resolves when the update operation is complete.
+   */
+  async updateItems(items: UpdateTestSuiteItem[]): Promise<void> {
+    if (!items || items.length === 0) {
+      return;
+    }
+
+    const datasetItems: DatasetItemData[] = items.map((item) =>
+      prepareDatasetItemData({ ...item.data, id: item.id }, { assertions: item.assertions, description: item.description, executionPolicy: item.executionPolicy })
+    );
+
+    await this.dataset.update(datasetItems);
   }
 
   async getItems(): Promise<

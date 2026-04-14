@@ -23,6 +23,18 @@ export interface TestSuiteItem {
 }
 
 /**
+ * A single item to be updated in a test suite via `updateItems()`.
+ * Requires an ID to identify the item to update.
+ */
+export interface UpdateTestSuiteItem {
+  id: string;
+  data?: Record<string, unknown>;
+  assertions?: string[];
+  description?: string;
+  executionPolicy?: ExecutionPolicy;
+}
+
+/**
  * Result of an individual item in the test suite.
  */
 export type ItemResult = {

@@ -698,4 +698,66 @@ describe("TestSuite", () => {
       );
     });
   });
+
+  describe("updateItems", () => {
+    it("should update items via dataset.update", async () => {
+      const updateSpy = vi
+        .spyOn(testDataset, "update")
+        .mockResolvedValue(undefined);
+
+      await suite.updateItems([
+        { id: "item-1", data: { input: "updated" } },
+        { id: "item-2", assertions: ["is correct"], description: "Updated item" },
+      ]);
+
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      const updatedItems = updateSpy.mock.calls[0][0] as unknown[];
+      expect(updatedItems).toHaveLength(2);
+      expect(updatedItems[0]).toEqual(
+        expect.objectContaining({ id: "item-1", input: "updated" })
+      );
+      expect(updatedItems[1]).toEqual(
+        expect.objectContaining({
+          id: "item-2",
+          evaluators: [
+            expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
+          ],
+          description: "Updated item",
+        })
+      );
+    });
+
+    it("should not call dataset.update for empty array", async () => {
+      const updateSpy = vi
+        .spyOn(testDataset, "update")
+        .mockResolvedValue(undefined);
+
+      await suite.updateItems([]);
+
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it("should pass execution policy per item", async () => {
+      const updateSpy = vi
+        .spyOn(testDataset, "update")
+        .mockResolvedValue(undefined);
+
+      await suite.updateItems([
+        {
+          id: "item-1",
+          data: { input: "test" },
+          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        },
+      ]);
+
+      const updatedItems = updateSpy.mock.calls[0][0] as unknown[];
+      expect(updatedItems[0]).toEqual(
+        expect.objectContaining({
+          id: "item-1",
+          input: "test",
+          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        })
+      );
+    });
+  });
 });
