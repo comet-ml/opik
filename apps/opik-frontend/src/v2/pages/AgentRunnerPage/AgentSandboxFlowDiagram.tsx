@@ -15,6 +15,7 @@ import {
 import OllieOwl from "@/icons/ollie-owl.svg?react";
 import CurveRight from "@/icons/sandbox-curve-right.svg?react";
 import CurveLeft from "@/icons/sandbox-curve-left.svg?react";
+import opikLogoUrl from "/images/opik-logo.png";
 
 const Tag: React.FC<{
   icon: React.ReactNode;
@@ -55,7 +56,7 @@ const AgentSandboxFlowDiagram: React.FC = () => (
       }}
     >
       <img
-        src="/images/opik-logo.png"
+        src={opikLogoUrl}
         alt="Opik"
         className="mb-2 h-3 w-auto self-start"
       />

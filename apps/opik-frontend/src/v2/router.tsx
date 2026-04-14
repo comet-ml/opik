@@ -11,6 +11,7 @@ import {
 import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
+import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
@@ -37,6 +38,7 @@ import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueu
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
 import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
+import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -51,7 +53,7 @@ import EvaluationSuitePage from "@/v2/pages/EvaluationSuitePage/EvaluationSuiteP
 import EvaluationSuiteItemsPage from "@/v2/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
-import InsightsPage from "@/v2/pages/InsightsPage/InsightsPage";
+import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -94,6 +96,13 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
   id: "workspaceGuardEmptyLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={EmptyPageLayout} />,
+});
+
+// ----------- pairing (root-level, no layout)
+const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/opik/pair/v1",
+  component: PairingPage,
 });
 
 // ----------- base redirect
@@ -191,13 +200,13 @@ const logsRoute = createRoute({
   },
 });
 
-// ----------- insights (project-scoped)
-const insightsRoute = createRoute({
-  path: "/insights",
+// ----------- dashboards (project-scoped)
+const projectDashboardsRoute = createRoute({
+  path: "/dashboards",
   getParentRoute: () => projectScopedRoute,
-  component: InsightsPage,
+  component: ProjectDashboardsPage,
   staticData: {
-    title: "Insights",
+    title: "Dashboards",
   },
 });
 
@@ -296,6 +305,12 @@ const playgroundRoute = createRoute({
   staticData: {
     title: "Playground",
   },
+  component: PlaygroundPageGuard,
+});
+
+const playgroundIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => playgroundRoute,
   component: PlaygroundPage,
 });
 
@@ -527,6 +542,7 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 // ═══════════════════════════════════════════════════════════════
 
 const routeTree = rootRoute.addChildren([
+  pairingRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -543,7 +559,7 @@ const routeTree = rootRoute.addChildren([
         projectScopedRoute.addChildren([
           projectHomeRoute,
           logsRoute,
-          insightsRoute,
+          projectDashboardsRoute,
           tracesRedirectRoute,
           experimentsRoute.addChildren([
             experimentsListRoute,
@@ -554,7 +570,7 @@ const routeTree = rootRoute.addChildren([
             evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
           ]),
           promptsRoute.addChildren([promptsListRoute, promptRoute]),
-          playgroundRoute,
+          playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
             optimizationsNewRoute,

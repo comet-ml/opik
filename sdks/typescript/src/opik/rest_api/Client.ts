@@ -19,8 +19,8 @@ import { ManualEvaluationClient } from "./api/resources/manualEvaluation/client/
 import { OllamaClient } from "./api/resources/ollama/client/Client.js";
 import { OllieStateClient } from "./api/resources/ollieState/client/Client.js";
 import { OpenTelemetryIngestionClient } from "./api/resources/openTelemetryIngestion/client/Client.js";
-import { OpikConnectClient } from "./api/resources/opikConnect/client/Client.js";
 import { OptimizationsClient } from "./api/resources/optimizations/client/Client.js";
+import { PairingClient } from "./api/resources/pairing/client/Client.js";
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
 import { PromptsClient } from "./api/resources/prompts/client/Client.js";
 import { RedirectClient } from "./api/resources/redirect/client/Client.js";
@@ -70,8 +70,8 @@ export class OpikApiClient {
     protected _ollama: OllamaClient | undefined;
     protected _ollieState: OllieStateClient | undefined;
     protected _openTelemetryIngestion: OpenTelemetryIngestionClient | undefined;
-    protected _opikConnect: OpikConnectClient | undefined;
     protected _optimizations: OptimizationsClient | undefined;
+    protected _pairing: PairingClient | undefined;
     protected _projects: ProjectsClient | undefined;
     protected _prompts: PromptsClient | undefined;
     protected _retentionRules: RetentionRulesClient | undefined;
@@ -171,12 +171,12 @@ export class OpikApiClient {
         return (this._openTelemetryIngestion ??= new OpenTelemetryIngestionClient(this._options));
     }
 
-    public get opikConnect(): OpikConnectClient {
-        return (this._opikConnect ??= new OpikConnectClient(this._options));
-    }
-
     public get optimizations(): OptimizationsClient {
         return (this._optimizations ??= new OptimizationsClient(this._options));
+    }
+
+    public get pairing(): PairingClient {
+        return (this._pairing ??= new PairingClient(this._options));
     }
 
     public get projects(): ProjectsClient {

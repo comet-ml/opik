@@ -1,27 +1,49 @@
-import React from "react";
+import React, { useCallback, useRef, useState } from "react";
 
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
+import { Info } from "lucide-react";
+import { JsonParam, useQueryParam } from "use-query-params";
+
+import { Button } from "@/ui/button";
+import { useActiveProjectId } from "@/store/AppStore";
+import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import GeneralDatasetsTab from "./GeneralDatasetsTab/GeneralDatasetsTab";
 
 const ExperimentsPage: React.FC = () => {
+  const activeProjectId = useActiveProjectId();
+  const resetDialogKeyRef = useRef(0);
+  const [query] = useQueryParam("new", JsonParam);
+  const [openDialog, setOpenDialog] = useState<boolean>(
+    Boolean(query?.experiment),
+  );
+
+  const handleNewExperimentClick = useCallback(() => {
+    setOpenDialog(true);
+    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+  }, []);
+
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer
-        className="pb-1 pt-6"
+        className="flex items-center justify-between pb-1 pt-4"
         direction="horizontal"
         limitWidth
       >
-        <h1 className="comet-title-l truncate break-words">Experiments</h1>
+        <h1 className="comet-title-xs truncate break-words">Experiments</h1>
+        <Button variant="outline" size="xs" onClick={handleNewExperimentClick}>
+          <Info className="mr-1 size-3.5" />
+          Create experiment
+        </Button>
       </PageBodyStickyContainer>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerDescription
-          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
-        />
-      </PageBodyStickyContainer>
-      <GeneralDatasetsTab />
+      <GeneralDatasetsTab onNewExperimentClick={handleNewExperimentClick} />
+      <AddExperimentDialog
+        key={resetDialogKeyRef.current}
+        open={openDialog}
+        setOpen={setOpenDialog}
+        datasetName={query?.datasetName}
+        projectId={activeProjectId}
+      />
     </PageBodyScrollContainer>
   );
 };

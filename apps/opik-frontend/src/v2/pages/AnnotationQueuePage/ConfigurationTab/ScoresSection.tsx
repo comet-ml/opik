@@ -39,7 +39,7 @@ const ScoresSection: React.FunctionComponent<ScoresSectionProps> = ({
   }
 
   return (
-    <div className="pt-6">
+    <div className="pt-4">
       <h2 className="comet-title-s truncate break-words pb-3 pt-2">
         Feedback scores ({feedbackDefinitions.length})
       </h2>

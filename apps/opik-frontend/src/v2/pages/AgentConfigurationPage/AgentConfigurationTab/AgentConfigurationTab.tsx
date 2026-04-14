@@ -1,14 +1,130 @@
-import React, { useMemo, useState } from "react";
-import { Book, Settings2 } from "lucide-react";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  Book,
+  Check,
+  ChevronDown,
+  Clock,
+  FilePen,
+  History,
+  Settings2,
+  User,
+} from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
+import { cn, buildDocsUrl } from "@/lib/utils";
+import { getTimeFromNow } from "@/lib/date";
+import { generateBlueprintDescription } from "@/utils/agent-configurations";
 import Loader from "@/shared/Loader/Loader";
-import { buildDocsUrl } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import AgentConfigurationHistoryTimeline from "./AgentConfigurationHistoryTimeline";
 import AgentConfigurationDetailView from "./AgentConfigurationDetailView";
 import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import AgentConfigTagList from "./AgentConfigTagList";
+
+type HistoryPopoverProps = {
+  items: ConfigHistoryItem[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+};
+
+const HistoryPopover: React.FC<HistoryPopoverProps> = ({
+  items,
+  selectedIndex,
+  onSelect,
+}) => {
+  const [open, setOpen] = useState(false);
+  const selectedItem = items[selectedIndex];
+
+  const handleSelect = useCallback(
+    (index: number) => {
+      onSelect(index);
+      setOpen(false);
+    },
+    [onSelect],
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="flex h-8 w-full items-center justify-between rounded-md border bg-background px-3 dark:bg-accent-background">
+          <div className="flex min-w-0 items-center gap-2">
+            <TooltipWrapper content="Version history">
+              <History className="size-3.5 shrink-0 text-light-slate" />
+            </TooltipWrapper>
+            {selectedItem && (
+              <>
+                <span className="comet-body-s-accented shrink-0">
+                  {selectedItem.name}
+                </span>
+                <AgentConfigTagList
+                  tags={selectedItem.tags}
+                  size="sm"
+                  maxWidth={150}
+                />
+              </>
+            )}
+          </div>
+          <ChevronDown className="size-4 shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        className="max-h-[50vh] w-[var(--radix-popover-trigger-width)] overflow-y-auto p-1"
+      >
+        {items.map((item, index) => {
+          const isSelected = index === selectedIndex;
+          const blueprintDescription =
+            item.description || generateBlueprintDescription(item.values);
+
+          return (
+            <button
+              key={item.id}
+              className={cn(
+                "flex w-full flex-col rounded-md px-3 py-2 text-left",
+                isSelected
+                  ? "bg-primary-foreground"
+                  : "hover:bg-primary-foreground/60",
+              )}
+              onClick={() => handleSelect(index)}
+            >
+              <div className="flex items-center gap-1.5">
+                <Check
+                  className={cn("size-3 shrink-0", !isSelected && "invisible")}
+                />
+                <span className="comet-body-s-accented">{item.name}</span>
+                <AgentConfigTagList tags={item.tags} size="sm" maxWidth={150} />
+              </div>
+              <div className="mt-1 flex flex-col gap-1 pl-[18px]">
+                <p className="comet-body-xs flex min-w-0 items-center gap-1 text-light-slate">
+                  <FilePen className="size-3 shrink-0" />
+                  <TooltipWrapper content={blueprintDescription}>
+                    <span className="w-fit max-w-full truncate">
+                      {blueprintDescription}
+                    </span>
+                  </TooltipWrapper>
+                </p>
+                <div className="comet-body-xs flex items-center gap-1 text-light-slate">
+                  <Clock className="size-3 shrink-0" />
+                  <span>{getTimeFromNow(item.created_at)}</span>
+                  {item.created_by && (
+                    <span className="ml-1 flex items-center gap-1">
+                      <User className="size-3 shrink-0" />
+                      {item.created_by}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 type AgentConfigurationTabProps = {
   projectId: string;
@@ -35,6 +151,11 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
     const idx = allRows.findIndex((r) => r.id === selectedId);
     return idx >= 0 ? idx : 0;
   }, [allRows, selectedId]);
+
+  const handleSelect = useCallback(
+    (index: number) => setSelectedId(allRows[index]?.id ?? undefined),
+    [allRows, setSelectedId],
+  );
 
   if (isPending) {
     return <Loader />;
@@ -83,10 +204,19 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
   }
 
   return (
-    <div className="flex gap-0">
-      <div className="w-[50vw] min-w-0 flex-1 [overflow-anchor:none]">
-        <div className="mx-6 mt-6">
-          <p className="comet-body-s-accented">Agent configuration</p>
+    <div className="flex flex-col lg:flex-row lg:gap-0">
+      <div className="mx-6 mt-4 flex flex-col gap-4 lg:hidden">
+        <h1 className="comet-title-xs">Agent configuration</h1>
+        <HistoryPopover
+          items={allRows}
+          selectedIndex={selectedIndex}
+          onSelect={handleSelect}
+        />
+      </div>
+
+      <div className="min-w-0 flex-1 [overflow-anchor:none] lg:w-[50vw]">
+        <div className="mx-6 mt-6 hidden lg:block">
+          <h1 className="comet-title-xs">Agent configuration</h1>
         </div>
 
         {selectedItem ? (
@@ -103,13 +233,13 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
         )}
       </div>
 
-      <div className="w-[25vw] shrink-0 pr-2">
+      <div className="hidden w-[25vw] shrink-0 pr-2 lg:block">
         <p className="comet-body-s-accented ml-3 mt-6">Version history</p>
 
         <AgentConfigurationHistoryTimeline
           items={allRows}
           selectedIndex={selectedIndex}
-          onSelect={(index) => setSelectedId(allRows[index]?.id ?? undefined)}
+          onSelect={handleSelect}
           hasNextPage={hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
           onLoadMore={fetchNextPage}

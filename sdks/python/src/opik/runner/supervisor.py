@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from ..cli.pairing import RunnerType
 from ..rest_api.core.api_error import ApiError
 from .bridge_handlers import FileLockRegistry
 from .bridge_handlers.edit_file import EditFileHandler
@@ -67,6 +68,8 @@ class Supervisor:
         on_command_start: Optional[Callable[[str, str, str], None]] = None,
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
+        bridge_key: Optional[bytes] = None,
+        runner_type: RunnerType = RunnerType.ENDPOINT,
     ) -> None:
         self._command = command
         self._env = env
@@ -78,6 +81,8 @@ class Supervisor:
         self._on_error = on_error
         self._on_command_start = on_command_start
         self._on_command_end = on_command_end
+        self._bridge_key = bridge_key
+        self._runner_type = runner_type
         if command is None:
             self._watch = False
         elif watch is None:
@@ -102,28 +107,31 @@ class Supervisor:
         )
         heartbeat_thread.start()
 
-        mutation_queue = FileLockRegistry()
         self._bg_tracker = BackgroundProcessTracker()
-        handlers: Dict[str, Any] = {
-            "ReadFile": ReadFileHandler(self._repo_root),
-            "WriteFile": WriteFileHandler(self._repo_root, mutation_queue),
-            "EditFile": EditFileHandler(self._repo_root, mutation_queue),
-            "ListFiles": ListFilesHandler(self._repo_root),
-            "SearchFiles": SearchFilesHandler(self._repo_root),
-            "Exec": ExecHandler(self._repo_root, self._bg_tracker),
-        }
-        bridge_loop = BridgePollLoop(
-            self._api,
-            self._runner_id,
-            handlers,
-            self._shutdown_event,
-            on_command_start=self._on_command_start,
-            on_command_end=self._on_command_end,
-        )
-        bridge_thread = threading.Thread(
-            target=bridge_loop.run, name="bridge-poll", daemon=True
-        )
-        bridge_thread.start()
+
+        if self._runner_type == RunnerType.CONNECT:
+            mutation_queue = FileLockRegistry()
+            handlers: Dict[str, Any] = {
+                "ReadFile": ReadFileHandler(self._repo_root),
+                "WriteFile": WriteFileHandler(self._repo_root, mutation_queue),
+                "EditFile": EditFileHandler(self._repo_root, mutation_queue),
+                "ListFiles": ListFilesHandler(self._repo_root),
+                "SearchFiles": SearchFilesHandler(self._repo_root),
+                "Exec": ExecHandler(self._repo_root, self._bg_tracker),
+            }
+            bridge_loop = BridgePollLoop(
+                self._api,
+                self._runner_id,
+                handlers,
+                self._shutdown_event,
+                on_command_start=self._on_command_start,
+                on_command_end=self._on_command_end,
+                bridge_key=self._bridge_key,
+            )
+            bridge_thread = threading.Thread(
+                target=bridge_loop.run, name="bridge-poll", daemon=True
+            )
+            bridge_thread.start()
 
         if self._watch:
             watcher = FileWatcher(self._repo_root, self._on_file_change)
@@ -338,7 +346,9 @@ class Supervisor:
 
     def _send_checklist(self) -> None:
         try:
-            checklist = build_checklist(self._repo_root, self._command)
+            checklist = build_checklist(
+                self._repo_root, self._command, self._runner_type
+            )
             self._api.runners.patch_checklist(self._runner_id, request=checklist)
             LOGGER.debug(
                 "Checklist sent (instrumented=%s)", checklist["instrumentation"]
@@ -371,9 +381,10 @@ class Supervisor:
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                self._api.runners.heartbeat(
-                    self._runner_id, capabilities=["jobs", "bridge"]
+                caps = (
+                    ["bridge"] if self._runner_type == RunnerType.CONNECT else ["jobs"]
                 )
+                self._api.runners.heartbeat(self._runner_id, capabilities=caps)
             except ApiError as e:
                 if e.status_code == 410:
                     LOGGER.info("Runner deregistered (410), shutting down")

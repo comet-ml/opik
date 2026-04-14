@@ -211,7 +211,7 @@ class ExperimentItemProcessorTest {
     class TraceCreation {
 
         @Test
-        void processCreatesTraceWithEvalSuiteMetadata() {
+        void processCreatesTraceWithTestSuiteMetadata() {
             var prompt = buildPrompt("gpt-4", "user", "Hello");
             var datasetItemId = UUID.randomUUID();
             var datasetItem = buildDatasetItem(datasetItemId, Map.of("input", new TextNode("test")));
@@ -233,9 +233,9 @@ class ExperimentItemProcessorTest {
             var metadata = trace.metadata();
 
             assertThat(metadata.get("created_from").asText()).isEqualTo("playground");
-            assertThat(metadata.get("eval_suite_dataset_id").asText()).isEqualTo(datasetId.toString());
-            assertThat(metadata.get("eval_suite_dataset_version_hash").asText()).isEqualTo(versionHash);
-            assertThat(metadata.get("eval_suite_dataset_item_id").asText()).isEqualTo(datasetItemId.toString());
+            assertThat(metadata.get("test_suite_dataset_id").asText()).isEqualTo(datasetId.toString());
+            assertThat(metadata.get("test_suite_dataset_version_hash").asText()).isEqualTo(versionHash);
+            assertThat(metadata.get("test_suite_dataset_item_id").asText()).isEqualTo(datasetItemId.toString());
         }
 
         @Test
@@ -600,7 +600,7 @@ class ExperimentItemProcessorTest {
             verify(traceService).create(captor.capture());
 
             var metadata = captor.getValue().metadata();
-            assertThat(metadata.has("eval_suite_dataset_version_hash")).isFalse();
+            assertThat(metadata.has("test_suite_dataset_version_hash")).isFalse();
         }
     }
 }

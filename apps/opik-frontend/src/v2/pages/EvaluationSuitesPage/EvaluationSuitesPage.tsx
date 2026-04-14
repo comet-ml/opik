@@ -8,6 +8,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import { Plus } from "lucide-react";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -21,7 +22,6 @@ import DatasetActionsPanel from "@/v2/pages-shared/datasets/DatasetActionsPanel/
 import { createDatasetRowActionsCell } from "@/v2/pages-shared/datasets/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
-import { buildDocsUrl } from "@/lib/utils";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -356,23 +356,17 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-xs truncate break-words">
           Evaluation suites
         </h1>
-      </div>
-      <div className="comet-body-s mb-4 text-muted-slate">
-        An evaluation suite is a collection of inputs, expected outputs, and
-        evaluation criteria used to evaluate your LLM application.{" "}
-        <a
-          href={buildDocsUrl("/evaluation/manage_datasets")}
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary"
-        >
-          Read more
-        </a>
+        {canCreateDatasets && (
+          <Button variant="default" size="xs" onClick={handleNewSuiteClick}>
+            <Plus className="mr-1 size-4" />
+            Create evaluation suite
+          </Button>
+        )}
       </div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
@@ -408,11 +402,6 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          {canCreateDatasets && (
-            <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
-              Create evaluation suite
-            </Button>
-          )}
         </div>
       </div>
       <DataTable
@@ -431,7 +420,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && canCreateDatasets && (
               <Button variant="link" onClick={handleNewSuiteClick}>
-                Create new
+                Create evaluation suite
               </Button>
             )}
           </DataTableNoData>

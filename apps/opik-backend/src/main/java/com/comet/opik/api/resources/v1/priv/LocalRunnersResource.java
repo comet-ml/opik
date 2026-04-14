@@ -10,17 +10,15 @@ import com.comet.opik.api.runner.BridgeCommandSubmitRequest;
 import com.comet.opik.api.runner.BridgeCommandSubmitResponse;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
-import com.comet.opik.api.runner.LocalRunnerConnectRequest;
-import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
-import com.comet.opik.api.runner.LocalRunnerPairRequest;
-import com.comet.opik.api.runner.LocalRunnerPairResponse;
 import com.comet.opik.api.runner.LocalRunnerStatus;
-import com.comet.opik.domain.LocalRunnerService;
+import com.comet.opik.domain.ConnectBridgeService;
+import com.comet.opik.domain.EndpointJobService;
+import com.comet.opik.domain.RunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -75,48 +73,10 @@ import java.util.concurrent.TimeUnit;
 public class LocalRunnersResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull LocalRunnerService runnerService;
+    private final @NonNull RunnerService runnerService;
+    private final @NonNull EndpointJobService endpointJobService;
+    private final @NonNull ConnectBridgeService connectBridgeService;
     private final @NonNull LocalRunnerConfig runnerConfig;
-
-    @POST
-    @Path("/pairs")
-    @RateLimited
-    @Operation(operationId = "generatePairingCode", summary = "Generate a pairing code", description = "Generate a pairing code for a local runner in the current workspace", responses = {
-            @ApiResponse(responseCode = "201", description = "Pairing code generated", headers = @Header(name = "Location", description = "URI of the runner"), content = @Content(schema = @Schema(implementation = LocalRunnerPairResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public Response generatePairingCode(
-            @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerPairRequest.class))) @NotNull @Valid LocalRunnerPairRequest request,
-            @Context UriInfo uriInfo) {
-        ensureEnabled();
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        LocalRunnerPairResponse response = runnerService.generatePairingCode(workspaceId, userName,
-                request.projectId());
-        var uri = uriInfo.getBaseUriBuilder()
-                .path("v1/private/local-runners/{runnerId}")
-                .build(response.runnerId());
-        return Response.created(uri).entity(response).build();
-    }
-
-    @POST
-    @Path("/connections")
-    @RateLimited
-    @Operation(operationId = "connectRunner", summary = "Connect a local runner", description = "Exchange a pairing code or API key for local runner credentials", responses = {
-            @ApiResponse(responseCode = "201", description = "Runner connected", headers = @Header(name = "Location", description = "URI of the runner"), content = @Content(schema = @Schema(implementation = LocalRunnerConnectResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public Response connect(
-            @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerConnectRequest.class))) @NotNull @Valid LocalRunnerConnectRequest request,
-            @Context UriInfo uriInfo) {
-        ensureEnabled();
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-        LocalRunnerConnectResponse connectResponse = runnerService.connect(workspaceId, userName, request);
-        var uri = uriInfo.getBaseUriBuilder()
-                .path("v1/private/local-runners/{runnerId}")
-                .build(connectResponse.runnerId());
-        return Response.created(uri).entity(connectResponse).build();
-    }
 
     @GET
     @Operation(operationId = "listRunners", summary = "List local runners", description = "List local runners owned by the current user in the workspace", responses = {
@@ -160,7 +120,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        runnerService.registerAgents(runnerId, workspaceId, userName, agents);
+        endpointJobService.registerAgents(runnerId, workspaceId, userName, agents);
         return Response.noContent().build();
     }
 
@@ -209,7 +169,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        UUID jobId = runnerService.createJob(workspaceId, userName, request);
+        UUID jobId = endpointJobService.createJob(workspaceId, userName, request);
         var uri = uriInfo.getAbsolutePathBuilder().path("/{jobId}").build(jobId);
         return Response.created(uri).build();
     }
@@ -226,8 +186,8 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        LocalRunnerJob.LocalRunnerJobPage jobPage = runnerService.listJobs(runnerId, projectId, workspaceId, userName,
-                page, size);
+        LocalRunnerJob.LocalRunnerJobPage jobPage = endpointJobService.listJobs(runnerId, projectId, workspaceId,
+                userName, page, size);
         return Response.ok(jobPage).build();
     }
 
@@ -246,7 +206,7 @@ public class LocalRunnersResource {
                 ar -> ar.resume(Response.ok(NullNode.getInstance()).build()));
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        runnerService.nextJob(runnerId, workspaceId, userName)
+        endpointJobService.nextJob(runnerId, workspaceId, userName)
                 .map(job -> Response.ok(job).build())
                 .defaultIfEmpty(Response.ok(NullNode.getInstance()).build())
                 .subscribe(
@@ -271,7 +231,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        LocalRunnerJob job = runnerService.getJob(jobId, workspaceId, userName);
+        LocalRunnerJob job = endpointJobService.getJob(jobId, workspaceId, userName);
         return Response.ok(job).build();
     }
 
@@ -285,7 +245,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        List<LocalRunnerLogEntry> logs = runnerService.getJobLogs(jobId, offset, workspaceId, userName);
+        List<LocalRunnerLogEntry> logs = endpointJobService.getJobLogs(jobId, offset, workspaceId, userName);
         return Response.ok(logs).build();
     }
 
@@ -301,7 +261,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        runnerService.appendLogs(jobId, workspaceId, userName, entries);
+        endpointJobService.appendLogs(jobId, workspaceId, userName, entries);
         return Response.noContent().build();
     }
 
@@ -316,7 +276,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        runnerService.reportResult(jobId, workspaceId, userName, result);
+        endpointJobService.reportResult(jobId, workspaceId, userName, result);
         return Response.noContent().build();
     }
 
@@ -329,7 +289,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        runnerService.cancelJob(jobId, workspaceId, userName);
+        endpointJobService.cancelJob(jobId, workspaceId, userName);
         return Response.noContent().build();
     }
 
@@ -347,7 +307,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        UUID commandId = runnerService.createBridgeCommand(runnerId, workspaceId, userName, request);
+        UUID commandId = connectBridgeService.createBridgeCommand(runnerId, workspaceId, userName, request);
         var uri = uriInfo.getBaseUriBuilder()
                 .path("v1/private/local-runners/{runnerId}/bridge/commands/{commandId}")
                 .build(runnerId, commandId);
@@ -374,7 +334,7 @@ public class LocalRunnersResource {
                         .commands(List.of()).build()).build()));
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        runnerService.nextBridgeCommands(runnerId, workspaceId, userName, maxCommands)
+        connectBridgeService.nextBridgeCommands(runnerId, workspaceId, userName, maxCommands)
                 .map(batch -> Response.ok(batch).build())
                 .subscribe(
                         asyncResponse::resume,
@@ -401,7 +361,7 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        runnerService.reportBridgeCommandResult(runnerId, workspaceId, userName, commandId, request);
+        connectBridgeService.reportBridgeCommandResult(runnerId, workspaceId, userName, commandId, request);
         return Response.noContent().build();
     }
 
@@ -420,7 +380,7 @@ public class LocalRunnersResource {
         String userName = requestContext.get().getUserName();
 
         if (!wait) {
-            BridgeCommand command = runnerService.getBridgeCommand(runnerId, workspaceId, userName, commandId);
+            BridgeCommand command = connectBridgeService.getBridgeCommand(runnerId, workspaceId, userName, commandId);
             asyncResponse.resume(Response.ok(command).build());
             return;
         }
@@ -432,7 +392,7 @@ public class LocalRunnersResource {
         asyncResponse.setTimeoutHandler(
                 ar -> ar.resume(Response.status(Response.Status.REQUEST_TIMEOUT).build()));
 
-        runnerService.awaitBridgeCommand(runnerId, workspaceId, userName, commandId, clampedTimeout)
+        connectBridgeService.awaitBridgeCommand(runnerId, workspaceId, userName, commandId, clampedTimeout)
                 .map(cmd -> Response.ok(cmd).build())
                 .subscribe(
                         asyncResponse::resume,
