@@ -50,7 +50,7 @@ const PlaygroundOutputTable = ({
   isFetchingData,
 }: PlaygroundOutputTableProps) => {
   const datasetType = useDatasetType();
-  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
+  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -92,7 +92,7 @@ const PlaygroundOutputTable = ({
     const retVal: ColumnDef<PlaygroundOutputTableData>[] = [];
     const explainer =
       EXPLAINERS_MAP[
-        EXPLAINER_ID.how_do_i_use_the_evaluation_suite_in_the_playground
+        EXPLAINER_ID.how_do_i_use_the_test_suite_in_the_playground
       ];
 
     const inputColumns = [...datasetColumns]
@@ -144,7 +144,7 @@ const PlaygroundOutputTable = ({
     const outputColumns = promptIds.map((promptId, promptIdx) => {
       return {
         id: `output-${promptId}`,
-        label: `${isEvaluationSuite ? "Result" : "Output"} ${getAlphabetLetter(
+        label: `${isTestSuite ? "Result" : "Output"} ${getAlphabetLetter(
           promptIdx,
         )}`,
         type: COLUMN_TYPE.string,
@@ -166,7 +166,7 @@ const PlaygroundOutputTable = ({
     );
 
     return retVal;
-  }, [promptIds, isEvaluationSuite]);
+  }, [promptIds, isTestSuite]);
 
   const resizeConfig = useMemo(
     () => ({

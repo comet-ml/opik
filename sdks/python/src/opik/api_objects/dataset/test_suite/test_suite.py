@@ -589,7 +589,7 @@ class TestSuite:
         experiment_type: Optional[str] = None,
         dataset_item_ids: Optional[List[str]] = None,
         dataset_filter_string: Optional[str] = None,
-        client: Optional[opik_client_module.Opik] = None,
+        client: Optional["opik_client_module.Opik"] = None,
         generate_report: bool = True,
         report_output_path: Optional[str] = None,
     ) -> suite_types.TestSuiteResult:

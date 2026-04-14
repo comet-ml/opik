@@ -6,8 +6,8 @@ export { runTests } from "./runTests";
 export type { RunTestsOptions } from "./runTests";
 export { TestSuite } from "./TestSuite";
 export type {
-  AddItemOptions,
   CreateTestSuiteOptions,
+  UpdateTestSuiteOptions,
 } from "./TestSuite";
 export {
   serializeEvaluators,

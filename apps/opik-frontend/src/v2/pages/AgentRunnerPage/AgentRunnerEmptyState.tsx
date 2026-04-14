@@ -6,9 +6,11 @@ import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 import AgentSandboxFlowDiagram from "./AgentSandboxFlowDiagram";
 import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
+import useActiveProjectName from "@/hooks/useActiveProjectName";
 
 const AgentRunnerEmptyState: React.FC = () => {
-  const command = `opik endpoint --project <project_name> -- <your app start command>`;
+  const projectName = useActiveProjectName();
+  const command = `opik endpoint --project "${projectName}" -- <your app start command>`;
 
   return (
     <div className="flex flex-1 justify-center gap-16 px-10 pt-[15.69rem]">

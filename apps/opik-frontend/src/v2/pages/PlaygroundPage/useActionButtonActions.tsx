@@ -88,7 +88,7 @@ const useActionButtonActions = ({
   const abortControllersRef = useRef(new Map<string, AbortController>());
   const runExperimentExecution = useRunExperimentExecution();
 
-  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
+  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
 
   // Get the minimum maxConcurrentRequests from all prompts
   const maxConcurrentRequests = useMemo(() => {
@@ -441,7 +441,7 @@ const useActionButtonActions = ({
           id: exp.experiment_id,
           datasetName,
           datasetVersionId,
-          evaluationMethod: EVALUATION_METHOD.EVALUATION_SUITE,
+          evaluationMethod: EVALUATION_METHOD.TEST_SUITE,
         };
       });
 
@@ -529,11 +529,11 @@ const useActionButtonActions = ({
   ]);
 
   const runAll = useCallback(async () => {
-    if (isEvaluationSuite) {
+    if (isTestSuite) {
       return runAllViaBackend();
     }
     return runAllViaFrontend();
-  }, [isEvaluationSuite, runAllViaBackend, runAllViaFrontend]);
+  }, [isTestSuite, runAllViaBackend, runAllViaFrontend]);
 
   const runSingle = useCallback(
     async (promptId: string) => {

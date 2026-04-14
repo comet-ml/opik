@@ -1,10 +1,7 @@
 import { useMemo } from "react";
-import { useDraftExecutionPolicy } from "@/store/EvaluationSuiteDraftStore";
+import { useDraftExecutionPolicy } from "@/store/TestSuiteDraftStore";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
-import {
-  DEFAULT_EXECUTION_POLICY,
-  ExecutionPolicy,
-} from "@/types/evaluation-suites";
+import { DEFAULT_EXECUTION_POLICY, ExecutionPolicy } from "@/types/test-suites";
 
 export const useEffectiveExecutionPolicy = (
   suiteId: string,

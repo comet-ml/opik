@@ -227,7 +227,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     <Popover onOpenChange={openChangeHandler} open={open && !isDisabled} modal>
       <PopoverTrigger asChild={!isDisabled} disabled={isDisabled}>
         {isDisabled ? (
-          <TooltipWrapper content="Select an evaluation suite first to choose metrics">
+          <TooltipWrapper content="Select a test suite first to choose metrics">
             <span className="block">{triggerElement}</span>
           </TooltipWrapper>
         ) : (

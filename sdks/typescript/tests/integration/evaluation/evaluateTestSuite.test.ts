@@ -76,8 +76,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
 
-        await suite.addItem({ input: "Q1", expected: "A1" });
-        await suite.addItem({ input: "Q2", expected: "A2" });
+        await suite.insert([{ data: { input: "Q1", expected: "A1" } }]);
+        await suite.insert([{ data: { input: "Q2", expected: "A2" } }]);
 
         await waitForSuiteItems(suite, 2);
 
@@ -121,7 +121,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         expect(assertions).toHaveLength(1);
         expect(assertions[0]).toBe("Response is helpful");
 
-        await suite.addItem({ input: "Hello", expected: "Hi" });
+        await suite.insert([{ data: { input: "Hello", expected: "Hi" } }]);
         await waitForSuiteItems(suite, 1);
 
         const result = await runTests({ testSuite: suite, task: echoTask });
@@ -144,10 +144,12 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem(
-          { input: "Explain gravity", expected: "A force" },
-          { assertions: ["Response is concise"] }
-        );
+        await suite.insert([
+          {
+            data: { input: "Explain gravity", expected: "A force" },
+            assertions: ["Response is concise"],
+          },
+        ]);
 
         await waitForSuiteItems(suite, 1);
 
@@ -219,7 +221,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalAssertions: ["Response is helpful"],
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
-        await original.addItem({ input: "seed item" });
+        await original.insert([{ data: { input: "seed item" } }]);
         await waitForSuiteItems(original, 1);
 
         // Record version ID before getOrCreate
@@ -269,7 +271,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
 
-        await suite.addItem({ input: "seed item" });
+        await suite.insert([{ data: { input: "seed item" } }]);
         await waitForSuiteItems(suite, 1);
 
         // Record version ID before the no-op update
@@ -309,7 +311,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem({ input: "seed item" });
+        await suite.insert([{ data: { input: "seed item" } }]);
         await waitForSuiteItems(suite, 1);
 
         const datasetRef = await client.getDataset(suiteName);
@@ -354,7 +356,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem({ input: "seed item" });
+        await suite.insert([{ data: { input: "seed item" } }]);
         await waitForSuiteItems(suite, 1);
 
         // Update only executionPolicy, omit assertions
@@ -386,7 +388,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });
 
-        await suite.addItem({ input: "seed item" });
+        await suite.insert([{ data: { input: "seed item" } }]);
         await waitForSuiteItems(suite, 1);
 
         // Update only assertions, omit executionPolicy
@@ -423,11 +425,17 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           projectName,
         });
 
-        await suite.addItem({ input: "What is 2+2?", expected: "4" });
-        await suite.addItem({
-          input: "What is the capital of France?",
-          expected: "Paris",
-        });
+        await suite.insert([
+          { data: { input: "What is 2+2?", expected: "4" } },
+        ]);
+        await suite.insert([
+          {
+            data: {
+              input: "What is the capital of France?",
+              expected: "Paris",
+            },
+          },
+        ]);
 
         await waitForSuiteItems(suite, 2);
 
@@ -470,7 +478,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
 
-        await suite.addItem({ input: "Hello world", expected: "Hi" });
+        await suite.insert([{ data: { input: "Hello world", expected: "Hi" } }]);
 
         await waitForSuiteItems(suite, 1);
 
@@ -528,10 +536,12 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem(
-          { input: "Explain gravity", expected: "A force of attraction" },
-          { assertions: ["Response is concise"] }
-        );
+        await suite.insert([
+          {
+            data: { input: "Explain gravity", expected: "A force of attraction" },
+            assertions: ["Response is concise"],
+          },
+        ]);
 
         await waitForSuiteItems(suite, 1);
 
@@ -568,8 +578,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           name: suiteName,
         });
 
-        await suite.addItem({ input: "Item 1" });
-        await suite.addItem({ input: "Item 2" });
+        await suite.insert([{ data: { input: "Item 1" } }]);
+        await suite.insert([{ data: { input: "Item 2" } }]);
 
         await waitForSuiteItems(suite, 2);
 
@@ -580,7 +590,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const item1 = items.find((i) => i.data.input === "Item 1")!;
         expect(item1).toBeDefined();
 
-        await suite.deleteItems([item1.id]);
+        await suite.delete([item1.id]);
 
         // Wait for deletion to propagate
         await searchAndWaitForDone(
@@ -615,10 +625,12 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem(
-          { input: "Explain gravity", expected: "A force" },
-          { assertions: ["Response is accurate"] }
-        );
+        await suite.insert([
+          {
+            data: { input: "Explain gravity", expected: "A force" },
+            assertions: ["Response is accurate"],
+          },
+        ]);
 
         await waitForSuiteItems(suite, 1);
 
@@ -671,10 +683,12 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem(
-          { input: "What is AI?", expected: "Artificial Intelligence" },
-          { executionPolicy: { runsPerItem: 2, passThreshold: 1 } }
-        );
+        await suite.insert([
+          {
+            data: { input: "What is AI?", expected: "Artificial Intelligence" },
+            executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+          },
+        ]);
 
         await waitForSuiteItems(suite, 1);
 
@@ -729,10 +743,12 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem(
-          { input: "Test input", expected: "Test output" },
-          { assertions: ["Response is correct"] }
-        );
+        await suite.insert([
+          {
+            data: { input: "Test input", expected: "Test output" },
+            assertions: ["Response is correct"],
+          },
+        ]);
 
         await waitForSuiteItems(suite, 1);
 
@@ -778,12 +794,13 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.addItem(
-          { input: "Describe the sun", expected: "A star" },
+        await suite.insert([
           {
+            data: { input: "Describe the sun", expected: "A star" },
             assertions: ["Response is factual"],
             executionPolicy: { runsPerItem: 2, passThreshold: 1 },
-          }
+          },
+        ]
         );
 
         await waitForSuiteItems(suite, 1);

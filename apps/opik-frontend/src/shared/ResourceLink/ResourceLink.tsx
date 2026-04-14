@@ -30,7 +30,7 @@ export enum RESOURCE_TYPE {
   experimentItem,
   optimization,
   trial,
-  evaluationSuite,
+  testSuite,
   annotationQueue,
   dashboard,
   traces,
@@ -48,23 +48,23 @@ export const RESOURCE_MAP = {
     color: "var(--color-green)",
   },
   [RESOURCE_TYPE.dataset]: {
-    url: "/$workspaceName/evaluation-suites/$suiteId/items",
+    url: "/$workspaceName/test-suites/$suiteId/items",
     projectUrl:
-      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+      "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
-    deleted: "Deleted evaluation suite",
-    label: "evaluation suite",
+    deleted: "Deleted test suite",
+    label: "test suite",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.datasetItem]: {
-    url: "/$workspaceName/evaluation-suites/$suiteId/items",
+    url: "/$workspaceName/test-suites/$suiteId/items",
     projectUrl:
-      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+      "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
-    deleted: "Deleted evaluation suite item",
-    label: "evaluation suite item",
+    deleted: "Deleted test suite item",
+    label: "test suite item",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.prompt]: {
@@ -145,14 +145,14 @@ export const RESOURCE_MAP = {
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.traces },
     projectSearch: { logsType: LOGS_TYPE.traces },
   },
-  [RESOURCE_TYPE.evaluationSuite]: {
-    url: "/$workspaceName/evaluation-suites/$suiteId/items",
+  [RESOURCE_TYPE.testSuite]: {
+    url: "/$workspaceName/test-suites/$suiteId/items",
     projectUrl:
-      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+      "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
-    deleted: "Deleted evaluation suite",
-    label: "evaluation suite",
+    deleted: "Deleted test suite",
+    label: "test suite",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.threads]: {

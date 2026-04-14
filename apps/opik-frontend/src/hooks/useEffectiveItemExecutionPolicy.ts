@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { useEditedDatasetItemById } from "@/store/EvaluationSuiteDraftStore";
-import { ExecutionPolicy } from "@/types/evaluation-suites";
+import { useEditedDatasetItemById } from "@/store/TestSuiteDraftStore";
+import { ExecutionPolicy } from "@/types/test-suites";
 
 export const useEffectiveItemExecutionPolicy = (
   itemId: string,

@@ -107,11 +107,9 @@ const OptimizationsNewConfigSidebar: React.FC<
           render={({ field }) => (
             <FormItem>
               <FormLabel className="comet-body-s-accented flex items-center gap-1">
-                Evaluation suite
+                Test suite
                 <ExplainerIcon
-                  {...EXPLAINERS_MAP[
-                    EXPLAINER_ID.whats_the_evaluation_suite_section
-                  ]}
+                  {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_section]}
                 />
               </FormLabel>
               <FormControl>

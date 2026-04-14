@@ -33,7 +33,7 @@ const useGetOrCreateDemoDataset = () => {
         try {
           const { data } = await api.post(DATASETS_REST_ENDPOINT, {
             name: datasetName,
-            type: DATASET_TYPE.EVALUATION_SUITE,
+            type: DATASET_TYPE.TEST_SUITE,
           });
           newDataset = data;
         } catch {
