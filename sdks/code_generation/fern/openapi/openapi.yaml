@@ -3971,6 +3971,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner
+      description: Get a single local runner with its registered agents
+      operationId: getRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Runner details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunner"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Runners
+      summary: Disconnect local runner
+      description: "Disconnect a local runner, terminating its connection and failing\
+        \ any pending jobs"
+      operationId: disconnectRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
   /v1/private/local-runners/{runnerId}/bridge/commands/{commandId}:
     get:
       tags:
@@ -4036,33 +4080,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LocalRunnerJob"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/{runnerId}:
-    get:
-      tags:
-      - Runners
-      summary: Get local runner
-      description: Get a single local runner with its registered agents
-      operationId: getRunner
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Runner details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocalRunner"
         "404":
           description: Not found
           content:
@@ -8363,14 +8380,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8388,14 +8397,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     ErrorMessage_Public:
       type: object
       properties:
@@ -8459,14 +8460,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8484,14 +8477,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     BlueprintPage_History:
       type: object
       properties:
@@ -9535,6 +9520,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -9544,10 +9533,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10067,6 +10052,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10076,10 +10065,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10417,6 +10402,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10426,10 +10415,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10863,6 +10848,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10872,10 +10861,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10957,6 +10942,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -10966,10 +10955,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -17008,10 +16993,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17619,10 +17604,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17753,10 +17738,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -17849,10 +17834,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         exclude_blueprint_update_for_projects:
           uniqueItems: true
           type: array
@@ -17898,10 +17883,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array

@@ -16,6 +16,7 @@ import {
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
 import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useTheme } from "@/contexts/theme-provider";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
@@ -244,6 +245,7 @@ function useBridgeContext(
   surface: BridgeSurface,
 ): BridgeContext {
   const workspaceName = useActiveWorkspaceName();
+  const { themeMode } = useTheme();
   const workspace = useWorkspace();
 
   const { projectId } = useParams({ strict: false }) as {
@@ -270,7 +272,7 @@ function useBridgeContext(
       projectName,
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
-      theme: "light",
+      theme: themeMode,
       surface,
       projectStats,
     }),
@@ -281,6 +283,7 @@ function useBridgeContext(
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      themeMode,
       surface,
       projectStats,
     ],

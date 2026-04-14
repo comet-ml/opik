@@ -1,29 +1,37 @@
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
 import api, {
+  TRACES_KEY,
+  TRACES_REST_ENDPOINT,
   PROJECTS_REST_ENDPOINT,
   OPTIMIZATIONS_KEY,
   AGENT_CONFIGS_KEY,
-  PROJECT_STATISTICS_KEY,
 } from "@/api/api";
 import { ProjectStats } from "@/types/assistant-sidebar";
-import { generateProjectFilters, processFilters } from "@/lib/filters";
+import { generateVisibilityFilters, processFilters } from "@/lib/filters";
+
+const VISIBILITY_FILTER_PARAMS = processFilters(
+  undefined,
+  generateVisibilityFilters(),
+);
 
 function useOnboardingCountQuery(
   key: string,
   endpoint: string,
   enabled: boolean,
+  params?: Record<string, string>,
 ): UseQueryResult<number> {
   return useQuery({
-    queryKey: [key, "onboarding-count", endpoint],
+    queryKey: [key, "onboarding-count", endpoint, params],
     queryFn: async ({ signal }) => {
       const { data } = await api.get(endpoint, {
         signal,
-        params: { size: 1, page: 1 },
+        params: { size: 1, page: 1, ...params },
       });
       return (data.total as number) ?? 0;
     },
     enabled,
     staleTime: 1_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -40,48 +48,46 @@ export default function useProjectOnboardingStats(
 ): ProjectStats | undefined {
   const enabled = !!projectId;
 
-  const { data: statsData } = useQuery({
-    queryKey: [PROJECT_STATISTICS_KEY, "onboarding-trace-count", projectId],
-    queryFn: async ({ signal }) => {
-      const { data } = await api.get(`${PROJECTS_REST_ENDPOINT}stats`, {
-        signal,
-        params: {
-          size: 1,
-          page: 1,
-          ...processFilters(generateProjectFilters(projectId!)),
-        },
-      });
-      const match = (data.content ?? []).find(
-        (s: { project_id?: string }) => s.project_id === projectId,
-      );
-      return (match?.trace_count as number) ?? 0;
-    },
-    enabled,
-    staleTime: 1_000,
-  });
+  const { data: traceTotal, isLoading: tracesLoading } =
+    useOnboardingCountQuery(TRACES_KEY, TRACES_REST_ENDPOINT, enabled, {
+      project_id: projectId!,
+      ...VISIBILITY_FILTER_PARAMS,
+    });
 
-  const { data: experimentTotal } = useOnboardingCountQuery(
-    "experiments",
-    `${PROJECTS_REST_ENDPOINT}${projectId}/experiments`,
-    enabled,
-  );
+  const { data: experimentTotal, isLoading: experimentsLoading } =
+    useOnboardingCountQuery(
+      "experiments",
+      `${PROJECTS_REST_ENDPOINT}${projectId}/experiments`,
+      enabled,
+    );
 
-  const { data: optimizationTotal } = useOnboardingCountQuery(
-    OPTIMIZATIONS_KEY,
-    `${PROJECTS_REST_ENDPOINT}${projectId}/optimizations`,
-    enabled,
-  );
+  const { data: optimizationTotal, isLoading: optimizationsLoading } =
+    useOnboardingCountQuery(
+      OPTIMIZATIONS_KEY,
+      `${PROJECTS_REST_ENDPOINT}${projectId}/optimizations`,
+      enabled,
+    );
 
-  const { data: blueprintTotal } = useOnboardingCountQuery(
-    AGENT_CONFIGS_KEY,
-    `/v1/private/agent-configs/blueprints/history/projects/${projectId}`,
-    enabled,
-  );
+  const { data: blueprintTotal, isLoading: blueprintsLoading } =
+    useOnboardingCountQuery(
+      AGENT_CONFIGS_KEY,
+      `/v1/private/agent-configs/blueprints/history/projects/${projectId}`,
+      enabled,
+    );
 
   if (!enabled) return undefined;
 
+  if (
+    tracesLoading ||
+    experimentsLoading ||
+    optimizationsLoading ||
+    blueprintsLoading
+  ) {
+    return undefined;
+  }
+
   return {
-    traceCount: statsData ?? 0,
+    traceCount: traceTotal ?? 0,
     experimentCount: experimentTotal ?? 0,
     optimizationCount: optimizationTotal ?? 0,
     blueprintVersionCount: blueprintTotal ?? 0,

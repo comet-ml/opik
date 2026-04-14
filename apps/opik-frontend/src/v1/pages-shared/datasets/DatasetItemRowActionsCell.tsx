@@ -11,7 +11,7 @@ import {
 } from "@/ui/dropdown-menu";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { DatasetItem } from "@/types/datasets";
-import { useDeleteItem } from "@/store/EvaluationSuiteDraftStore";
+import { useDeleteItem } from "@/store/TestSuiteDraftStore";
 import RemoveDatasetItemsDialog from "./RemoveDatasetItemsDialog";
 import { useDatasetItemDeletePreference } from "./hooks/useDatasetItemDeletePreference";
 

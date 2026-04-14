@@ -67,7 +67,7 @@ This test ensures proper synchronization of experiment items between UI and back
       const firstRow = page.locator('table tbody tr').first();
       await firstRow.click();
 
-      const datasetItemHeading = page.getByRole('heading', { name: 'Evaluation suite item', level: 4 });
+      const datasetItemHeading = page.getByRole('heading', { name: 'Test suite item', level: 4 });
       await expect(datasetItemHeading).toBeVisible({ timeout: 10000 });
 
       const traceButton = page.getByRole('button', { name: 'Trace' });
