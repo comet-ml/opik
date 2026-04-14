@@ -1051,7 +1051,9 @@ def test_test_suite__update_test_settings_policy_only__keeps_existing_assertions
         global_execution_policy={"runs_per_item": 1, "pass_threshold": 1},
     )
 
-    suite.update_test_settings(global_execution_policy={"runs_per_item": 5, "pass_threshold": 3})
+    suite.update_test_settings(
+        global_execution_policy={"runs_per_item": 5, "pass_threshold": 3}
+    )
 
     retrieved = opik_client.get_test_suite(name=dataset_name)
 
@@ -1273,9 +1275,7 @@ def test_get_test_suite_experiments__returns_experiments(
 # =============================================================================
 
 
-def test_update__updates_existing_items(
-    opik_client: opik.Opik, dataset_name: str
-):
+def test_update__updates_existing_items(opik_client: opik.Opik, dataset_name: str):
     """
     Test that update_items() updates data on existing items.
     """
@@ -1301,9 +1301,7 @@ def test_update__updates_existing_items(
     assert updated_items[0]["data"]["question"] == "Updated question"
 
 
-def test_update__missing_id__raises_error(
-    opik_client: opik.Opik, dataset_name: str
-):
+def test_update__missing_id__raises_error(opik_client: opik.Opik, dataset_name: str):
     """
     Test that update_items() raises error when item has no id.
     """
