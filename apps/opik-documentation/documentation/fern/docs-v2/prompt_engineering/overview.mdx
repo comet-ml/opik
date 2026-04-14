@@ -7,45 +7,32 @@ og:title: Agent Configuration Overview — Opik
 title: Agent Configuration Overview
 ---
 
-Agent Configuration is Opik's system for versioning and managing everything that influences your agent's behavior — prompts, model parameters, tool definitions, and more — outside of your codebase.
-
-{/* TODO: Add a hero image or short demo video here */}
+When you're building agents, the stuff that actually matters — your prompts, model settings, tool definitions — usually ends up hardcoded somewhere in your repo. Agent Configuration pulls all of that out into a versioned, manageable system so you can tweak things without redeploying.
 
 ## Why use Agent Configuration
 
-{/* TODO: Expand on the pain points this solves. Suggested talking points:
-    - Prompts scattered in code are hard to track, review, or roll back
-    - Changing a prompt today requires a full code deploy
-    - No audit trail of what changed between agent versions
-    - Hard to A/B test different configurations in production
-*/}
+If you've ever had to push a whole new deploy just to change a system prompt, you know the pain. There's no history of what you changed, no way to quickly roll back, and no clean way to test a different prompt in staging vs. production.
 
-When building production agents, the parameters that matter most — prompts, temperatures, tool descriptions — are often buried in source code. Agent Configuration lets you manage them as versioned, deployable artifacts so you can iterate without redeploying.
+Agent Configuration gives you version control for your agent's parameters. You define them once in code, push them to Opik, and from there you can update, compare, and promote versions through the UI or SDK.
 
 ## Key features
 
-{/* TODO: Review and expand each bullet with any additional capabilities */}
-
-- **Version control**: Every configuration change creates an immutable version with a full audit trail
-- **Environment labels**: Promote a version to `prod` or `staging` through the UI without touching code
-- **Prompt management**: Track and version text prompts and multi-turn chat prompts with variable substitution
-- **Typed parameters**: Store model names, temperatures, tool definitions, and any numeric or string values alongside your prompts
-- **SDK support**: First-class Python and TypeScript SDK support for defining and fetching configurations
+- **Version control** — Every change creates an immutable version. You can always see what changed and roll back.
+- **Environment labels** — Tag a version as `prod` or `staging` in the UI. Your agent picks it up automatically.
+- **Prompt management** — Version text prompts and chat prompts, with `{{variable}}` substitution built in.
+- **Typed parameters** — Store model names, temperatures, tool definitions, and any other string or numeric values alongside your prompts.
+- **Python and TypeScript SDKs** — Define and fetch configs from either language.
 
 ## How it works
 
-{/* TODO: Consider adding a diagram here (reference /img/v2/agent-configuration/ for existing assets) */}
+There are really just two steps:
 
-At a high level, Agent Configuration works in two steps:
+1. **Define your configuration** — Declare a `Config` subclass (Python) or a plain object (TypeScript) with your fields and defaults, then push it with `create_config` / `createConfig`.
+2. **Fetch it at runtime** — Inside a tracked function, call `get_or_create_config` / `getOrCreateConfig`. The SDK returns the version that matches your requested environment or version. If Opik is temporarily unreachable, it falls back to the defaults you provided.
 
-1. **Define a schema** — Use the SDK to declare the shape of your configuration (which fields, what types) and push the first version.
-2. **Fetch at runtime** — Your agent calls `get_agent_config` (Python) or `getAgentConfigVersion` (TypeScript) with an environment label. Opik returns the configuration version assigned to that label, or the provided fallback if none exists.
-
-When you want to update your agent's behavior, create a new version in the Opik UI or SDK and move the `prod` label to it. Your running agent picks up the change on its next fetch — no redeployment needed.
+When you want to change something, create a new version and move the `prod` label to it. Your running agent picks up the change on its next fetch — no redeploy.
 
 ## Next steps
-
-{/* TODO: Verify these links match the final navigation structure */}
 
 - [Getting started](/prompt_engineering/getting-started) — Add Agent Configuration to your code in minutes
 - [Concepts](/prompt_engineering/concepts) — Deep dive into versions, environments, and configuration types
