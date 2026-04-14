@@ -111,6 +111,11 @@ describe("evaluateTestSuite", () => {
       .spyOn(opikClient.api.experiments, "createExperiment")
       .mockImplementation(mockAPIFunction);
 
+    vi.spyOn(
+      opikClient.api.experiments,
+      "createExperimentItems"
+    ).mockImplementation(mockAPIFunction);
+
     streamDatasetItemsSpy = vi
       .spyOn(opikClient.api.datasets, "streamDatasetItems")
       .mockImplementation(() =>
