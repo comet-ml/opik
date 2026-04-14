@@ -936,24 +936,25 @@ the trace to be logged to in a couple of ways:
 
 ### Project name resolution (Python SDK)
 
-When any Python SDK method accepts a `project_name` parameter, the value is resolved using the following precedence:
+The project name for the `Opik()` client, `@track`-decorated functions, and native integrations (e.g., `track_openai`, `OpikTracer`) is resolved using the following precedence:
 
-1. **Explicit argument** — the `project_name` passed directly to the method or decorator (e.g., `@track(project_name="...")`, `client.trace(project_name="...")`)
+1. **Explicit argument** — the `project_name` passed directly to `Opik()`, `@track(project_name="...")`, an integration constructor (e.g., `OpikTracer(project_name="...")`), or a client method (e.g., `client.trace(project_name="...")`)
 2. **Active project context** — set by `@track(project_name=...)` on a parent function or by the `opik.project_context()` context manager
 3. **Client configuration** — the project name from the `Opik()` constructor, `OPIK_PROJECT_NAME` environment variable, or `~/.opik.config` file
 4. **Default** — falls back to `"Default Project"` (a warning is logged once to remind you to configure a project name)
 
-This means that if you call an Opik client method inside a `@track(project_name="my-agent")` decorated function without passing `project_name` explicitly, it will automatically use `"my-agent"` from the active context.
+This means that if you use the `Opik()` client, call a `@track`-decorated function, or initialize a native integration inside an active project context without passing `project_name` explicitly, it will automatically use the project name from that context.
 
 #### `opik.project_context()`
 
-The `opik.project_context()` context manager sets the project name for all Opik operations within a block — traces, spans, feedback scores, and integration callbacks:
+The `opik.project_context()` context manager sets the project name for all Opik operations within a block — the `Opik()` client, `@track`-decorated functions, and native integrations:
 
 ```python
 import opik
 
 with opik.project_context("customer-support"):
-    # All traces and spans created here will be logged to "customer-support"
+    # The Opik client, @track-decorated functions, and native integrations
+    # all use "customer-support" as the project name
     my_agent(query)
 ```
 
