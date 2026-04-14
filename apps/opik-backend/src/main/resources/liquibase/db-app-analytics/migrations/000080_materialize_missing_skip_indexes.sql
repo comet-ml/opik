@@ -14,3 +14,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}'
     MATERIALIZE INDEX idx_optimizations_project_id;
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_items_project_id;
+
