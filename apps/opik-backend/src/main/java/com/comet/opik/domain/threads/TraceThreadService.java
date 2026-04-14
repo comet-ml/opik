@@ -48,14 +48,10 @@ public interface TraceThreadService {
 
     Mono<Void> processTraceThreads(Map<String, ThreadTimestamps> threadInfo, UUID projectId);
 
-    Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
-
     Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant now,
             Duration defaultTimeoutToMarkThreadAsInactive,
             Duration minLookback,
             int limit);
-
-    Mono<Duration> getMaxTimeoutMarkThreadAsInactive(Duration defaultTimeout);
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant now,
             Duration defaultTimeoutToMarkThreadAsInactive);
@@ -67,8 +63,6 @@ public interface TraceThreadService {
     Mono<Void> closeThreads(UUID projectId, Set<String> threadIds);
 
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
-
-    Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId, Instant timestamp);
 
     Mono<UUID> getThreadModelId(UUID projectId, String threadId);
 
@@ -117,12 +111,14 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     String threadId = entry.getKey();
                     ThreadTimestamps timestamps = entry.getValue();
 
-                    // Extract timestamp from earliest trace (first trace in chronological order)
+                    // Extract timestamp from the earliest trace (first trace in chronological order)
                     Instant earliestTraceTimestamp = IdGenerator.extractTimestampFromUUIDv7(timestamps.firstTraceId());
 
                     return traceThreadIdService
                             .getOrCreateTraceThreadId(workspaceId, projectId, threadId, earliestTraceTimestamp)
-                            .map(traceThreadId -> mapToModel(traceThreadId, userName, timestamps.lastUpdatedAt()));
+                            .map(traceThreadId -> TraceThreadMapper.INSTANCE.mapFromThreadIdModel(
+                                    traceThreadId, userName, TraceThreadStatus.ACTIVE,
+                                    timestamps.maxLastUpdatedAt(), timestamps.firstTraceSource()));
                 }));
     }
 
@@ -131,8 +127,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return getOrCreateThreadId(projectId, threadId, null);
     }
 
-    @Override
-    public Mono<UUID> getOrCreateThreadId(@NonNull UUID projectId, @NonNull String threadId, Instant timestamp) {
+    private Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId, Instant timestamp) {
         return Mono.deferContextual(context -> traceThreadIdService
                 .getOrCreateTraceThreadId(context.get(RequestContext.WORKSPACE_ID), projectId, threadId, timestamp)
                 .map(TraceThreadIdModel::id));
@@ -209,11 +204,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return traceThreadIdService.getTraceThreadIdsByThreadModelIds(threadModelIds);
     }
 
-    private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
-        return TraceThreadMapper.INSTANCE.mapFromThreadIdModel(traceThread, userName, TraceThreadStatus.ACTIVE,
-                lastUpdatedAt);
-    }
-
     private Mono<Void> saveTraceThreads(UUID projectId, List<TraceThreadModel> traceThreads) {
 
         if (traceThreads.isEmpty()) {
@@ -287,12 +277,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     @Override
-    public Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, @NonNull TraceThreadCriteria criteria) {
-        return traceThreadDAO.findThreadsByProject(page, size, criteria)
-                .switchIfEmpty(Mono.just(List.of()));
-    }
-
-    @Override
     public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive,
             Duration minLookback, int limit) {
@@ -316,8 +300,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 cachedMaxInactivePeriod, limit));
     }
 
-    @Override
-    public Mono<Duration> getMaxTimeoutMarkThreadAsInactive(@NonNull Duration defaultTimeout) {
+    private Mono<Duration> getMaxTimeoutMarkThreadAsInactive(Duration defaultTimeout) {
         return workspaceConfigurationService.getMaxTimeoutMarkThreadAsInactive()
                 .map(maxTimeoutSeconds -> {
                     if (maxTimeoutSeconds > 0) {
@@ -368,9 +351,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 })
                 .reduce(0L, Long::sum)
                 .doOnError(ex -> log.error(
-                        "Error when processing closure of pending trace threads  for project: '%s' workspaceId '%s'"
-                                .formatted(projectId, workspaceId),
-                        ex))
+                        "Error when processing closure of pending trace threads  for project: '{}' workspaceId '{}'",
+                        projectId, workspaceId, ex))
                 .flatMap(count -> {
                     var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
                     return lockService.unlockUsingToken(lock).thenReturn(count);

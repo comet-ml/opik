@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.TraceThreadStatus;
 import lombok.Builder;
 
@@ -14,6 +15,9 @@ import java.util.UUID;
  *
  * @param id The unique identifier for the trace thread it will also be referenced as trace thread id.
  * @param threadId The unique identifier for the thread, this is an external id provided by the user.
+ * @param source The origin source of the triggering traces. Persisted to ClickHouse; defaults to
+ *               'unknown' for pre-existing rows. {@link Source#isLoggingSource(Source)} treats null
+ *               (mapped from 'unknown') as SDK for backward compatibility.
  */
 @Builder(toBuilder = true)
 public record TraceThreadModel(
@@ -34,7 +38,8 @@ public record TraceThreadModel(
         Map<String, Integer> feedbackScores,
         String firstMessage,
         String lastMessage,
-        Long numberOfMessages) {
+        Long numberOfMessages,
+        Source source) {
 
     public boolean isInactive() {
         return status == TraceThreadStatus.INACTIVE;

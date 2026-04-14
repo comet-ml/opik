@@ -59,22 +59,31 @@ public class TraceThreadListener {
                     UUID traceId = trace.id();
 
                     if (existing == null) {
-                        return new ThreadTimestamps(traceId, lastUpdatedAt);
+                        return ThreadTimestamps.builder()
+                                .firstTraceId(traceId)
+                                .maxLastUpdatedAt(lastUpdatedAt)
+                                .firstTraceSource(trace.source())
+                                .build();
                     }
 
                     // Keep the minimum trace ID (earliest timestamp in UUIDv7)
-                    // Note: UUIDv7 compareTo() works correctly here because UUIDv7s are
+                    // Note: UUIDv7 compareTo() works correctly here because UUID v7 are
                     // lexicographically ordered by their timestamp component
                     UUID minTraceId = traceId.compareTo(existing.firstTraceId()) < 0
                             ? traceId
                             : existing.firstTraceId();
 
                     // Keep the most recent lastUpdatedAt
-                    Instant maxLastUpdatedAt = lastUpdatedAt.isAfter(existing.lastUpdatedAt())
+                    var maxLastUpdatedAt = lastUpdatedAt.isAfter(existing.maxLastUpdatedAt())
                             ? lastUpdatedAt
-                            : existing.lastUpdatedAt();
+                            : existing.maxLastUpdatedAt();
 
-                    return new ThreadTimestamps(minTraceId, maxLastUpdatedAt);
+                    // Preserve the source from the first trace seen for this thread.
+                    // In practice traces in a thread originate from the same source, but this is not enforced.
+                    return existing.toBuilder()
+                            .firstTraceId(minTraceId)
+                            .maxLastUpdatedAt(maxLastUpdatedAt)
+                            .build();
                 });
             }
         });
