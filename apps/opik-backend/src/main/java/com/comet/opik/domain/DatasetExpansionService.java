@@ -17,6 +17,7 @@ import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -207,15 +208,15 @@ public class DatasetExpansionService {
             log.debug("Parsed '{}' samples from LLM response", parsedSamples.size());
             return parsedSamples;
 
+        } catch (BadRequestException exception) {
+            log.error("Validation error during sample generation", exception);
+            throw exception;
         } catch (ClientErrorException | ServerErrorException exception) {
             log.error("LLM service error during sample generation", exception);
             throw exception;
         } catch (Exception exception) {
             log.error("Failed to generate samples using LLM", exception);
-            var detail = exception.getMessage() != null
-                    ? "Failed to generate synthetic samples: " + exception.getMessage()
-                    : "Failed to generate synthetic samples";
-            throw new BadRequestException(detail, exception);
+            throw new InternalServerErrorException("Failed to generate synthetic samples", exception);
         }
     }
 
