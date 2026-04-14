@@ -306,6 +306,10 @@ export class EvaluationSuite {
     return this.dataset.getTags();
   }
 
+  async getItemsCount(): Promise<number | undefined> {
+    return this.dataset.getItemsCount();
+  }
+
   async getExecutionPolicy(): Promise<Required<ExecutionPolicy>> {
     const versionInfo = await this.dataset.getVersionInfo();
     return resolveExecutionPolicy(versionInfo?.executionPolicy);

@@ -99,6 +99,9 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
             passThreshold: 1,
           });
         }
+
+        const count = await suite.getItemsCount();
+        expect(count).toBe(2);
       },
       60000
     );

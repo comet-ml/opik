@@ -405,6 +405,27 @@ describe("EvaluationSuite", () => {
     });
   });
 
+  describe("getItemsCount", () => {
+    it("should delegate to dataset.getItemsCount and return the count", async () => {
+      const getItemsCountSpy = vi
+        .spyOn(testDataset, "getItemsCount")
+        .mockResolvedValue(42);
+
+      const count = await suite.getItemsCount();
+
+      expect(getItemsCountSpy).toHaveBeenCalled();
+      expect(count).toBe(42);
+    });
+
+    it("should return undefined when dataset has no items count", async () => {
+      vi.spyOn(testDataset, "getItemsCount").mockResolvedValue(undefined);
+
+      const count = await suite.getItemsCount();
+
+      expect(count).toBeUndefined();
+    });
+  });
+
   describe("getExecutionPolicy", () => {
     it("should resolve execution policy from versionInfo", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
