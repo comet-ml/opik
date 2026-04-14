@@ -91,7 +91,9 @@ def _parse_pairing_url(output_lines, timeout):
     Join all output and search for the full URL.
     """
     deadline = time.monotonic() + timeout
-    url_pattern = re.compile(r"(https?://\S+/opik/pair/v1#[A-Za-z0-9_\-]+)")
+    url_pattern = re.compile(
+        r"(https?://\S+/opik/pair/v1(?:\?[^#\s]*)?#[A-Za-z0-9_\-]+)"
+    )
 
     while time.monotonic() < deadline:
         joined = "".join(list(output_lines))
