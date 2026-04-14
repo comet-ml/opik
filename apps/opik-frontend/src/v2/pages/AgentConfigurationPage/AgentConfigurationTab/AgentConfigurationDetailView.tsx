@@ -1,33 +1,33 @@
-import React, { useState } from "react";
-import {
-  Clock,
-  FilePen,
-  FoldVertical,
-  Pencil,
-  UnfoldVertical,
-  User,
-} from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Clock, FilePen, Pencil, User } from "lucide-react";
 
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
-import { generateBlueprintDescription } from "@/utils/agent-configurations";
 import Loader from "@/shared/Loader/Loader";
+import { cn } from "@/lib/utils";
 import { Card } from "@/ui/card";
+import DeployToPopover from "./DeployToPopover";
+import BlueprintValuesList from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
+import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
+import { generateBlueprintDescription } from "@/utils/agent-configurations";
 import { Button } from "@/ui/button";
-import { Separator } from "@/ui/separator";
+import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
+import useTracesList from "@/api/traces/useTracesList";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { COLUMN_TYPE } from "@/types/shared";
-import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
-import useTracesList from "@/api/traces/useTracesList";
-import BlueprintValuesList, {
-  useBlueprintCollapse,
-} from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
-import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
-import DeployToPopover from "./DeployToPopover";
+import { Separator } from "@/ui/separator";
 import DiffVersionPopover from "./DiffVersionPopover";
 import AgentConfigTagList from "./AgentConfigTagList";
+import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/ExpandAllToggle";
+import { useFieldsCollapse } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
+import {
+  collectMultiLineKeys,
+  hasAnyExpandableField,
+} from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
+
+const DESCRIPTION_TRUNCATE_LENGTH = 80;
 
 type AgentConfigurationDetailViewProps = {
   item: ConfigHistoryItem;
@@ -66,13 +66,7 @@ const AgentConfigurationDetailView: React.FC<
     label: string;
     blueprintId: string;
   } | null>(null);
-
-  const blueprintValues = agentConfig?.values ?? [];
-  const { openItems, setOpenItems, allExpanded, toggleAll } =
-    useBlueprintCollapse(blueprintValues);
-
-  const description =
-    item.description || generateBlueprintDescription(item.values);
+  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
     setDiffBase({
@@ -81,6 +75,21 @@ const AgentConfigurationDetailView: React.FC<
     });
     setDiffOpen(true);
   };
+
+  const description =
+    item.description || generateBlueprintDescription(item.values);
+
+  const descriptionIsLong = description.length > DESCRIPTION_TRUNCATE_LENGTH;
+
+  const collapsibleKeys = useMemo(
+    () => collectMultiLineKeys(agentConfig?.values ?? []),
+    [agentConfig],
+  );
+  const hasExpandableFields = useMemo(
+    () => hasAnyExpandableField(agentConfig?.values ?? []),
+    [agentConfig],
+  );
+  const collapseController = useFieldsCollapse({ collapsibleKeys });
 
   return (
     <>
@@ -97,7 +106,7 @@ const AgentConfigurationDetailView: React.FC<
               />
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <DeployToPopover
               item={item}
               projectId={projectId}
@@ -126,19 +135,38 @@ const AgentConfigurationDetailView: React.FC<
               />
             )}
             <Button size="xs" variant="outline" onClick={onEdit}>
-              <Pencil className="mr-1.5 size-3.5" />
+              <Pencil className="mr-1.5 size-3.5 text-light-slate" />
               Edit configuration
             </Button>
           </div>
         </div>
-
-        <p className="comet-body-s flex w-full min-w-0 items-start gap-1 overflow-hidden text-light-slate">
+        <div className="comet-body-s flex w-full min-w-0 items-start gap-1 text-light-slate">
           <FilePen className="mt-1 size-3 shrink-0" />
-          <TooltipWrapper content={description}>
-            <span className="w-fit max-w-full truncate">{description}</span>
-          </TooltipWrapper>
-        </p>
-
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 items-baseline gap-1",
+              notesExpanded && "flex-wrap",
+            )}
+          >
+            <span
+              className={cn(
+                "min-w-0",
+                notesExpanded ? "break-words" : "truncate",
+              )}
+            >
+              {description}
+            </span>
+            {descriptionIsLong && (
+              <button
+                type="button"
+                className="shrink-0 text-light-slate underline"
+                onClick={() => setNotesExpanded((v) => !v)}
+              >
+                {notesExpanded ? "Show less" : "Show more"}
+              </button>
+            )}
+          </div>
+        </div>
         <div className="comet-body-s mt-1 flex items-center gap-1 text-light-slate">
           <Clock className="size-3 shrink-0" />
           <TooltipWrapper
@@ -151,35 +179,21 @@ const AgentConfigurationDetailView: React.FC<
           </TooltipWrapper>
           <User className="ml-1.5 size-3.5 shrink-0" />
           <span>{item.created_by}</span>
-          {blueprintValues.length > 0 && (
-            <TooltipWrapper
-              content={allExpanded ? "Collapse all" : "Expand all"}
-            >
-              <Button
-                variant="outline"
-                size="icon-xs"
-                className="ml-auto"
-                onClick={toggleAll}
-              >
-                {allExpanded ? (
-                  <FoldVertical className="size-4 text-muted-slate" />
-                ) : (
-                  <UnfoldVertical className="size-4 text-muted-slate" />
-                )}
-              </Button>
-            </TooltipWrapper>
+          {hasExpandableFields && (
+            <div className="ml-auto text-foreground">
+              <ExpandAllToggle controller={collapseController} />
+            </div>
           )}
         </div>
 
-        <Separator className="mt-4" />
+        <Separator className="mb-2 mt-4" />
 
         {isPending ? (
           <Loader />
         ) : (
           <BlueprintValuesList
-            values={blueprintValues}
-            openItems={openItems}
-            onOpenItemsChange={setOpenItems}
+            values={agentConfig?.values ?? []}
+            controller={collapseController}
           />
         )}
       </Card>

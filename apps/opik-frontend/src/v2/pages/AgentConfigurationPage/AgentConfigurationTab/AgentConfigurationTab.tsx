@@ -18,7 +18,7 @@ import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryLi
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import AgentConfigurationHistoryTimeline from "./AgentConfigurationHistoryTimeline";
 import AgentConfigurationDetailView from "./AgentConfigurationDetailView";
-import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
+import AgentConfigurationEditPanel from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditPanel";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AgentConfigTagList from "./AgentConfigTagList";
 import AgentConfigurationEmptyState from "@/v2/pages/AgentConfigurationPage/AgentConfigurationEmptyState";
@@ -175,21 +175,6 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
 
   const selectedItem = allRows[selectedIndex] as ConfigHistoryItem;
 
-  if (editItem) {
-    return (
-      <div className="w-full p-4">
-        <AgentConfigurationEditView
-          item={editItem}
-          projectId={projectId}
-          onSaved={() => {
-            setSelectedId(undefined);
-            setEditItem(null);
-          }}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col lg:flex-row lg:gap-0">
       <div className="mx-6 mt-5 flex flex-col gap-4 lg:hidden">
@@ -232,6 +217,21 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
           onLoadMore={fetchNextPage}
         />
       </div>
+
+      {editItem && (
+        <AgentConfigurationEditPanel
+          open={!!editItem}
+          onOpenChange={(open) => {
+            if (!open) setEditItem(null);
+          }}
+          item={editItem}
+          projectId={projectId}
+          onSaved={() => {
+            setSelectedId(undefined);
+            setEditItem(null);
+          }}
+        />
+      )}
     </div>
   );
 };
