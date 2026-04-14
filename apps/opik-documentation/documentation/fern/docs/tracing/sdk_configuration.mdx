@@ -105,53 +105,6 @@ Both SDKs support multiple configuration approaches with different precedence or
 
 **TypeScript SDK:** Constructor options → Environment variables → Configuration file (`~/.opik.config`) → Defaults
 
-### Project Name Resolution
-
-In the Python SDK, `project_name` follows a specific resolution order that extends the general configuration precedence. When any SDK method accepts a `project_name` parameter, the value is resolved as follows:
-
-1. **Explicit argument** — the `project_name` passed directly to the method or decorator (e.g., `@track(project_name="...")`, `client.trace(project_name="...")`)
-2. **Active project context** — set by `@track(project_name=...)` on a parent function or by the `opik.project_context()` context manager (see below)
-3. **Client configuration** — the project name from the `Opik()` constructor, `OPIK_PROJECT_NAME` environment variable, or `~/.opik.config` file
-4. **Default** — falls back to `"Default Project"` (a warning is logged once to remind you to configure a project name)
-
-#### `opik.project_context()` context manager
-
-You can use `opik.project_context()` to set the project name for all Opik operations within a block — traces, spans, feedback scores, and integration callbacks:
-
-```python
-import opik
-
-with opik.project_context("customer-support"):
-    # All traces and spans created here will be logged to "customer-support"
-    my_agent(query)
-```
-
-The first context to set a project name becomes the owner. Nested `project_context` or `@track(project_name=...)` calls with a different name are ignored (a warning is logged), and the outer project name is preserved. This prevents traces from being split across projects within a single execution.
-
-#### `@track` decorator context propagation
-
-When you use `@track(project_name="...")`, the decorator sets the project context for the duration of the decorated function. Any nested `@track`-decorated functions or Opik client calls inside it will inherit that project name automatically:
-
-```python
-from opik import track
-
-@track(project_name="my-agent")
-def agent(query):
-    # Both retrieve() and generate() inherit "my-agent" as the project
-    context = retrieve(query)
-    return generate(context)
-
-@track
-def retrieve(query):
-    # Inherits project_name="my-agent" from the parent
-    ...
-
-@track
-def generate(context):
-    # Also inherits project_name="my-agent"
-    ...
-```
-
 ### Environment Variables
 
 Both SDKs support environment variables for configuration. Here's a comparison of available options:
