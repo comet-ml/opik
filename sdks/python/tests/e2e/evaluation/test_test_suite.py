@@ -1390,6 +1390,8 @@ def test_test_suite__create_without_metadata_then_insert__items_persisted(
     """
     suite = opik_client.create_test_suite(name=dataset_name)
 
+    assert suite.get_version_info() is None
+
     suite.insert(
         [
             {"data": {"input": {"question": "What is 2+2?"}}},
@@ -1398,8 +1400,7 @@ def test_test_suite__create_without_metadata_then_insert__items_persisted(
     )
 
     reloaded = opik_client.get_test_suite(name=dataset_name)
-    items = reloaded.get_items()
-    assert len(items) == 2
+    assert len(reloaded.get_items()) == 2
 
 
 def test_test_suite__create_without_metadata_then_update__metadata_persisted(
@@ -1413,6 +1414,8 @@ def test_test_suite__create_without_metadata_then_update__metadata_persisted(
     assertion = "The response is factually correct"
 
     suite = opik_client.create_test_suite(name=dataset_name)
+
+    assert suite.get_version_info() is None
 
     suite.update(
         global_assertions=[assertion],
