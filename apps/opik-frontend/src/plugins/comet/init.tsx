@@ -33,7 +33,6 @@ loadScript(location.origin + `/config.js?version=${new Date().getTime()}`).then(
     initPosthog(
       window.environmentVariablesOverwrite?.OPIK_POSTHOG_KEY,
       window.environmentVariablesOverwrite?.OPIK_POSTHOG_HOST,
-      window.environmentVariablesOverwrite?.OPIK_ANALYTICS_ENVIRONMENT,
     );
     initAnalytics(window.environmentVariablesOverwrite?.OPIK_SEGMENT_ID);
     initGTM(window.environmentVariablesOverwrite?.OPIK_ANALYTICS_ID);

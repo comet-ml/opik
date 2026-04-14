@@ -1,5 +1,3 @@
-import posthog from "posthog-js";
-
 const EVENT_PREFIX = "opik_";
 
 // Follow-up tickets add event names here, e.g.:
@@ -16,14 +14,20 @@ export const trackEvent = (
   properties?: Record<string, unknown>,
 ) => {
   try {
-    const instance = posthog.__loaded ? posthog : null;
-    if (!instance) return;
+    if (!window.analytics) return;
 
     const prefixedEvent = event.startsWith(EVENT_PREFIX)
       ? event
       : EVENT_PREFIX + event;
-    instance.capture(prefixedEvent, properties);
+
+    const environment =
+      window.environmentVariablesOverwrite?.OPIK_ANALYTICS_ENVIRONMENT;
+    const enrichedProperties = environment
+      ? { ...properties, environment }
+      : properties;
+
+    window.analytics.track(prefixedEvent, enrichedProperties);
   } catch {
-    // no-op when PostHog isn't available
+    // no-op when Segment isn't available
   }
 };

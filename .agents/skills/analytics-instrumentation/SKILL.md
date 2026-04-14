@@ -37,10 +37,11 @@ trackEvent(OpikEvent.ONBOARDING_AGENT_NAME_SUBMITTED, {
 ```
 
 ### How it works
-- `trackEvent()` safely no-ops when PostHog isn't loaded (OSS mode)
+- `trackEvent()` safely no-ops when Segment isn't loaded (OSS mode)
 - `opik_` prefix is enforced at runtime as a safety net
-- `OPIK_ANALYTICS_ENVIRONMENT` is registered as a PostHog super property at init — it's automatically attached to every event (including pageviews)
-- Frontend events go directly to PostHog via `posthog-js`
+- `OPIK_ANALYTICS_ENVIRONMENT` is injected into event properties automatically by `trackEvent()`
+- Frontend custom events flow through Segment (same pipeline as backend): Segment → PostHog
+- PostHog still handles automatic pageviews, user identification, and feature flags directly
 
 ## Backend Events
 
@@ -83,8 +84,9 @@ Analytics is disabled by default. OSS installations are unaffected.
 ## Event Flow
 
 ```
-Frontend events:  Browser → posthog-js → PostHog
-Backend events:   Java → comet-stats → Segment → PostHog
+Frontend custom events:  Browser → Segment → PostHog
+Backend events:          Java → comet-stats → Segment → PostHog
+PostHog native:          Browser → posthog-js → PostHog (pageviews, feature flags, identification)
 ```
 
 ## Deciding Frontend vs Backend
