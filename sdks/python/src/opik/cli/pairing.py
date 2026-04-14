@@ -92,9 +92,8 @@ def build_pairing_link(
 
     fragment = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
     domain_root = get_base_url(base_url)
-    if workspace:
-        return f"{domain_root}{workspace}/opik/pair/v1#{fragment}"
-    return f"{domain_root}opik/pair/v1#{fragment}"
+    query = f"?workspace={workspace}" if workspace else ""
+    return f"{domain_root}opik/pair/v1{query}#{fragment}"
 
 
 def validate_runner_name(runner_name: str) -> None:
