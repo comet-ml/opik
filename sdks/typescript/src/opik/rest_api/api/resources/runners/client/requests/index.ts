@@ -4,6 +4,7 @@ export type { BridgeCommandResultRequest } from "./BridgeCommandResultRequest.js
 export type { BridgeCommandSubmitRequest } from "./BridgeCommandSubmitRequest.js";
 export type { CancelJobRequest } from "./CancelJobRequest.js";
 export type { CreateLocalRunnerJobRequest } from "./CreateLocalRunnerJobRequest.js";
+export type { DisconnectRunnerRequest } from "./DisconnectRunnerRequest.js";
 export type { GetBridgeCommandRequest } from "./GetBridgeCommandRequest.js";
 export type { GetJobLogsRequest } from "./GetJobLogsRequest.js";
 export type { GetJobRequest } from "./GetJobRequest.js";
