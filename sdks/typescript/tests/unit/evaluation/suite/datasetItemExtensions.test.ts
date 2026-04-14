@@ -4,7 +4,7 @@ import { DatasetItemWriteSource } from "@/rest_api/api";
 import { EvaluatorItemWrite } from "@/rest_api/api/types/EvaluatorItemWrite";
 import { ExecutionPolicyWrite } from "@/rest_api/api/types/ExecutionPolicyWrite";
 
-describe("DatasetItem extensions for evaluation suites", () => {
+describe("DatasetItem extensions for test suites", () => {
   describe("toApiModel", () => {
     it("should include evaluators field when set on the DatasetItem", () => {
       const evaluators: EvaluatorItemWrite[] = [

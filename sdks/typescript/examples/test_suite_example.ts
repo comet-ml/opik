@@ -1,15 +1,15 @@
 /**
- * Example: Running an EvaluationSuite with projectName.
+ * Example: Running a TestSuite with projectName.
  *
  * Creates a suite with assertions and execution policy,
  * adds test items, runs an evaluation task, and prints results.
  *
  * Run:
- *   cd sdks/typescript && npx tsx examples/evaluation_suite_example.ts
+ *   cd sdks/typescript && npx tsx examples/test_suite_example.ts
  *
  * Requires a running Opik server. Set OPIK_URL_OVERRIDE in .env or env vars.
  */
-import { Opik, EvaluationSuite } from "opik";
+import { Opik, TestSuite } from "opik";
 
 async function main() {
   const timestamp = Date.now();
@@ -17,9 +17,9 @@ async function main() {
 
   // --- Create a suite with assertions ---
   const suiteName = `example-suite-${timestamp}`;
-  console.log(`Creating evaluation suite "${suiteName}"...`);
+  console.log(`Creating test suite "${suiteName}"...`);
 
-  const suite = await EvaluationSuite.create(client, {
+  const suite = await TestSuite.create(client, {
     name: suiteName,
     assertions: ["Response answers the question"],
     executionPolicy: { runsPerItem: 1, passThreshold: 1 },

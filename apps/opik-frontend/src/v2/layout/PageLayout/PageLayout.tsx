@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useMatchRoute } from "@tanstack/react-router";
 import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
 import useLocalStorageState from "use-local-storage-state";
@@ -35,7 +35,12 @@ const PageLayout = () => {
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
 
-  const showAssistantSidebar = !!AssistantSidebar;
+  const matchRoute = useMatchRoute();
+  const isProjectHome = !!matchRoute({
+    to: "/$workspaceName/projects/$projectId/home",
+  });
+
+  const showAssistantSidebar = !!AssistantSidebar && !isProjectHome;
 
   const assistantWidth = showAssistantSidebar ? assistantSidebarWidth : 0;
   const isMobile = useMediaQuery(`(max-width: ${1023 + assistantWidth}px)`);

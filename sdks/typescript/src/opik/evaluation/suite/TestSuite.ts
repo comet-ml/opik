@@ -6,12 +6,12 @@ import {
   validateExecutionPolicy,
 } from "../suite_evaluators/validators";
 import type {
-  EvaluationSuiteResult,
-  EvaluationSuiteItem,
+  TestSuiteResult,
+  TestSuiteItem,
   ExecutionPolicy,
 } from "./types";
 import { buildSuiteResult } from "./suiteResultConstructor";
-import { evaluateSuite } from "./evaluateSuite";
+import { evaluateTestSuite } from "./evaluateTestSuite";
 import {
   serializeEvaluators,
   deserializeEvaluators,
@@ -24,7 +24,7 @@ import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/Datase
 import type { Prompt } from "@/prompt/Prompt";
 import { generateId } from "@/utils/generateId";
 
-export interface EvaluationSuiteRunOptions {
+export interface TestSuiteRunOptions {
   experimentName?: string;
   projectName?: string;
   experimentConfig?: Record<string, unknown>;
@@ -39,7 +39,7 @@ export interface AddItemOptions {
   executionPolicy?: ExecutionPolicy;
 }
 
-export interface CreateEvaluationSuiteOptions {
+export interface CreateTestSuiteOptions {
   name: string;
   description?: string;
   assertions?: string[];
@@ -50,7 +50,7 @@ export interface CreateEvaluationSuiteOptions {
 
 function validateSuiteName(name: string): void {
   if (!name || name.trim() === "") {
-    throw new Error("Evaluation suite name must be a non-empty string");
+    throw new Error("Test suite name must be a non-empty string");
   }
 }
 
@@ -111,7 +111,7 @@ function validateTaskResult(
   return dict;
 }
 
-export class EvaluationSuite {
+export class TestSuite {
   public readonly name: string;
   public readonly description?: string;
 
@@ -133,8 +133,8 @@ export class EvaluationSuite {
 
   static async create(
     client: OpikClient,
-    options: CreateEvaluationSuiteOptions
-  ): Promise<EvaluationSuite> {
+    options: CreateTestSuiteOptions
+  ): Promise<TestSuite> {
     validateSuiteName(options.name);
 
     const resolvedEvaluators = resolveEvaluators(
@@ -183,27 +183,27 @@ export class EvaluationSuite {
       });
     }
 
-    return new EvaluationSuite(dataset, client);
+    return new TestSuite(dataset, client);
   }
 
   static async get(
     client: OpikClient,
     name: string,
     projectName?: string
-  ): Promise<EvaluationSuite> {
+  ): Promise<TestSuite> {
     const dataset = await client.getDataset(name, projectName);
     await dataset.syncHashes();
-    return new EvaluationSuite(dataset, client);
+    return new TestSuite(dataset, client);
   }
 
   static async getOrCreate(
     client: OpikClient,
-    options: CreateEvaluationSuiteOptions
-  ): Promise<EvaluationSuite> {
+    options: CreateTestSuiteOptions
+  ): Promise<TestSuite> {
     validateSuiteName(options.name);
 
     try {
-      const suite = await EvaluationSuite.get(client, options.name, options.projectName);
+      const suite = await TestSuite.get(client, options.name, options.projectName);
 
       const hasUpdates =
         options.assertions !== undefined ||
@@ -221,7 +221,7 @@ export class EvaluationSuite {
       return suite;
     } catch (error) {
       if (error instanceof DatasetNotFoundError) {
-        return EvaluationSuite.create(client, options);
+        return TestSuite.create(client, options);
       }
       throw error;
     }
@@ -238,7 +238,7 @@ export class EvaluationSuite {
     await this.dataset.insert([prepareDatasetItemData(data, options)]);
   }
 
-  async addItems(items: EvaluationSuiteItem[]): Promise<void> {
+  async addItems(items: TestSuiteItem[]): Promise<void> {
     const datasetItems: DatasetItemData[] = items.map((item) =>
       prepareDatasetItemData(item.data, item)
     );
@@ -248,14 +248,14 @@ export class EvaluationSuite {
 
   async run(
     task: EvaluationTask,
-    options?: EvaluationSuiteRunOptions
-  ): Promise<EvaluationSuiteResult> {
+    options?: TestSuiteRunOptions
+  ): Promise<TestSuiteResult> {
     const validatedTask: EvaluationTask = async (item) => {
       const result = await task(item);
       return validateTaskResult(result);
     };
 
-    const evalResult = await evaluateSuite({
+    const evalResult = await evaluateTestSuite({
       dataset: this.dataset,
       task: validatedTask,
       experimentName: options?.experimentName,
@@ -347,7 +347,7 @@ export class EvaluationSuite {
       const versionInfo = await this.dataset.getVersionInfo();
       if (!versionInfo) {
         throw new Error(
-          `Cannot update evaluation suite '${this.name}': ` +
+          `Cannot update test suite '${this.name}': ` +
             "no version info found. Add at least one item first."
         );
       }

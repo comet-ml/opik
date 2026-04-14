@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { DatasetItem } from "@/dataset/DatasetItem";
-import { EvaluationSuite } from "@/evaluation/suite/EvaluationSuite";
+import { TestSuite } from "@/evaluation/suite/TestSuite";
 import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import {
   validateEvaluators,
@@ -43,8 +43,8 @@ vi.mock("@/evaluation/suite_evaluators/validators", async (importOriginal) => {
   };
 });
 
-vi.mock("@/evaluation/suite/evaluateSuite", () => ({
-  evaluateSuite: vi.fn().mockResolvedValue({
+vi.mock("@/evaluation/suite/evaluateTestSuite", () => ({
+  evaluateTestSuite: vi.fn().mockResolvedValue({
     experimentId: "exp-1",
     experimentName: "test-exp",
     testResults: [
@@ -62,10 +62,10 @@ vi.mock("@/evaluation/suite/evaluateSuite", () => ({
   }),
 }));
 
-describe("EvaluationSuite", () => {
+describe("TestSuite", () => {
   let opikClient: OpikClient;
   let testDataset: Dataset;
-  let suite: EvaluationSuite;
+  let suite: TestSuite;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -79,7 +79,7 @@ describe("EvaluationSuite", () => {
       opikClient
     );
 
-    suite = new EvaluationSuite(testDataset, opikClient);
+    suite = new TestSuite(testDataset, opikClient);
   });
 
   afterEach(() => {
@@ -200,11 +200,11 @@ describe("EvaluationSuite", () => {
   });
 
   describe("run", () => {
-    it("should delegate to evaluateSuite and return EvaluationSuiteResult", async () => {
-      const { evaluateSuite } = await import(
-        "@/evaluation/suite/evaluateSuite"
+    it("should delegate to evaluateTestSuite and return TestSuiteResult", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
       );
-      vi.mocked(evaluateSuite).mockResolvedValue({
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
         experimentId: "exp-1",
         experimentName: "test-exp",
         testResults: [
@@ -243,11 +243,11 @@ describe("EvaluationSuite", () => {
       expect(result.itemResults.has("item-1")).toBe(true);
     });
 
-    it("should pass model option to evaluateSuite as evaluatorModel", async () => {
-      const { evaluateSuite } = await import(
-        "@/evaluation/suite/evaluateSuite"
+    it("should pass model option to evaluateTestSuite as evaluatorModel", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
       );
-      vi.mocked(evaluateSuite).mockResolvedValue({
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
         experimentId: "exp-2",
         experimentName: "test-exp-2",
         testResults: [],
@@ -261,16 +261,16 @@ describe("EvaluationSuite", () => {
         model: "claude-sonnet-4",
       });
 
-      expect(evaluateSuite).toHaveBeenCalledWith(
+      expect(evaluateTestSuite).toHaveBeenCalledWith(
         expect.objectContaining({ evaluatorModel: "claude-sonnet-4" })
       );
     });
 
-    it("should not call getVersionInfo separately (evaluateSuite handles everything)", async () => {
-      const { evaluateSuite } = await import(
-        "@/evaluation/suite/evaluateSuite"
+    it("should not call getVersionInfo separately (evaluateTestSuite handles everything)", async () => {
+      const { evaluateTestSuite } = await import(
+        "@/evaluation/suite/evaluateTestSuite"
       );
-      vi.mocked(evaluateSuite).mockResolvedValue({
+      vi.mocked(evaluateTestSuite).mockResolvedValue({
         experimentId: "exp-2",
         experimentName: "test-exp-2",
         testResults: [
@@ -299,7 +299,7 @@ describe("EvaluationSuite", () => {
 
       await suite.run(mockTask, { experimentName: "test-experiment" });
 
-      // getVersionInfo should NOT be called by run() since evaluateSuite handles everything
+      // getVersionInfo should NOT be called by run() since evaluateTestSuite handles everything
       expect(getVersionInfoSpy).not.toHaveBeenCalled();
     });
   });
@@ -692,20 +692,20 @@ describe("EvaluationSuite", () => {
   describe("input validation", () => {
     it("should throw Error when creating suite with empty name", async () => {
       await expect(
-        EvaluationSuite.create(opikClient, { name: "" })
-      ).rejects.toThrow("Evaluation suite name must be a non-empty string");
+        TestSuite.create(opikClient, { name: "" })
+      ).rejects.toThrow("Test suite name must be a non-empty string");
     });
 
     it("should throw Error when creating suite with whitespace-only name", async () => {
       await expect(
-        EvaluationSuite.create(opikClient, { name: "   " })
-      ).rejects.toThrow("Evaluation suite name must be a non-empty string");
+        TestSuite.create(opikClient, { name: "   " })
+      ).rejects.toThrow("Test suite name must be a non-empty string");
     });
 
     it("should throw Error in getOrCreate with empty name", async () => {
       await expect(
-        EvaluationSuite.getOrCreate(opikClient, { name: "" })
-      ).rejects.toThrow("Evaluation suite name must be a non-empty string");
+        TestSuite.getOrCreate(opikClient, { name: "" })
+      ).rejects.toThrow("Test suite name must be a non-empty string");
     });
 
     it("should call validateExecutionPolicy when executionPolicy is provided in create", async () => {
@@ -727,7 +727,7 @@ describe("EvaluationSuite", () => {
           }) as never
       );
 
-      await EvaluationSuite.create(opikClient, {
+      await TestSuite.create(opikClient, {
         name: "valid-suite",
         executionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });
