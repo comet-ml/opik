@@ -21,6 +21,7 @@ import {
   executionPolicyEqual,
 } from "./suiteHelpers";
 import type { EvaluatorItemLike } from "./suiteHelpers";
+import type { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
 import type { DatasetItemUpdate } from "@/rest_api/api/types/DatasetItemUpdate";
 import { generateId } from "@/utils/generateId";
@@ -375,11 +376,14 @@ export class TestSuite {
     const hasVersionUpdates = resolvedEvaluators || assertionsProvided || options.globalExecutionPolicy !== undefined;
     if (hasVersionUpdates) {
       const versionInfo = await this.dataset.getVersionInfo();
+
       if (!versionInfo) {
-        throw new Error(
-          `Cannot update test suite '${this.name}': ` +
-            "no version info found. Add at least one item first."
-        );
+        // No version exists yet — create the initial one using the provided values,
+        // falling back to defaults for anything not specified.
+        const evaluators = resolvedEvaluators ?? [];
+        const executionPolicy = resolveExecutionPolicy(options.globalExecutionPolicy);
+        await this.createInitialTestSuiteVersion(evaluators, executionPolicy);
+        return;
       }
 
       // Resolve current values once — used both for fallback and change detection
@@ -417,6 +421,26 @@ export class TestSuite {
         },
       });
     }
+  }
+
+  /**
+   * Creates the first version for a test suite that has no versions yet.
+   * Uses override=true since there is no base version to build on.
+   */
+  private async createInitialTestSuiteVersion(
+    evaluators: LLMJudge[],
+    executionPolicy: Required<ExecutionPolicy>
+  ): Promise<void> {
+    await this.client.api.datasets.applyDatasetItemChanges(this.dataset.id, {
+      override: true,
+      body: {
+        ...(evaluators.length > 0 && { evaluators: serializeEvaluators(evaluators) }),
+        execution_policy: {
+          runs_per_item: executionPolicy.runsPerItem,
+          pass_threshold: executionPolicy.passThreshold,
+        },
+      },
+    });
   }
 
   async delete(itemIds: string[]): Promise<void> {

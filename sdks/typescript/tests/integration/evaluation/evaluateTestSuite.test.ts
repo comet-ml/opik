@@ -494,6 +494,81 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
+  describe("Update on suite with no initial version", () => {
+    it(
+      "should create the initial version when update is called on a suite that has no items yet",
+      async () => {
+        // Create with no globalAssertions and no globalExecutionPolicy so that
+        // TestSuite.create does NOT call applyDatasetItemChanges — leaving the
+        // suite with no dataset version at all.
+        const suiteName = `test-suite-update-no-version-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, { name: suiteName });
+
+        // Verify there really is no version yet
+        const datasetRef = await client.getDataset(suiteName);
+        expect(await datasetRef.getVersionInfo()).toBeNull();
+
+        // update() should create the initial version via override:true
+        await suite.update({
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is helpful");
+
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 2, passThreshold: 1 });
+      },
+      60000
+    );
+
+    it(
+      "should create the initial version with default policy when only assertions are provided",
+      async () => {
+        const suiteName = `test-suite-update-no-version-defaults-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, { name: suiteName });
+
+        await suite.update({ globalAssertions: ["Response is concise"] });
+
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is concise");
+
+        // Policy should have fallen back to defaults (runsPerItem:1, passThreshold:1)
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 1, passThreshold: 1 });
+      },
+      60000
+    );
+
+    it(
+      "should create the initial version with no evaluators when only executionPolicy is provided",
+      async () => {
+        const suiteName = `test-suite-update-no-version-policy-only-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, { name: suiteName });
+
+        await suite.update({
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        });
+
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(0);
+
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 3, passThreshold: 2 });
+      },
+      60000
+    );
+  });
+
   describe("Suite Update", () => {
     it(
       "should update suite evaluators and execution policy",

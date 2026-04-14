@@ -1034,6 +1034,91 @@ describe("TestSuite", () => {
         })
       );
     });
+
+    describe("initial version creation when no version exists", () => {
+      let applyChangesSpy: ReturnType<typeof vi.spyOn>;
+
+      beforeEach(() => {
+        vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue(null);
+
+        applyChangesSpy = vi
+          .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
+          .mockImplementation(
+            () =>
+              ({
+                then: (cb: (v: unknown) => unknown) =>
+                  Promise.resolve(cb(undefined)),
+                [Symbol.toStringTag]: "HttpResponsePromise",
+              }) as never
+          );
+      });
+
+      it("should call applyDatasetItemChanges with override:true and evaluators when assertions provided", async () => {
+        await suite.update({
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+
+        expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+          override: true,
+          body: {
+            evaluators: [
+              expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
+            ],
+            execution_policy: { runs_per_item: 2, pass_threshold: 1 },
+          },
+        });
+      });
+
+      it("should omit evaluators key from body when no assertions are provided", async () => {
+        await suite.update({
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        });
+
+        expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+          override: true,
+          body: {
+            execution_policy: { runs_per_item: 3, pass_threshold: 2 },
+          },
+        });
+        expect(applyChangesSpy).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.not.objectContaining({ body: expect.objectContaining({ evaluators: expect.anything() }) })
+        );
+      });
+
+      it("should fall back to DEFAULT_EXECUTION_POLICY when no executionPolicy is provided", async () => {
+        await suite.update({ globalAssertions: ["Response is helpful"] });
+
+        expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+          override: true,
+          body: {
+            evaluators: [
+              expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
+            ],
+            execution_policy: {
+              runs_per_item: DEFAULT_EXECUTION_POLICY.runsPerItem,
+              pass_threshold: DEFAULT_EXECUTION_POLICY.passThreshold,
+            },
+          },
+        });
+      });
+
+      it("should not call applyDatasetItemChanges with override:false or include base_version", async () => {
+        await suite.update({ globalAssertions: ["Response is helpful"] });
+
+        expect(applyChangesSpy).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ override: false })
+        );
+        expect(applyChangesSpy).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            body: expect.objectContaining({ base_version: expect.anything() }),
+          })
+        );
+      });
+    });
   });
 
   describe("input validation", () => {
