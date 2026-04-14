@@ -77,11 +77,14 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
   async contentHash(): Promise<string> {
     const content: Record<string, unknown> = { ...this.getContent() };
 
-    if (this.evaluators) {
+    if (this.evaluators && this.evaluators.length > 0) {
       content["evaluators"] = this.evaluators;
     }
 
-    if (this.executionPolicy) {
+    if (
+      this.executionPolicy &&
+      Object.keys(this.executionPolicy).length > 0
+    ) {
       content["executionPolicy"] = this.executionPolicy;
     }
 

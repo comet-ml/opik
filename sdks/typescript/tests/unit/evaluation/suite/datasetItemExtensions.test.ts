@@ -200,6 +200,20 @@ describe("DatasetItem extensions for test suites", () => {
 
       expect(await itemA.contentHash()).toBe(await itemB.contentHash());
     });
+
+    it("should treat empty evaluators/executionPolicy the same as omitted", async () => {
+      const itemOmitted = new DatasetItem({ id: "hash-5a", input: "test" });
+      const itemEmpty = new DatasetItem({
+        id: "hash-5b",
+        input: "test",
+        evaluators: [],
+        executionPolicy: {} as ExecutionPolicyWrite,
+      });
+
+      expect(await itemEmpty.contentHash()).toBe(
+        await itemOmitted.contentHash()
+      );
+    });
   });
 
   describe("fromApiModel", () => {
