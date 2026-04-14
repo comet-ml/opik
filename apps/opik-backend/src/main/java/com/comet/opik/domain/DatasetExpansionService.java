@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
@@ -15,6 +16,8 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.ServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,8 +36,11 @@ import java.util.UUID;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DatasetExpansionService {
 
+    private static final int MAX_COMPLETION_TOKENS = 4000;
+
     private final @NonNull ChatCompletionService chatCompletionService;
     private final @NonNull DatasetItemService datasetItemService;
+    private final @NonNull DatasetService datasetService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull IdGenerator idGenerator;
@@ -60,12 +66,15 @@ public class DatasetExpansionService {
             throw new BadRequestException("Cannot expand empty dataset. Add at least one sample first");
         }
 
+        var datasetType = datasetService.findById(datasetId).type();
+
         // Use custom prompt if provided, otherwise build default prompt
         var generationPrompt = StringUtils.isNotBlank(request.customPrompt())
                 ? request.customPrompt().trim()
                 : buildGenerationPrompt(existingItems.content(), request);
         // Generate samples using LLM with batch processing for large requests
-        var generatedSamples = generateSamplesInBatches(generationPrompt, request, datasetId, workspaceId);
+        var generatedSamples = generateSamplesInBatches(generationPrompt, request, datasetId, workspaceId,
+                datasetType);
         log.info("Finished dataset expansion for datasetId '{}', workspaceId '{}', total samples '{}'",
                 datasetId, workspaceId, generatedSamples.size());
         return DatasetExpansionResponse.builder()
@@ -122,7 +131,8 @@ public class DatasetExpansionService {
     }
 
     private List<DatasetItem> generateSamplesInBatches(
-            String basePrompt, DatasetExpansion request, UUID datasetId, String workspaceId) {
+            String basePrompt, DatasetExpansion request, UUID datasetId, String workspaceId,
+            DatasetType datasetType) {
         var allSamples = new ArrayList<DatasetItem>();
         var totalSamples = request.sampleCount();
         var batchSize = Math.min(20, totalSamples); // Process in batches of up to 20
@@ -162,7 +172,7 @@ public class DatasetExpansionService {
                             .preserveFields(request.preserveFields())
                             .variationInstructions(request.variationInstructions())
                             .build(),
-                    datasetId, workspaceId);
+                    datasetId, workspaceId, datasetType);
 
             allSamples.addAll(batchSamples);
             remainingSamples -= currentBatchSize;
@@ -173,12 +183,14 @@ public class DatasetExpansionService {
     }
 
     private List<DatasetItem> generateSamples(
-            String prompt, DatasetExpansion request, UUID datasetId, String workspaceId) {
+            String prompt, DatasetExpansion request, UUID datasetId, String workspaceId,
+            DatasetType datasetType) {
         try {
             // Create chat completion request, request should handle most models including reasoning models like GPT-5, Sonnet, etc.
             var chatRequest = ChatCompletionRequest.builder()
                     .model(request.model())
                     .addUserMessage(prompt)
+                    .maxCompletionTokens(MAX_COMPLETION_TOKENS)
                     .temperature(1.0) // Set temperature to 1.0 for consistent output
                     .stream(false) // Non-streaming request for dataset expansion
                     .build();
@@ -191,22 +203,25 @@ public class DatasetExpansionService {
 
             // Parse the JSON response
             var parsedSamples = parseGeneratedSamples(
-                    generatedContent, datasetId, request.model(), request.sampleCount());
+                    generatedContent, datasetId, request.model(), request.sampleCount(), datasetType);
             log.debug("Parsed '{}' samples from LLM response", parsedSamples.size());
             return parsedSamples;
 
+        } catch (ClientErrorException | ServerErrorException exception) {
+            log.error("LLM service error during sample generation", exception);
+            throw exception;
         } catch (Exception exception) {
             log.error("Failed to generate samples using LLM", exception);
-            // If it's already a RuntimeException with a detailed message, preserve it
-            if (exception instanceof BadRequestException && exception.getMessage().contains("AI model")) {
-                throw exception;
-            }
-            throw new BadRequestException("Failed to generate synthetic samples", exception);
+            var detail = exception.getMessage() != null
+                    ? "Failed to generate synthetic samples: " + exception.getMessage()
+                    : "Failed to generate synthetic samples";
+            throw new BadRequestException(detail, exception);
         }
     }
 
     private List<DatasetItem> parseGeneratedSamples(
-            String generatedContent, UUID datasetId, String model, int requestedSampleCount) {
+            String generatedContent, UUID datasetId, String model, int requestedSampleCount,
+            DatasetType datasetType) {
         try {
             // Clean the response - sometimes LLMs add markdown formatting
             String cleanedContent = generatedContent.trim();
@@ -243,9 +258,10 @@ public class DatasetExpansionService {
                     if (sampleNode.isObject()) {
                         var dataNode = (ObjectNode) sampleNode;
 
-                        // Add metadata to indicate this is synthetic
-                        dataNode.put("_generated", true);
-                        dataNode.put("_generation_model", model);
+                        if (datasetType != DatasetType.TEST_SUITE) {
+                            dataNode.put("_generated", true);
+                            dataNode.put("_generation_model", model);
+                        }
 
                         // Convert to Map for DatasetItem
                         Map<String, JsonNode> dataMap = objectMapper.convertValue(dataNode,
@@ -266,8 +282,11 @@ public class DatasetExpansionService {
                 // Handle case where LLM returns a single object instead of array
                 log.warn("LLM returned single object instead of array, wrapping in array");
                 var dataNode = (ObjectNode) rootNode;
-                dataNode.put("_generated", true);
-                dataNode.put("_generation_model", model);
+
+                if (datasetType != DatasetType.TEST_SUITE) {
+                    dataNode.put("_generated", true);
+                    dataNode.put("_generation_model", model);
+                }
 
                 Map<String, JsonNode> dataMap = objectMapper.convertValue(dataNode,
                         objectMapper.getTypeFactory().constructMapType(Map.class, String.class,
