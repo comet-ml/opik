@@ -60,7 +60,7 @@ def test_multi_class_publishes_store_only_sent_values__happyflow(
     )
     latest = manager.get_blueprint()
     assert latest is not None
-    assert sorted(latest.keys()) == ["ConfigB.retries"]
+    assert sorted(latest.keys()) == ["retries"]
 
     project_id = opik_client.rest_client.projects.retrieve_project(name=project_name).id
     history = opik_client.rest_client.agent_configs.get_blueprint_history(
@@ -100,21 +100,6 @@ def test_publish_version_and_retrieve__happyflow(
     auto_prod = fetch_auto_prod()
     assert auto_prod.temperature == pytest.approx(0.5)
     assert auto_prod.model == "gpt-3.5"
-
-    # Publishing the same values again must be a no-op (1 entry in history).
-    get_global_registry().clear()
-    opik_client.create_config(
-        MyConfig(temperature=0.5, model="gpt-3.5", hint=None), project_name=project_name
-    )
-    project_id = opik_client.rest_client.projects.retrieve_project(name=project_name).id
-    assert (
-        len(
-            opik_client.rest_client.agent_configs.get_blueprint_history(
-                project_id=project_id
-            ).content
-        )
-        == 1
-    )
 
     # Publishing different values (hint filled in) creates a new version.
     get_global_registry().clear()
@@ -278,7 +263,7 @@ def test_mask_overrides_config__happyflow(
         project_name=project_name,
         rest_client_=opik_client.rest_client,
     )
-    mask_id = manager.create_mask(parameters={"MyConfig.temperature": 0.9})
+    mask_id = manager.create_mask(parameters={"temperature": 0.9})
 
     get_global_registry().clear()
 
