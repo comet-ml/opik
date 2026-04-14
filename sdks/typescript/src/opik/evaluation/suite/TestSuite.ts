@@ -301,6 +301,35 @@ export class TestSuite {
     return resolveExecutionPolicy(versionInfo?.executionPolicy);
   }
 
+  /**
+   * Get the current (latest) version name.
+   *
+   * @returns The version name (e.g., "v1") or undefined if no versions exist
+   */
+  async getCurrentVersionName(): Promise<string | undefined> {
+    return this.dataset.getCurrentVersionName();
+  }
+
+  /**
+   * Get the current (latest) version info.
+   *
+   * @returns The DatasetVersionPublic object or undefined if no versions exist
+   */
+  async getVersionInfo(): Promise<Awaited<ReturnType<typeof this.dataset.getVersionInfo>>> {
+    return this.dataset.getVersionInfo();
+  }
+
+  /**
+   * Get a read-only view of a specific version.
+   *
+   * @param versionName The version name to retrieve (e.g., "v1", "v2")
+   * @returns A DatasetVersion object for the specified version
+   * @throws DatasetVersionNotFoundError if the version doesn't exist
+   */
+  async getVersionView(versionName: string): Promise<ReturnType<typeof this.dataset.getVersionView>> {
+    return this.dataset.getVersionView(versionName);
+  }
+
   async update(options: {
     globalAssertions?: string[];
     globalExecutionPolicy?: ExecutionPolicy;

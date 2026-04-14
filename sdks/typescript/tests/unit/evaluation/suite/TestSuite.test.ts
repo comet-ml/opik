@@ -772,4 +772,64 @@ describe("TestSuite", () => {
       expect(clearSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("getCurrentVersionName", () => {
+    it("should return the current version name from dataset", async () => {
+      const getCurrentVersionNameSpy = vi
+        .spyOn(testDataset, "getCurrentVersionName")
+        .mockResolvedValue("v2");
+
+      const result = await suite.getCurrentVersionName();
+
+      expect(result).toBe("v2");
+      expect(getCurrentVersionNameSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("should return undefined when no versions exist", async () => {
+      const getCurrentVersionNameSpy = vi
+        .spyOn(testDataset, "getCurrentVersionName")
+        .mockResolvedValue(undefined);
+
+      const result = await suite.getCurrentVersionName();
+
+      expect(result).toBeUndefined();
+      expect(getCurrentVersionNameSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getVersionInfo", () => {
+    it("should return the version info from dataset", async () => {
+      const mockVersionInfo = {
+        id: "version-1",
+        versionName: "v1",
+        evaluators: [],
+        executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+      };
+      const getVersionInfoSpy = vi
+        .spyOn(testDataset, "getVersionInfo")
+        .mockResolvedValue(mockVersionInfo);
+
+      const result = await suite.getVersionInfo();
+
+      expect(result).toEqual(mockVersionInfo);
+      expect(getVersionInfoSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getVersionView", () => {
+    it("should return a version view for the specified version", async () => {
+      const mockVersionView = {
+        datasetName: "test-suite",
+        datasetId: "suite-ds-id",
+        versionId: "version-1",
+      };
+      const getVersionViewSpy = vi
+        .spyOn(testDataset, "getVersionView")
+        .mockResolvedValue(mockVersionView as never);
+
+      await suite.getVersionView("v1");
+
+      expect(getVersionViewSpy).toHaveBeenCalledWith("v1");
+    });
+  });
 });
