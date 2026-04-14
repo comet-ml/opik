@@ -38,6 +38,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
@@ -106,6 +107,16 @@ public class LocalRunnersResource {
         String userName = requestContext.get().getUserName();
         LocalRunner runner = runnerService.getRunner(workspaceId, userName, runnerId);
         return Response.ok(runner).build();
+    }
+
+    @DELETE
+    @Path("/{runnerId}")
+    @Operation(operationId = "disconnectRunner", summary = "Disconnect local runner", description = "Disconnect a local runner, terminating its connection and failing any pending jobs", responses = {
+            @ApiResponse(responseCode = "204", description = "No content")})
+    public Response disconnectRunner(@PathParam("runnerId") UUID runnerId) {
+        ensureEnabled();
+        runnerService.disconnectRunner(runnerId);
+        return Response.noContent().build();
     }
 
     @PUT

@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from opik.api_objects.agent_config import types
-from opik.api_objects.agent_config.config import AgentConfigManager
+from opik.api_objects.agent_config.config import ConfigManager
 from opik.api_objects.agent_config.blueprint import Blueprint
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
@@ -33,18 +33,18 @@ def mock_rest_client():
 
 @pytest.fixture
 def agent_config(mock_rest_client):
-    return AgentConfigManager(
+    return ConfigManager(
         project_name="my-project",
         rest_client_=mock_rest_client,
     )
 
 
-class TestAgentConfigManagerProperties:
+class TestConfigManagerProperties:
     def test_project_name(self, agent_config):
         assert agent_config.project_name == "my-project"
 
 
-class TestAgentConfigManagerGetBlueprint:
+class TestConfigManagerGetBlueprint:
     def test_get_blueprint__returns_blueprint(self, agent_config, mock_rest_client):
         mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
         mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
@@ -169,7 +169,7 @@ class TestAgentConfigManagerGetBlueprint:
         )
 
 
-class TestAgentConfigManagerGetBlueprintByName:
+class TestConfigManagerGetBlueprintByName:
     def test_get_blueprint_by_name__returns_blueprint(
         self, agent_config, mock_rest_client
     ):
@@ -199,7 +199,7 @@ class TestAgentConfigManagerGetBlueprintByName:
         assert result is None
 
 
-class TestAgentConfigManagerCreateBlueprint:
+class TestConfigManagerCreateBlueprint:
     def test_create_blueprint__happy_path__calls_backend_and_returns_blueprint(
         self, agent_config, mock_rest_client
     ):
@@ -209,8 +209,8 @@ class TestAgentConfigManagerCreateBlueprint:
 
         result = agent_config.create_blueprint(
             fields_with_values={
-                "temperature": types.FieldValueSpec(float, 0.6, None),
-                "name": types.FieldValueSpec(str, "agent", None),
+                "temperature": types.FieldValueSpec(float, 0.6),
+                "name": types.FieldValueSpec(str, "agent"),
             }
         )
 
@@ -230,7 +230,7 @@ class TestAgentConfigManagerCreateBlueprint:
         )
 
         agent_config.create_blueprint(
-            fields_with_values={"flag": types.FieldValueSpec(bool, False, None)}
+            fields_with_values={"flag": types.FieldValueSpec(bool, False)}
         )
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
@@ -247,7 +247,7 @@ class TestAgentConfigManagerCreateBlueprint:
         )
 
         agent_config.create_blueprint(
-            fields_with_values={"temp": types.FieldValueSpec(float, 0.5, None)}
+            fields_with_values={"temp": types.FieldValueSpec(float, 0.5)}
         )
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
@@ -280,7 +280,7 @@ class TestAgentConfigManagerCreateBlueprint:
         )
 
         result = agent_config.create_blueprint(
-            fields_with_values={"temp": types.FieldValueSpec(float, 0.6, None)}
+            fields_with_values={"temp": types.FieldValueSpec(float, 0.6)}
         )
 
         assert isinstance(result, Blueprint)
@@ -301,12 +301,12 @@ class TestAgentConfigManagerCreateBlueprint:
         assert call_kwargs["blueprint"].description == "v1"
 
 
-class TestAgentConfigManagerCreateMask:
+class TestConfigManagerCreateMask:
     def test_create_mask__happy_path__calls_backend_with_mask_type(
         self, agent_config, mock_rest_client
     ):
         agent_config.create_mask(
-            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3, None)}
+            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3)}
         )
 
         call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
@@ -316,7 +316,7 @@ class TestAgentConfigManagerCreateMask:
 
     def test_create_mask__returns_mask_id(self, agent_config, mock_rest_client):
         result = agent_config.create_mask(
-            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3, None)}
+            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3)}
         )
 
         assert isinstance(result, str)
@@ -326,7 +326,7 @@ class TestAgentConfigManagerCreateMask:
         self, agent_config, mock_rest_client
     ):
         agent_config.create_mask(
-            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3, None)}
+            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3)}
         )
 
         call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
@@ -344,7 +344,7 @@ class TestAgentConfigManagerCreateMask:
         self, agent_config, mock_rest_client
     ):
         agent_config.create_mask(
-            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3, None)},
+            fields_with_values={"temperature": types.FieldValueSpec(float, 0.3)},
             description="variant-A",
         )
 
@@ -355,7 +355,7 @@ class TestAgentConfigManagerCreateMask:
         self, agent_config, mock_rest_client
     ):
         agent_config.create_mask(
-            fields_with_values={"temp": types.FieldValueSpec(float, 0.5, None)}
+            fields_with_values={"temp": types.FieldValueSpec(float, 0.5)}
         )
 
         call_kwargs = mock_rest_client.agent_configs.update_agent_config.call_args[1]
@@ -364,26 +364,26 @@ class TestAgentConfigManagerCreateMask:
 
 class TestResolveFieldsWithValues:
     def test_none_value__included_with_str_type(self):
-        result = AgentConfigManager._resolve_fields_with_values(
+        result = ConfigManager._resolve_fields_with_values(
             parameters={"temp": 0.5, "name": None},
             fields_with_values=None,
         )
-        assert result["temp"] == types.FieldValueSpec(float, 0.5, None)
-        assert result["name"] == types.FieldValueSpec(str, None, None)
+        assert result["temp"] == types.FieldValueSpec(float, 0.5)
+        assert result["name"] == types.FieldValueSpec(str, None)
 
     def test_all_none_parameters__included_with_str_type(self):
-        result = AgentConfigManager._resolve_fields_with_values(
+        result = ConfigManager._resolve_fields_with_values(
             parameters={"a": None, "b": None},
             fields_with_values=None,
         )
         assert result == {
-            "a": types.FieldValueSpec(str, None, None),
-            "b": types.FieldValueSpec(str, None, None),
+            "a": types.FieldValueSpec(str, None),
+            "b": types.FieldValueSpec(str, None),
         }
 
     def test_fields_with_values_takes_precedence_over_parameters(self):
-        explicit = {"x": types.FieldValueSpec(int, 1, None)}
-        result = AgentConfigManager._resolve_fields_with_values(
+        explicit = {"x": types.FieldValueSpec(int, 1)}
+        result = ConfigManager._resolve_fields_with_values(
             parameters={"x": 99},
             fields_with_values=explicit,
         )

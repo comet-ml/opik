@@ -171,8 +171,18 @@ class SearchTimeoutError(OpikException):
     pass
 
 
-class AgentConfigNotFound(OpikException):
-    """Exception raised when no agent config blueprint is found for the requested env/version/latest."""
+class ConfigNotFound(OpikException):
+    """Exception raised when no config is found for the requested env/version."""
+
+    pass
+
+
+class ConfigMismatch(OpikException):
+    """Exception raised when the backend config blueprint schema does not match the expected config class.
+
+    This typically occurs when the backend blueprint is missing one or more fields
+    declared in the requested ``Config`` subclass.
+    """
 
     pass
 

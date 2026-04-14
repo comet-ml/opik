@@ -45,7 +45,7 @@ type OptimizationProgressChartContentProps = {
   selectedTrialId?: string;
   onTrialSelect?: (trialId: string) => void;
   onTrialClick?: (candidateId: string) => void;
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
   isInProgress?: boolean;
   inProgressInfo?: InProgressInfo;
 };
@@ -64,7 +64,7 @@ const OptimizationProgressChartContent: React.FC<
   selectedTrialId,
   onTrialSelect,
   onTrialClick,
-  isEvaluationSuite,
+  isTestSuite,
   isInProgress = false,
   inProgressInfo,
 }) => {
@@ -175,7 +175,7 @@ const OptimizationProgressChartContent: React.FC<
     selectedTrialId,
     onTrialSelect,
     onTrialClick,
-    isEvaluationSuite,
+    isTestSuite,
     setHoveredTrial,
   });
 
@@ -257,13 +257,13 @@ const OptimizationProgressChartContent: React.FC<
               hoveredTrial={hoveredTrial}
               candidate={c}
               chartData={chartData}
-              isEvaluationSuite={isEvaluationSuite}
+              isTestSuite={isTestSuite}
             />
           );
         })()}
 
       <div className="mt-1 flex items-center justify-center gap-4">
-        {isEvaluationSuite ? (
+        {isTestSuite ? (
           TRIAL_STATUS_ORDER.filter((s) =>
             chartData.some((d) => d.status === s),
           ).map((s) => (

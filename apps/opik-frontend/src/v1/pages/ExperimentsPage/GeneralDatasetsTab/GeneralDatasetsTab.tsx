@@ -30,7 +30,7 @@ import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import Loader from "@/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import {
   transformExperimentScores,
   getScoreDisplayName,
@@ -190,7 +190,7 @@ const GeneralDatasetsTab: React.FC = () => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Evaluation suite",
+        label: "Test suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -201,7 +201,7 @@ const GeneralDatasetsTab: React.FC = () => {
       },
       {
         id: "dataset_version",
-        label: "Evaluation suite version",
+        label: "Test suite version",
         type: COLUMN_TYPE.string,
         iconType: "version" as const,
         accessorFn: (row: GroupedExperiment) =>
@@ -521,7 +521,7 @@ const GeneralDatasetsTab: React.FC = () => {
           id: datasetId,
           name: [
             {
-              label: "Evaluation suite",
+              label: "Test suite",
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -562,7 +562,7 @@ const GeneralDatasetsTab: React.FC = () => {
                   label: calculateGroupLabel(groups[index]),
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted evaluation suite"
+                      ? "Deleted test suite"
                       : label || value || "Undefined",
                 };
               }),
@@ -595,7 +595,7 @@ const GeneralDatasetsTab: React.FC = () => {
           scores[s.name] = s.value;
         });
         if (
-          isEvalSuiteExperiment(experiment) &&
+          isTestSuiteExperiment(experiment) &&
           isNumber(experiment.pass_rate)
         ) {
           scores[PASS_RATE_LABEL] = experiment.pass_rate;

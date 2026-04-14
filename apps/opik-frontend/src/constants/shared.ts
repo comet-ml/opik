@@ -7,6 +7,8 @@ import {
 } from "@/types/shared";
 
 export const DEMO_PROJECT_NAME = "Demo Project";
+export const SNIPPET_PROJECT_NAME = "my-ai-project";
+export const PROJECT_NAME_PLACEHOLDER = "PROJECT_NAME_PLACEHOLDER";
 export const PLAYGROUND_PROJECT_NAME = "playground";
 export const USER_FEEDBACK_NAME = "User feedback";
 export const PIP_INSTALL_OPIK_COMMAND = "pip install opik";

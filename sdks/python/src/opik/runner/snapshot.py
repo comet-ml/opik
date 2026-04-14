@@ -35,8 +35,10 @@ _ENTRYPOINT_PATTERNS = [
 ]
 
 _CONFIGURATION_PATTERNS = [
-    re.compile(r"get_agent_config_version\("),
-    re.compile(r"getAgentConfigVersion\("),
+    re.compile(r"get_or_create_config\("),
+    re.compile(r"create_config\("),
+    re.compile(r"getOrCreateConfig\("),
+    re.compile(r"createConfig\("),
 ]
 
 _ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTERNS

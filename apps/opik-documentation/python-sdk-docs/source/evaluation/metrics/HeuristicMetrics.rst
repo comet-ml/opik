@@ -4,7 +4,7 @@ Heuristic Metrics
 .. currentmodule:: opik.evaluation.metrics
 
 This section lists the text-similarity, readability, safety, and sentiment metrics
-that can be composed into larger evaluation suites. Several metrics rely on optional
+that can be composed into larger test suites. Several metrics rely on optional
 dependencies (for example, ``bert-score``, ``sacrebleu``, ``fasttext``, ``nltk``);
 install the relevant packages before scoring.
 

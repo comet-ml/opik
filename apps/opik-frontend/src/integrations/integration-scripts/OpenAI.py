@@ -4,7 +4,7 @@ from openai import OpenAI
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.openai import track_openai  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 

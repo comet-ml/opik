@@ -63,10 +63,10 @@ const OptimizationConfiguration: React.FC<OptimizationConfigurationProps> = ({
           </CardHeader>
           <CardContent className="flex shrink-0 flex-col gap-1">
             <ConfigItem
-              label="Evaluation suite"
+              label="Test suite"
               value={
                 <Link
-                  to="/$workspaceName/projects/$projectId/evaluation-suites/$suiteId"
+                  to="/$workspaceName/projects/$projectId/test-suites/$suiteId"
                   params={{
                     workspaceName,
                     projectId: activeProjectId!,

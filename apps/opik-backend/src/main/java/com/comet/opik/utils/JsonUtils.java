@@ -247,6 +247,10 @@ public class JsonUtils {
         }
     }
 
+    public <T> String writeListOrDefaultEmpty(List<T> list) {
+        return writeValueAsString(list == null ? List.of() : list);
+    }
+
     public String writeValueAsString(@NonNull Object value) {
         try {
             return MAPPER.writeValueAsString(value);

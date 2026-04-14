@@ -224,6 +224,55 @@ class RunnersClient:
         )
         return _response.data
 
+    def get_runner(self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> LocalRunner:
+        """
+        Get a single local runner with its registered agents
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        LocalRunner
+            Runner details
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.runners.get_runner(runner_id='runnerId', )
+        """
+        _response = self._raw_client.get_runner(runner_id, request_options=request_options)
+        return _response.data
+
+    def disconnect_runner(self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+        """
+        Disconnect a local runner, terminating its connection and failing any pending jobs
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.runners.disconnect_runner(runner_id='runnerId', )
+        """
+        _response = self._raw_client.disconnect_runner(runner_id, request_options=request_options)
+        return _response.data
+
     def get_bridge_command(
         self,
         runner_id: str,
@@ -288,31 +337,6 @@ class RunnersClient:
         client.runners.get_job(job_id='jobId', )
         """
         _response = self._raw_client.get_job(job_id, request_options=request_options)
-        return _response.data
-
-    def get_runner(self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> LocalRunner:
-        """
-        Get a single local runner with its registered agents
-
-        Parameters
-        ----------
-        runner_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LocalRunner
-            Runner details
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.get_runner(runner_id='runnerId', )
-        """
-        _response = self._raw_client.get_runner(runner_id, request_options=request_options)
         return _response.data
 
     def heartbeat(
@@ -868,6 +892,65 @@ class AsyncRunnersClient:
         )
         return _response.data
 
+    async def get_runner(
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> LocalRunner:
+        """
+        Get a single local runner with its registered agents
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        LocalRunner
+            Runner details
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.runners.get_runner(runner_id='runnerId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_runner(runner_id, request_options=request_options)
+        return _response.data
+
+    async def disconnect_runner(
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Disconnect a local runner, terminating its connection and failing any pending jobs
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.runners.disconnect_runner(runner_id='runnerId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.disconnect_runner(runner_id, request_options=request_options)
+        return _response.data
+
     async def get_bridge_command(
         self,
         runner_id: str,
@@ -938,36 +1021,6 @@ class AsyncRunnersClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_job(job_id, request_options=request_options)
-        return _response.data
-
-    async def get_runner(
-        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> LocalRunner:
-        """
-        Get a single local runner with its registered agents
-
-        Parameters
-        ----------
-        runner_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LocalRunner
-            Runner details
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.runners.get_runner(runner_id='runnerId', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.get_runner(runner_id, request_options=request_options)
         return _response.data
 
     async def heartbeat(

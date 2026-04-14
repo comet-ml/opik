@@ -61,19 +61,17 @@ const getRunDisabledTooltip = ({
   isRunning,
   isDatasetEmpty,
   hasFilters,
-  isEvaluationSuite,
+  isTestSuite,
 }: {
   isRunning: boolean;
   isDatasetEmpty: boolean;
   hasFilters: boolean;
-  isEvaluationSuite: boolean;
+  isTestSuite: boolean;
 }): string | undefined => {
   if (isRunning) return "An experiment is already running";
   if (isDatasetEmpty && hasFilters) return "No items match the current filters";
   if (isDatasetEmpty) {
-    return `Selected ${
-      isEvaluationSuite ? "evaluation suite" : "dataset"
-    } is empty`;
+    return `Selected ${isTestSuite ? "test suite" : "dataset"} is empty`;
   }
   return undefined;
 };
@@ -126,8 +124,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   const selectedDataset = datasets.find((ds) => ds.id === plainDatasetId);
   const datasetName = selectedDataset?.name || null;
   const selectedDatasetType = selectedDataset?.type ?? null;
-  const isEvaluationSuite =
-    selectedDatasetType === DATASET_TYPE.EVALUATION_SUITE;
+  const isTestSuite = selectedDatasetType === DATASET_TYPE.TEST_SUITE;
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: plainDatasetId!, page: 1, size: MAX_VERSIONS_TO_FETCH },
@@ -202,7 +199,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
       versionId: parsedDatasetId?.versionId,
       datasetName,
       datasetType: selectedDatasetType ?? DATASET_TYPE.DATASET,
-      selectedRuleIds: isEvaluationSuite ? [] : selectedRuleIds,
+      selectedRuleIds: isTestSuite ? [] : selectedRuleIds,
       experimentNamePrefix: experimentPrefix,
       filters,
     });
@@ -212,7 +209,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     datasetName,
     parsedDatasetId?.versionId,
     selectedDatasetType,
-    isEvaluationSuite,
+    isTestSuite,
     selectedRuleIds,
     experimentPrefix,
     filters,
@@ -237,14 +234,14 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
           <DialogHeader className="pb-0">
             <DialogTitle>Test on dataset</DialogTitle>
             <DialogDescription>
-              Run your prompt suite against a dataset or evaluation suite and
-              score results with selected metrics.
+              Run your prompt suite against a dataset or test suite and score
+              results with selected metrics.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 overflow-y-auto pb-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Dataset / Evaluation suite</Label>
+              <Label>Dataset / Test suite</Label>
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <DatasetVersionSelectBox
@@ -267,7 +264,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               </div>
             </div>
 
-            {plainDatasetId && selectedDataset && !isEvaluationSuite && (
+            {plainDatasetId && selectedDataset && !isTestSuite && (
               <div className="flex flex-col gap-1.5">
                 <Label>Metrics</Label>
                 <MetricSelector
@@ -293,7 +290,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 isRunning,
                 isDatasetEmpty,
                 hasFilters: filters.length > 0,
-                isEvaluationSuite,
+                isTestSuite,
               })}
             >
               <Button
@@ -301,7 +298,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 disabled={isRunDisabled}
                 style={isRunDisabled ? { pointerEvents: "auto" } : {}}
               >
-                {isEvaluationSuite ? "Use evaluation suite" : "Use dataset"}
+                {isTestSuite ? "Use test suite" : "Use dataset"}
               </Button>
             </TooltipWrapper>
           </DialogFooter>

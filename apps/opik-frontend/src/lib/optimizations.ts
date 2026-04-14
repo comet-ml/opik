@@ -11,7 +11,7 @@ import {
 import { AggregatedFeedbackScore } from "@/types/shared";
 import { aggregateExperimentMetrics } from "@/lib/experiment-metrics";
 import { getFeedbackScore } from "@/lib/feedback-scores";
-import { Experiment } from "@/types/datasets";
+import { Experiment, EVALUATION_METHOD } from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
@@ -62,9 +62,9 @@ export const extractMetricNameFromCode = (code: string): string => {
 };
 
 export const getObjectiveLabel = (
-  isEvaluationSuite?: boolean,
+  isTestSuite?: boolean,
   objectiveName?: string,
-): string => (isEvaluationSuite ? "Pass rate" : objectiveName ?? "Accuracy");
+): string => (isTestSuite ? "Pass rate" : objectiveName ?? "Accuracy");
 
 export const MAX_EXPERIMENTS_LOADED = 1000;
 
@@ -188,8 +188,10 @@ export const getOptimizationDefaultConfigByProvider = (
   return {};
 };
 
-export const checkIsEvaluationSuite = (experiments: Experiment[]): boolean => {
-  return experiments.some((e) => e.evaluation_method === "evaluation_suite");
+export const checkIsTestSuite = (experiments: Experiment[]): boolean => {
+  return experiments.some(
+    (e) => e.evaluation_method === EVALUATION_METHOD.TEST_SUITE,
+  );
 };
 
 export const getOptimizationMetadata = (

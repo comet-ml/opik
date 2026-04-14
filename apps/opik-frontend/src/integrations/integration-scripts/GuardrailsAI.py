@@ -3,7 +3,7 @@ from guardrails.hub import PolitenessCheck
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.guardrails import track_guardrails  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # Create a politeness check validator
 politeness_check = PolitenessCheck(

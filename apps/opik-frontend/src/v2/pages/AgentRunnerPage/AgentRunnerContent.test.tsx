@@ -6,6 +6,8 @@ import { RunnerConnectionStatus } from "@/types/agent-sandbox";
 import type { PairingState } from "@/hooks/usePairingState";
 import { ReactNode } from "react";
 import { TooltipProvider } from "@/ui/tooltip";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
+import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 
 let mockPairingState: PairingState;
 
@@ -50,7 +52,9 @@ describe("AgentRunnerContent", () => {
   const createWrapper = (qc: QueryClient) => {
     const Wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={qc}>
-        <TooltipProvider>{children}</TooltipProvider>
+        <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+          <TooltipProvider>{children}</TooltipProvider>
+        </PermissionsProvider>
       </QueryClientProvider>
     );
     Wrapper.displayName = "TestWrapper";

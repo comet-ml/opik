@@ -801,7 +801,7 @@ def verify_threads_annotation_queue(
     testlib.assert_equal(instructions, queue.instructions)
 
 
-def verify_evaluation_suite_result(
+def verify_test_suite_result(
     opik_client: opik.Opik,
     suite_result: Any,
     items_total: int = mock.ANY,  # type: ignore
@@ -812,12 +812,12 @@ def verify_evaluation_suite_result(
     project_name: Optional[str] = None,
 ):
     """
-    Verify an EvaluationSuiteResult — both in-memory properties and persisted
+    Verify a TestSuiteResult — both in-memory properties and persisted
     experiment data from the backend.
 
     Args:
         opik_client: The Opik client instance.
-        suite_result: The EvaluationSuiteResult returned by suite.run().
+        suite_result: The TestSuiteResult returned by suite.run().
         items_total: Expected total number of dataset items in the suite.
         items_passed: Expected number of dataset items that passed.
         experiment_items_count: Expected number of experiment items (traces)
@@ -827,7 +827,7 @@ def verify_evaluation_suite_result(
             across all experiment items.
         expected_score_names: If provided, the union of all score names
             across all experiment items must equal this set.
-        project_name: The project name associated with the evaluation suite.
+        project_name: The project name associated with the test suite.
     """
     if items_total is not mock.ANY:
         assert suite_result.items_total == items_total, (

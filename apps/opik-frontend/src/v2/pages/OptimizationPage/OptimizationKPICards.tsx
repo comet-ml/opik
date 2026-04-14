@@ -50,7 +50,7 @@ type OptimizationKPICardsProps = {
   experiments: Experiment[];
   baselineCandidate?: AggregatedCandidate;
   bestCandidate?: AggregatedCandidate;
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
   objectiveName?: string;
   optimizationCreatedAt?: string;
   isInProgress?: boolean;
@@ -62,7 +62,7 @@ const OptimizationKPICards: React.FunctionComponent<
   experiments,
   baselineCandidate,
   bestCandidate,
-  isEvaluationSuite,
+  isTestSuite,
   objectiveName,
   optimizationCreatedAt,
   isInProgress,
@@ -93,7 +93,7 @@ const OptimizationKPICards: React.FunctionComponent<
     return new Date(optimizationCreatedAt).getTime();
   }, [optimizationCreatedAt]);
 
-  const configs = getMetricKPICardConfigs({ isEvaluationSuite, objectiveName });
+  const configs = getMetricKPICardConfigs({ isTestSuite, objectiveName });
 
   return (
     <div className="grid grid-cols-4 gap-4">

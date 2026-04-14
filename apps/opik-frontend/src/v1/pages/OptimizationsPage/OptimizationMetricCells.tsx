@@ -17,9 +17,9 @@ export const OptimizationPassRateCell = (
   context: CellContext<unknown, unknown>,
 ) => {
   const row = context.row.original as Optimization;
-  const isEvaluationSuite = (row.experiment_scores?.length ?? 0) > 0;
+  const isTestSuite = (row.experiment_scores?.length ?? 0) > 0;
 
-  if (!isEvaluationSuite) {
+  if (!isTestSuite) {
     return (
       <CellWrapper
         metadata={context.column.columnDef.meta}
@@ -49,9 +49,9 @@ export const OptimizationAccuracyCell = (
   context: CellContext<unknown, unknown>,
 ) => {
   const row = context.row.original as Optimization;
-  const isEvaluationSuite = (row.experiment_scores?.length ?? 0) > 0;
+  const isTestSuite = (row.experiment_scores?.length ?? 0) > 0;
 
-  if (isEvaluationSuite) {
+  if (isTestSuite) {
     return (
       <CellWrapper
         metadata={context.column.columnDef.meta}

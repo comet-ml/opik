@@ -12,7 +12,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import { Opik } from "@/index";
-import { AgentConfigManager } from "@/agent-config";
+import { ConfigManager } from "@/agent-config";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -245,17 +245,17 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
       const customGreeting = `custom-greeting-${Date.now()}`;
 
       // Create a blueprint with a default greeting
-      const manager = new AgentConfigManager(PROJECT_NAME, client);
+      const manager = new ConfigManager(PROJECT_NAME, client);
       await manager.createBlueprint({
         values: [
-          { key: "EchoConfig.greeting", value: "default-greeting", type: "string" },
+          { key: "greeting", value: "default-greeting", type: "string" },
         ],
       });
 
       // Create a mask that overrides the greeting
       const maskId = await manager.createMask({
         values: [
-          { key: "EchoConfig.greeting", value: customGreeting, type: "string" },
+          { key: "greeting", value: customGreeting, type: "string" },
         ],
       });
 

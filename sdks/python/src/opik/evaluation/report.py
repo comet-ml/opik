@@ -127,7 +127,7 @@ def display_experiment_link(experiment_url: str) -> None:
 def display_evaluation_in_progress(experiment_url: str) -> None:
     console_container = console.Console()
     console_container.print(
-        f"Running evaluation suite, results will be available in "
+        f"Running test suite, results will be available in "
         f"[bold cyan][link={experiment_url}]Opik dashboard[/link][/bold cyan]."
     )
 

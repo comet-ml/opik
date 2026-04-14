@@ -45,9 +45,9 @@ import AlertsRouteWrapper from "@/v1/pages/AlertsPage/AlertsRouteWrapper";
 import AlertEditPageGuard from "@/v1/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v1/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v1/pages/DashboardsPage/DashboardsPage";
-import EvaluationSuitesPage from "@/v1/pages/EvaluationSuitesPage/EvaluationSuitesPage";
-import EvaluationSuitePage from "@/v1/pages/EvaluationSuitePage/EvaluationSuitePage";
-import EvaluationSuiteItemsPage from "@/v1/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
+import TestSuitesPage from "@/v1/pages/TestSuitesPage/TestSuitesPage";
+import TestSuitePage from "@/v1/pages/TestSuitePage/TestSuitePage";
+import TestSuiteItemsPage from "@/v1/pages/TestSuiteItemsPage/TestSuiteItemsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -288,34 +288,34 @@ const trialRoute = createRoute({
   },
 });
 
-// ----------- evaluation suites
-const evaluationSuitesRoute = createRoute({
-  path: "/evaluation-suites",
+// ----------- test suites
+const testSuitesRoute = createRoute({
+  path: "/test-suites",
   getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Datasets",
   },
 });
 
-const evaluationSuitesListRoute = createRoute({
+const testSuitesListRoute = createRoute({
   path: "/",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitesPage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitesPage,
 });
 
-const evaluationSuiteRoute = createRoute({
+const testSuiteRoute = createRoute({
   path: "/$suiteId",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitePage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitePage,
   staticData: {
     param: "suiteId",
   },
 });
 
-const evaluationSuiteItemsRoute = createRoute({
+const testSuiteItemsRoute = createRoute({
   path: "/items",
-  getParentRoute: () => evaluationSuiteRoute,
-  component: EvaluationSuiteItemsPage,
+  getParentRoute: () => testSuiteRoute,
+  component: TestSuiteItemsPage,
 });
 
 // ----------- datasets (legacy redirects)
@@ -330,7 +330,7 @@ const datasetsListRoute = createRoute({
   getParentRoute: () => datasetsRoute,
   component: () => (
     <Navigate
-      to="/$workspaceName/evaluation-suites"
+      to="/$workspaceName/test-suites"
       params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
     />
   ),
@@ -348,7 +348,7 @@ const datasetRedirectRoute = createRoute({
     const { datasetId } = datasetRoute.useParams();
     return (
       <Navigate
-        to="/$workspaceName/evaluation-suites/$suiteId"
+        to="/$workspaceName/test-suites/$suiteId"
         params={{
           workspaceName: useAppStore.getState().activeWorkspaceName,
           suiteId: datasetId,
@@ -365,7 +365,7 @@ const datasetItemsRoute = createRoute({
     const { datasetId } = datasetRoute.useParams();
     return (
       <Navigate
-        to="/$workspaceName/evaluation-suites/$suiteId/items"
+        to="/$workspaceName/test-suites/$suiteId/items"
         params={{
           workspaceName: useAppStore.getState().activeWorkspaceName,
           suiteId: datasetId,
@@ -548,9 +548,9 @@ const routeTree = rootRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
       ]),
-      evaluationSuitesRoute.addChildren([
-        evaluationSuitesListRoute,
-        evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
+      testSuitesRoute.addChildren([
+        testSuitesListRoute,
+        testSuiteRoute.addChildren([testSuiteItemsRoute]),
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
