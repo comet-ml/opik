@@ -377,6 +377,7 @@ describe("OpikClient EvaluationSuite methods", () => {
 
       expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("my-suite");
+      expect(suite.description).toBe("My test suite");
       expect(createDatasetSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           name: "my-suite",
