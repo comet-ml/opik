@@ -338,9 +338,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
             custom_parameters={"reasoning_effort": self._reasoning_effort},
         )
 
-        # NOTE: No consumer reads these messages — every component uses its own
-        # hardcoded copy of the prompt. Included only to satisfy the config
-        # schema. Duplicated in: Python SDK (metric.py), TS SDK
+        # NOTE: For test suite evaluators, no consumer reads these messages —
+        # the backend replaces them with its own hardcoded copy. Included here
+        # because the shared LlmAsJudgeCode schema requires @NotNull messages.
+        # The prompt is duplicated in: Python SDK (metric.py), TS SDK
         # (llmJudgeTemplate.ts), FE (assertion-converters.ts), and BE
         # (TestSuitePromptConstants.java). See OPIK-5735.
         messages = [

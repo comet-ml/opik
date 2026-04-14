@@ -132,8 +132,8 @@ public class TestSuiteEvaluatorMapper {
      * test suite LLM judge prompts. Variables use {@code {"input": "input", "output": "output"}}
      * which map to the full trace input/output via the OnlineScoringEngine variable resolution.
      * <p>
-     * NOTE: No consumer reads the serialized messages — every component (including this one)
-     * uses its own hardcoded copy of the prompt. Duplicated in: Python SDK (metric.py),
+     * NOTE: For test suite evaluators, the serialized messages are discarded here and replaced
+     * with the hardcoded prompt. The prompt is duplicated in: Python SDK (metric.py),
      * TS SDK (llmJudgeTemplate.ts), FE (assertion-converters.ts), and BE
      * (TestSuitePromptConstants.java). See OPIK-5735.
      */
