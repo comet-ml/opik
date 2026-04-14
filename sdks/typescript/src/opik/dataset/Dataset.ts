@@ -33,7 +33,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
 
   private idToHash: Map<string, string> = new Map();
   private hashes: Set<string> = new Set();
-  private cachedItemsCount: number | undefined | null = null;
+  private cachedItemsCount: number | undefined;
 
   /**
    * Configuration object for creating a new Dataset instance.
@@ -90,7 +90,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       throw error;
     }
 
-    this.cachedItemsCount = null;
+    this.cachedItemsCount = undefined;
   }
 
   /**
@@ -148,7 +148,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       }
     }
 
-    this.cachedItemsCount = null;
+    this.cachedItemsCount = undefined;
   }
 
   /**
@@ -186,7 +186,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * @returns The item count, or undefined if not available
    */
   public async getItemsCount(): Promise<number | undefined> {
-    if (this.cachedItemsCount === null) {
+    if (this.cachedItemsCount === undefined) {
       const datasetInfo = await this.opik.api.datasets.getDatasetByIdentifier({
         datasetName: this.name,
         projectName: this.projectName,
