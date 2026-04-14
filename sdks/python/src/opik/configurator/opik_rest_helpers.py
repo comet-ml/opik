@@ -114,36 +114,15 @@ def get_most_recent_project_name(
     api_key: Optional[str],
     workspace: Optional[str],
     api_url: str,
-    base_url: Optional[str] = None,
 ) -> Optional[str]:
     """
     Fetches the most recently created project name.
     Returns None if no projects are found or if the request fails.
-
-    Tries api_url first (e.g. http://host/api/), then falls back to
-    base_url directly (e.g. http://host/) for direct backend connections.
     """
-    urls_to_try = [api_url]
-    if base_url and base_url != api_url:
-        urls_to_try.append(base_url)
-
-    for url in urls_to_try:
-        result = _try_fetch_most_recent_project(api_key, workspace, url)
-        if result is not None:
-            return result
-
-    return None
-
-
-def _try_fetch_most_recent_project(
-    api_key: Optional[str],
-    workspace: Optional[str],
-    url: str,
-) -> Optional[str]:
     try:
         with _get_httpx_client(api_key=api_key, workspace=workspace) as client:
             response = client.get(
-                url=f"{url}v1/private/projects",
+                url=f"{api_url}v1/private/projects",
                 params={
                     "page": 1,
                     "size": 1,
@@ -160,5 +139,5 @@ def _try_fetch_most_recent_project(
 
         return None
     except Exception:
-        LOGGER.debug("Failed to fetch projects from %s", url, exc_info=True)
+        LOGGER.debug("Failed to fetch projects from %s", api_url, exc_info=True)
         return None

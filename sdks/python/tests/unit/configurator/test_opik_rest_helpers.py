@@ -237,32 +237,6 @@ class TestGetMostRecentProjectName:
         )
         assert result is None
 
-    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
-    def test_falls_back_to_base_url_on_api_url_failure(self, mock_httpx_client):
-        """When api_url returns 404, falls back to base_url (direct backend)."""
-        mock_client_instance = MagicMock()
-
-        mock_404 = Mock()
-        mock_404.status_code = 404
-
-        mock_200 = Mock()
-        mock_200.status_code = 200
-        mock_200.json.return_value = {"content": [{"name": "My Agent"}]}
-
-        mock_client_instance.__enter__.return_value = mock_client_instance
-        mock_client_instance.__exit__.return_value = False
-        mock_client_instance.get.side_effect = [mock_404, mock_200]
-        mock_httpx_client.return_value = mock_client_instance
-
-        result = opik_rest_helpers.get_most_recent_project_name(
-            api_key=None,
-            workspace="default",
-            api_url="http://localhost:8080/api/",
-            base_url="http://localhost:8080/",
-        )
-        assert result == "My Agent"
-        assert mock_client_instance.get.call_count == 2
-
 
 class TestIsApiKeyCorrect:
     @pytest.mark.parametrize(

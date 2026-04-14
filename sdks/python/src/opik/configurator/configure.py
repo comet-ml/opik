@@ -463,16 +463,15 @@ class OpikConfigurator:
         Tries to fetch the most recently created project from the API,
         falling back to the hardcoded default if the API call fails.
         """
-        api_url = self._get_api_url()
         recent_project = opik_rest_helpers.get_most_recent_project_name(
             api_key=self.api_key,
             workspace=self.workspace,
-            api_url=api_url,
-            base_url=url_helpers.ensure_ending_slash(self.base_url),
+            api_url=self.api_url,
         )
         return recent_project or config.OPIK_PROJECT_DEFAULT_NAME
 
-    def _get_api_url(self) -> str:
+    @property
+    def api_url(self) -> str:
         if not self.use_local:
             return urllib.parse.urljoin(self.base_url, "opik/api/")
         else:
@@ -494,7 +493,7 @@ class OpikConfigurator:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
         try:
-            url = self._get_api_url()
+            url = self.api_url
 
             if save_to_file:
                 new_config = opik.config.OpikConfig(
