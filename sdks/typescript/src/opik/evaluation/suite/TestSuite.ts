@@ -17,7 +17,6 @@ import {
 } from "./suiteHelpers";
 import type { EvaluatorItemLike } from "./suiteHelpers";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
-import type { Prompt } from "@/prompt/Prompt";
 import { generateId } from "@/utils/generateId";
 
 export interface AddItemOptions {
