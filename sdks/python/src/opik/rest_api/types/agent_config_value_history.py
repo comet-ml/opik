@@ -8,14 +8,10 @@ from .agent_config_value_history_type import AgentConfigValueHistoryType
 
 
 class AgentConfigValueHistory(UniversalBaseModel):
-    id: typing.Optional[str] = None
-    project_id: typing.Optional[str] = None
     key: str
     value: typing.Optional[str] = None
     type: AgentConfigValueHistoryType
     description: typing.Optional[str] = None
-    valid_from_blueprint_id: typing.Optional[str] = None
-    valid_to_blueprint_id: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
