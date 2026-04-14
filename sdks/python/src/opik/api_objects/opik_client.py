@@ -2005,6 +2005,12 @@ class Opik:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
             ApiError: If there is an error during the creation of the prompt.
         """
+        from opik.validation.chat_prompt_messages import ChatPromptMessagesValidator
+
+        validator = ChatPromptMessagesValidator(messages)
+        validator.validate()
+        validator.raise_if_validation_failed()
+
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
         messages_str = json.dumps(messages)
