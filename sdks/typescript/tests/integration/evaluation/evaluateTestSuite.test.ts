@@ -411,8 +411,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
         await suite.addItem(
@@ -467,8 +467,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
         await suite.addItem(
@@ -526,7 +526,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
         await suite.addItem(
@@ -574,8 +574,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         const suite = await TestSuite.create(client, {
           name: suiteName,
-          assertions: ["Response is helpful"],
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
         await suite.addItem(
