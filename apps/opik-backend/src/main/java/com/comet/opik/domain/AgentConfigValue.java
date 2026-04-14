@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -16,29 +15,20 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
-import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentConfigValue(
         @JsonView( {
-                AgentConfig.View.Public.class,
-                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        @JsonView({AgentConfig.View.Public.class,
-                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
-        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
+                AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) String value,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotNull ValueType type,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
-                AgentConfig.View.Write.class}) String description,
-        @JsonView({AgentConfig.View.Public.class,
-                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validFromBlueprintId,
-        @JsonView({AgentConfig.View.Public.class,
-                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validToBlueprintId){
+                AgentConfig.View.Write.class}) String description){
 
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
