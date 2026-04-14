@@ -760,4 +760,16 @@ describe("TestSuite", () => {
       );
     });
   });
+
+  describe("clear", () => {
+    it("should call dataset.clear to delete all items", async () => {
+      const clearSpy = vi
+        .spyOn(testDataset, "clear")
+        .mockResolvedValue(undefined);
+
+      await suite.clear();
+
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

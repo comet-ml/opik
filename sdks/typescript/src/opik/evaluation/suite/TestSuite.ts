@@ -369,4 +369,11 @@ export class TestSuite {
   async deleteItems(itemIds: string[]): Promise<void> {
     await this.dataset.delete(itemIds);
   }
+
+  /**
+   * Deletes all items from the test suite.
+   */
+  async clear(): Promise<void> {
+    await this.dataset.clear();
+  }
 }
