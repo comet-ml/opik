@@ -1147,7 +1147,19 @@ describe("TestSuite", () => {
   });
 
   describe("updateItems", () => {
-    it("should update items via dataset.update", async () => {
+    const createMockRawItem = (id: string, data: Record<string, unknown>) => {
+      const item = new DatasetItem({ id, ...data });
+      return item;
+    };
+
+    beforeEach(() => {
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([
+        createMockRawItem("item-1", { input: "original", expected: "original_output" }),
+        createMockRawItem("item-2", { input: "original2", metadata: { source: "test" } }),
+      ]);
+    });
+
+    it("should update items via dataset.update with merged data", async () => {
       const updateSpy = vi
         .spyOn(testDataset, "update")
         .mockResolvedValue(undefined);
@@ -1161,11 +1173,13 @@ describe("TestSuite", () => {
       const updatedItems = updateSpy.mock.calls[0][0] as unknown[];
       expect(updatedItems).toHaveLength(2);
       expect(updatedItems[0]).toEqual(
-        expect.objectContaining({ id: "item-1", input: "updated" })
+        expect.objectContaining({ id: "item-1", input: "updated", expected: "original_output" })
       );
       expect(updatedItems[1]).toEqual(
         expect.objectContaining({
           id: "item-2",
+          input: "original2",
+          metadata: { source: "test" },
           evaluators: [
             expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
           ],
@@ -1202,9 +1216,18 @@ describe("TestSuite", () => {
         expect.objectContaining({
           id: "item-1",
           input: "test",
+          expected: "original_output",
           executionPolicy: { runsPerItem: 3, passThreshold: 2 },
         })
       );
+    });
+
+    it("should throw error when item to update is not found", async () => {
+      vi.spyOn(testDataset, "update").mockResolvedValue(undefined);
+
+      await expect(
+        suite.updateItems([{ id: "non-existent-id", data: { foo: "bar" } }])
+      ).rejects.toThrow('Item with id "non-existent-id" not found in the test suite');
     });
   });
 

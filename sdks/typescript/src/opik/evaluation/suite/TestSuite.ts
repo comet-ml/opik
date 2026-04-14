@@ -229,19 +229,46 @@ export class TestSuite {
   }
 
   /**
-   * Updates a list of items in the dataset with the provided data.
+   * Updates existing items in the test suite. All provided fields are merged with
+   * existing item data - only the fields you specify will be updated, preserving
+   * all other existing values.
    *
-   * @param {UpdateTestSuiteItem[]} items - An array of items to update, where each item contains data, assertions, description, and execution policies.
-   * @return {Promise<void>} A promise that resolves when the update operation is complete.
+   * @param items - Array of items to update. Each item must have an `id` to identify
+   *                the existing item. Only the provided fields (data, assertions,
+   *                description, executionPolicy) will be updated; omitted fields
+   *                retain their current values.
+   * @throws Error if an item with the specified ID is not found
    */
   async updateItems(items: UpdateTestSuiteItem[]): Promise<void> {
     if (!items || items.length === 0) {
       return;
     }
 
-    const datasetItems: DatasetItemData[] = items.map((item) =>
-      prepareDatasetItemData({ ...item.data, id: item.id }, { assertions: item.assertions, description: item.description, executionPolicy: item.executionPolicy })
+    const existingItems = await this.dataset.getRawItems();
+    const existingById = new Map(
+      existingItems.map((item) => [item.id, item])
     );
+
+    const datasetItems: DatasetItemData[] = items.map((updateItem) => {
+      const existing = existingById.get(updateItem.id);
+      if (!existing) {
+        throw new Error(`Item with id "${updateItem.id}" not found in the test suite`);
+      }
+
+      const existingContent = existing.getContent(false) as Record<string, unknown>;
+
+      const mergedData: Record<string, unknown> = {
+        ...existingContent,
+        ...(updateItem.data && { ...updateItem.data }),
+        id: updateItem.id,
+      };
+
+      return prepareDatasetItemData(mergedData, {
+        assertions: updateItem.assertions,
+        description: updateItem.description,
+        executionPolicy: updateItem.executionPolicy,
+      });
+    });
 
     await this.dataset.update(datasetItems);
   }
