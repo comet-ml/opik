@@ -78,11 +78,16 @@ public class TraceThreadListener {
                             ? lastUpdatedAt
                             : existing.maxLastUpdatedAt();
 
-                    // Preserve the source from the first trace seen for this thread.
+                    // Track the source from the chronologically earliest trace (matching firstTraceId).
                     // In practice traces in a thread originate from the same source, but this is not enforced.
+                    var earliestSource = traceId.compareTo(existing.firstTraceId()) < 0
+                            ? trace.source()
+                            : existing.firstTraceSource();
+
                     return existing.toBuilder()
                             .firstTraceId(minTraceId)
                             .maxLastUpdatedAt(maxLastUpdatedAt)
+                            .firstTraceSource(earliestSource)
                             .build();
                 });
             }
