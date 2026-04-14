@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import isUndefined from "lodash/isUndefined";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
@@ -45,11 +45,22 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
 
   const showScoresTab = memorizedExperiments.length > 0 && !isTestSuite;
 
+  const availableTabs = useMemo(() => {
+    const tabs = new Set(["items", "config"]);
+    if (!isTestSuite) tabs.add("insights");
+    if (showScoresTab) tabs.add("scores");
+    return tabs;
+  }, [isTestSuite, showScoresTab]);
+
+  const effectiveTab = availableTabs.has(tab as string)
+    ? (tab as string)
+    : "items";
+
   const renderContent = () => {
     return (
       <Tabs
         defaultValue="items"
-        value={tab as string}
+        value={effectiveTab}
         onValueChange={setTab}
         className="min-w-min"
       >
