@@ -10,6 +10,10 @@ import {
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { Plus } from "lucide-react";
 
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyEvalSuitesLightUrl from "/images/empty-evaluation-suites-light.svg";
+import emptyEvalSuitesDarkUrl from "/images/empty-evaluation-suites-dark.svg";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
@@ -355,87 +359,105 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
     return <Loader />;
   }
 
+  const isEmpty = noData && datasets.length === 0;
+
   return (
-    <div className="pt-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-xs truncate break-words">
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">
           Evaluation suites
         </h1>
         {canCreateDatasets && (
           <Button variant="default" size="xs" onClick={handleNewSuiteClick}>
             <Plus className="mr-1 size-4" />
-            Create evaluation suite
+            Create suite
           </Button>
         )}
       </div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTERS_COLUMNS}
-            filters={filters}
-            onChange={setFilters}
-            config={filtersConfig as never}
-            layout="icon"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          {canDeleteDatasets && (
-            <>
-              <DatasetActionsPanel
-                datasets={selectedRows}
-                entityName="evaluation suites"
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyEvalSuitesLightUrl}
+          darkImageUrl={emptyEvalSuitesDarkUrl}
+          title="No evaluation suites yet"
+          description={
+            "Create set of test cases with expected outputs and scoring to help you compare\nand optimize your configurations."
+          }
+          primaryActionLabel="Create your first suite"
+          onPrimaryAction={handleNewSuiteClick}
+          docsUrl={buildDocsUrl("/evaluation/manage_datasets")}
+        />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTERS_COLUMNS}
+                filters={filters}
+                onChange={setFilters}
+                config={filtersConfig as never}
+                layout="icon"
               />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </>
-          )}
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={datasets}
-        onRowClick={handleRowClick}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && canCreateDatasets && (
-              <Button variant="link" onClick={handleNewSuiteClick}>
-                Create evaluation suite
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-        showLoadingOverlay={isPlaceholderData && isFetching}
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page}
-          pageChange={setPage}
-          size={size}
-          sizeChange={setSize}
-          total={total}
-        ></DataTablePagination>
-      </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {canDeleteDatasets && (
+                <>
+                  <DatasetActionsPanel
+                    datasets={selectedRows}
+                    entityName="evaluation suites"
+                  />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </>
+              )}
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              ></ColumnsButton>
+            </div>
+          </div>
+          <DataTable
+            columns={columns}
+            data={datasets}
+            onRowClick={handleRowClick}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={
+              <DataTableNoData title={noDataText}>
+                {noData && canCreateDatasets && (
+                  <Button variant="link" onClick={handleNewSuiteClick}>
+                    Create evaluation suite
+                  </Button>
+                )}
+              </DataTableNoData>
+            }
+            showLoadingOverlay={isPlaceholderData && isFetching}
+          />
+          <div className="py-4">
+            <DataTablePagination
+              page={page}
+              pageChange={setPage}
+              size={size}
+              sizeChange={setSize}
+              total={total}
+            ></DataTablePagination>
+          </div>
+        </>
+      )}
       <AddEvaluationSuiteSidebar
         open={openDialog}
         setOpen={setOpenDialog}

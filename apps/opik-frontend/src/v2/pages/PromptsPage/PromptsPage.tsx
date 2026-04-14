@@ -7,6 +7,10 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { PlusIcon } from "lucide-react";
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyPromptLibraryLightUrl from "/images/empty-prompt-library-light.svg";
+import emptyPromptLibraryDarkUrl from "/images/empty-prompt-library-dark.svg";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
@@ -336,10 +340,14 @@ const PromptsPage: React.FunctionComponent = () => {
     return <Loader />;
   }
 
+  const isEmpty = noData && prompts.length === 0;
+
   return (
-    <div className="pt-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-xs truncate break-words">Prompt library</h1>
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">
+          Prompt library
+        </h1>
         {canCreatePrompts && (
           <Button variant="default" size="xs" onClick={handleNewPromptClick}>
             <PlusIcon className="mr-1 size-4" />
@@ -347,70 +355,86 @@ const PromptsPage: React.FunctionComponent = () => {
           </Button>
         )}
       </div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          {canDeletePrompts && (
-            <>
-              <PromptsActionsPanel prompts={selectedRows} />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </>
-          )}
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          />
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={prompts}
-        onRowClick={handleRowClick}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && canCreatePrompts && (
-              <Button variant="link" onClick={handleNewPromptClick}>
-                Create prompt
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-        showLoadingOverlay={isPlaceholderData && isFetching}
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page}
-          pageChange={setPage}
-          size={size}
-          sizeChange={setSize}
-          total={total}
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyPromptLibraryLightUrl}
+          darkImageUrl={emptyPromptLibraryDarkUrl}
+          title="No prompts yet"
+          description={
+            "Create and manage prompts in one place.\nVersion them, improve and reuse, and keep your workflows consistent."
+          }
+          primaryActionLabel="Create your first prompt"
+          onPrimaryAction={handleNewPromptClick}
+          docsUrl={buildDocsUrl("/prompt_engineering/prompt_management")}
         />
-      </div>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {canDeletePrompts && (
+                <>
+                  <PromptsActionsPanel prompts={selectedRows} />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </>
+              )}
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              />
+            </div>
+          </div>
+          <DataTable
+            columns={columns}
+            data={prompts}
+            onRowClick={handleRowClick}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={
+              <DataTableNoData title={noDataText}>
+                {noData && canCreatePrompts && (
+                  <Button variant="link" onClick={handleNewPromptClick}>
+                    Create prompt
+                  </Button>
+                )}
+              </DataTableNoData>
+            }
+            showLoadingOverlay={isPlaceholderData && isFetching}
+          />
+          <div className="py-4">
+            <DataTablePagination
+              page={page}
+              pageChange={setPage}
+              size={size}
+              sizeChange={setSize}
+              total={total}
+            />
+          </div>
+        </>
+      )}
       <AddEditPromptDialog
         key={resetDialogKeyRef.current}
         open={openDialog}

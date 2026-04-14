@@ -14,6 +14,7 @@ import { Plus } from "lucide-react";
 import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
@@ -439,7 +440,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-4">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-xs truncate break-words">Projects</h1>
+        <h1 className="comet-body-accented truncate break-words">Projects</h1>
         {canCreateProjects && (
           <Button variant="default" size="xs" onClick={handleNewProjectClick}>
             <Plus className="mr-1 size-4" />
@@ -492,13 +493,17 @@ const ProjectsPage: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={canDeleteProjects ? DEFAULT_COLUMN_PINNING : undefined}
         noData={
-          <DataTableNoData title={noDataText}>
-            {noData && canCreateProjects && (
-              <Button variant="link" onClick={handleNewProjectClick}>
-                Create project
-              </Button>
-            )}
-          </DataTableNoData>
+          noData ? (
+            <DataTableNoData title={noDataText}>
+              {canCreateProjects && (
+                <Button variant="link" onClick={handleNewProjectClick}>
+                  Create project
+                </Button>
+              )}
+            </DataTableNoData>
+          ) : (
+            <DataTableNoMatchingData />
+          )
         }
         showLoadingOverlay={isPlaceholderData && isFetching}
       />

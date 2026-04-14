@@ -1,17 +1,15 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Book,
   Check,
   ChevronDown,
   Clock,
   FilePen,
   History,
-  Settings2,
   User,
 } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
-import { cn, buildDocsUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { getTimeFromNow } from "@/lib/date";
 import { generateBlueprintDescription } from "@/utils/agent-configurations";
 import Loader from "@/shared/Loader/Loader";
@@ -23,6 +21,7 @@ import AgentConfigurationDetailView from "./AgentConfigurationDetailView";
 import AgentConfigurationEditView from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AgentConfigTagList from "./AgentConfigTagList";
+import AgentConfigurationEmptyState from "@/v2/pages/AgentConfigurationPage/AgentConfigurationEmptyState";
 
 type HistoryPopoverProps = {
   items: ConfigHistoryItem[];
@@ -163,25 +162,13 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
 
   if (allRows.length === 0) {
     return (
-      <div className="flex w-full justify-center p-6">
-        <div className="flex w-full flex-col items-center rounded-md border px-6 py-14">
-          <Settings2 className="mb-3 size-4 text-light-slate" />
-          <h2 className="comet-title-xs">No agent configuration found</h2>
-          <p className="comet-body-s mt-2 text-center text-muted-slate">
-            This project doesn&apos;t include an agent configuration.
-            <br />
-            Configure your agent to track and edit prompts and parameters here.
-          </p>
-          <a
-            href={buildDocsUrl("/tracing/log_agents")}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-4 flex items-center gap-1.5 text-sm text-primary hover:underline"
-          >
-            <Book className="size-4" />
-            Learn how to configure your agent
-          </a>
+      <div className="flex min-h-full flex-col px-6 pt-4">
+        <div className="mb-1 flex min-h-7 items-center">
+          <h1 className="comet-body-accented truncate break-words">
+            Agent configuration
+          </h1>
         </div>
+        <AgentConfigurationEmptyState />
       </div>
     );
   }
@@ -205,8 +192,8 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
 
   return (
     <div className="flex flex-col lg:flex-row lg:gap-0">
-      <div className="mx-6 mt-4 flex flex-col gap-4 lg:hidden">
-        <h1 className="comet-title-xs">Agent configuration</h1>
+      <div className="mx-6 mt-5 flex flex-col gap-4 lg:hidden">
+        <h1 className="comet-body-accented">Agent configuration</h1>
         <HistoryPopover
           items={allRows}
           selectedIndex={selectedIndex}
@@ -215,8 +202,8 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
       </div>
 
       <div className="min-w-0 flex-1 [overflow-anchor:none] lg:w-[50vw]">
-        <div className="mx-6 mt-6 hidden lg:block">
-          <h1 className="comet-title-xs">Agent configuration</h1>
+        <div className="mx-6 mt-5 hidden lg:block">
+          <h1 className="comet-body-accented">Agent configuration</h1>
         </div>
 
         {selectedItem ? (
