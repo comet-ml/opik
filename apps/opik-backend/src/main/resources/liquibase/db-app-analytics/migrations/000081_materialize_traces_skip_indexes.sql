@@ -10,4 +10,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
     MATERIALIZE INDEX idx_traces_thread_id_bf;
 
---rollback -- no-op: MATERIALIZE INDEX cannot be rolled back; the index definition remains
+--rollback empty
