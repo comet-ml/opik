@@ -195,8 +195,9 @@ class TestRunPairing:
 
         return api
 
+    @patch("opik.cli.pairing.time.monotonic", return_value=0.0)
     @patch("opik.cli.pairing.time.sleep")
-    def test_run_pairing__happyflow__returns_result(self, mock_sleep):
+    def test_run_pairing__happyflow__returns_result(self, mock_sleep, mock_monotonic):
         api = self._make_api()
         result = run_pairing(
             api=api,
@@ -212,8 +213,11 @@ class TestRunPairing:
         assert result.project_id == self.PROJECT_ID
         assert len(result.bridge_key) == 32
 
+    @patch("opik.cli.pairing.time.monotonic", return_value=0.0)
     @patch("opik.cli.pairing.time.sleep")
-    def test_run_pairing__with_tui__calls_started_and_completed(self, mock_sleep):
+    def test_run_pairing__with_tui__calls_started_and_completed(
+        self, mock_sleep, mock_monotonic
+    ):
         api = self._make_api()
         tui = MagicMock()
 
@@ -229,8 +233,11 @@ class TestRunPairing:
         tui.pairing_started.assert_called_once()
         tui.pairing_completed.assert_called_once()
 
+    @patch("opik.cli.pairing.time.monotonic", return_value=0.0)
     @patch("opik.cli.pairing.time.sleep")
-    def test_run_pairing__404_during_poll__retries_until_connected(self, mock_sleep):
+    def test_run_pairing__404_during_poll__retries_until_connected(
+        self, mock_sleep, mock_monotonic
+    ):
         api = self._make_api()
         err = NotFoundError(body=None)
         runner = MagicMock()
@@ -285,9 +292,10 @@ class TestRunPairing:
 
         tui.pairing_failed.assert_called_once_with("timed out")
 
+    @patch("opik.cli.pairing.time.monotonic", return_value=0.0)
     @patch("opik.cli.pairing.time.sleep")
     def test_run_pairing__keyboard_interrupt__calls_tui_pairing_failed(
-        self, mock_sleep
+        self, mock_sleep, mock_monotonic
     ):
         api = self._make_api()
         api.runners.get_runner.side_effect = KeyboardInterrupt
@@ -305,8 +313,11 @@ class TestRunPairing:
 
         tui.pairing_failed.assert_called_once_with("interrupted")
 
+    @patch("opik.cli.pairing.time.monotonic", return_value=0.0)
     @patch("opik.cli.pairing.time.sleep")
-    def test_run_pairing__non_404_api_error__propagates(self, mock_sleep):
+    def test_run_pairing__non_404_api_error__propagates(
+        self, mock_sleep, mock_monotonic
+    ):
         from opik.rest_api.core.api_error import ApiError
 
         api = self._make_api()
