@@ -492,7 +492,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             )
             SELECT
                 :experiment_id as experiment_id,
-                toDecimal64(if(countIf(has_assertions) = 0, 0, sumIf(item_passed, has_assertions) / countIf(has_assertions)), 9) AS pass_rate,
+                toDecimal64(ifNull(sumIf(item_passed, has_assertions) / nullIf(toFloat64(countIf(has_assertions)), 0), 0), 9) AS pass_rate,
                 sumIf(item_passed, has_assertions) AS passed_count,
                 countIf(has_assertions) AS total_count
             FROM items
