@@ -601,4 +601,241 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
       60000
     );
   });
+
+  describe("Item-Level Updates", () => {
+    it(
+      "should update item assertions and verify they are persisted",
+      async () => {
+        const suiteName = `test-suite-update-assertions-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.addItem(
+          { input: "Explain gravity", expected: "A force" },
+          { assertions: ["Response is accurate"] }
+        );
+
+        await waitForSuiteItems(suite, 1);
+
+        const itemsBefore = await suite.getItems();
+        expect(itemsBefore).toHaveLength(1);
+        expect(itemsBefore[0].assertions).toContain("Response is accurate");
+
+        // Update the item's assertions
+        await suite.updateItemAssertions(itemsBefore[0].id, [
+          "Response is concise",
+          "Response is clear",
+        ]);
+
+        // Wait for the update to propagate
+        const updatedItems = await searchAndWaitForDone(
+          async () => {
+            const items = await suite.getItems();
+            const item = items.find((i) => i.data.input === "Explain gravity");
+            if (item && item.assertions.includes("Response is concise")) {
+              return items;
+            }
+            return [];
+          },
+          1,
+          WAIT_OPTIONS.timeout,
+          WAIT_OPTIONS.interval
+        );
+
+        const updatedItem = updatedItems.find(
+          (i) => i.data.input === "Explain gravity"
+        )!;
+        expect(updatedItem).toBeDefined();
+        expect(updatedItem.assertions).toHaveLength(2);
+        expect(updatedItem.assertions).toContain("Response is concise");
+        expect(updatedItem.assertions).toContain("Response is clear");
+        expect(updatedItem.assertions).not.toContain("Response is accurate");
+      },
+      60000
+    );
+
+    it(
+      "should update item execution policy and verify it is persisted",
+      async () => {
+        const suiteName = `test-suite-update-policy-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.addItem(
+          { input: "What is AI?", expected: "Artificial Intelligence" },
+          { executionPolicy: { runsPerItem: 2, passThreshold: 1 } }
+        );
+
+        await waitForSuiteItems(suite, 1);
+
+        const itemsBefore = await suite.getItems();
+        expect(itemsBefore).toHaveLength(1);
+        expect(itemsBefore[0].executionPolicy).toEqual({
+          runsPerItem: 2,
+          passThreshold: 1,
+        });
+
+        // Update the item's execution policy
+        await suite.updateItemExecutionPolicy(itemsBefore[0].id, {
+          runsPerItem: 5,
+          passThreshold: 3,
+        });
+
+        // Wait for the update to propagate
+        const updatedItems = await searchAndWaitForDone(
+          async () => {
+            const items = await suite.getItems();
+            const item = items.find((i) => i.data.input === "What is AI?");
+            if (item && item.executionPolicy.runsPerItem === 5) {
+              return items;
+            }
+            return [];
+          },
+          1,
+          WAIT_OPTIONS.timeout,
+          WAIT_OPTIONS.interval
+        );
+
+        const updatedItem = updatedItems.find(
+          (i) => i.data.input === "What is AI?"
+        )!;
+        expect(updatedItem).toBeDefined();
+        expect(updatedItem.executionPolicy).toEqual({
+          runsPerItem: 5,
+          passThreshold: 3,
+        });
+      },
+      60000
+    );
+
+    it(
+      "should clear item assertions by passing an empty array",
+      async () => {
+        const suiteName = `test-suite-clear-assertions-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.addItem(
+          { input: "Test input", expected: "Test output" },
+          { assertions: ["Response is correct"] }
+        );
+
+        await waitForSuiteItems(suite, 1);
+
+        const itemsBefore = await suite.getItems();
+        expect(itemsBefore[0].assertions).toHaveLength(1);
+
+        // Clear assertions by passing empty array
+        await suite.updateItemAssertions(itemsBefore[0].id, []);
+
+        // Wait for the update to propagate
+        const updatedItems = await searchAndWaitForDone(
+          async () => {
+            const items = await suite.getItems();
+            const item = items.find((i) => i.data.input === "Test input");
+            if (item && item.assertions.length === 0) {
+              return items;
+            }
+            return [];
+          },
+          1,
+          WAIT_OPTIONS.timeout,
+          WAIT_OPTIONS.interval
+        );
+
+        const updatedItem = updatedItems.find(
+          (i) => i.data.input === "Test input"
+        )!;
+        expect(updatedItem).toBeDefined();
+        expect(updatedItem.assertions).toHaveLength(0);
+      },
+      60000
+    );
+
+    it(
+      "should update both assertions and execution policy in a single updateItem call",
+      async () => {
+        const suiteName = `test-suite-update-item-combined-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.addItem(
+          { input: "Describe the sun", expected: "A star" },
+          {
+            assertions: ["Response is factual"],
+            executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+          }
+        );
+
+        await waitForSuiteItems(suite, 1);
+
+        const itemsBefore = await suite.getItems();
+        expect(itemsBefore).toHaveLength(1);
+        expect(itemsBefore[0].assertions).toContain("Response is factual");
+        expect(itemsBefore[0].executionPolicy).toEqual({
+          runsPerItem: 2,
+          passThreshold: 1,
+        });
+
+        // Update both assertions and execution policy in one call
+        await suite.updateItem(itemsBefore[0].id, {
+          assertions: ["Response is brief"],
+          executionPolicy: { runsPerItem: 4, passThreshold: 2 },
+        });
+
+        // Wait for the update to propagate
+        const updatedItems = await searchAndWaitForDone(
+          async () => {
+            const items = await suite.getItems();
+            const item = items.find(
+              (i) => i.data.input === "Describe the sun"
+            );
+            if (
+              item &&
+              item.assertions.includes("Response is brief") &&
+              item.executionPolicy.runsPerItem === 4
+            ) {
+              return items;
+            }
+            return [];
+          },
+          1,
+          WAIT_OPTIONS.timeout,
+          WAIT_OPTIONS.interval
+        );
+
+        const updatedItem = updatedItems.find(
+          (i) => i.data.input === "Describe the sun"
+        )!;
+        expect(updatedItem).toBeDefined();
+        expect(updatedItem.assertions).toHaveLength(1);
+        expect(updatedItem.assertions).toContain("Response is brief");
+        expect(updatedItem.assertions).not.toContain("Response is factual");
+        expect(updatedItem.executionPolicy).toEqual({
+          runsPerItem: 4,
+          passThreshold: 2,
+        });
+      },
+      60000
+    );
+  });
 });
