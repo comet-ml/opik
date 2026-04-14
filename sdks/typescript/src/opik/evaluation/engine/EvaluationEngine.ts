@@ -42,7 +42,7 @@ interface ProgressTracker {
  */
 export type EvaluationEngineOptions<T = Record<string, unknown>> =
   EvaluateOptions<T> & {
-    /** Explicit flag: engine runs in evaluation suite mode. */
+    /** Explicit flag: engine runs in test suite mode. */
     suiteMode?: boolean;
     /** Suite execution policy (runsPerItem, passThreshold). When omitted, behaves as standard evaluate. */
     executionPolicy?: Required<ExecutionPolicy>;

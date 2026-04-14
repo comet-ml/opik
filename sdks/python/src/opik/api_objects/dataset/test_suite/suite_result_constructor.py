@@ -1,7 +1,7 @@
 """
-Suite result construction logic for evaluation suites.
+Suite result construction logic for test suites.
 
-This module handles building EvaluationSuiteResult from raw evaluation results,
+This module handles building TestSuiteResult from raw evaluation results,
 including pass/fail determination based on execution policies.
 """
 
@@ -12,16 +12,16 @@ from opik.api_objects.dataset import dataset_item
 from opik.evaluation import evaluation_result, test_result
 
 from . import types as suite_types
-from .evaluation_suite_result import is_score_passed
+from .test_suite_result import is_score_passed
 
 
 def build_suite_result(
     eval_result: evaluation_result.EvaluationResult,
     suite_name: Optional[str] = None,
     total_time: Optional[float] = None,
-) -> suite_types.EvaluationSuiteResult:
+) -> suite_types.TestSuiteResult:
     """
-    Build an EvaluationSuiteResult from an EvaluationResult.
+    Build a TestSuiteResult from an EvaluationResult.
 
     Groups test results by dataset item and computes pass/fail status
     based on execution policies stored in each item.
@@ -35,7 +35,7 @@ def build_suite_result(
         eval_result: The raw evaluation result from the evaluation engine.
 
     Returns:
-        EvaluationSuiteResult with pass/fail status for each item and the suite.
+        TestSuiteResult with pass/fail status for each item and the suite.
     """
     results_by_item: Dict[str, List[test_result.TestResult]] = defaultdict(list)
     items_cache: Dict[str, Optional[dataset_item.DatasetItem]] = {}
@@ -59,6 +59,8 @@ def build_suite_result(
             if item.execution_policy.runs_per_item is not None:
                 configured_runs_per_item = item.execution_policy.runs_per_item
 
+        has_assertions = any(r.score_results for r in item_test_results)
+
         runs_passed = sum(
             1
             for r in item_test_results
@@ -73,6 +75,7 @@ def build_suite_result(
         item_results[item_id] = suite_types.ItemResult(
             dataset_item_id=item_id,
             passed=passed,
+            has_assertions=has_assertions,
             runs_passed=runs_passed,
             runs_total=len(item_test_results),
             configured_runs_per_item=configured_runs_per_item,
@@ -80,7 +83,7 @@ def build_suite_result(
             test_results=sorted(item_test_results, key=lambda r: r.trial_id),
         )
 
-    return suite_types.EvaluationSuiteResult(
+    return suite_types.TestSuiteResult(
         items_passed=items_passed,
         items_total=len(results_by_item),
         item_results=item_results,

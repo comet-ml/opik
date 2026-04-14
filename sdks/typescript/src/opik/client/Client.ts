@@ -638,7 +638,7 @@ export class OpikClient {
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
    * @param datasetVersionId Optional ID of the dataset version to link the experiment to
-   * @param evaluationMethod @internal Used by evaluation suites — not part of the public API
+   * @param evaluationMethod @internal Used by test suites — not part of the public API
    * @returns The created Experiment object
    */
   public createExperiment = async ({

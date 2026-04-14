@@ -1,4 +1,4 @@
-"""Console display for evaluation suite results."""
+"""Console display for test suite results."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from rich import align, console, panel, table, text
 
-from ..evaluation_suite_result import is_score_passed
+from ..test_suite_result import is_score_passed
 
 if TYPE_CHECKING:
-    from .. import evaluation_suite_result as _result_mod
+    from .. import test_suite_result as _result_mod
 
 
 def _format_time(seconds: float) -> str:
@@ -20,11 +20,11 @@ def _format_time(seconds: float) -> str:
 
 
 def display_suite_results(
-    suite_result: _result_mod.EvaluationSuiteResult,
+    suite_result: _result_mod.TestSuiteResult,
     verbose: int,
     report_path: Optional[str],
 ) -> None:
-    suite_name = suite_result.suite_name or "Evaluation Suite"
+    suite_name = suite_result.suite_name or "Test Suite"
     total_time = suite_result.total_time or 0.0
     experiment_url = suite_result.experiment_url
     test_results = [

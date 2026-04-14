@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MockInstance } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
-import { EvaluationSuite } from "@/evaluation/suite/EvaluationSuite";
+import { TestSuite } from "@/evaluation/suite/TestSuite";
 import { DatasetNotFoundError } from "@/dataset";
 import { OpikApiError } from "@/rest_api";
 import {
@@ -43,7 +43,7 @@ vi.mock("@/evaluation/suite_evaluators/validators", async (importOriginal) => {
   };
 });
 
-describe("EvaluationSuite static methods", () => {
+describe("TestSuite static methods", () => {
   let opikClient: OpikClient;
   let createDatasetSpy: MockInstance;
   let applyChangesSpy: MockInstance;
@@ -79,20 +79,20 @@ describe("EvaluationSuite static methods", () => {
     vi.restoreAllMocks();
   });
 
-  describe("EvaluationSuite.create", () => {
-    it("should create dataset with type evaluation_suite and return EvaluationSuite", async () => {
-      const suite = await EvaluationSuite.create(opikClient, {
+  describe("TestSuite.create", () => {
+    it("should create dataset with type evaluation_suite and return TestSuite", async () => {
+      const suite = await TestSuite.create(opikClient, {
         name: "my-suite",
-        description: "My evaluation suite",
+        description: "My test suite",
       });
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("my-suite");
-      expect(suite.description).toBe("My evaluation suite");
+      expect(suite.description).toBe("My test suite");
       expect(createDatasetSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           name: "my-suite",
-          description: "My evaluation suite",
+          description: "My test suite",
           type: "evaluation_suite",
         })
       );
@@ -101,13 +101,13 @@ describe("EvaluationSuite static methods", () => {
     });
 
     it("should create initial version when assertions are provided", async () => {
-      const suite = await EvaluationSuite.create(opikClient, {
+      const suite = await TestSuite.create(opikClient, {
         name: "my-suite",
         assertions: ["is accurate"],
         executionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(applyChangesSpy).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -126,13 +126,13 @@ describe("EvaluationSuite static methods", () => {
     });
 
     it("should create suite with assertions shorthand", async () => {
-      const suite = await EvaluationSuite.create(opikClient, {
+      const suite = await TestSuite.create(opikClient, {
         name: "my-suite",
         assertions: ["is accurate", "is concise"],
         executionPolicy: { runsPerItem: 2, passThreshold: 1 },
       });
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(applyChangesSpy).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -151,12 +151,12 @@ describe("EvaluationSuite static methods", () => {
     });
 
     it("should pass tags to createDataset", async () => {
-      const suite = await EvaluationSuite.create(opikClient, {
+      const suite = await TestSuite.create(opikClient, {
         name: "my-suite",
         tags: ["prod", "v2"],
       });
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(createDatasetSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           name: "my-suite",
@@ -167,7 +167,7 @@ describe("EvaluationSuite static methods", () => {
     });
   });
 
-  describe("EvaluationSuite.get", () => {
+  describe("TestSuite.get", () => {
     let syncHashesSpy: MockInstance;
 
     beforeEach(() => {
@@ -179,10 +179,10 @@ describe("EvaluationSuite static methods", () => {
         .mockResolvedValue(undefined);
     });
 
-    it("should fetch dataset by name and return EvaluationSuite", async () => {
-      const suite = await EvaluationSuite.get(opikClient, "test-suite");
+    it("should fetch dataset by name and return TestSuite", async () => {
+      const suite = await TestSuite.get(opikClient, "test-suite");
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("test-suite");
       expect(getDatasetByIdentifierSpy).toHaveBeenCalledWith({
         datasetName: "test-suite",
@@ -209,12 +209,12 @@ describe("EvaluationSuite static methods", () => {
       });
 
       await expect(
-        EvaluationSuite.get(opikClient, "nonexistent-suite")
+        TestSuite.get(opikClient, "nonexistent-suite")
       ).rejects.toThrow(DatasetNotFoundError);
     });
   });
 
-  describe("EvaluationSuite.getOrCreate", () => {
+  describe("TestSuite.getOrCreate", () => {
     beforeEach(() => {
       vi.spyOn(opikClient.datasetBatchQueue, "flush").mockResolvedValue(
         undefined
@@ -223,11 +223,11 @@ describe("EvaluationSuite static methods", () => {
     });
 
     it("should return existing suite when found", async () => {
-      const suite = await EvaluationSuite.getOrCreate(opikClient, {
+      const suite = await TestSuite.getOrCreate(opikClient, {
         name: "test-suite",
       });
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("test-suite");
       // Should not have created a new dataset
       expect(createDatasetSpy).not.toHaveBeenCalled();
@@ -235,17 +235,17 @@ describe("EvaluationSuite static methods", () => {
 
     it("should call update() when existing suite found and options have assertions/tags/executionPolicy", async () => {
       const updateSpy = vi
-        .spyOn(EvaluationSuite.prototype, "update")
+        .spyOn(TestSuite.prototype, "update")
         .mockResolvedValue(undefined);
 
-      const suite = await EvaluationSuite.getOrCreate(opikClient, {
+      const suite = await TestSuite.getOrCreate(opikClient, {
         name: "test-suite",
         assertions: ["is accurate"],
         tags: ["prod"],
         executionPolicy: { runsPerItem: 2, passThreshold: 1 },
       });
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("test-suite");
       expect(createDatasetSpy).not.toHaveBeenCalled();
       expect(updateSpy).toHaveBeenCalledWith({
@@ -272,12 +272,12 @@ describe("EvaluationSuite static methods", () => {
         });
       });
 
-      const suite = await EvaluationSuite.getOrCreate(opikClient, {
+      const suite = await TestSuite.getOrCreate(opikClient, {
         name: "new-suite",
         description: "New suite",
       });
 
-      expect(suite).toBeInstanceOf(EvaluationSuite);
+      expect(suite).toBeInstanceOf(TestSuite);
       expect(suite.name).toBe("new-suite");
       expect(createDatasetSpy).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -1,6 +1,6 @@
 import { EvaluationResult, EvaluationTestResult } from "../types";
 import {
-  EvaluationSuiteResult,
+  TestSuiteResult,
   ItemResult,
   DEFAULT_EXECUTION_POLICY,
 } from "./types";
@@ -57,7 +57,7 @@ function groupByTrialId(
 }
 
 /**
- * Builds an EvaluationSuiteResult from an EvaluationResult and execution policies.
+ * Builds a TestSuiteResult from an EvaluationResult and execution policies.
  *
  * Pass/fail logic (matching Python exactly):
  * - Group test results by datasetItemId
@@ -70,7 +70,7 @@ function groupByTrialId(
  */
 export function buildSuiteResult(
   evalResult: EvaluationResult
-): EvaluationSuiteResult {
+): TestSuiteResult {
   const itemGroups = groupByDatasetItemId(evalResult.testResults);
 
   const itemResults = new Map<string, ItemResult>();
