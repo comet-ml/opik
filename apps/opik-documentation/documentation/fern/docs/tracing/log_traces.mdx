@@ -719,7 +719,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
         - `output` (Dict[str, Any], optional): Output data for the trace
         - `tags` (List[str], optional): Tags to categorize the trace
         - `metadata` (Dict[str, Any], optional): Additional metadata
-        - `project_name` (str, optional): Project name (defaults to environment variable)
+        - `project_name` (str, optional): Project name (falls back to active project context, then client configuration)
         - `thread_id` (str, optional): Thread identifier for multi-threaded applications
         - `flush` (bool, optional): Whether to flush data immediately (default: False)
 
@@ -892,6 +892,37 @@ the trace to be logged to in a couple of ways:
             pass
         ```
 
+        When `@track(project_name="...")` is used, the decorator sets the project context for the duration of the function. Any nested `@track`-decorated functions or Opik client calls inside it will automatically inherit that project name:
+
+        ```python
+        from opik import track
+
+        @track(project_name="my-agent")
+        def agent(query):
+            context = retrieve(query)
+            return generate(context)
+
+        @track
+        def retrieve(query):
+            # Inherits project_name="my-agent" from the parent
+            ...
+
+        @track
+        def generate(context):
+            # Also inherits project_name="my-agent"
+            ...
+        ```
+
+        You can also use the `opik.project_context()` context manager to set the project name for all operations within a block:
+
+        ```python
+        import opik
+
+        with opik.project_context("my_project"):
+            # All traces, spans, and client operations here use "my_project"
+            my_agent(query)
+        ```
+
         If you are using the low level SDK, you can set the project as part of the `Opik` client constructor:
 
         ```python
@@ -899,6 +930,10 @@ the trace to be logged to in a couple of ways:
 
         client = Opik(project_name="my_project")
         ```
+
+        <Tip>
+            The Python SDK resolves project names in this order: explicit argument → active project context (`@track` or `opik.project_context()`) → client configuration (`OPIK_PROJECT_NAME` env var or config file) → `"Default Project"`. For full details, see [Project Name Resolution](/tracing/sdk_configuration#project-name-resolution).
+        </Tip>
     </Tab>
 
 </Tabs>
