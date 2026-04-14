@@ -123,15 +123,10 @@ async function deriveBridgeKey(
 // Activate + derive + store — runs once on mount
 // ---------------------------------------------------------------------------
 
-function extractWorkspaceFromPath(): string | null {
-  // Cloud URLs: /{workspace}/opik/pair/v1
-  // OSS URLs:   /opik/pair/v1
-  const match = window.location.pathname.match(/^\/([^/]+)\/opik\/pair\/v1/);
-  return match ? match[1] : null;
-}
-
 async function activate(payload: PairingPayload): Promise<void> {
-  const workspace = extractWorkspaceFromPath();
+  const workspace = new URLSearchParams(window.location.search).get(
+    "workspace",
+  );
   if (workspace) {
     api.defaults.headers.common["Comet-Workspace"] = workspace;
   }
