@@ -1,14 +1,25 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Loader2, Save } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { AGENT_CONFIGS_KEY } from "@/api/api";
+import { ConfigHistoryItem } from "@/types/agent-configs";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
+import { Button } from "@/ui/button";
+import { ToastAction } from "@/ui/toast";
+import { useToast } from "@/ui/use-toast";
+import useAppStore from "@/store/AppStore";
 import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import useAgentConfigCreateMutation from "@/api/agent-configs/useAgentConfigCreateMutation";
 import { LocalRunner } from "@/types/agent-sandbox";
 import AgentRunnerInputForm from "./AgentRunnerInputForm";
 import AgentConfigurationEditView, {
   AgentConfigurationEditViewHandle,
+  AgentConfigurationEditViewState,
 } from "@/v2/pages-shared/agent-configuration/AgentConfigurationEditView";
+import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/ExpandAllToggle";
+import { useFieldsCollapse } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 import { LoadableSelectBox } from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import { DropdownOption } from "@/types/shared";
 
@@ -31,10 +42,26 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
   isRunning,
   resetKey,
 }) => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const [activeTab, setActiveTab] = useState("input");
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
   const configEditRef = useRef<AgentConfigurationEditViewHandle>(null);
   const { mutateAsync: createConfigAsync } = useAgentConfigCreateMutation();
+
+  const [editState, setEditState] = useState<AgentConfigurationEditViewState>({
+    isDirty: false,
+    isSaving: false,
+    hasErrors: false,
+    collapsibleKeys: [],
+    hasExpandableFields: false,
+  });
+
+  const controller = useFieldsCollapse({
+    collapsibleKeys: editState.collapsibleKeys,
+  });
 
   const { data: configData } = useConfigHistoryListInfinite({ projectId });
 
@@ -87,6 +114,61 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
     [onRun, createConfigAsync, activeVersion],
   );
 
+  const handleSaveConfiguration = useCallback(async () => {
+    await configEditRef.current?.save();
+  }, []);
+
+  const queryClient = useQueryClient();
+
+  const resolveSavedVersionName = useCallback(
+    async (newBlueprintId?: string): Promise<string | undefined> => {
+      if (!newBlueprintId) return undefined;
+      const fromCurrent = allVersions.find((v) => v.id === newBlueprintId);
+      if (fromCurrent) return fromCurrent.name;
+      const queryKey = [AGENT_CONFIGS_KEY, "history", { projectId }];
+      await queryClient.refetchQueries({ queryKey });
+      type Page = { content: ConfigHistoryItem[] };
+      const data = queryClient.getQueryData<{ pages: Page[] }>(queryKey);
+      const found = data?.pages
+        ?.flatMap((p) => p.content)
+        ?.find((v) => v.id === newBlueprintId);
+      return found?.name;
+    },
+    [allVersions, queryClient, projectId],
+  );
+
+  const handleConfigSaved = useCallback(
+    async (newBlueprintId?: string) => {
+      setSelectedVersionId("");
+      const versionName = await resolveSavedVersionName(newBlueprintId);
+      const description = versionName
+        ? `You've created ${versionName} of agent configuration. You can deploy it from Agent configuration page.`
+        : "You've created a new version of agent configuration. You can deploy it from Agent configuration page.";
+      toast({
+        title: "New agent configuration saved",
+        description,
+        actions: [
+          <ToastAction
+            key="manage"
+            variant="link"
+            size="sm"
+            altText="Manage agent configuration"
+            onClick={() =>
+              navigate({
+                to: "/$workspaceName/projects/$projectId/agent-configuration",
+                params: { workspaceName, projectId },
+              })
+            }
+          >
+            Manage agent configuration
+            <ArrowRight className="ml-1 size-3.5" />
+          </ToastAction>,
+        ],
+      });
+    },
+    [toast, navigate, workspaceName, projectId, resolveSavedVersionName],
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Tabs
@@ -131,13 +213,8 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
           hidden={activeTab !== "configuration"}
         >
           {activeVersion ? (
-            <AgentConfigurationEditView
-              key={`${activeVersion.id}-${resetKey}`}
-              ref={configEditRef}
-              item={activeVersion}
-              projectId={projectId}
-              onSaved={() => setSelectedVersionId("")}
-              headerLeft={
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <LoadableSelectBox
                   value={selectedVersionId || activeVersion.id}
                   onChange={setSelectedVersionId}
@@ -152,8 +229,44 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
                     </div>
                   )}
                 />
-              }
-            />
+                {editState.isDirty && (
+                  <span className="comet-body-xs flex items-center gap-1 text-muted-slate">
+                    <span className="size-1.5 rounded-full bg-destructive" />
+                    Edited
+                  </span>
+                )}
+                <div className="ml-auto flex items-center gap-1">
+                  {editState.hasExpandableFields && (
+                    <ExpandAllToggle controller={controller} />
+                  )}
+                  <Button
+                    variant="outline"
+                    size="2xs"
+                    onClick={handleSaveConfiguration}
+                    disabled={
+                      editState.isSaving ||
+                      editState.hasErrors ||
+                      !editState.isDirty
+                    }
+                  >
+                    <Save className="mr-1 size-3.5" />
+                    {editState.isSaving ? "Saving…" : "Save configuration"}
+                    <ArrowUpRight className="ml-1 size-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              <AgentConfigurationEditView
+                key={`${activeVersion.id}-${resetKey}`}
+                ref={configEditRef}
+                item={activeVersion}
+                projectId={projectId}
+                onSaved={handleConfigSaved}
+                controller={controller}
+                onStateChange={setEditState}
+                blockNavigation={false}
+              />
+            </div>
           ) : (
             <div className="flex flex-col items-center py-8 text-muted-slate">
               <p className="comet-body-s">

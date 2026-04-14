@@ -10,7 +10,6 @@ import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
-import com.comet.opik.api.events.PromptVersionCreatedEvent;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
@@ -338,8 +337,7 @@ class PromptServiceImpl implements PromptService {
                     .build();
 
             var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
-            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId,
-                    createPromptVersion.excludeBlueprintUpdateForProjects());
+            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
 
             return savedPromptVersion;
         });
@@ -350,8 +348,7 @@ class PromptServiceImpl implements PromptService {
             // only retry if commit is not provided
             return handler.onErrorDo(() -> {
                 var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
-                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId,
-                        createPromptVersion.excludeBlueprintUpdateForProjects());
+                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
 
                 return savedPromptVersion;
             });
@@ -794,7 +791,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
-            String userName, UUID projectId, Set<UUID> excludeProjectIds) {
+            String userName, UUID projectId) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
@@ -802,14 +799,6 @@ class PromptServiceImpl implements PromptService {
                 .userName(userName)
                 .projectId(projectId)
                 .payload(promptVersion)
-                .build());
-
-        eventBus.post(PromptVersionCreatedEvent.builder()
-                .workspaceId(workspaceId)
-                .promptId(promptVersion.promptId())
-                .commit(promptVersion.commit())
-                .userName(userName)
-                .excludeProjectIds(excludeProjectIds)
                 .build());
     }
 

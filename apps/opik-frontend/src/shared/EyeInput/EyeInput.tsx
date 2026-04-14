@@ -26,13 +26,11 @@ const EyeInput = (props: EyeInputProps) => {
         className={cn(props.className, "pr-8")}
       />
       <Button
+        type="button"
         variant="ghost"
         size="icon"
         className="absolute right-0 top-1/2 -translate-y-1/2"
-        onClick={(e) => {
-          e.preventDefault();
-          setHidden((h) => !h);
-        }}
+        onClick={() => setHidden((h) => !h)}
         disabled={props.disabled}
       >
         <Icon className="size-4 text-light-slate" />

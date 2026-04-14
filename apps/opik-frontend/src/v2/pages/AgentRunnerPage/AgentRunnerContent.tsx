@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import { Pause, Play, RotateCcw, Unplug } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
@@ -11,12 +11,14 @@ import {
 } from "@/ui/resizable";
 import useSandboxCreateJobMutation from "@/api/agent-sandbox/useSandboxCreateJobMutation";
 import useSandboxJobStatus from "@/api/agent-sandbox/useSandboxJobStatus";
+import useDisconnectRunnerMutation from "@/api/agent-sandbox/useDisconnectRunnerMutation";
 import {
   RunnerConnectionStatus,
   SandboxJobStatus,
 } from "@/types/agent-sandbox";
 import useTraceById from "@/api/traces/useTraceById";
 import usePairingState from "@/hooks/usePairingState";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
@@ -43,7 +45,10 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   const agentName = pairing.runner?.agents?.[0]?.name ?? "";
   const isReady = isConnected && Boolean(agentName);
 
+  const { permissions } = usePermissions();
+  const { canConfigureWorkspaceSettings } = permissions;
   const createJobMutation = useSandboxCreateJobMutation();
+  const disconnectMutation = useDisconnectRunnerMutation();
 
   const { data: jobData } = useSandboxJobStatus({
     jobId: activeJobId ?? "",
@@ -180,6 +185,23 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
                 <RotateCcw className="mr-1 size-3.5" />
                 Reset
               </Button>
+              {canConfigureWorkspaceSettings && (
+                <TooltipWrapper content="Disconnect agent">
+                  <Button
+                    variant="outline"
+                    size="2xs"
+                    disabled={disconnectMutation.isPending}
+                    onClick={() => {
+                      if (pairing.runnerId) {
+                        disconnectMutation.mutate(pairing.runnerId);
+                      }
+                    }}
+                  >
+                    <Unplug className="mr-1 size-3.5" />
+                    Disconnect
+                  </Button>
+                </TooltipWrapper>
+              )}
             </>
           )}
         </div>

@@ -51,8 +51,7 @@ import {
   injectColumnCallback,
   migrateSelectedColumns,
 } from "@/lib/table";
-import { buildDocsUrl } from "@/lib/utils";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import Loader from "@/shared/Loader/Loader";
 import {
   buildDatasetFilterColumns,
@@ -70,7 +69,6 @@ import {
   useIsDraftMode,
   useIsAllItemsSelected,
   useSetIsAllItemsSelected,
-  useDeletedIds,
 } from "@/store/EvaluationSuiteDraftStore";
 
 const getRowId = (d: DatasetItem) => d.id;
@@ -211,7 +209,6 @@ function EvaluationSuiteItemsTab({
   );
 
   const isDraftMode = useIsDraftMode();
-  const deletedIds = useDeletedIds();
 
   const { data, isPending, isPlaceholderData, isFetching } =
     useEvaluationSuiteItemsWithDraft(
@@ -291,15 +288,6 @@ function EvaluationSuiteItemsTab({
   >(storageKeys.columnsWidthKey, {
     defaultValue: {},
   });
-
-  const itemLabel = isEvaluationSuite ? "suite items" : "dataset items";
-
-  const noDataText = useMemo(() => {
-    if (isDraftMode && deletedIds.size > 0 && totalCount !== deletedIds.size) {
-      return `All ${itemLabel} on this page have been deleted`;
-    }
-    return `There are no ${itemLabel} yet`;
-  }, [isDraftMode, deletedIds.size, totalCount, itemLabel]);
 
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {
@@ -627,20 +615,19 @@ function EvaluationSuiteItemsTab({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          <DataTableNoData title={noDataText}>
-            <Button variant="link">
-              <a
-                href={buildDocsUrl(
-                  "/evaluation/manage_datasets",
-                  "#insert-items",
-                )}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Check our documentation
-              </a>
-            </Button>
-          </DataTableNoData>
+          <DataTableEmptyContent
+            title={`No ${
+              isEvaluationSuite ? "evaluation suite" : "dataset"
+            } items yet`}
+            description="Add test cases to run evaluations and measure performance."
+          >
+            <button
+              onClick={() => setOpenCreatePanel(true)}
+              className="comet-body-s underline underline-offset-4 hover:text-primary"
+            >
+              Add new item
+            </button>
+          </DataTableEmptyContent>
         }
       />
       <div className="flex justify-end py-4">

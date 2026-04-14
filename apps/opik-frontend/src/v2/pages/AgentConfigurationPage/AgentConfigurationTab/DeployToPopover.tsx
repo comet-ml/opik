@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Check, Plus, Tags, Trash2, X } from "lucide-react";
+import { Check, CircleFadingArrowUp, Plus, Trash2, X } from "lucide-react";
 
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import useAgentConfigEnvsMutation from "@/api/agent-configs/useAgentConfigEnvsMutation";
@@ -145,8 +145,8 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button size="xs" variant="outline" onClick={resetAndOpen}>
-          <Tags className="mr-1.5 size-3.5 text-primary" />
-          Deploy to
+          <CircleFadingArrowUp className="mr-1.5 size-3.5 text-light-slate" />
+          Deploy to...
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-3">

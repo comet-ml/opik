@@ -43,24 +43,6 @@ vi.mock("@/evaluation/suite_evaluators/validators", async (importOriginal) => {
   };
 });
 
-vi.mock("@/evaluation/suite/evaluateTestSuite", () => ({
-  evaluateTestSuite: vi.fn().mockResolvedValue({
-    experimentId: "exp-1",
-    experimentName: "test-exp",
-    testResults: [
-      {
-        testCase: {
-          traceId: "trace-1",
-          datasetItemId: "item-1",
-          scoringInputs: {},
-          taskOutput: { output: "hello" },
-        },
-        scoreResults: [{ name: "quality", value: 1 }],
-        resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
-      },
-    ],
-  }),
-}));
 
 describe("TestSuite", () => {
   let opikClient: OpikClient;
@@ -219,174 +201,14 @@ describe("TestSuite", () => {
     });
   });
 
-  describe("run", () => {
-    it("should delegate to evaluateTestSuite and return TestSuiteResult", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-1",
-        experimentName: "test-exp",
-        testResults: [
-          {
-            testCase: {
-              traceId: "trace-1",
-              datasetItemId: "item-1",
-              scoringInputs: {},
-              taskOutput: { output: "hello" },
-            },
-            scoreResults: [{ name: "quality", value: 1 }],
-            resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
-          },
-        ],
-        errors: [],
-      });
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      const result = await suite.run(mockTask, {
-        experimentName: "test-experiment",
-      });
-
-      // Verify the result structure
-      expect(result).toEqual(
-        expect.objectContaining({
-          experimentId: "exp-1",
-          experimentName: "test-exp",
-          allItemsPassed: true,
-          itemsPassed: 1,
-          itemsTotal: 1,
-          passRate: 1.0,
-        })
-      );
-      expect(result.itemResults).toBeInstanceOf(Map);
-      expect(result.itemResults.has("item-1")).toBe(true);
-    });
-
-    it("should pass model option to evaluateTestSuite as evaluatorModel", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-2",
-        experimentName: "test-exp-2",
-        testResults: [],
-        errors: [],
-      });
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      await suite.run(mockTask, {
-        experimentName: "test-experiment",
-        model: "claude-sonnet-4",
-      });
-
-      expect(evaluateTestSuite).toHaveBeenCalledWith(
-        expect.objectContaining({ evaluatorModel: "claude-sonnet-4" })
-      );
-    });
-
-    it("should not call getVersionInfo separately (evaluateTestSuite handles everything)", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-2",
-        experimentName: "test-exp-2",
-        testResults: [
-          {
-            testCase: {
-              traceId: "trace-2",
-              datasetItemId: "item-2",
-              scoringInputs: {},
-              taskOutput: { output: "world" },
-            },
-            scoreResults: [{ name: "quality", value: 1 }],
-            resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
-          },
-        ],
-        errors: [],
-      });
-
-      const getVersionInfoSpy = vi
-        .spyOn(testDataset, "getVersionInfo")
-        .mockResolvedValue({
-          id: "v1",
-          executionPolicy: { runsPerItem: 1, passThreshold: 1 },
-        });
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      await suite.run(mockTask, { experimentName: "test-experiment" });
-
-      // getVersionInfo should NOT be called by run() since evaluateTestSuite handles everything
-      expect(getVersionInfoSpy).not.toHaveBeenCalled();
-    });
-
-    it("should pass explicit projectName to evaluateTestSuite", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-3",
-        experimentName: "test-exp-3",
-        testResults: [],
-        errors: [],
-      });
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      await suite.run(mockTask, {
-        experimentName: "test-experiment",
-        projectName: "explicit-project",
-      });
-
-      expect(evaluateTestSuite).toHaveBeenCalledWith(
-        expect.objectContaining({ projectName: "explicit-project" })
-      );
-    });
-
-    it("should fall back to dataset.projectName when run options omit projectName", async () => {
-      const { evaluateTestSuite } = await import(
-        "@/evaluation/suite/evaluateTestSuite"
-      );
-      vi.mocked(evaluateTestSuite).mockResolvedValue({
-        experimentId: "exp-4",
-        experimentName: "test-exp-4",
-        testResults: [],
-        errors: [],
-      });
-
-      const datasetWithProject = new Dataset(
-        {
-          id: "ds-with-project",
-          name: "test-suite-with-project",
-          projectName: "dataset-project",
-        },
-        opikClient
-      );
-      const suiteWithProject = new TestSuite(datasetWithProject, opikClient);
-
-      const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
-
-      await suiteWithProject.run(mockTask, {
-        experimentName: "test-experiment",
-      });
-
-      expect(evaluateTestSuite).toHaveBeenCalledWith(
-        expect.objectContaining({ projectName: "dataset-project" })
-      );
-    });
-  });
-
-  describe("getAssertions", () => {
+  describe("getGlobalAssertions", () => {
     it("should return empty array when versionInfo has no evaluators", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "v1",
         versionName: "v1",
       });
 
-      const assertions = await suite.getAssertions();
+      const assertions = await suite.getGlobalAssertions();
 
       expect(assertions).toEqual([]);
     });
@@ -394,7 +216,7 @@ describe("TestSuite", () => {
     it("should return empty array when versionInfo is undefined", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue(undefined);
 
-      const assertions = await suite.getAssertions();
+      const assertions = await suite.getGlobalAssertions();
 
       expect(assertions).toEqual([]);
     });
@@ -425,7 +247,7 @@ describe("TestSuite", () => {
         executionPolicy: { runsPerItem: 1, passThreshold: 1 },
       });
 
-      const assertions = await suite.getAssertions();
+      const assertions = await suite.getGlobalAssertions();
 
       expect(assertions).toEqual(["is correct", "is concise"]);
     });
@@ -450,7 +272,7 @@ describe("TestSuite", () => {
         ],
       });
 
-      const assertions = await suite.getAssertions();
+      const assertions = await suite.getGlobalAssertions();
 
       expect(Array.isArray(assertions)).toBe(true);
       for (const a of assertions) {
@@ -501,14 +323,14 @@ describe("TestSuite", () => {
     });
   });
 
-  describe("getExecutionPolicy", () => {
+  describe("getGlobalExecutionPolicy", () => {
     it("should resolve execution policy from versionInfo", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "v1",
         executionPolicy: { runsPerItem: 5, passThreshold: 3 },
       });
 
-      const policy = await suite.getExecutionPolicy();
+      const policy = await suite.getGlobalExecutionPolicy();
 
       expect(policy).toEqual({ runsPerItem: 5, passThreshold: 3 });
     });
@@ -516,7 +338,7 @@ describe("TestSuite", () => {
     it("should return default execution policy when versionInfo is undefined", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue(undefined);
 
-      const policy = await suite.getExecutionPolicy();
+      const policy = await suite.getGlobalExecutionPolicy();
 
       expect(policy).toEqual(DEFAULT_EXECUTION_POLICY);
     });
@@ -527,7 +349,7 @@ describe("TestSuite", () => {
         versionName: "v1",
       });
 
-      const policy = await suite.getExecutionPolicy();
+      const policy = await suite.getGlobalExecutionPolicy();
 
       expect(policy).toEqual(DEFAULT_EXECUTION_POLICY);
     });
@@ -645,7 +467,7 @@ describe("TestSuite", () => {
   });
 
   describe("update", () => {
-    it("should accept assertions and call applyDatasetItemChanges", async () => {
+    it("should accept globalAssertions and call applyDatasetItemChanges", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
         versionName: "v1",
@@ -664,8 +486,8 @@ describe("TestSuite", () => {
         );
 
       await suite.update({
-        assertions: ["is correct"],
-        executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        globalAssertions: ["is correct"],
+        globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });
 
       expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
@@ -683,7 +505,7 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial update with assertions only (no executionPolicy)", async () => {
+    it("should support partial update with globalAssertions only (no globalExecutionPolicy)", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
         versionName: "v1",
@@ -702,7 +524,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ assertions: ["is correct"] });
+      await suite.update({ globalAssertions: ["is correct"] });
 
       // Should use current executionPolicy from versionInfo as fallback
       expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
@@ -716,7 +538,7 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial update with executionPolicy only (no assertions)", async () => {
+    it("should support partial update with globalExecutionPolicy only (no globalAssertions)", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
         versionName: "v1",
@@ -735,7 +557,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ executionPolicy: { runsPerItem: 5, passThreshold: 3 } });
+      await suite.update({ globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 } });
 
       expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
         override: false,
@@ -778,9 +600,9 @@ describe("TestSuite", () => {
       expect(applyChangesSpy).not.toHaveBeenCalled();
     });
 
-    it("should throw when none of assertions, executionPolicy, or tags are provided", async () => {
+    it("should throw when none of globalAssertions, globalExecutionPolicy, or tags are provided", async () => {
       await expect(suite.update({})).rejects.toThrow(
-        "At least one of 'assertions', 'executionPolicy', or 'tags' must be provided."
+        "At least one of 'globalAssertions', 'globalExecutionPolicy', or 'tags' must be provided."
       );
     });
   });
@@ -804,7 +626,7 @@ describe("TestSuite", () => {
       ).rejects.toThrow("Test suite name must be a non-empty string");
     });
 
-    it("should call validateExecutionPolicy when executionPolicy is provided in create", async () => {
+    it("should call validateExecutionPolicy when globalExecutionPolicy is provided in create", async () => {
       vi.spyOn(opikClient.api.datasets, "createDataset").mockImplementation(
         () =>
           ({
@@ -825,7 +647,7 @@ describe("TestSuite", () => {
 
       await TestSuite.create(opikClient, {
         name: "valid-suite",
-        executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });
 
       expect(validateExecutionPolicy).toHaveBeenCalledWith(
@@ -866,8 +688,8 @@ describe("TestSuite", () => {
       );
 
       await suite.update({
-        assertions: ["is correct"],
-        executionPolicy: { runsPerItem: 5, passThreshold: 3 },
+        globalAssertions: ["is correct"],
+        globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
       });
 
       expect(validateExecutionPolicy).toHaveBeenCalledWith(

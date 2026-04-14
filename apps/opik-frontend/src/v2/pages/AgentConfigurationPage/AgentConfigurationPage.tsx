@@ -6,7 +6,7 @@ const AgentConfigurationPage = () => {
   const projectId = useActiveProjectId()!;
 
   return (
-    <PageBodyScrollContainer>
+    <PageBodyScrollContainer className="[scrollbar-gutter:stable]">
       <AgentConfigurationTab projectId={projectId} />
     </PageBodyScrollContainer>
   );

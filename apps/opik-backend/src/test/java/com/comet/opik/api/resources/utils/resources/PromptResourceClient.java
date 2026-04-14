@@ -207,16 +207,10 @@ public class PromptResourceClient {
     }
 
     public PromptVersion createPromptVersion(Prompt prompt, String apiKey, String workspaceName) {
-        return createPromptVersion(prompt, apiKey, workspaceName, null);
-    }
-
-    public PromptVersion createPromptVersion(Prompt prompt, String apiKey, String workspaceName,
-            Set<UUID> excludeBlueprintUpdateForProjects) {
 
         var request = CreatePromptVersion.builder()
                 .name(prompt.name())
                 .version(podamFactory.manufacturePojo(PromptVersion.class))
-                .excludeBlueprintUpdateForProjects(excludeBlueprintUpdateForProjects)
                 .build();
 
         try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")
