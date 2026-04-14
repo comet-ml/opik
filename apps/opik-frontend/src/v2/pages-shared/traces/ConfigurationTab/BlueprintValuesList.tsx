@@ -1,91 +1,72 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import React, { useMemo } from "react";
 
 import { BlueprintValue, BlueprintValueType } from "@/types/agent-configs";
 import { formatBlueprintValue } from "@/utils/agent-configurations";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  CustomAccordionTrigger,
-} from "@/ui/accordion";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "./BlueprintTypeIcon";
-import BlueprintValuePrompt from "./BlueprintValuePrompt";
+import BlueprintValuePromptCompact from "@/v2/pages-shared/agent-configuration/fields/BlueprintValuePromptCompact";
+import FieldSection from "@/v2/pages-shared/agent-configuration/fields/FieldSection";
+import CollapsibleBlock from "@/v2/pages-shared/agent-configuration/fields/CollapsibleBlock";
+import {
+  collectMultiLineKeys,
+  isMultiLineField,
+} from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
+import {
+  FieldsCollapseController,
+  useFieldsCollapse,
+} from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 
-const renderValue = (v: BlueprintValue) => {
-  if (v.type === BlueprintValueType.PROMPT) {
-    return <BlueprintValuePrompt key={v.value} value={v} />;
-  }
-
-  return (
-    <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
-      {formatBlueprintValue(v)}
-    </div>
-  );
-};
-
-export const useBlueprintCollapse = (values: BlueprintValue[]) => {
-  const allKeys = useMemo(() => values.map((v) => v.key), [values]);
-  const [openItems, setOpenItems] = useState<string[]>(allKeys);
-
-  useEffect(() => {
-    setOpenItems(allKeys);
-  }, [allKeys]);
-
-  const allExpanded = openItems.length === allKeys.length;
-  const toggleAll = () => setOpenItems(allExpanded ? [] : allKeys);
-
-  return { openItems, setOpenItems, allExpanded, toggleAll };
-};
+const renderScalarValue = (v: BlueprintValue) => (
+  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+    {formatBlueprintValue(v)}
+  </div>
+);
 
 type BlueprintValuesListProps = {
   values: BlueprintValue[];
-  openItems?: string[];
-  onOpenItemsChange?: (items: string[]) => void;
+  controller?: FieldsCollapseController;
 };
 
 const BlueprintValuesList: React.FC<BlueprintValuesListProps> = ({
   values,
-  openItems,
-  onOpenItemsChange,
+  controller: externalController,
 }) => {
-  const allKeys = useMemo(() => values.map((v) => v.key), [values]);
-  const [internalOpen, setInternalOpen] = useState<string[]>(allKeys);
-  const controlled = openItems !== undefined;
-
-  useEffect(() => {
-    if (!controlled) setInternalOpen(allKeys);
-  }, [allKeys, controlled]);
+  const collapsibleKeys = useMemo(() => collectMultiLineKeys(values), [values]);
+  const internalController = useFieldsCollapse({ collapsibleKeys });
+  const controller = externalController ?? internalController;
 
   return (
-    <Accordion
-      type="multiple"
-      value={controlled ? openItems : internalOpen}
-      onValueChange={controlled ? onOpenItemsChange : setInternalOpen}
-    >
-      {values.map((v) => (
-        <AccordionItem key={v.key} value={v.key} className="border-b py-1">
-          <CustomAccordionTrigger className="group/trigger flex items-center gap-2 py-3">
-            <ChevronDown className="size-4 shrink-0 -rotate-90 text-light-slate transition-transform duration-200 group-data-[state=open]/trigger:rotate-0" />
-            <BlueprintTypeIcon type={v.type} />
-            <span className="comet-body-s-accented text-foreground">
-              {v.key}
-            </span>
-          </CustomAccordionTrigger>
-          <AccordionContent className="pb-3">
-            {v.description && (
-              <TooltipWrapper content={v.description}>
-                <span className="comet-body-xs mb-2 block w-fit max-w-full truncate text-light-slate">
-                  {v.description}
-                </span>
-              </TooltipWrapper>
+    <div className="flex flex-col gap-4">
+      {values.map((v) => {
+        const isPrompt = v.type === BlueprintValueType.PROMPT;
+        const collapsible = !isPrompt && isMultiLineField(v);
+        return (
+          <FieldSection
+            key={v.key}
+            label={v.key}
+            description={v.description}
+            icon={<BlueprintTypeIcon type={v.type} />}
+            testId={`field-section-${v.key}`}
+          >
+            {isPrompt ? (
+              <BlueprintValuePromptCompact
+                key={v.value}
+                value={v}
+                controller={controller}
+              />
+            ) : (
+              <CollapsibleBlock
+                collapsible={collapsible}
+                expanded={controller.isExpanded(v.key)}
+                onToggle={() => controller.toggle(v.key)}
+                testId={`field-block-${v.key}`}
+              >
+                {renderScalarValue(v)}
+              </CollapsibleBlock>
             )}
-            <div className="overflow-hidden">{renderValue(v)}</div>
-          </AccordionContent>
-        </AccordionItem>
-      ))}
-    </Accordion>
+          </FieldSection>
+        );
+      })}
+    </div>
   );
 };
 

@@ -37,10 +37,22 @@ const makeRow = (
 
 describe("getStatusFromExperimentItems", () => {
   describe("no items", () => {
-    it("returns undefined status when experiment_items is empty", () => {
+    it("returns SKIPPED with 'no experiment item' reason when experiment_items is empty", () => {
       const result = getStatusFromExperimentItems(makeRow());
-      expect(result.status).toBeUndefined();
+      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.skippedReason).toBe("No experiment item defined");
       expect(result.totalCount).toBe(0);
+    });
+  });
+
+  describe("items without assertions", () => {
+    it("returns SKIPPED with 'no assertions' reason when items have no status", () => {
+      const row = makeRow({
+        experiment_items: [makeItem({ id: "i1" })],
+      });
+      const result = getStatusFromExperimentItems(row);
+      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.skippedReason).toBe("No assertions defined");
     });
   });
 
@@ -124,11 +136,21 @@ describe("getStatusFromExperimentItems", () => {
 
 describe("getStatusInfoForExperiment", () => {
   describe("no item", () => {
-    it("returns undefined status when item is undefined", () => {
+    it("returns SKIPPED with 'no experiment item' reason when item is undefined", () => {
       const result = getStatusInfoForExperiment(makeRow(), "exp-1", undefined);
-      expect(result.status).toBeUndefined();
+      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.skippedReason).toBe("No experiment item defined");
       expect(result.passedCount).toBe(0);
       expect(result.totalCount).toBe(0);
+    });
+  });
+
+  describe("item without assertions", () => {
+    it("returns SKIPPED with 'no assertions' reason when item has no status", () => {
+      const item = makeItem({ id: "i1" });
+      const result = getStatusInfoForExperiment(makeRow(), "exp-1", item);
+      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.skippedReason).toBe("No assertions defined");
     });
   });
 

@@ -2,7 +2,7 @@ import boto3
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.bedrock import track_bedrock  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 bedrock = boto3.client(
     service_name="bedrock-runtime",

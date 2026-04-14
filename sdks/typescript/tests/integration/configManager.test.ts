@@ -159,28 +159,6 @@ describe.skipIf(!shouldRunApiTests)(
       const resolvedVersion = created.get("pinnedVersion") as PromptVersion;
       expect(resolvedVersion.id).toBe(versionIdV1);
       expect(resolvedVersion.commit).toBe(commitV1);
-
-      // Create v2 of the same prompt
-      const promptV2 = await client.createPrompt({
-        name: promptName,
-        prompt: "Hello v2",
-      });
-      expect(promptV2.versionId).not.toBe(versionIdV1);
-      const commitV2 = promptV2.commit!;
-
-      // Re-fetch the latest blueprint
-      const fetched = await manager.getBlueprint();
-      expect(fetched).not.toBeNull();
-
-      // New prompt is reflected
-      const fetchedPrompt = fetched!.get("systemPrompt") as Prompt;
-      expect(fetchedPrompt.commit).not.toBe(commitV1);
-      expect(fetchedPrompt.commit).toBe(commitV2);
-
-      // Pinned version stays pinned
-      const fetchedVersion = fetched!.get("pinnedVersion") as PromptVersion;
-      expect(fetchedVersion.id).toBe(versionIdV1);
-      expect(fetchedVersion.commit).toBe(commitV1);
     });
 
     it("should return null for nonexistent blueprint ID", async () => {

@@ -9,7 +9,7 @@ from llama_index.core import (
 )
 from opik import configure  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 set_global_handler("opik")  # HIGHLIGHTED_LINE
 opik_callback_handler = global_handler  # HIGHLIGHTED_LINE

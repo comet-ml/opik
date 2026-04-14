@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional
+from typing import Annotated, Optional
 
 import pytest
 import opik
@@ -36,66 +36,96 @@ def project_name(opik_client: opik.Opik):
         pass
 
 
-def test_get_or_create_and_create_config__happyflow(
+def test_multi_class_publishes_store_only_sent_values__happyflow(
     opik_client: opik.Opik,
     project_name: str,
 ):
-    """Core lifecycle: get_or_create_config auto-creates from fallback, then
-    create_config writes a new version, then set_config_env tags it, then
-    get_or_create_config retrieves by env / version."""
+    """Each published blueprint stores only the values that were sent — no carry-forward."""
+
+    class ConfigA(opik.Config):
+        temperature: float
+        model: str
+
+    class ConfigB(opik.Config):
+        retries: int
+
+    opik_client.create_config(
+        ConfigA(temperature=0.5, model="gpt-4"), project_name=project_name
+    )
+    opik_client.create_config(ConfigB(retries=3), project_name=project_name)
+
+    manager = ConfigManager(
+        project_name=project_name,
+        rest_client_=opik_client.rest_client,
+    )
+    latest = manager.get_blueprint()
+    assert latest is not None
+    assert sorted(latest.keys()) == ["retries"]
+
+    project_id = opik_client.rest_client.projects.retrieve_project(name=project_name).id
+    history = opik_client.rest_client.agent_configs.get_blueprint_history(
+        project_id=project_id
+    ).content
+    assert len(history) == 2
+
+
+def test_publish_version_and_retrieve__happyflow(
+    opik_client: opik.Opik,
+    project_name: str,
+):
+    """Core lifecycle: publish, dedup, new version, get by latest / version name / env."""
 
     class MyConfig(opik.Config):
-        temperature: float
+        temperature: Annotated[float, "Sampling temperature"]
         model: str
         hint: Optional[str]
 
-    # First get_or_create_config with no existing config auto-creates from fallback.
-    @opik.track(project_name=project_name)
-    def first_fetch():
-        return opik_client.get_or_create_config(
-            fallback=MyConfig(temperature=0.5, model="gpt-3.5", hint=None),
-            project_name=project_name,
-        )
-
-    cfg = first_fetch()
-    assert cfg.temperature == pytest.approx(0.5)
-    assert cfg.model == "gpt-3.5"
-    assert cfg.hint is None
-    assert cfg.is_fallback is False
-
-    # Write a new version unconditionally via create_config.
-    v2_name = opik_client.create_config(
-        MyConfig(temperature=0.8, model="gpt-4", hint="use chain-of-thought"),
-        project_name=project_name,
+    # Publish v1 with hint=None and verify the version name comes back.
+    v1_name = opik_client.create_config(
+        MyConfig(temperature=0.5, model="gpt-3.5", hint=None), project_name=project_name
     )
-    assert isinstance(v2_name, str) and v2_name != ""
+    assert isinstance(v1_name, str) and v1_name != ""
 
-    # The first auto-created blueprint is tagged as "prod" by the backend, so
-    # fetching by env="prod" returns v1 values, not v2.
+    # Backend auto-tags the first blueprint as "prod" — verify without any manual deploy_to.
     get_global_registry().clear()
 
     @opik.track(project_name=project_name)
-    def fetch_prod():
+    def fetch_auto_prod():
         return opik_client.get_or_create_config(
             fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
             project_name=project_name,
             env="prod",
         )
 
-    prod_cfg = fetch_prod()
-    assert prod_cfg.temperature == pytest.approx(0.5)
-    assert prod_cfg.model == "gpt-3.5"
+    auto_prod = fetch_auto_prod()
+    assert auto_prod.temperature == pytest.approx(0.5)
+    assert auto_prod.model == "gpt-3.5"
 
-    # Tag v2 as prod; subsequent prod fetch returns v2.
-    opik_client.set_config_env(project_name=project_name, version=v2_name, env="prod")
+    # Publishing different values (hint filled in) creates a new version.
+    get_global_registry().clear()
+    v2_name = opik_client.create_config(
+        MyConfig(temperature=0.8, model="gpt-4", hint="use chain-of-thought"),
+        project_name=project_name,
+    )
+    assert v2_name != v1_name
+
+    # version="latest" returns v2; hint is now a real value.
     get_global_registry().clear()
 
-    prod_cfg_v2 = fetch_prod()
-    assert prod_cfg_v2.temperature == pytest.approx(0.8)
-    assert prod_cfg_v2.model == "gpt-4"
-    assert prod_cfg_v2.hint == "use chain-of-thought"
+    @opik.track(project_name=project_name)
+    def fetch_latest():
+        return opik_client.get_or_create_config(
+            fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
+            project_name=project_name,
+            version="latest",
+        )
 
-    # Fetch by explicit version name.
+    latest = fetch_latest()
+    assert latest.temperature == pytest.approx(0.8)
+    assert latest.model == "gpt-4"
+    assert latest.hint == "use chain-of-thought"
+
+    # version= by name returns v1; hint must be None as originally published.
     get_global_registry().clear()
 
     @opik.track(project_name=project_name)
@@ -103,30 +133,28 @@ def test_get_or_create_and_create_config__happyflow(
         return opik_client.get_or_create_config(
             fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
             project_name=project_name,
-            version=v2_name,
+            version=v1_name,
         )
 
     by_name = fetch_by_name()
-    assert by_name.temperature == pytest.approx(0.8)
-    assert by_name.hint == "use chain-of-thought"
+    assert by_name.temperature == pytest.approx(0.5)
+    assert by_name.hint is None
 
-    # Fetch without a fallback — returns a generic Config and must resolve to
-    # the same underlying blueprint (and values) as the fallback-enabled
-    # ``by_name`` fetch above.
+    # Deploy v1 to prod; env= fetch returns v1 despite v2 being latest.
+    opik_client.set_config_env(project_name=project_name, version=v1_name, env="prod")
     get_global_registry().clear()
 
     @opik.track(project_name=project_name)
-    def fetch_prod_no_fallback():
-        return opik_client.get_or_create_config(project_name=project_name)
+    def fetch_by_env():
+        return opik_client.get_or_create_config(
+            fallback=MyConfig(temperature=0.0, model="fallback", hint=None),
+            project_name=project_name,
+            env="prod",
+        )
 
-    no_fallback_cfg = fetch_prod_no_fallback()
-    assert type(no_fallback_cfg) is opik.Config
-    assert no_fallback_cfg.is_fallback is False
-    # Same blueprint as the fallback-enabled ``by_name`` fetch.
-    assert no_fallback_cfg._state.blueprint_id == by_name._state.blueprint_id
-    assert no_fallback_cfg.temperature == by_name.temperature
-    assert no_fallback_cfg.model == by_name.model
-    assert no_fallback_cfg.hint == by_name.hint
+    by_env = fetch_by_env()
+    assert by_env.temperature == pytest.approx(0.5)
+    assert by_env.hint is None
 
 
 def test_prompt_field_and_trace_metadata__happyflow(
@@ -173,6 +201,7 @@ def test_prompt_field_and_trace_metadata__happyflow(
                 temperature=0.0,
             ),
             project_name=project_name,
+            version="latest",
         )
         id_storage["trace_id"] = opik_context.get_current_trace_data().id
         id_storage["span_id"] = opik_context.get_current_span_data().id
@@ -218,54 +247,16 @@ def test_mask_overrides_config__happyflow(
     opik_client: opik.Opik,
     project_name: str,
 ):
-    """Selecting a specific blueprint via context overrides the default resolution,
-    and layering a mask on top overrides selected fields while leaving untouched
-    fields from the pinned blueprint intact."""
+    """A mask overrides selected fields while leaving untouched fields intact."""
 
     class MyConfig(opik.Config):
         temperature: float
         model: str
 
-    # Publish two versions: v1 is "prod" (auto-tagged on first publish), v2 is newer.
-    v1_name = opik_client.create_config(
+    opik_client.create_config(
         MyConfig(temperature=0.5, model="gpt-4"), project_name=project_name
     )
-    v2_name = opik_client.create_config(
-        MyConfig(temperature=0.7, model="gpt-4o"), project_name=project_name
-    )
-    assert v1_name != v2_name
 
-    # Sanity check: with no context overrides, env="prod" returns v1 values.
-    get_global_registry().clear()
-
-    @opik.track(project_name=project_name)
-    def fetch_default():
-        return opik_client.get_or_create_config(
-            fallback=MyConfig(temperature=0.0, model="fallback"),
-            project_name=project_name,
-        )
-
-    default_cfg = fetch_default()
-    assert default_cfg.temperature == pytest.approx(0.5)
-    assert default_cfg.model == "gpt-4"
-
-    # Pin a specific blueprint via context — overrides env resolution, returns v2.
-    get_global_registry().clear()
-
-    with agent_config_context(mask_id=None, blueprint_name=v2_name):
-
-        @opik.track(project_name=project_name)
-        def fetch_pinned_blueprint():
-            return opik_client.get_or_create_config(
-                fallback=MyConfig(temperature=0.0, model="fallback"),
-                project_name=project_name,
-            )
-
-        pinned = fetch_pinned_blueprint()
-        assert pinned.temperature == pytest.approx(0.7)
-        assert pinned.model == "gpt-4o"
-
-    # Mask alone overlays on top of the default (prod = v1).
     get_global_registry().clear()
 
     manager = ConfigManager(
@@ -283,25 +274,9 @@ def test_mask_overrides_config__happyflow(
             return opik_client.get_or_create_config(
                 fallback=MyConfig(temperature=0.0, model="fallback"),
                 project_name=project_name,
+                version="latest",
             )
 
-        masked = fetch_with_mask()
-        assert masked.temperature == pytest.approx(0.9)
-        assert masked.model == "gpt-4"
-
-    # Blueprint + mask: pin v2, then mask temperature. Mask overrides temperature
-    # (0.9) but model is read from v2 ("gpt-4o"), not v1 or fallback.
-    get_global_registry().clear()
-
-    with agent_config_context(mask_id=mask_id, blueprint_name=v2_name):
-
-        @opik.track(project_name=project_name)
-        def fetch_pinned_and_masked():
-            return opik_client.get_or_create_config(
-                fallback=MyConfig(temperature=0.0, model="fallback"),
-                project_name=project_name,
-            )
-
-        pinned_and_masked = fetch_pinned_and_masked()
-        assert pinned_and_masked.temperature == pytest.approx(0.9)
-        assert pinned_and_masked.model == "gpt-4o"
+        result = fetch_with_mask()
+        assert result.temperature == pytest.approx(0.9)
+        assert result.model == "gpt-4"

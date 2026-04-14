@@ -6,6 +6,7 @@ import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -60,6 +61,8 @@ public interface RunnerService {
     boolean hasCapability(UUID runnerId, String capability);
 
     String getActiveRunnerId(String workspaceId, UUID projectId, String userName, RunnerType type);
+
+    void disconnectRunner(UUID runnerId);
 }
 
 @Slf4j
@@ -120,18 +123,21 @@ class RunnerServiceImpl implements RunnerService {
     private final @NonNull LocalRunnerConfig runnerConfig;
     private final @NonNull Provider<EndpointJobService> endpointJobService;
     private final @NonNull Provider<ConnectBridgeService> connectBridgeService;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     @Inject
     RunnerServiceImpl(@NonNull StringRedisClient redisClient, @NonNull IdGenerator idGenerator,
             @NonNull ProjectService projectService, @NonNull LocalRunnerConfig runnerConfig,
             @NonNull Provider<EndpointJobService> endpointJobService,
-            @NonNull Provider<ConnectBridgeService> connectBridgeService) {
+            @NonNull Provider<ConnectBridgeService> connectBridgeService,
+            @NonNull Provider<RequestContext> requestContext) {
         this.redisClient = redisClient;
         this.idGenerator = idGenerator;
         this.projectService = projectService;
         this.runnerConfig = runnerConfig;
         this.endpointJobService = endpointJobService;
         this.connectBridgeService = connectBridgeService;
+        this.requestContext = requestContext;
     }
 
     @Override
@@ -339,6 +345,32 @@ class RunnerServiceImpl implements RunnerService {
                 projectUserRunnerKey(workspaceId, projectId, userName, type)).get();
     }
 
+    @Override
+    public void disconnectRunner(@NonNull UUID runnerId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        // Idempotent: if the runner is already gone or not owned by this user, treat as a no-op.
+        if (!isRunnerOwnedByUser(runnerId, workspaceId, userName)) {
+            log.info("Runner '{}' not found for user in workspace '{}', treating disconnect as no-op", runnerId,
+                    workspaceId);
+            return;
+        }
+
+        RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId));
+        Map<String, String> fields = runnerMap.readAllMap();
+        // fields may be empty if the runner hash was already cleared; cleanup must still run.
+        String projectIdStr = fields.get(FIELD_PROJECT_ID);
+        String typeStr = fields.get(FIELD_TYPE);
+
+        if (!fields.isEmpty()) {
+            runnerMap.put(FIELD_DISCONNECTED_AT, Instant.now().toString());
+        }
+
+        cleanupOrphanedRunner(runnerId, workspaceId, userName, projectIdStr, typeStr);
+        log.info("Disconnected runner '{}' in workspace '{}'", runnerId, workspaceId);
+    }
+
     // --- Private methods ---
 
     private void evictExistingRunner(String workspaceId, UUID projectId, String userName,
@@ -349,23 +381,38 @@ class RunnerServiceImpl implements RunnerService {
 
         if (oldRunnerIdStr != null && !oldRunnerIdStr.equals(newRunnerId.toString())) {
             UUID oldRunnerId = UUID.fromString(oldRunnerIdStr);
-            redisClient.getBucket(runnerHeartbeatKey(oldRunnerId)).delete();
 
             RMap<String, String> oldRunnerMap = redisClient.getMap(runnerKey(oldRunnerId));
             if (oldRunnerMap.isExists()) {
                 oldRunnerMap.put(FIELD_DISCONNECTED_AT, Instant.now().toString());
             }
 
-            endpointJobService.get().failOrphanedJobs(oldRunnerId);
-            connectBridgeService.get().failOrphanedBridgeCommands(oldRunnerId);
-
-            RSet<String> projectRunners = redisClient.getSet(projectRunnersKey(workspaceId, projectId));
-            projectRunners.remove(oldRunnerIdStr);
-
-            removeRunnerFromWorkspace(workspaceId, userName, oldRunnerId);
-
+            cleanupOrphanedRunner(oldRunnerId, workspaceId, userName, projectId.toString(), type.getValue());
             log.info("Evicted runner '{}' in workspace '{}'", oldRunnerId, workspaceId);
         }
+    }
+
+    private void cleanupOrphanedRunner(UUID runnerId, String workspaceId, String userName,
+            String projectIdStr, String typeStr) {
+        redisClient.getBucket(runnerHeartbeatKey(runnerId)).delete();
+
+        endpointJobService.get().failOrphanedJobs(runnerId);
+        connectBridgeService.get().failOrphanedBridgeCommands(runnerId);
+
+        if (projectIdStr != null) {
+            UUID projectId = UUID.fromString(projectIdStr);
+            RunnerType type = typeStr != null ? RunnerType.fromValue(typeStr) : RunnerType.ENDPOINT;
+            RSet<String> projectRunners = redisClient.getSet(projectRunnersKey(workspaceId, projectId));
+            projectRunners.remove(runnerId.toString());
+
+            RBucket<String> userRunnerBucket = redisClient.getBucket(
+                    projectUserRunnerKey(workspaceId, projectId, userName, type));
+            if (runnerId.toString().equals(userRunnerBucket.get())) {
+                userRunnerBucket.delete();
+            }
+        }
+
+        removeRunnerFromWorkspace(workspaceId, userName, runnerId);
     }
 
     private void setUserRunner(String workspaceId, UUID projectId, String userName, UUID runnerId, RunnerType type) {

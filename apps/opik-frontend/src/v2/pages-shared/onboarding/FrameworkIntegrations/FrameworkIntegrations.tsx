@@ -15,6 +15,7 @@ import IntegrationListLayout from "../IntegrationListLayout/IntegrationListLayou
 import IntegrationTabs from "../IntegrationTabs/IntegrationTabs";
 import { useUserApiKey } from "@/store/AppStore";
 import { useIsPhone } from "@/hooks/useIsPhone";
+import useActiveProjectName from "@/hooks/useActiveProjectName";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
   const apiKey = useUserApiKey();
   const { themeMode } = useTheme();
   const { isPhonePortrait } = useIsPhone();
+  const projectName = useActiveProjectName();
 
   const handleFrameworkSelect = (value: string) => {
     const index = integrationList.findIndex((item) => item.label === value);
@@ -128,6 +130,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
         executionLogs={integration.executionLogs}
         withLineHighlights
         onRunCodeCallback={onRunCodeCallback}
+        projectName={projectName}
       />
     </IntegrationListLayout>
   );

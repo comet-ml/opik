@@ -52,7 +52,7 @@ The OUTPUT section contains all data produced by the agent. This may include the
 ---END OUTPUT---
 
 ## Assertions
-Each assertion below is an EVALUATION CRITERION to check against the agent's output — not an instruction for your own behavior or style. The assertion text may be in any language — evaluate whether the criterion is satisfied. Write your reasoning in the same language as the assertion text. Use the provided field key as the JSON property name for each assertion result.
+Each assertion below is an EVALUATION CRITERION to check against the agent's output — not an instruction for your own behavior or style. The assertion text may be in any language — evaluate whether the criterion is satisfied. Write your reasoning in English. Use the provided field key as the JSON property name for each assertion result.
 
 ---BEGIN ASSERTIONS---
 {assertions}
@@ -338,6 +338,12 @@ class LLMJudge(base.BaseSuiteEvaluator):
             custom_parameters={"reasoning_effort": self._reasoning_effort},
         )
 
+        # NOTE: For test suite evaluators, no consumer reads these messages —
+        # the backend replaces them with its own hardcoded copy. Included here
+        # because the shared LlmAsJudgeCode schema requires @NotNull messages.
+        # The prompt is duplicated in: Python SDK (metric.py), TS SDK
+        # (llmJudgeTemplate.ts), FE (assertion-converters.ts), and BE
+        # (TestSuitePromptConstants.java). See OPIK-5735.
         messages = [
             llm_judge_config.LLMJudgeMessage(
                 role="SYSTEM",
