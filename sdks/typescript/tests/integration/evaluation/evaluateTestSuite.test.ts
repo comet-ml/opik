@@ -206,6 +206,207 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
+  describe("getOrCreate does not modify existing suite", () => {
+    it(
+      "should return existing suite as-is when called with different assertions and policy",
+      async () => {
+        const suiteName = `test-suite-getorcreate-nomod-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        // 1. Create a suite with known assertions/policy and add an item so a version exists
+        const original = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+        await original.addItem({ input: "seed item" });
+        await waitForSuiteItems(original, 1);
+
+        // Record version ID before getOrCreate
+        const datasetBefore = await client.getDataset(suiteName);
+        const versionBefore = await datasetBefore.getVersionInfo();
+        expect(versionBefore).toBeDefined();
+        const versionIdBefore = versionBefore!.id;
+
+        // 2. Call getOrCreate with DIFFERENT assertions and policy
+        const fetched = await TestSuite.getOrCreate(client, {
+          name: suiteName,
+          globalAssertions: ["Completely different assertion"],
+          globalExecutionPolicy: { runsPerItem: 5, passThreshold: 4 },
+          tags: ["should-be-ignored"],
+        });
+
+        // 3. Should return the same suite
+        expect(fetched.id).toBe(original.id);
+
+        // 4. Assertions should NOT have been overwritten
+        const assertions = await fetched.getGlobalAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is helpful");
+
+        // 5. Execution policy should NOT have been overwritten
+        const policy = await fetched.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 2, passThreshold: 1 });
+
+        // 6. No new version should have been created
+        const versionAfter = await datasetBefore.getVersionInfo();
+        expect(versionAfter!.id).toBe(versionIdBefore);
+      },
+      60000
+    );
+  });
+
+  describe("Update skips when values unchanged", () => {
+    it(
+      "should not create a new version when update is called with identical values",
+      async () => {
+        const suiteName = `test-suite-update-noop-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+
+        await suite.addItem({ input: "seed item" });
+        await waitForSuiteItems(suite, 1);
+
+        // Record version ID before the no-op update
+        const datasetRef = await client.getDataset(suiteName);
+        const versionBefore = await datasetRef.getVersionInfo();
+        expect(versionBefore).toBeDefined();
+        const versionIdBefore = versionBefore!.id;
+
+        // Call update with the exact same values
+        await suite.update({
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+
+        // No new version should exist
+        const versionAfter = await datasetRef.getVersionInfo();
+        expect(versionAfter!.id).toBe(versionIdBefore);
+
+        // Values should remain unchanged
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toEqual(["Response is helpful"]);
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 2, passThreshold: 1 });
+      },
+      60000
+    );
+
+    it(
+      "should create a new version when update changes assertions",
+      async () => {
+        const suiteName = `test-suite-update-diff-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.addItem({ input: "seed item" });
+        await waitForSuiteItems(suite, 1);
+
+        const datasetRef = await client.getDataset(suiteName);
+        const versionBefore = await datasetRef.getVersionInfo();
+        expect(versionBefore).toBeDefined();
+        const versionIdBefore = versionBefore!.id;
+
+        // Update with different assertions
+        await suite.update({
+          globalAssertions: ["Response is concise", "Response is accurate"],
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        });
+
+        // A new version should have been created (different version ID)
+        const versionAfter = await datasetRef.getVersionInfo();
+        expect(versionAfter).toBeDefined();
+        expect(versionAfter!.id).not.toBe(versionIdBefore);
+
+        // Verify new values are persisted
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(2);
+        expect(assertions).toContain("Response is concise");
+        expect(assertions).toContain("Response is accurate");
+
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 3, passThreshold: 2 });
+      },
+      60000
+    );
+  });
+
+  describe("Partial update preserves unchanged fields", () => {
+    it(
+      "should retain existing assertions when only executionPolicy is updated",
+      async () => {
+        const suiteName = `test-suite-partial-policy-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
+        });
+
+        await suite.addItem({ input: "seed item" });
+        await waitForSuiteItems(suite, 1);
+
+        // Update only executionPolicy, omit assertions
+        await suite.update({
+          globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
+        });
+
+        // Assertions should be preserved
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is helpful");
+
+        // Policy should be updated
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 5, passThreshold: 3 });
+      },
+      60000
+    );
+
+    it(
+      "should retain existing executionPolicy when only assertions are updated",
+      async () => {
+        const suiteName = `test-suite-partial-assertions-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const suite = await TestSuite.create(client, {
+          name: suiteName,
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        });
+
+        await suite.addItem({ input: "seed item" });
+        await waitForSuiteItems(suite, 1);
+
+        // Update only assertions, omit executionPolicy
+        await suite.update({
+          globalAssertions: ["Response is accurate"],
+        });
+
+        // Assertions should be updated
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is accurate");
+
+        // Policy should be preserved
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 3, passThreshold: 2 });
+      },
+      60000
+    );
+  });
+
   describe("Full Evaluation Run", () => {
     it(
       "should run suite evaluation end-to-end and return correct result structure",

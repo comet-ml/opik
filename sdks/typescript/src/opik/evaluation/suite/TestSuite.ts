@@ -14,6 +14,8 @@ import {
   deserializeEvaluators,
   resolveExecutionPolicy,
   resolveItemExecutionPolicy,
+  evaluatorsEqual,
+  executionPolicyEqual,
 } from "./suiteHelpers";
 import type { EvaluatorItemLike } from "./suiteHelpers";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
@@ -178,22 +180,7 @@ export class TestSuite {
     validateSuiteName(options.name);
 
     try {
-      const suite = await TestSuite.get(client, options.name, options.projectName);
-
-      const hasUpdates =
-        options.globalAssertions !== undefined ||
-        options.globalExecutionPolicy !== undefined ||
-        options.tags !== undefined;
-
-      if (hasUpdates) {
-        await suite.update({
-          globalAssertions: options.globalAssertions,
-          globalExecutionPolicy: options.globalExecutionPolicy,
-          tags: options.tags,
-        });
-      }
-
-      return suite;
+      return await TestSuite.get(client, options.name, options.projectName);
     } catch (error) {
       if (error instanceof DatasetNotFoundError) {
         return TestSuite.create(client, options);
@@ -307,15 +294,28 @@ export class TestSuite {
         );
       }
 
+      // Resolve current values once — used both for fallback and change detection
+      const currentEvaluators = versionInfo.evaluators
+        ? deserializeEvaluators(versionInfo.evaluators)
+        : [];
+      const currentPolicy = resolveExecutionPolicy(versionInfo.executionPolicy);
+
       // Partial updates: retain current values for omitted params
       const evaluators = resolvedEvaluators ??
-        (assertionsProvided
-          ? []
-          : (versionInfo.evaluators
-            ? deserializeEvaluators(versionInfo.evaluators)
-            : []));
-      const executionPolicy = options.globalExecutionPolicy ??
-        resolveExecutionPolicy(versionInfo.executionPolicy);
+        (assertionsProvided ? [] : currentEvaluators);
+      const executionPolicy = options.globalExecutionPolicy
+        ? {
+            runsPerItem: options.globalExecutionPolicy.runsPerItem ?? currentPolicy.runsPerItem,
+            passThreshold: options.globalExecutionPolicy.passThreshold ?? currentPolicy.passThreshold,
+          }
+        : currentPolicy;
+
+      if (
+        evaluatorsEqual(evaluators, currentEvaluators) &&
+        executionPolicyEqual(executionPolicy, currentPolicy)
+      ) {
+        return;
+      }
 
       await this.client.api.datasets.applyDatasetItemChanges(this.dataset.id, {
         override: false,
