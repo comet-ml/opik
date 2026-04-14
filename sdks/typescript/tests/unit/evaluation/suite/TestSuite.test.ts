@@ -102,7 +102,7 @@ describe("TestSuite", () => {
         },
         opikClient
       );
-      const suiteWithProject = new EvaluationSuite(
+      const suiteWithProject = new TestSuite(
         datasetWithProject,
         opikClient
       );
