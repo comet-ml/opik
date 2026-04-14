@@ -288,4 +288,44 @@ describe("TestSuite static methods", () => {
       );
     });
   });
+
+  describe("TestSuite.delete", () => {
+    let deleteDatasetByNameSpy: MockInstance;
+
+    beforeEach(() => {
+      deleteDatasetByNameSpy = vi
+        .spyOn(opikClient.api.datasets, "deleteDatasetByName")
+        .mockImplementation(mockAPIFunction);
+    });
+
+    it("should delete a test suite by name", async () => {
+      await TestSuite.delete(opikClient, "test-suite");
+
+      expect(deleteDatasetByNameSpy).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "opik-sdk-typescript-test",
+      });
+    });
+
+    it("should delete a test suite with custom project name", async () => {
+      await TestSuite.delete(opikClient, "test-suite", "custom-project");
+
+      expect(deleteDatasetByNameSpy).toHaveBeenCalledWith({
+        datasetName: "test-suite",
+        projectName: "custom-project",
+      });
+    });
+
+    it("should throw error for empty suite name", async () => {
+      await expect(
+        TestSuite.delete(opikClient, "")
+      ).rejects.toThrow("Test suite name must be a non-empty string");
+    });
+
+    it("should throw error for whitespace-only suite name", async () => {
+      await expect(
+        TestSuite.delete(opikClient, "   ")
+      ).rejects.toThrow("Test suite name must be a non-empty string");
+    });
+  });
 });

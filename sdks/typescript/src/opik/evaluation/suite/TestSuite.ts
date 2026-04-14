@@ -106,6 +106,15 @@ export class TestSuite {
   // Static factory methods (replace Client.ts methods — no circular dep)
   // ---------------------------------------------------------------------------
 
+  static async delete(client: OpikClient, name: string, projectName?: string): Promise<void> {
+    validateSuiteName(name);
+    const resolvedProjectName = client.resolveProjectName(projectName);
+    await client.api.datasets.deleteDatasetByName({
+      datasetName: name,
+      projectName: resolvedProjectName,
+    });
+  }
+
   static async create(
     client: OpikClient,
     options: CreateTestSuiteOptions
