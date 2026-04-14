@@ -6,4 +6,4 @@
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}'
     MATERIALIZE INDEX idx_spans_source;
 
---rollback -- no-op: MATERIALIZE INDEX cannot be rolled back; the index definition remains
+--rollback empty
