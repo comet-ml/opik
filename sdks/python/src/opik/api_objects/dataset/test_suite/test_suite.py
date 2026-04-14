@@ -411,11 +411,20 @@ class TestSuite:
         )
         if has_version_updates:
             version_info = self._dataset.get_version_info()
+
             if version_info is None:
-                raise RuntimeError(
-                    f"Cannot update test suite '{self._name}': "
-                    "no version info found. Add at least one item first."
+                new_evaluators = resolved or []
+                new_policy = (
+                    global_execution_policy
+                    or execution_policy.DEFAULT_EXECUTION_POLICY.copy()
                 )
+                rest_operations.create_initial_test_suite_version(
+                    rest_client=self._dataset._rest_client,
+                    dataset_id=self._dataset.id,
+                    evaluators=new_evaluators,
+                    exec_policy=new_policy,
+                )
+                return
 
             current_evaluators = self._dataset.get_evaluators()
             current_policy = self.get_global_execution_policy()
