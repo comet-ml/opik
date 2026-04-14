@@ -393,27 +393,14 @@ export class TestSuite {
     itemId: string,
     assertions: string[]
   ): Promise<void> {
-    this.validateItemId(itemId);
-
-    const evaluators = this.resolveAndSerializeEvaluators(assertions);
-
-    await this.client.api.datasets.batchUpdateDatasetItems({
-      ids: [itemId],
-      update: { evaluators: evaluators as EvaluatorItem[] },
-    });
+    await this.updateItem(itemId, { assertions });
   }
 
   async updateItemExecutionPolicy(
     itemId: string,
     executionPolicy: ExecutionPolicy
   ): Promise<void> {
-    this.validateItemId(itemId);
-    validateExecutionPolicy(executionPolicy, "item-level execution policy update");
-
-    await this.client.api.datasets.batchUpdateDatasetItems({
-      ids: [itemId],
-      update: { executionPolicy },
-    });
+    await this.updateItem(itemId, { executionPolicy });
   }
 
   async updateItem(
