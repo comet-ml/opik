@@ -1,6 +1,10 @@
 import posthog from "posthog-js";
 
-export const initPosthog = (key?: string, host?: string) => {
+export const initPosthog = (
+  key?: string,
+  host?: string,
+  environment?: string,
+) => {
   if (!key || !host) return;
 
   posthog.init(key, {
@@ -15,4 +19,8 @@ export const initPosthog = (key?: string, host?: string) => {
       return event;
     },
   });
+
+  if (environment) {
+    posthog.register({ environment });
+  }
 };

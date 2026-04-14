@@ -15,6 +15,7 @@ type EnvironmentVariablesOverwrite = {
   OPIK_NEW_RELIC_APP_ID: string;
   OPIK_POSTHOG_KEY: string;
   OPIK_POSTHOG_HOST: string;
+  OPIK_ANALYTICS_ENVIRONMENT?: string;
   PRODUCTION: boolean;
   ON_PREMISE: boolean;
 };
@@ -32,6 +33,7 @@ loadScript(location.origin + `/config.js?version=${new Date().getTime()}`).then(
     initPosthog(
       window.environmentVariablesOverwrite?.OPIK_POSTHOG_KEY,
       window.environmentVariablesOverwrite?.OPIK_POSTHOG_HOST,
+      window.environmentVariablesOverwrite?.OPIK_ANALYTICS_ENVIRONMENT,
     );
     initAnalytics(window.environmentVariablesOverwrite?.OPIK_SEGMENT_ID);
     initGTM(window.environmentVariablesOverwrite?.OPIK_ANALYTICS_ID);
