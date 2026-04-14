@@ -75,7 +75,16 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
    * @returns A promise resolving to the content hash
    */
   async contentHash(): Promise<string> {
-    const content = this.getContent();
+    const content: Record<string, unknown> = { ...this.getContent() };
+
+    if (this.evaluators) {
+      content["evaluators"] = this.evaluators;
+    }
+
+    if (this.executionPolicy) {
+      content["executionPolicy"] = this.executionPolicy;
+    }
+
     // Use fast-json-stable-stringify for deterministic JSON
     const json = stringify(content);
 
