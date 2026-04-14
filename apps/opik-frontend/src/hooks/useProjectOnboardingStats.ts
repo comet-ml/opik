@@ -9,6 +9,11 @@ import api, {
 import { ProjectStats } from "@/types/assistant-sidebar";
 import { generateVisibilityFilters, processFilters } from "@/lib/filters";
 
+const VISIBILITY_FILTER_PARAMS = processFilters(
+  undefined,
+  generateVisibilityFilters(),
+);
+
 function useOnboardingCountQuery(
   key: string,
   endpoint: string,
@@ -46,7 +51,7 @@ export default function useProjectOnboardingStats(
   const { data: traceTotal, isLoading: tracesLoading } =
     useOnboardingCountQuery(TRACES_KEY, TRACES_REST_ENDPOINT, enabled, {
       project_id: projectId!,
-      ...processFilters(undefined, generateVisibilityFilters()),
+      ...VISIBILITY_FILTER_PARAMS,
     });
 
   const { data: experimentTotal, isLoading: experimentsLoading } =
