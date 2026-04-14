@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000077_materialize_missing_skip_indexes
+--changeset thiagohora:000080_materialize_missing_skip_indexes
 --comment: Add and materialize missing skip indexes that were not materialized in previous migrations
 
 -- Add missing index from 000057 (project_id was added to experiment_items without an index)
