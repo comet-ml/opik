@@ -586,7 +586,7 @@ public class ExperimentDAO {
                     experiment_id,
                     toNullable(sumIf(item_passed, has_assertions)) AS passed_count,
                     toNullable(countIf(has_assertions)) AS total_count,
-                    CAST(sumIf(item_passed, has_assertions) / nullIf(countIf(has_assertions), 0) AS Nullable(Decimal64(9))) AS pass_rate
+                    if(countIf(has_assertions) = 0, NULL, toNullable(toDecimal64(sumIf(item_passed, has_assertions) / countIf(has_assertions), 9))) AS pass_rate
                 FROM (
                     SELECT
                         experiment_id,
@@ -1427,7 +1427,7 @@ public class ExperimentDAO {
                     experiment_id,
                     toNullable(sumIf(item_passed, has_assertions)) AS passed_count,
                     toNullable(countIf(has_assertions)) AS total_count,
-                    CAST(sumIf(item_passed, has_assertions) / nullIf(countIf(has_assertions), 0) AS Nullable(Decimal64(9))) AS pass_rate
+                    if(countIf(has_assertions) = 0, NULL, toNullable(toDecimal64(sumIf(item_passed, has_assertions) / countIf(has_assertions), 9))) AS pass_rate
                 FROM (
                     SELECT
                         experiment_id,
