@@ -494,12 +494,7 @@ class OpikConfigurator:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
         try:
-            # Prototype
-            url = (
-                urllib.parse.urljoin(self.base_url, "opik/api/")
-                if not self.use_local
-                else urllib.parse.urljoin(self.base_url, "/api/")
-            )
+            url = self._get_api_url()
 
             if save_to_file:
                 new_config = opik.config.OpikConfig(
