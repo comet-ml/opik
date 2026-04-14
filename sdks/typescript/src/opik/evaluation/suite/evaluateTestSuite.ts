@@ -15,7 +15,7 @@ import {
 } from "./suiteHelpers";
 import type { ExecutionPolicy } from "./types";
 
-export interface EvaluateSuiteOptions<T = Record<string, unknown>> {
+export interface EvaluateTestSuiteOptions<T = Record<string, unknown>> {
   /** The dataset to evaluate against */
   dataset: Dataset<T extends DatasetItemData ? T : DatasetItemData & T>;
 
@@ -45,19 +45,19 @@ export interface EvaluateSuiteOptions<T = Record<string, unknown>> {
 }
 
 /**
- * Run an evaluation suite using evaluators and execution policy stored in the dataset version metadata.
+ * Run a test suite using evaluators and execution policy stored in the dataset version metadata.
  *
  * Pre-processes item-level evaluators and execution policies before passing them to the engine.
  * Items are fetched once via getRawItems() and passed as prefetchedItems to avoid duplicate API calls.
  */
-export async function evaluateSuite<T = Record<string, unknown>>(
-  options: EvaluateSuiteOptions<T>
+export async function evaluateTestSuite<T = Record<string, unknown>>(
+  options: EvaluateTestSuiteOptions<T>
 ): Promise<EvaluationResult> {
   if (!options.dataset) {
-    throw new Error("Dataset is required for evaluation suite");
+    throw new Error("Dataset is required for test suite");
   }
   if (!options.task) {
-    throw new Error("Task function is required for evaluation suite");
+    throw new Error("Task function is required for test suite");
   }
 
   const client = options.client ?? OpikSingleton.getInstance();
@@ -129,7 +129,7 @@ export async function evaluateSuite<T = Record<string, unknown>>(
     const engine = new EvaluationEngine<T>(engineOptions, client, experiment);
     return await engine.execute();
   } catch (error) {
-    logger.error(`Error during evaluation suite: ${error}`);
+    logger.error(`Error during test suite: ${error}`);
     throw error;
   }
 }

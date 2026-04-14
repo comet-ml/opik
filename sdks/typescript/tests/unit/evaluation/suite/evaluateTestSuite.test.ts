@@ -32,7 +32,7 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", () => {
   return { LLMJudge: MockLLMJudge };
 });
 
-import { evaluateSuite } from "@/evaluation/suite/evaluateSuite";
+import { evaluateTestSuite } from "@/evaluation/suite/evaluateTestSuite";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { EvaluationTask } from "@/evaluation/types";
@@ -43,7 +43,7 @@ import {
   mockAPIFunctionWithStream,
 } from "../../../mockUtils";
 
-describe("evaluateSuite", () => {
+describe("evaluateTestSuite", () => {
   let opikClient: OpikClient;
   let testDataset: Dataset;
   let createTracesSpy: MockInstance<typeof opikClient.api.traces.createTraces>;
@@ -83,7 +83,7 @@ describe("evaluateSuite", () => {
       {
         id: "test-dataset-id",
         name: "test-dataset",
-        description: "Test dataset for evaluation suite",
+        description: "Test dataset for test suite",
       },
       opikClient
     );
@@ -171,7 +171,7 @@ describe("evaluateSuite", () => {
   });
 
   test("creates experiment for suite evaluation with correct parameters", async () => {
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -192,7 +192,7 @@ describe("evaluateSuite", () => {
   });
 
   test("reads evaluators from dataset version metadata and uses them for scoring", async () => {
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -258,7 +258,7 @@ describe("evaluateSuite", () => {
       })
     );
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -273,7 +273,7 @@ describe("evaluateSuite", () => {
   });
 
   test("executes task once per item when runsPerItem=1", async () => {
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -330,7 +330,7 @@ describe("evaluateSuite", () => {
       })
     );
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -402,7 +402,7 @@ describe("evaluateSuite", () => {
       })
     );
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -449,12 +449,12 @@ describe("evaluateSuite", () => {
   test("throws error when dataset is missing", async () => {
     await expect(
       // @ts-expect-error - Intentionally missing required property
-      evaluateSuite({
+      evaluateTestSuite({
         task: mockTask,
         experimentName: "suite-experiment",
         client: opikClient,
       })
-    ).rejects.toThrow("Dataset is required for evaluation suite");
+    ).rejects.toThrow("Dataset is required for test suite");
 
     expect(createExperimentSpy).not.toHaveBeenCalled();
   });
@@ -462,18 +462,18 @@ describe("evaluateSuite", () => {
   test("throws error when task is missing", async () => {
     await expect(
       // @ts-expect-error - Intentionally missing required property
-      evaluateSuite({
+      evaluateTestSuite({
         dataset: testDataset,
         experimentName: "suite-experiment",
         client: opikClient,
       })
-    ).rejects.toThrow("Task function is required for evaluation suite");
+    ).rejects.toThrow("Task function is required for test suite");
 
     expect(createExperimentSpy).not.toHaveBeenCalled();
   });
 
   test("passes evaluatorModel to deserializeEvaluators via LLMJudge.fromConfig", async () => {
-    await evaluateSuite({
+    await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -545,7 +545,7 @@ describe("evaluateSuite", () => {
       })
     );
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -576,7 +576,7 @@ describe("evaluateSuite", () => {
   });
 
   test("streamDatasetItems is called only once (prefetched items, no duplicate fetch)", async () => {
-    await evaluateSuite({
+    await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -610,7 +610,7 @@ describe("evaluateSuite", () => {
       )
     );
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -638,7 +638,7 @@ describe("evaluateSuite", () => {
       )
     );
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",
@@ -680,7 +680,7 @@ describe("evaluateSuite", () => {
       return { output: "generated output" };
     };
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: failingTask,
       experimentName: "suite-experiment",
@@ -727,7 +727,7 @@ describe("evaluateSuite", () => {
       )
     );
 
-    const result = await evaluateSuite({
+    const result = await evaluateTestSuite({
       dataset: testDataset,
       task: mockTask,
       experimentName: "suite-experiment",

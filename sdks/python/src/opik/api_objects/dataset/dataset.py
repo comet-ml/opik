@@ -164,12 +164,14 @@ class DatasetVersion(DatasetExportOperations):
         rest_client: rest_api_client.OpikApi,
         version_info: dataset_version_public.DatasetVersionPublic,
         project_name: Optional[str],
+        client: Optional[Any] = None,
     ) -> None:
         self._dataset_name = dataset_name
         self._dataset_id = dataset_id
         self._rest_client = rest_client
         self._version_info = version_info
         self._project_name = project_name
+        self.client = client
 
     @property
     def dataset_name(self) -> str:
@@ -292,7 +294,10 @@ class DatasetVersion(DatasetExportOperations):
         """
         return self._version_info
 
-    def get_evaluators(self) -> List[Any]:
+    def get_evaluators(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[Any]:
         """
         Get suite-level evaluators for this dataset version.
 
@@ -325,6 +330,7 @@ class Dataset(DatasetExportOperations):
         project_name: Optional[str],
         rest_client: rest_api_client.OpikApi,
         dataset_items_count: Optional[int] = None,
+        client: Optional[Any] = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -334,6 +340,7 @@ class Dataset(DatasetExportOperations):
         self._rest_client = rest_client
         self._dataset_items_count = dataset_items_count
         self._project_name = project_name
+        self.client = client
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
@@ -344,6 +351,7 @@ class Dataset(DatasetExportOperations):
         dataset_fern: rest_dataset_public.DatasetPublic,
         project_name: str,
         rest_client: rest_api_client.OpikApi,
+        client: Optional[Any] = None,
     ) -> "Dataset":
         """Build a Dataset from a backend response, resolving the actual project.
 
@@ -364,6 +372,7 @@ class Dataset(DatasetExportOperations):
             project_name=actual_project_name or project_name,
             rest_client=rest_client,
             dataset_items_count=dataset_fern.dataset_items_count,
+            client=client,
         )
         dataset_.__internal_api__sync_hashes__()
         return dataset_
@@ -876,4 +885,5 @@ class Dataset(DatasetExportOperations):
             rest_client=self._rest_client,
             version_info=version_info,
             project_name=self._project_name,
+            client=self.client,
         )

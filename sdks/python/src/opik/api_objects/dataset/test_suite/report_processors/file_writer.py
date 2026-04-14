@@ -1,4 +1,4 @@
-"""Save structured JSON report files for evaluation suite results."""
+"""Save structured JSON report files for test suite results."""
 
 from __future__ import annotations
 
@@ -8,23 +8,23 @@ import os
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .. import evaluation_suite_result as _result_mod
+    from .. import test_suite_result as _result_mod
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_REPORT_DIR = "opik_evaluation_suite_reports"
+DEFAULT_REPORT_DIR = "opik_test_suite_reports"
 
 
 def save_report(
-    suite_result: _result_mod.EvaluationSuiteResult,
+    suite_result: _result_mod.TestSuiteResult,
     output_path: Optional[str] = None,
 ) -> str:
-    """Save an evaluation suite result as a structured JSON report file.
+    """Save a test suite result as a structured JSON report file.
 
     Args:
-        suite_result: The evaluation suite result to serialize.
+        suite_result: The test suite result to serialize.
         output_path: Optional file path. If not provided, a default path
-            is generated under the ``opik_evaluation_suite_reports/`` directory.
+            is generated under the ``opik_test_suite_reports/`` directory.
 
     Returns:
         The absolute path to the written report file.
@@ -44,7 +44,7 @@ def save_report(
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report_dict, f, indent=2, default=str, ensure_ascii=False)
 
-    LOGGER.debug("Evaluation suite report saved to %s", output_path)
+    LOGGER.debug("Test suite report saved to %s", output_path)
     return output_path
 
 
