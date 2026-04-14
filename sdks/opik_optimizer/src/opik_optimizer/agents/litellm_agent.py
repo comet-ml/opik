@@ -576,7 +576,11 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             for ch in choices
             if hasattr(ch, "message") and getattr(ch, "message").content
         ]
-        return outputs if outputs else [""]
+        if not outputs:
+            logger.warning(
+                "LiteLLMAgent: all candidate responses were empty; returning empty list"
+            )
+        return outputs
 
     def _prepare_messages(
         self, messages: list[dict[str, Any]], dataset_item: dict[str, Any] | None
