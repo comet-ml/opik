@@ -27,7 +27,7 @@ public record DatasetExpansion(
         @JsonView({
                 DatasetExpansion.View.Write.class}) @Schema(description = "Custom prompt to use for generation instead of auto-generated one") String customPrompt,
         @JsonView({
-                DatasetExpansion.View.Write.class}) @Schema(description = "Maximum number of tokens for the LLM response. Required by Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults to 4000 for Anthropic models only.") Integer maxCompletionTokens){
+                DatasetExpansion.View.Write.class}) @Min(100) @Schema(description = "Maximum number of tokens for the LLM response. Required by Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults to 4000 for Anthropic models only.") Integer maxCompletionTokens){
 
     public static class View {
         public static class Write {
