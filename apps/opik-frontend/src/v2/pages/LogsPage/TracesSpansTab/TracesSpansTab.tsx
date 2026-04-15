@@ -123,6 +123,7 @@ import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSumma
 const getRowId = (d: Trace | Span) => d.id;
 
 const REFETCH_INTERVAL = 30000;
+const EMPTY_FILTERS: unknown[] = [];
 
 const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
 
@@ -429,7 +430,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [filters = [], setFilters] = useQueryParam(
+  const [filters = EMPTY_FILTERS, setFilters] = useQueryParam(
     `${type}_filters`,
     JsonParam,
     {

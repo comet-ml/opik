@@ -32,6 +32,7 @@ import get from "lodash/get";
 import { METADATA_AGENT_GRAPH_KEY } from "@/constants/traces";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
+const EMPTY_FILTERS: unknown[] = [];
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -82,7 +83,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     },
   );
 
-  const [filters = [], setFilters] = useQueryParam(
+  const [filters = EMPTY_FILTERS, setFilters] = useQueryParam(
     `trace_panel_filters`,
     JsonParam,
     {
