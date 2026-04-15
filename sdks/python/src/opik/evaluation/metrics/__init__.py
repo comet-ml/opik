@@ -4,6 +4,8 @@ import os
 from .base_metric import BaseMetric
 from . import score_result as score_result
 
+# ⚠️  MAINTAINER NOTE: Any new metric import MUST go inside the
+#     `if not _LIGHTWEIGHT_MODE:` block below. See opik/__init__.py for details.
 _LIGHTWEIGHT_MODE = os.environ.get("OPIK_SCORING_LIGHTWEIGHT") == "true"
 
 if not _LIGHTWEIGHT_MODE:
@@ -92,7 +94,6 @@ if not _LIGHTWEIGHT_MODE:
     from .ragas_metric import RagasMetricWrapper
     from opik.exceptions import MetricComputationError
 
-    # from .llm_judges.factuality.metric import Factuality
 
 __all__: list[str] = (
     ["BaseMetric", "score_result"]
@@ -163,6 +164,5 @@ __all__: list[str] = (
         "SummarizationConsistencyJudge",
         "LLMJuriesJudge",
         "ConversationThreadMetric",
-        # "Factuality",
     ]
 )

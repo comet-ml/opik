@@ -3,6 +3,12 @@ import os
 
 # Lightweight mode: skip all heavy imports and SDK initialization.
 # Used by the scoring sandbox where only BaseMetric and ScoreResult are needed.
+#
+# ⚠️  MAINTAINER NOTE: Any new public import MUST go inside the
+#     `if not _LIGHTWEIGHT_MODE:` block below. Adding a top-level import
+#     that pulls in heavy dependencies (pydantic_settings, rest_api, sentry,
+#     etc.) will break Online Scoring performance.  The test
+#     `test_lightweight_mode_only_loads_allowed_modules` will catch violations.
 _LIGHTWEIGHT_MODE = os.environ.get("OPIK_SCORING_LIGHTWEIGHT") == "true"
 
 if not _LIGHTWEIGHT_MODE:
@@ -66,6 +72,39 @@ if not _LIGHTWEIGHT_MODE:
         error_tracking.setup_sentry_error_tracker()
 else:
     __version__ = "unknown"
+
+    # In lightweight mode heavy symbols (track, Opik, evaluate, …) are
+    # intentionally not imported.  Provide a helpful error instead of a
+    # confusing "AttributeError: module 'opik' has no attribute 'track'".
+    _HEAVYWEIGHT_NAMES = {
+        "track",
+        "flush_tracker",
+        "Opik",
+        "get_global_client",
+        "set_global_client",
+        "configure",
+        "evaluate",
+        "evaluate_prompt",
+        "evaluate_experiment",
+        "evaluate_on_dict_items",
+        "run_tests",
+        "Dataset",
+        "Prompt",
+        "ChatPrompt",
+        "Trace",
+        "Span",
+        "opik_context",
+    }
+
+    def __getattr__(name: str) -> None:  # type: ignore[misc]
+        if name in _HEAVYWEIGHT_NAMES:
+            raise RuntimeError(
+                f"opik.{name} is not available in lightweight mode "
+                f"(OPIK_SCORING_LIGHTWEIGHT=true). Only BaseMetric and "
+                f"ScoreResult are available in this mode."
+            )
+        raise AttributeError(f"module 'opik' has no attribute {name!r}")
+
 
 __all__: list[str] = (
     ["__version__"]

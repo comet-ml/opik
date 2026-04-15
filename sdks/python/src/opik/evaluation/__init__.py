@@ -1,6 +1,8 @@
 # ruff: noqa: F401 — re-exports for public API
 import os
 
+# ⚠️  MAINTAINER NOTE: Any new import MUST go inside the
+#     `if not _LIGHTWEIGHT_MODE:` block below. See opik/__init__.py for details.
 _LIGHTWEIGHT_MODE = os.environ.get("OPIK_SCORING_LIGHTWEIGHT") == "true"
 
 if not _LIGHTWEIGHT_MODE:
