@@ -1,86 +1,80 @@
-from .aggregated_metric import AggregatedMetric
-
-# Keep the canonical import first for the new layout while still tolerating
-# older packaging artefacts (some environments import this module before the
-# conversation package is available).  If the eager import fails we fall back
-# to the lazy getter below, letting legacy entry-points keep working.
-from .conversation.conversation_thread_metric import ConversationThreadMetric
-
-from .conversation import types as conversation_types
-from .conversation.heuristics.degeneration.metric import ConversationDegenerationMetric
-from .conversation.heuristics.knowledge_retention.metric import (
-    KnowledgeRetentionMetric,
-)
-from .conversation.llm_judges.conversational_coherence.metric import (
-    ConversationalCoherenceMetric,
-)
-from .conversation.llm_judges.g_eval_wrappers import (
-    GEvalConversationMetric,
-    ConversationComplianceRiskMetric,
-    ConversationDialogueHelpfulnessMetric,
-    ConversationQARelevanceMetric,
-    ConversationSummarizationCoherenceMetric,
-    ConversationSummarizationConsistencyMetric,
-    ConversationPromptUncertaintyMetric,
-)
-from .conversation.llm_judges.session_completeness.metric import (
-    SessionCompletenessQuality,
-)
-from .conversation.llm_judges.user_frustration.metric import UserFrustrationMetric
-from .heuristics.contains import Contains
-from .heuristics.equals import Equals
-from .heuristics.gleu import GLEU
-from .heuristics.chrf import ChrF
-from .heuristics.is_json import IsJson
-from .heuristics.distribution_metrics import (
-    JSDivergence,
-    JSDistance,
-    KLDivergence,
-)
-from .heuristics.levenshtein_ratio import LevenshteinRatio
-from .heuristics.meteor import METEOR
-from .heuristics.bertscore import BERTScore
-from .heuristics.spearman import SpearmanRanking
-from .heuristics.readability import Readability
-from .heuristics.tone import Tone
-from .heuristics.prompt_injection import PromptInjection
-from .heuristics.language_adherence import LanguageAdherenceMetric
-from .heuristics.regex_match import RegexMatch
-from .heuristics.bleu import SentenceBLEU, CorpusBLEU
-from .heuristics.rouge import ROUGE
-from .heuristics.sentiment import Sentiment
-from .heuristics.vader_sentiment import VADERSentiment
-from .llm_judges.answer_relevance.metric import AnswerRelevance
-from .llm_judges.g_eval_presets import (
-    AgentTaskCompletionJudge,
-    AgentToolCorrectnessJudge,
-    ComplianceRiskJudge,
-    DemographicBiasJudge,
-    DialogueHelpfulnessJudge,
-    GenderBiasJudge,
-    PoliticalBiasJudge,
-    PromptUncertaintyJudge,
-    QARelevanceJudge,
-    RegionalBiasJudge,
-    ReligiousBiasJudge,
-    SummarizationCoherenceJudge,
-    SummarizationConsistencyJudge,
-)
-from .llm_judges.context_precision.metric import ContextPrecision
-from .llm_judges.context_recall.metric import ContextRecall
-from .llm_judges.g_eval.metric import GEval, GEvalPreset
-from .llm_judges.hallucination.metric import Hallucination
-from .llm_judges.moderation.metric import Moderation
-from .llm_judges.llm_juries.metric import LLMJuriesJudge
-from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
-from .llm_judges.syc_eval.metric import SycEval
-from .llm_judges.usefulness.metric import Usefulness
-from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
+# Lazy-loaded metric classes (PEP 562).
+# All imports are deferred until first access via __getattr__.
 from .base_metric import BaseMetric
-from .ragas_metric import RagasMetricWrapper
-from opik.exceptions import MetricComputationError
+from . import score_result
 
-# from .llm_judges.factuality.metric import Factuality
+_LAZY_IMPORTS: dict = {
+    # aggregated
+    "AggregatedMetric": (".aggregated_metric", "AggregatedMetric"),
+    # conversation
+    "ConversationThreadMetric": (".conversation.conversation_thread_metric", "ConversationThreadMetric"),
+    "conversation_types": (".conversation", "types"),
+    "ConversationDegenerationMetric": (".conversation.heuristics.degeneration.metric", "ConversationDegenerationMetric"),
+    "KnowledgeRetentionMetric": (".conversation.heuristics.knowledge_retention.metric", "KnowledgeRetentionMetric"),
+    "ConversationalCoherenceMetric": (".conversation.llm_judges.conversational_coherence.metric", "ConversationalCoherenceMetric"),
+    "GEvalConversationMetric": (".conversation.llm_judges.g_eval_wrappers", "GEvalConversationMetric"),
+    "ConversationComplianceRiskMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationComplianceRiskMetric"),
+    "ConversationDialogueHelpfulnessMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationDialogueHelpfulnessMetric"),
+    "ConversationQARelevanceMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationQARelevanceMetric"),
+    "ConversationSummarizationCoherenceMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationSummarizationCoherenceMetric"),
+    "ConversationSummarizationConsistencyMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationSummarizationConsistencyMetric"),
+    "ConversationPromptUncertaintyMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationPromptUncertaintyMetric"),
+    "SessionCompletenessQuality": (".conversation.llm_judges.session_completeness.metric", "SessionCompletenessQuality"),
+    "UserFrustrationMetric": (".conversation.llm_judges.user_frustration.metric", "UserFrustrationMetric"),
+    # heuristics
+    "Contains": (".heuristics.contains", "Contains"),
+    "Equals": (".heuristics.equals", "Equals"),
+    "GLEU": (".heuristics.gleu", "GLEU"),
+    "ChrF": (".heuristics.chrf", "ChrF"),
+    "IsJson": (".heuristics.is_json", "IsJson"),
+    "JSDivergence": (".heuristics.distribution_metrics", "JSDivergence"),
+    "JSDistance": (".heuristics.distribution_metrics", "JSDistance"),
+    "KLDivergence": (".heuristics.distribution_metrics", "KLDivergence"),
+    "LevenshteinRatio": (".heuristics.levenshtein_ratio", "LevenshteinRatio"),
+    "METEOR": (".heuristics.meteor", "METEOR"),
+    "BERTScore": (".heuristics.bertscore", "BERTScore"),
+    "SpearmanRanking": (".heuristics.spearman", "SpearmanRanking"),
+    "Readability": (".heuristics.readability", "Readability"),
+    "Tone": (".heuristics.tone", "Tone"),
+    "PromptInjection": (".heuristics.prompt_injection", "PromptInjection"),
+    "LanguageAdherenceMetric": (".heuristics.language_adherence", "LanguageAdherenceMetric"),
+    "RegexMatch": (".heuristics.regex_match", "RegexMatch"),
+    "SentenceBLEU": (".heuristics.bleu", "SentenceBLEU"),
+    "CorpusBLEU": (".heuristics.bleu", "CorpusBLEU"),
+    "ROUGE": (".heuristics.rouge", "ROUGE"),
+    "Sentiment": (".heuristics.sentiment", "Sentiment"),
+    "VADERSentiment": (".heuristics.vader_sentiment", "VADERSentiment"),
+    # llm judges
+    "AnswerRelevance": (".llm_judges.answer_relevance.metric", "AnswerRelevance"),
+    "AgentTaskCompletionJudge": (".llm_judges.g_eval_presets", "AgentTaskCompletionJudge"),
+    "AgentToolCorrectnessJudge": (".llm_judges.g_eval_presets", "AgentToolCorrectnessJudge"),
+    "ComplianceRiskJudge": (".llm_judges.g_eval_presets", "ComplianceRiskJudge"),
+    "DemographicBiasJudge": (".llm_judges.g_eval_presets", "DemographicBiasJudge"),
+    "DialogueHelpfulnessJudge": (".llm_judges.g_eval_presets", "DialogueHelpfulnessJudge"),
+    "GenderBiasJudge": (".llm_judges.g_eval_presets", "GenderBiasJudge"),
+    "PoliticalBiasJudge": (".llm_judges.g_eval_presets", "PoliticalBiasJudge"),
+    "PromptUncertaintyJudge": (".llm_judges.g_eval_presets", "PromptUncertaintyJudge"),
+    "QARelevanceJudge": (".llm_judges.g_eval_presets", "QARelevanceJudge"),
+    "RegionalBiasJudge": (".llm_judges.g_eval_presets", "RegionalBiasJudge"),
+    "ReligiousBiasJudge": (".llm_judges.g_eval_presets", "ReligiousBiasJudge"),
+    "SummarizationCoherenceJudge": (".llm_judges.g_eval_presets", "SummarizationCoherenceJudge"),
+    "SummarizationConsistencyJudge": (".llm_judges.g_eval_presets", "SummarizationConsistencyJudge"),
+    "ContextPrecision": (".llm_judges.context_precision.metric", "ContextPrecision"),
+    "ContextRecall": (".llm_judges.context_recall.metric", "ContextRecall"),
+    "GEval": (".llm_judges.g_eval.metric", "GEval"),
+    "GEvalPreset": (".llm_judges.g_eval.metric", "GEvalPreset"),
+    "Hallucination": (".llm_judges.hallucination.metric", "Hallucination"),
+    "Moderation": (".llm_judges.moderation.metric", "Moderation"),
+    "LLMJuriesJudge": (".llm_judges.llm_juries.metric", "LLMJuriesJudge"),
+    "TrajectoryAccuracy": (".llm_judges.trajectory_accuracy", "TrajectoryAccuracy"),
+    "SycEval": (".llm_judges.syc_eval.metric", "SycEval"),
+    "Usefulness": (".llm_judges.usefulness.metric", "Usefulness"),
+    "StructuredOutputCompliance": (".llm_judges.structure_output_compliance.metric", "StructuredOutputCompliance"),
+    # wrappers
+    "RagasMetricWrapper": (".ragas_metric", "RagasMetricWrapper"),
+    # exceptions
+    "MetricComputationError": ("opik.exceptions", "MetricComputationError"),
+}
 
 __all__ = [
     "AggregatedMetric",
@@ -148,5 +142,24 @@ __all__ = [
     "SummarizationConsistencyJudge",
     "LLMJuriesJudge",
     "ConversationThreadMetric",
-    # "Factuality",
 ]
+
+
+def __getattr__(name: str):
+    if name in _LAZY_IMPORTS:
+        module_path, attr_name = _LAZY_IMPORTS[name]
+
+        import importlib
+
+        module = importlib.import_module(module_path, __package__)
+        value = getattr(module, attr_name)
+
+        # Cache in module globals so __getattr__ is not called again
+        globals()[name] = value
+        return value
+
+    raise AttributeError(f"module 'opik.evaluation.metrics' has no attribute {name!r}")
+
+
+def __dir__():
+    return list(__all__) + ["score_result"]
