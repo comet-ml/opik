@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { DatasetItem } from "@/dataset/DatasetItem";
@@ -683,7 +684,7 @@ describe("TestSuite", () => {
     });
   });
 
-  describe("update", () => {
+  describe("updateTestSettings", () => {
     it("should accept globalAssertions and call applyDatasetItemChanges", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
@@ -702,7 +703,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({
+      await suite.updateTestSettings({
         globalAssertions: ["is correct"],
         globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
       });
@@ -722,7 +723,7 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial update with globalAssertions only (no globalExecutionPolicy)", async () => {
+    it("should support partial updateTestSettings with globalAssertions only (no globalExecutionPolicy)", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
         versionName: "v1",
@@ -741,7 +742,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ globalAssertions: ["is correct"] });
+      await suite.updateTestSettings({ globalAssertions: ["is correct"] });
 
       // Should use current executionPolicy from versionInfo as fallback
       expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
@@ -755,7 +756,7 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial update with globalExecutionPolicy only (no globalAssertions)", async () => {
+    it("should support partial updateTestSettings with globalExecutionPolicy only (no globalAssertions)", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
         versionName: "v1",
@@ -774,7 +775,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 } });
+      await suite.updateTestSettings({ globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 } });
 
       expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
         override: false,
@@ -785,7 +786,7 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial update with tags only (calls updateDataset, not applyDatasetItemChanges)", async () => {
+    it("should support partial updateTestSettings with tags only (calls updateDataset, not applyDatasetItemChanges)", async () => {
       const updateDatasetSpy = vi
         .spyOn(opikClient.api.datasets, "updateDataset")
         .mockImplementation(
@@ -808,7 +809,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ tags: ["ci", "nightly"] });
+      await suite.updateTestSettings({ tags: ["ci", "nightly"] });
 
       expect(updateDatasetSpy).toHaveBeenCalledWith("suite-ds-id", {
         name: "test-suite",
@@ -818,7 +819,7 @@ describe("TestSuite", () => {
     });
 
     it("should throw when none of globalAssertions, globalExecutionPolicy, or tags are provided", async () => {
-      await expect(suite.update({})).rejects.toThrow(
+      await expect(suite.updateTestSettings({})).rejects.toThrow(
         "At least one of 'globalAssertions', 'globalExecutionPolicy', or 'tags' must be provided."
       );
     });
@@ -858,7 +859,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ globalAssertions: ["is correct"] });
+      await suite.updateTestSettings({ globalAssertions: ["is correct"] });
 
       expect(applyChangesSpy).not.toHaveBeenCalled();
     });
@@ -885,7 +886,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 } });
+      await suite.updateTestSettings({ globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 } });
 
       expect(applyChangesSpy).not.toHaveBeenCalled();
     });
@@ -925,7 +926,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({
+      await suite.updateTestSettings({
         globalAssertions: ["is accurate"],
         globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
       });
@@ -968,7 +969,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ globalAssertions: ["is accurate"] });
+      await suite.updateTestSettings({ globalAssertions: ["is accurate"] });
 
       expect(applyChangesSpy).toHaveBeenCalled();
     });
@@ -995,7 +996,7 @@ describe("TestSuite", () => {
             }) as never
         );
 
-      await suite.update({ globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 } });
+      await suite.updateTestSettings({ globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 } });
 
       expect(applyChangesSpy).toHaveBeenCalled();
     });
@@ -1023,7 +1024,7 @@ describe("TestSuite", () => {
         );
 
       // Only provide runsPerItem — passThreshold should inherit from current (5), not default (1)
-      await suite.update({ globalExecutionPolicy: { runsPerItem: 7 } });
+      await suite.updateTestSettings({ globalExecutionPolicy: { runsPerItem: 7 } });
 
       expect(applyChangesSpy).toHaveBeenCalledWith(
         expect.anything(),
@@ -1033,6 +1034,91 @@ describe("TestSuite", () => {
           }),
         })
       );
+    });
+
+    describe("initial version creation when no version exists", () => {
+      let applyChangesSpy: MockInstance;
+
+      beforeEach(() => {
+        vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue(undefined);
+
+        applyChangesSpy = vi
+          .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
+          .mockImplementation(
+            () =>
+              ({
+                then: (cb: (v: unknown) => unknown) =>
+                  Promise.resolve(cb(undefined)),
+                [Symbol.toStringTag]: "HttpResponsePromise",
+              }) as never
+          );
+      });
+
+      it("should call applyDatasetItemChanges with override:true and evaluators when assertions provided", async () => {
+        await suite.updateTestSettings({
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+
+        expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+          override: true,
+          body: {
+            evaluators: [
+              expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
+            ],
+            execution_policy: { runs_per_item: 2, pass_threshold: 1 },
+          },
+        });
+      });
+
+      it("should omit evaluators key from body when no assertions are provided", async () => {
+        await suite.updateTestSettings({
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        });
+
+        expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+          override: true,
+          body: {
+            execution_policy: { runs_per_item: 3, pass_threshold: 2 },
+          },
+        });
+        expect(applyChangesSpy).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.not.objectContaining({ body: expect.objectContaining({ evaluators: expect.anything() }) })
+        );
+      });
+
+      it("should fall back to DEFAULT_EXECUTION_POLICY when no executionPolicy is provided", async () => {
+        await suite.updateTestSettings({ globalAssertions: ["Response is helpful"] });
+
+        expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+          override: true,
+          body: {
+            evaluators: [
+              expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
+            ],
+            execution_policy: {
+              runs_per_item: DEFAULT_EXECUTION_POLICY.runsPerItem,
+              pass_threshold: DEFAULT_EXECUTION_POLICY.passThreshold,
+            },
+          },
+        });
+      });
+
+      it("should not call applyDatasetItemChanges with override:false or include base_version", async () => {
+        await suite.updateTestSettings({ globalAssertions: ["Response is helpful"] });
+
+        expect(applyChangesSpy).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ override: false })
+        );
+        expect(applyChangesSpy).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            body: expect.objectContaining({ base_version: expect.anything() }),
+          })
+        );
+      });
     });
   });
 
@@ -1101,7 +1187,7 @@ describe("TestSuite", () => {
       );
     });
 
-    it("should call validateExecutionPolicy in update", async () => {
+    it("should call validateExecutionPolicy in updateTestSettings", async () => {
       vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({
         id: "version-1",
         evaluators: [],
@@ -1118,15 +1204,153 @@ describe("TestSuite", () => {
           }) as never
       );
 
-      await suite.update({
+      await suite.updateTestSettings({
         globalAssertions: ["is correct"],
         globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
       });
 
       expect(validateExecutionPolicy).toHaveBeenCalledWith(
         { runsPerItem: 5, passThreshold: 3 },
-        "suite update"
+        "suite test settings update"
       );
+    });
+  });
+
+  describe("update", () => {
+    let insertSpy: MockInstance;
+
+    beforeEach(() => {
+      insertSpy = vi.spyOn(testDataset, "insert").mockResolvedValue(undefined);
+    });
+
+    it("should call insert with id embedded in data", async () => {
+      await suite.update([
+        { id: "item-1", data: { input: "updated" } },
+        { id: "item-2", assertions: ["is correct"], description: "Updated item" },
+      ]);
+
+      expect(insertSpy).toHaveBeenCalledTimes(1);
+      const insertedItems = insertSpy.mock.calls[0][0] as unknown[];
+      expect(insertedItems).toHaveLength(2);
+      expect(insertedItems[0]).toEqual(
+        expect.objectContaining({ id: "item-1", input: "updated" })
+      );
+      expect(insertedItems[1]).toEqual(
+        expect.objectContaining({
+          id: "item-2",
+          evaluators: [expect.objectContaining({ name: "llm_judge", type: "llm_judge" })],
+          description: "Updated item",
+        })
+      );
+    });
+
+    it("should not call insert for empty array", async () => {
+      await suite.update([]);
+
+      expect(insertSpy).not.toHaveBeenCalled();
+    });
+
+    it("should pass execution policy per item", async () => {
+      await suite.update([
+        {
+          id: "item-1",
+          data: { input: "test" },
+          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        },
+      ]);
+
+      const insertedItems = insertSpy.mock.calls[0][0] as unknown[];
+      expect(insertedItems[0]).toEqual(
+        expect.objectContaining({
+          id: "item-1",
+          input: "test",
+          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        })
+      );
+    });
+
+    it("should throw when an item has an empty id", async () => {
+      await expect(
+        suite.update([{ id: "", data: { foo: "bar" } }])
+      ).rejects.toThrow("Missing id for test suite item to update");
+    });
+
+    it("should throw when an item has a whitespace-only id", async () => {
+      await expect(
+        suite.update([{ id: "   ", data: { foo: "bar" } }])
+      ).rejects.toThrow("Missing id for test suite item to update");
+    });
+  });
+
+  describe("clear", () => {
+    it("should call dataset.clear to delete all items", async () => {
+      const clearSpy = vi
+        .spyOn(testDataset, "clear")
+        .mockResolvedValue(undefined);
+
+      await suite.clear();
+
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getCurrentVersionName", () => {
+    it("should return the current version name from dataset", async () => {
+      const getCurrentVersionNameSpy = vi
+        .spyOn(testDataset, "getCurrentVersionName")
+        .mockResolvedValue("v2");
+
+      const result = await suite.getCurrentVersionName();
+
+      expect(result).toBe("v2");
+      expect(getCurrentVersionNameSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("should return undefined when no versions exist", async () => {
+      const getCurrentVersionNameSpy = vi
+        .spyOn(testDataset, "getCurrentVersionName")
+        .mockResolvedValue(undefined);
+
+      const result = await suite.getCurrentVersionName();
+
+      expect(result).toBeUndefined();
+      expect(getCurrentVersionNameSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getVersionInfo", () => {
+    it("should return the version info from dataset", async () => {
+      const mockVersionInfo = {
+        id: "version-1",
+        versionName: "v1",
+        evaluators: [],
+        executionPolicy: { runsPerItem: 1, passThreshold: 1 },
+      };
+      const getVersionInfoSpy = vi
+        .spyOn(testDataset, "getVersionInfo")
+        .mockResolvedValue(mockVersionInfo);
+
+      const result = await suite.getVersionInfo();
+
+      expect(result).toEqual(mockVersionInfo);
+      expect(getVersionInfoSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getVersionView", () => {
+    it("should return a version view for the specified version", async () => {
+      const mockVersionView = {
+        datasetName: "test-suite",
+        datasetId: "suite-ds-id",
+        versionId: "version-1",
+      };
+      const getVersionViewSpy = vi
+        .spyOn(testDataset, "getVersionView")
+        .mockResolvedValue(mockVersionView as never);
+
+      await suite.getVersionView("v1");
+
+      expect(getVersionViewSpy).toHaveBeenCalledWith("v1");
     });
   });
 });

@@ -23,6 +23,20 @@ export interface TestSuiteItem {
 }
 
 /**
+ * A single item to be updated in a test suite via `updateItems()`.
+ * Requires an ID to identify the item to update.
+ * All provided fields are merged with the existing item data - only the fields
+ * you specify will be updated, preserving all other existing values.
+ */
+export interface UpdateTestSuiteItem {
+  id: string;
+  data?: Record<string, unknown>;
+  assertions?: string[];
+  description?: string;
+  executionPolicy?: ExecutionPolicy;
+}
+
+/**
  * Result of an individual item in the test suite.
  */
 export type ItemResult = {
