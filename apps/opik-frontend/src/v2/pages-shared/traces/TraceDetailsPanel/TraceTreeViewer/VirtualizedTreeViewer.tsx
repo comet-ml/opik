@@ -11,8 +11,8 @@ import {
   MessageSquareMore,
   PenLine,
   Tag,
-  TriangleAlert,
 } from "lucide-react";
+import ErrorTriangle from "@/icons/error-triangle.svg?react";
 
 import useTreeDetailsStore, {
   TREE_DATABLOCK_TYPE,
@@ -32,21 +32,76 @@ import { formatCost } from "@/lib/money";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import TagsHoverCard from "@/shared/TagsHoverCard/TagsHoverCard";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
+import {
+  TRACE_TYPE_FOR_TREE,
+  TRACE_TYPE_COLORS_MAP,
+  TRACE_COLOR_TYPE,
+} from "@/constants/traces";
 
 const EXPAND_HOTKEYS = ["⏎"];
-const DETAILS_SECTION_COMPONENTS = [
-  TREE_DATABLOCK_TYPE.DURATION,
-  TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS,
-  TREE_DATABLOCK_TYPE.TOKENS_BREAKDOWN,
-  TREE_DATABLOCK_TYPE.ESTIMATED_COST,
-  TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES,
-  TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS,
-  TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS,
-  TREE_DATABLOCK_TYPE.MODEL,
-];
+const INDENT_PX = 24;
+const ICON_OFFSET = 8;
+
+const VerticalLine: React.FC<{
+  left: number;
+  top?: number | string;
+  bottom?: number | string;
+  height?: number | string;
+}> = ({ left, top = 0, bottom, height }) => (
+  <div
+    className="absolute w-px bg-tree-line"
+    style={{ left, top, bottom, height }}
+  />
+);
+
+const TreeConnectors: React.FC<{
+  depth: number;
+  connectors: boolean[];
+  isExpanded: boolean;
+  isExpandable: boolean;
+}> = ({ depth, connectors, isExpanded, isExpandable }) => (
+  <div className="pointer-events-none absolute inset-0">
+    {depth > 0 &&
+      Array.from({ length: depth }, (_, i) => {
+        const d = i + 1;
+        const isOwnDepth = d === depth;
+        const hasContinuation = connectors[i] ?? false;
+        const parentCenterX = ICON_OFFSET + (d - 1) * INDENT_PX + ICON_OFFSET;
+        const childLeft = ICON_OFFSET + d * INDENT_PX;
+        const branchWidth = childLeft - parentCenterX;
+
+        if (!isOwnDepth && !hasContinuation) return null;
+
+        if (!isOwnDepth) {
+          return <VerticalLine key={d} left={parentCenterX} height="100%" />;
+        }
+
+        return (
+          <React.Fragment key={d}>
+            {hasContinuation && (
+              <VerticalLine left={parentCenterX} height="100%" />
+            )}
+            <div
+              className="absolute rounded-bl-md border-b border-l border-tree-line"
+              style={{
+                left: parentCenterX,
+                top: hasContinuation ? 6 : 0,
+                height: hasContinuation ? 6 : 12,
+                width: branchWidth,
+              }}
+            />
+          </React.Fragment>
+        );
+      })}
+    {isExpandable && isExpanded && (
+      <VerticalLine
+        left={ICON_OFFSET + depth * INDENT_PX + ICON_OFFSET}
+        top={20}
+        bottom={0}
+      />
+    )}
+  </div>
+);
 
 type VirtualizedTreeViewerProps = {
   scrollRef: React.RefObject<HTMLDivElement>;
@@ -64,10 +119,6 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
   const { flattenedTree, expandedTreeRows, toggleExpand } =
     useTreeDetailsStore();
 
-  const isGuardrailsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.GUARDRAILS_ENABLED,
-  );
-
   const [scrollToRowId, setScrollToRowId] = React.useState<
     string | undefined
   >();
@@ -77,31 +128,40 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
     previous: undefined,
   });
 
-  const hasDurationTimeline = config[TREE_DATABLOCK_TYPE.DURATION_TIMELINE];
-  const hasOtherConfig = useMemo(
-    () =>
-      (isGuardrailsEnabled
-        ? [TREE_DATABLOCK_TYPE.GUARDRAILS, ...DETAILS_SECTION_COMPONENTS]
-        : DETAILS_SECTION_COMPONENTS
-      ).reduce((acc, block) => acc || config[block], false),
-    [config, isGuardrailsEnabled],
-  );
+  // For each node, track which ancestor depth levels have a continuing vertical line
+  const connectorInfo = useMemo(() => {
+    const info: boolean[][] = new Array(flattenedTree.length);
+    const hasFollowing: boolean[] = [];
 
-  const estimatedHeight =
-    36 + (hasDurationTimeline ? 18 : 0) + (hasOtherConfig ? 30 : 0);
+    for (let i = flattenedTree.length - 1; i >= 0; i--) {
+      const node = flattenedTree[i];
+      const depths: boolean[] = [];
+
+      for (let d = 1; d <= node.depth; d++) {
+        depths.push(hasFollowing[d] ?? false);
+      }
+
+      info[i] = depths;
+      hasFollowing[node.depth] = true;
+      for (let d = node.depth + 1; d < hasFollowing.length; d++) {
+        hasFollowing[d] = false;
+      }
+    }
+
+    return info;
+  }, [flattenedTree]);
+
+  const hasDurationTimeline = config[TREE_DATABLOCK_TYPE.DURATION_TIMELINE];
 
   const rowVirtualizer = useVirtualizer({
     count: flattenedTree.length,
     getScrollElement: () => scrollRef.current,
     getItemKey: (index: number) => flattenedTree[index].id ?? index,
-    estimateSize: () => estimatedHeight,
+    estimateSize: () => 38,
     scrollPaddingEnd: 96,
     overscan: 5,
+    measureElement: (el) => el.getBoundingClientRect().height,
   });
-
-  useEffect(() => {
-    rowVirtualizer?.measure();
-  }, [estimatedHeight, rowVirtualizer]);
 
   const selectRow = useCallback(
     (id: string) => {
@@ -150,34 +210,44 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
     [flattenedTree, rowId],
   );
 
-  const renderDurationTimeline = (node: TreeNode) => {
-    const widthPercentage = Math.min(
-      (node.data.duration / node.data.maxDuration) * 100,
-      100,
-    );
+  const nodeHasDetails = useCallback(
+    (node: TreeNode) => {
+      const guardrailStatus = get(node.data?.output, "guardrail_result", null);
+      const {
+        tokens,
+        comments,
+        tags,
+        model,
+        provider,
+        feedback_scores: feedbackScores,
+        span_feedback_scores: spanFeedbackScores,
+        total_estimated_cost: estimatedCost,
+        type,
+      } = node.data;
+      const isTrace = type === TRACE_TYPE_FOR_TREE;
+      const promptTokens = node.data.usage?.prompt_tokens;
+      const completionTokens = node.data.usage?.completion_tokens;
 
-    const offset = node.data.startTimestamp - node.data.maxStartTime;
-    const offsetPercentage = Math.max(
-      (offset / node.data.maxDuration) * 100,
-      0,
-    );
-
-    return (
-      <div className="w-full pb-1 pl-4 pt-1.5">
-        <div className="relative w-full">
-          <div className="absolute inset-x-0 top-[0.5px] h-px bg-border" />
-          <div
-            className="absolute top-0 h-0.5 rounded-full transition-[width,left] duration-500 ease-in-out"
-            style={{
-              background: node.data.spanColor,
-              width: widthPercentage + "%",
-              left: offsetPercentage + "%",
-            }}
-          />
-        </div>
-      </div>
-    );
-  };
+      return (
+        guardrailStatus !== null ||
+        (config[TREE_DATABLOCK_TYPE.DURATION] && node.data.duration) ||
+        (config[TREE_DATABLOCK_TYPE.MODEL] && (model || provider)) ||
+        (config[TREE_DATABLOCK_TYPE.ESTIMATED_COST] &&
+          !isUndefined(estimatedCost)) ||
+        (config[TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS] && isNumber(tokens)) ||
+        (config[TREE_DATABLOCK_TYPE.TOKENS_BREAKDOWN] &&
+          isNumber(promptTokens) &&
+          isNumber(completionTokens)) ||
+        (config[TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES] &&
+          (Boolean(feedbackScores?.length) ||
+            (isTrace && Boolean(spanFeedbackScores?.length)))) ||
+        (config[TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS] &&
+          Boolean(comments?.length)) ||
+        (config[TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS] && Boolean(tags?.length))
+      );
+    },
+    [config],
+  );
 
   const renderDetailsContainer = (node: TreeNode) => {
     const guardrailStatus = get(node.data?.output, "guardrail_result", null);
@@ -239,7 +309,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
     );
 
     return (
-      <div className="flex h-5 items-center gap-3 overflow-x-hidden">
+      <div className="flex flex-wrap items-center gap-x-3 overflow-x-hidden">
         {Boolean(guardrailStatus !== null) && (
           <TooltipWrapper
             content={
@@ -258,14 +328,39 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
         )}
         {config[TREE_DATABLOCK_TYPE.DURATION] && (
           <TooltipWrapper content={durationTooltip}>
-            <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+            <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
               <Clock className="size-3 shrink-0" /> {duration}
             </div>
           </TooltipWrapper>
         )}
+        {config[TREE_DATABLOCK_TYPE.MODEL] && (model || provider) && (
+          <TooltipWrapper
+            content={`Model: ${model || "NA"}, Provider: ${provider || "NA"}`}
+          >
+            <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
+              <Brain className="size-3 shrink-0" />{" "}
+              <div className="truncate">
+                {provider} {model}
+              </div>
+            </div>
+          </TooltipWrapper>
+        )}
+        {config[TREE_DATABLOCK_TYPE.ESTIMATED_COST] &&
+          !isUndefined(estimatedCost) && (
+            <TooltipWrapper
+              content={`Estimated cost ${formatCost(estimatedCost, {
+                modifier: "full",
+              })}`}
+            >
+              <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
+                <Coins className="size-3 shrink-0" />{" "}
+                {formatCost(estimatedCost)}
+              </div>
+            </TooltipWrapper>
+          )}
         {config[TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS] && isNumber(tokens) && (
           <TooltipWrapper content={`Total amount of tokens: ${tokens}`}>
-            <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+            <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
               <Hash className="size-3 shrink-0" /> {tokens}
             </div>
           </TooltipWrapper>
@@ -274,29 +369,16 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           isNumber(promptTokens) &&
           isNumber(completionTokens) && (
             <TooltipWrapper content={tokensBreakdownTooltip}>
-              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+              <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
                 <ArrowRightLeft className="size-3 shrink-0" /> {promptTokens}/
                 {completionTokens}
-              </div>
-            </TooltipWrapper>
-          )}
-        {config[TREE_DATABLOCK_TYPE.ESTIMATED_COST] &&
-          !isUndefined(estimatedCost) && (
-            <TooltipWrapper
-              content={`Estimated cost ${formatCost(estimatedCost, {
-                modifier: "full",
-              })}`}
-            >
-              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
-                <Coins className="size-3 shrink-0" />{" "}
-                {formatCost(estimatedCost)}
               </div>
             </TooltipWrapper>
           )}
         {config[TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES] &&
           Boolean(feedbackScores?.length) && (
             <FeedbackScoreHoverCard scores={feedbackScores!}>
-              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+              <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
                 <PenLine className="size-3 shrink-0" /> {feedbackScores!.length}
               </div>
             </FeedbackScoreHoverCard>
@@ -305,7 +387,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           isTrace &&
           Boolean(spanFeedbackScores?.length) && (
             <FeedbackScoreHoverCard scores={spanFeedbackScores!}>
-              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+              <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
                 <PenLine className="size-3 shrink-0" />{" "}
                 {spanFeedbackScores!.length} span
               </div>
@@ -314,7 +396,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
         {config[TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS] &&
           Boolean(comments?.length) && (
             <UserCommentHoverList commentsList={comments}>
-              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+              <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
                 <MessageSquareMore className="size-3 shrink-0" />{" "}
                 {comments.length}
               </div>
@@ -322,30 +404,18 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           )}
         {config[TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS] &&
           Boolean(tags?.length) && (
-            <TagsHoverCard tags={tags}>
-              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+            <TagsHoverCard tags={tags} tagVariant="gray">
+              <div className="comet-body-xs flex items-center gap-1 text-muted-slate">
                 <Tag className="size-3 shrink-0" /> {tags.length}
               </div>
             </TagsHoverCard>
           )}
-        {config[TREE_DATABLOCK_TYPE.MODEL] && (model || provider) && (
-          <TooltipWrapper
-            content={`Model: ${model || "NA"}, Provider: ${provider || "NA"}`}
-          >
-            <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
-              <Brain className="size-3 shrink-0" />{" "}
-              <div className="truncate">
-                {provider} {model}
-              </div>
-            </div>
-          </TooltipWrapper>
-        )}
       </div>
     );
   };
 
   return (
-    <div className="w-full px-4">
+    <div className="w-full">
       <div
         className="relative w-full"
         style={{
@@ -359,80 +429,127 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           const isOutOfSearch = node.data.isInSearch === false;
           const name = node.name || "NA";
 
+          const typeColors =
+            TRACE_TYPE_COLORS_MAP[node.data.type as TRACE_COLOR_TYPE];
+
           return (
             <div
               key={node.id}
+              ref={rowVirtualizer.measureElement}
+              data-index={virtualRow.index}
               className={cn(
-                "absolute left-0 flex w-full flex-col gap-1.5 px-1.5 py-2 cursor-pointer rounded-md hover:bg-primary-foreground",
+                "absolute left-0 flex w-full flex-col py-1 pl-2 pr-4 cursor-pointer border-l-8 border-transparent",
+                "hover:bg-[var(--row-bg)]",
                 {
-                  "bg-primary-foreground": isFocused,
+                  "bg-[var(--row-bg)] border-[var(--row-color)]": isFocused,
                   "opacity-50": isOutOfSearch,
                 },
               )}
-              style={{
-                top: virtualRow.start,
-                height: virtualRow.size,
-              }}
+              style={
+                {
+                  "--row-bg": typeColors?.bg,
+                  "--row-color": typeColors?.color,
+                  top: virtualRow.start,
+                } as React.CSSProperties
+              }
               onClick={() => selectRow(node.id)}
             >
+              <TreeConnectors
+                depth={node.depth}
+                connectors={connectorInfo[virtualRow.index] ?? []}
+                isExpandable={isExpandable}
+                isExpanded={expandedTreeRows.has(node.id)}
+              />
               <div
-                className="flex"
+                className="flex items-center"
                 style={{
-                  paddingLeft: node.depth * 12,
+                  paddingLeft: node.depth * INDENT_PX,
                 }}
               >
-                <div className="mr-1 flex h-5 w-4 shrink-0 items-center justify-center">
-                  {isExpandable && (
-                    <TooltipWrapper
-                      content="Expand/Collapse"
-                      hotkeys={EXPAND_HOTKEYS}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon-3xs"
-                        onClick={() => toggleExpand(node.id)}
-                      >
-                        <ChevronRight
-                          className={cn({
-                            "transform rotate-90": expandedTreeRows.has(
-                              node.id,
-                            ),
-                          })}
-                        />
-                      </Button>
-                    </TooltipWrapper>
-                  )}
-                </div>
-                <div className="flex min-w-1 flex-auto flex-col justify-stretch gap-2">
-                  <div className="flex items-center gap-2">
-                    <BaseTraceDataTypeIcon type={node.data.type} />
-                    <TooltipWrapper content={name}>
-                      <span
-                        className={cn(
-                          "truncate text-foreground-secondary",
-                          isFocused ? "comet-body-s-accented" : "comet-body-s",
-                        )}
-                      >
-                        {name}
-                      </span>
-                    </TooltipWrapper>
-                    {node.data.hasError && (
-                      <>
-                        <div className="flex-auto" />
-                        <TooltipWrapper
-                          content={node.data.error_info?.message ?? "Has error"}
-                        >
-                          <div className="flex size-5 items-center justify-center rounded-sm bg-[var(--error-indicator-background)]">
-                            <TriangleAlert className="size-3 text-[var(--error-indicator-text)]" />
-                          </div>
-                        </TooltipWrapper>
-                      </>
+                <BaseTraceDataTypeIcon type={node.data.type} />
+                <TooltipWrapper content={name}>
+                  <span
+                    className={cn(
+                      "ml-2 truncate text-foreground-secondary",
+                      isFocused ? "comet-body-xs-accented" : "comet-body-xs",
                     )}
-                  </div>
-                  {hasOtherConfig && renderDetailsContainer(node)}
-                </div>
+                  >
+                    {name}
+                  </span>
+                </TooltipWrapper>
+                <div className="flex-auto" />
+                {node.data.hasError && (
+                  <TooltipWrapper
+                    content={node.data.error_info?.message ?? "Has error"}
+                  >
+                    <span className="flex size-4 shrink-0 items-center justify-center text-destructive">
+                      <ErrorTriangle width={12} height={12} />
+                    </span>
+                  </TooltipWrapper>
+                )}
+                {isExpandable ? (
+                  <TooltipWrapper
+                    content="Expand/Collapse"
+                    hotkeys={EXPAND_HOTKEYS}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon-3xs"
+                      className="ml-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpand(node.id);
+                      }}
+                    >
+                      <ChevronRight
+                        className={cn({
+                          "transform rotate-90": expandedTreeRows.has(node.id),
+                        })}
+                      />
+                    </Button>
+                  </TooltipWrapper>
+                ) : (
+                  <div className="ml-1 size-4 shrink-0" />
+                )}
               </div>
-              {hasDurationTimeline && renderDurationTimeline(node)}
+              {nodeHasDetails(node) && (
+                <div
+                  style={{
+                    paddingLeft: node.depth * INDENT_PX + INDENT_PX,
+                  }}
+                >
+                  {renderDetailsContainer(node)}
+                </div>
+              )}
+              {hasDurationTimeline && node.data.maxDuration > 0 && (
+                <div
+                  className="px-2 py-1"
+                  style={{ paddingLeft: node.depth * INDENT_PX + INDENT_PX }}
+                >
+                  <div className="relative h-1 w-full">
+                    <div className="absolute inset-x-0 top-[1.5px] h-px bg-border" />
+                    <div
+                      className="absolute top-0 h-1 rounded-full"
+                      style={{
+                        background: node.data.spanColor,
+                        width:
+                          Math.min(
+                            (node.data.duration / node.data.maxDuration) * 100,
+                            100,
+                          ) + "%",
+                        left:
+                          Math.max(
+                            ((node.data.startTimestamp -
+                              node.data.maxStartTime) /
+                              node.data.maxDuration) *
+                              100,
+                            0,
+                          ) + "%",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

@@ -1,107 +1,45 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import useLocalStorageState from "use-local-storage-state";
-import { FoldVertical, UnfoldVertical } from "lucide-react";
-import { Link } from "@tanstack/react-router";
 
 import {
   addAllParentIds,
   constructDataMapAndSearchIds,
   filterFunction,
 } from "./helpers";
-import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
-import { LOGS_SOURCE, Span, Trace } from "@/types/traces";
+import { Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
-import {
-  LOGS_TYPE,
-  SPANS_COLORS_MAP,
-  TRACE_TYPE_FOR_TREE,
-} from "@/constants/traces";
-import { Button } from "@/ui/button";
+import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import NoData from "@/shared/NoData/NoData";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import VirtualizedTreeViewer from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/VirtualizedTreeViewer";
 import useTreeDetailsStore, {
-  TREE_DATABLOCK_TYPE,
   TreeNode,
   TreeNodeConfig,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
-import SpanDetailsButton from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
-import useAppStore from "@/store/AppStore";
-import { createFilter } from "@/lib/filters";
-
-const SELECTED_TREE_DATABLOCKS_KEY = "tree-datablocks-config";
-const SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE: TreeNodeConfig = {
-  [TREE_DATABLOCK_TYPE.GUARDRAILS]: true,
-  [TREE_DATABLOCK_TYPE.DURATION]: true,
-  [TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS]: true,
-  [TREE_DATABLOCK_TYPE.TOKENS_BREAKDOWN]: true,
-  [TREE_DATABLOCK_TYPE.ESTIMATED_COST]: true,
-  [TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES]: true,
-  [TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS]: true,
-  [TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS]: true,
-  [TREE_DATABLOCK_TYPE.MODEL]: true,
-  [TREE_DATABLOCK_TYPE.DURATION_TIMELINE]: true,
-};
 
 type TraceTreeViewerProps = {
-  projectId: string;
   trace: Trace;
   spans?: Span[];
   rowId: string;
   onSelectRow: (id: string) => void;
   search?: string;
-  setSearch: OnChangeFn<string | undefined>;
   filters: Filters;
-  setFilters: OnChangeFn<Filters>;
+  config: TreeNodeConfig;
 };
 
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
-  projectId,
   trace,
   spans,
   rowId,
   onSelectRow,
   search,
-  setSearch,
   filters,
-  setFilters,
+  config,
 }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const traceSpans = useMemo(() => spans ?? [], [spans]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [config, setConfig] = useLocalStorageState(
-    SELECTED_TREE_DATABLOCKS_KEY,
-    {
-      defaultValue: SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE,
-    },
-  );
 
   const hasSearch = Boolean(search && search.length);
   const hasFilter = Boolean(filters.length);
   const hasSearchOrFilter = hasSearch || hasFilter;
-  const title = !hasSearchOrFilter ? "Trace" : "Results";
-  const canNavigateToSpans = !trace.source || trace.source === LOGS_SOURCE.sdk;
-
-  const spansFilterForTrace = useMemo(
-    () => [
-      createFilter({
-        field: "trace_id",
-        type: COLUMN_TYPE.string,
-        operator: "=",
-        value: trace.id,
-      }),
-    ],
-    [trace.id],
-  );
-
-  // Combine trace_id filter with trace panel filters for navigation
-  // spansFilterForTrace comes first to ensure trace_id filter takes precedence
-  const combinedSpansFilters = useMemo(
-    () => [...spansFilterForTrace, ...filters],
-    [spansFilterForTrace, filters],
-  );
 
   const predicate = useCallback(
     (data: Span | Trace) =>
@@ -139,16 +77,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     return retVal;
   }, [traceSpans, hasSearchOrFilter, trace, predicate]);
 
-  // Calculate filtered span count excluding the trace itself
-  const filteredSpanCount = useMemo(() => {
-    if (!hasSearchOrFilter) return traceSpans.length;
-    // Exclude the trace from the count - only count actual spans
-    return searchIds.size - (searchIds.has(trace.id) ? 1 : 0);
-  }, [hasSearchOrFilter, traceSpans.length, searchIds, trace.id]);
-
-  const { tree, toggleExpandAll, setTree, expandedTreeRows, fullExpandedSet } =
-    useTreeDetailsStore();
-  const isAllExpanded = expandedTreeRows.size === fullExpandedSet.size;
+  const { tree, setTree } = useTreeDetailsStore();
 
   useEffect(() => {
     if (!filteredTraceSpans) {
@@ -223,67 +152,10 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
 
   return (
     <div
-      className="relative size-full max-w-full overflow-auto pb-4"
+      className="relative size-full overflow-y-auto overflow-x-hidden pb-4"
       ref={scrollRef}
     >
-      <div className="min-w-[400px] max-w-full">
-        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-background pb-2 pl-6 pr-4 pt-4">
-          <div className="flex h-8 items-center gap-1">
-            <div className="comet-title-xs">{title} -</div>
-            {canNavigateToSpans ? (
-              <TooltipWrapper content="View all spans of this trace in table view">
-                <Link
-                  to={`/$workspaceName/projects/$projectId/logs`}
-                  params={{ workspaceName, projectId }}
-                  search={{
-                    logsType: LOGS_TYPE.spans,
-                    spans_filters: combinedSpansFilters,
-                  }}
-                >
-                  <Button variant="link" className="comet-body-s px-0" asChild>
-                    <span>{filteredSpanCount} spans</span>
-                  </Button>
-                </Link>
-              </TooltipWrapper>
-            ) : (
-              <span className="comet-body-s">{filteredSpanCount} spans</span>
-            )}
-            <ExplainerIcon
-              {...EXPLAINERS_MAP[
-                EXPLAINER_ID.what_are_these_elements_in_the_tree
-              ]}
-            />
-          </div>
-          <div className="sticky right-0 top-0 flex items-center gap-x-1.5 bg-background pr-4 shadow-[-10px_0_10px_0_hsl(var(--background))]">
-            {!hasSearchOrFilter ? (
-              <>
-                <SpanDetailsButton config={config} onConfigChange={setConfig} />
-                <TooltipWrapper
-                  content={isAllExpanded ? "Collapse all" : "Expand all"}
-                >
-                  <Button
-                    onClick={toggleExpandAll}
-                    variant="outline"
-                    size="icon-2xs"
-                  >
-                    {isAllExpanded ? <FoldVertical /> : <UnfoldVertical />}
-                  </Button>
-                </TooltipWrapper>
-              </>
-            ) : (
-              <Button
-                variant="ghost"
-                size="2xs"
-                onClick={() => {
-                  setSearch(undefined);
-                  setFilters([]);
-                }}
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-        </div>
+      <div className="max-w-full pt-2">
         {tree.length ? (
           <VirtualizedTreeViewer
             scrollRef={scrollRef}

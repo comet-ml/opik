@@ -8,7 +8,6 @@ import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
-import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
@@ -24,13 +23,11 @@ import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import { formatDate } from "@/lib/date";
 import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import TraceDataViewerActionsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,
 } from "@/v2/pages-shared/traces/DetailsActionSection";
-import TraceDataViewerHeader from "./TraceDataViewerHeader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
@@ -46,7 +43,6 @@ type TraceDataViewerProps = {
   projectId: string;
   traceId: string;
   spanId?: string;
-  activeSection: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
   search?: string;
@@ -58,7 +54,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   projectId,
   traceId,
   spanId,
-  activeSection,
   setActiveSection,
   isSpansLazyLoading,
   search,
@@ -184,32 +179,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
       )}
       <div className="min-w-[400px] max-w-full overflow-x-hidden p-4">
         <div className="mb-6 flex flex-col gap-1">
-          <TraceDataViewerHeader
-            title={
-              <>
-                <BaseTraceDataTypeIcon type={type} />
-                <div
-                  data-testid="data-viewer-title"
-                  className="comet-title-xs truncate"
-                >
-                  {data?.name}
-                </div>
-              </>
-            }
-            actionsPanel={(layoutSize) => (
-              <TraceDataViewerActionsPanel
-                data={data}
-                activeSection={activeSection}
-                setActiveSection={setActiveSection}
-                layoutSize={layoutSize}
-              />
-            )}
-          />
-          <div className="comet-body-s-accented flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
+          <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
             {created_at && (
               <TooltipWrapper content={`Created at: ${created_at}`}>
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-created-at"
                 >
                   <Calendar className="size-3 shrink-0" /> {created_at}
@@ -226,7 +200,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             {Boolean(data.feedback_scores?.length) && (
               <FeedbackScoreHoverCard scores={data.feedback_scores!}>
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-scores"
                 >
                   <PenLine className="size-3 shrink-0" />{" "}
@@ -241,7 +215,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   scores={traceData.span_feedback_scores!}
                 >
                   <div
-                    className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                    className="comet-body-xs flex items-center gap-1 text-muted-slate"
                     data-testid="data-viewer-span-scores"
                   >
                     <PenLine className="size-3 shrink-0" />{" "}
@@ -252,7 +226,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-comments"
                 >
                   <MessageSquareMore className="size-3 shrink-0" />{" "}
@@ -267,7 +241,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 }`}
               >
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-provider-model"
                 >
                   <Brain className="size-3 shrink-0" />{" "}
@@ -285,6 +259,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             traceId={traceId}
             spanId={spanId}
             className="pl-1"
+            tagVariant="gray"
           />
         </div>
 

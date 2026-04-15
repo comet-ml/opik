@@ -15,8 +15,7 @@ type TraceStatsDisplayProps = {
   estimatedCost?: number;
 };
 
-const statClassName =
-  "comet-body-xs-accented flex items-center gap-1 text-muted-slate";
+const statClassName = "comet-body-xs flex items-center gap-1 text-muted-slate";
 
 const TraceStatsDisplay: React.FC<TraceStatsDisplayProps> = ({
   duration,

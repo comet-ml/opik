@@ -13,10 +13,12 @@ LOGGER = logging.getLogger(__name__)
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
 
 
-def _get_httpx_client(api_key: Optional[str] = None) -> httpx.Client:
+def _get_httpx_client(
+    api_key: Optional[str] = None, workspace: Optional[str] = None
+) -> httpx.Client:
     config_ = config.OpikConfig()
     client = httpx_client.get(
-        workspace=None,
+        workspace=workspace,
         api_key=api_key,
         check_tls_certificate=config_.check_tls_certificate,
         compress_json_requests=config_.enable_json_request_compression,
@@ -103,3 +105,39 @@ def is_workspace_name_correct(api_key: Optional[str], workspace: str, url: str) 
 
     workspaces: List[str] = response.json().get("workspaceNames", [])
     return workspace in workspaces
+
+
+_SORTING_CREATED_AT_DESC = '[{"field":"created_at","direction":"DESC"}]'
+
+
+def get_most_recent_project_name(
+    api_key: Optional[str],
+    workspace: Optional[str],
+    api_url: str,
+) -> Optional[str]:
+    """
+    Fetches the most recently created project name.
+    Returns None if no projects are found or if the request fails.
+    """
+    try:
+        with _get_httpx_client(api_key=api_key, workspace=workspace) as client:
+            response = client.get(
+                url=f"{api_url}v1/private/projects",
+                params={
+                    "page": 1,
+                    "size": 1,
+                    "sorting": _SORTING_CREATED_AT_DESC,
+                },
+            )
+
+        if response.status_code != 200:
+            return None
+
+        projects = response.json().get("content", [])
+        if projects:
+            return projects[0].get("name") or None
+
+        return None
+    except Exception:
+        LOGGER.debug("Failed to fetch projects from %s", api_url, exc_info=True)
+        return None

@@ -25,6 +25,7 @@ type FiltersButtonProps<TColumnData> = {
   align?: "start" | "end";
   disabled?: boolean;
   deferOnChange?: boolean;
+  tooltip?: string;
 };
 
 const FiltersButton = <TColumnData,>({
@@ -37,6 +38,7 @@ const FiltersButton = <TColumnData,>({
   align = "start",
   disabled,
   deferOnChange = false,
+  tooltip,
 }: FiltersButtonProps<TColumnData>) => {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
@@ -82,7 +84,7 @@ const FiltersButton = <TColumnData,>({
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      <TooltipWrapper content={isIconLayout ? "Filters" : undefined}>
+      <TooltipWrapper content={isIconLayout ? tooltip ?? "Filters" : undefined}>
         <PopoverTrigger asChild>
           <Button
             variant={variant}
