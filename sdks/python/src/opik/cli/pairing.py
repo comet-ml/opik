@@ -276,7 +276,9 @@ def run_pairing(
     if tui:
         tui.pairing_started(pairing_url, ttl_seconds)
     else:
-        click.echo(f"Open this link to pair: {pairing_url}")
+        click.echo(
+            f"Open this link to pair:  \U0001f449 {pairing_url}\nOr copy this URL into your browser:\n{pairing_url}"
+        )
 
     deadline = time.monotonic() + ttl_seconds
     try:

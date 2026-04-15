@@ -102,7 +102,9 @@ class RunnerTUI:
             self._pairing_url = url
 
         if not self._is_tty:
-            self._console.print(f"Open this link to pair:\n{url}")
+            self._console.print(
+                f"Open this link to pair:  \U0001f449 {url}\nOr copy this URL into your browser:\n{url}"
+            )
 
     def pairing_completed(self) -> None:
         with self._lock:
@@ -232,9 +234,14 @@ class RunnerTUI:
             lines.append(dot_char, style="yellow")
             lines.append(f" (timeout in {mins}m {secs:02d}s)", style="dim")
             lines.append(f"\n\n{padding}")
-            lines.append("Open this link to pair:")
+            lines.append("Open this link to pair:  \U0001f449 ")
+            lines.append(
+                "Link", style=Style(link=pairing_url, bold=True, underline=True)
+            )
             lines.append(f"\n{padding}")
-            lines.append(pairing_url, style=Style(link=pairing_url, bold=True))
+            lines.append("Or copy this URL into your browser:")
+            lines.append(f"\n{padding}")
+            lines.append(pairing_url, style="dim")
             lines.append("\n")
 
         if has_ops:
