@@ -124,9 +124,16 @@ class RunnerTUI:
         text.append("\u2714", style="green")
         if project_url:
             text.append(f"\n\n{self._PADDING}")
-            text.append(
-                "Continue developing in Opik:  \u2197\ufe0f ", style="rgb(91,74,228)"
-            )
+            msg = "Continue developing in Opik:  "
+            r_s, g_s, b_s = 91, 74, 228
+            r_e, g_e, b_e = 170, 140, 255
+            for i, ch in enumerate(msg):
+                t = i / max(len(msg) - 1, 1)
+                r = int(r_s + (r_e - r_s) * t)
+                g = int(g_s + (g_e - g_s) * t)
+                b = int(b_s + (b_e - b_s) * t)
+                text.append(ch, style=f"rgb({r},{g},{b})")
+            text.append("\u2197\ufe0f ", style=f"rgb({r_e},{g_e},{b_e})")
             text.append(
                 "Link", style=Style(link=project_url, bold=True, underline=True)
             )
