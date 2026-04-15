@@ -496,21 +496,19 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
   describe("Update on suite with no initial version", () => {
     it(
-      "should create the initial version when update is called on a suite that has no items yet",
+      "should create the initial version when update is called on a freshly created dataset",
       async () => {
-        // Create with no globalAssertions and no globalExecutionPolicy so that
-        // TestSuite.create does NOT call applyDatasetItemChanges — leaving the
-        // suite with no dataset version at all.
         const suiteName = `test-suite-update-no-version-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await TestSuite.create(client, { name: suiteName });
+        // Create only the backing dataset — no TestSuite.create, so no version exists yet.
+        const dataset = await client.createDataset(suiteName);
+        const suite = new TestSuite(dataset, client);
 
-        // Verify there really is no version yet
-        const datasetRef = await client.getDataset(suiteName);
-        expect(await datasetRef.getVersionInfo()).toBeNull();
+        // Confirm precondition: no version on the server.
+        expect(await dataset.getVersionInfo()).toBeUndefined();
 
-        // update() should create the initial version via override:true
+        // update() should create the initial version via override:true.
         await suite.update({
           globalAssertions: ["Response is helpful"],
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
@@ -532,7 +530,9 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const suiteName = `test-suite-update-no-version-defaults-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await TestSuite.create(client, { name: suiteName });
+        // Create only the backing dataset — no TestSuite.create, so no version exists yet.
+        const dataset = await client.createDataset(suiteName);
+        const suite = new TestSuite(dataset, client);
 
         await suite.update({ globalAssertions: ["Response is concise"] });
 
@@ -540,7 +540,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         expect(assertions).toHaveLength(1);
         expect(assertions[0]).toBe("Response is concise");
 
-        // Policy should have fallen back to defaults (runsPerItem:1, passThreshold:1)
+        // Policy should have fallen back to defaults (runsPerItem:1, passThreshold:1).
         const policy = await suite.getGlobalExecutionPolicy();
         expect(policy).toEqual({ runsPerItem: 1, passThreshold: 1 });
       },
@@ -553,7 +553,9 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const suiteName = `test-suite-update-no-version-policy-only-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        const suite = await TestSuite.create(client, { name: suiteName });
+        // Create only the backing dataset — no TestSuite.create, so no version exists yet.
+        const dataset = await client.createDataset(suiteName);
+        const suite = new TestSuite(dataset, client);
 
         await suite.update({
           globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
