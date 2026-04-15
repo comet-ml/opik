@@ -346,7 +346,7 @@ const AgentConfigurationEditView = React.forwardRef<
 
                     return (
                       <div className="flex flex-col gap-1">
-                        <div className="rounded-md border bg-primary-foreground px-3 py-2">
+                        <div className="rounded-md border bg-background px-3 py-2">
                           {showPreview ? (
                             <div className="comet-body-s truncate text-foreground">
                               {currentValue || (
