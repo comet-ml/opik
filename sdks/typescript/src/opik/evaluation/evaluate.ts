@@ -82,8 +82,8 @@ export async function evaluate<T = Record<string, unknown>>(
     try {
       const blueprint = await client.api.agentConfigs.getBlueprintById(options.blueprintId);
       if (blueprint.name) agentConfig.blueprint_version = blueprint.name;
-    } catch {
-      logger.debug(`Failed to fetch blueprint ${options.blueprintId}`);
+    } catch (error) {
+      logger.debug(`Failed to fetch blueprint ${options.blueprintId}: ${error}`);
     }
     experimentConfig = { ...experimentConfig, agent_configuration: agentConfig };
   }

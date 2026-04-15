@@ -80,9 +80,9 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     for (const exp of experiments) {
       const meta = exp.metadata as Record<string, unknown> | undefined;
       const config = meta?.[AGENT_CONFIGURATION_METADATA_KEY];
-      if (isAgentConfigurationMetadata(config)) {
+      if (isAgentConfigurationMetadata(config) && exp.project_id) {
         result[exp.id] = {
-          projectId: exp.project_id ?? "",
+          projectId: exp.project_id,
           blueprintId: config._blueprint_id,
         };
       }
