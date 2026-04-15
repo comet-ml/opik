@@ -107,7 +107,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
               onClick={onSettingsClick}
             >
               <Settings2 className="size-3.5 shrink-0" />
-              Evaluation settings
+              Test settings
             </Button>
           )}
         </div>

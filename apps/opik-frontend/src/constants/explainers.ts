@@ -247,7 +247,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_experiment_items]: {
     id: EXPLAINER_ID.what_are_experiment_items,
     description:
-      "Experiment items are individual evaluations that connect a test suite sample with its LLM output, feedback scores, and trace.",
+      "Experiment items are individual evaluations that connect a dataset sample with its LLM output, feedback scores, and trace.",
     docLink: "/evaluation/overview",
     docHash: "#analyzing-evaluation-results",
   },

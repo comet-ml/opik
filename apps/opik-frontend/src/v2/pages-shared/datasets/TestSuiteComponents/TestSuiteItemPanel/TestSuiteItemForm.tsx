@@ -18,6 +18,11 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Description } from "@/ui/description";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/test-suites";
+import {
+  ASSERTIONS_DESCRIPTION,
+  PASS_CRITERIA_TITLE,
+  PASS_CRITERIA_DESCRIPTION,
+} from "@/constants/test-suites";
 import { TestSuiteItemFormValues } from "./testSuiteItemFormSchema";
 
 const EDITOR_EXTENSIONS = [jsonLanguage, EditorView.lineWrapping];
@@ -166,7 +171,7 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
         <span className="comet-body-s-accented">Assertions</span>
         <div className="flex items-center justify-between">
           <span className="comet-body-xs text-light-slate">
-            Define the conditions for this evaluation to pass
+            {ASSERTIONS_DESCRIPTION}
           </span>
           <button
             type="button"
@@ -187,9 +192,9 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
         />
       </div>
 
-      <h3 className="comet-body-s-accented mb-1 mt-6">Evaluation criteria</h3>
+      <h3 className="comet-body-s-accented mb-1 mt-6">{PASS_CRITERIA_TITLE}</h3>
       <p className="comet-body-xs mb-4 text-light-slate">
-        Define the conditions required for the evaluation to pass.
+        {PASS_CRITERIA_DESCRIPTION}
       </p>
 
       <div className="flex items-start overflow-hidden rounded-md border">

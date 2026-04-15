@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
+import {
+  PASS_CRITERIA_TITLE,
+  PASS_CRITERIA_DESCRIPTION,
+} from "@/constants/test-suites";
 import useDatasetForm from "@/v2/pages-shared/datasets/AddEditDatasetDialog/useDatasetForm";
 import AddEditDatasetDialogWrapper from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialogWrapper";
 
@@ -53,9 +57,9 @@ const AddEditTestSuiteDialog: React.FunctionComponent<
         <>
           <Separator className="mb-4" />
           <div className="mb-4">
-            <h3 className="comet-body-s-accented">Evaluation criteria</h3>
+            <h3 className="comet-body-s-accented">{PASS_CRITERIA_TITLE}</h3>
             <p className="comet-body-xs text-light-slate">
-              Define the conditions required for the evaluation to pass
+              {PASS_CRITERIA_DESCRIPTION}
             </p>
           </div>
           <div className="mb-4 flex gap-4">
@@ -104,8 +108,8 @@ const AddEditTestSuiteDialog: React.FunctionComponent<
             <div className="mb-1">
               <Label className="comet-body-s-accented">Global assertions</Label>
               <p className="comet-body-xs text-light-slate">
-                Define the global conditions all items in this evaluation suite
-                must pass.
+                Define the global conditions all items in this test suite must
+                pass.
               </p>
             </div>
             <div className="pt-1.5">

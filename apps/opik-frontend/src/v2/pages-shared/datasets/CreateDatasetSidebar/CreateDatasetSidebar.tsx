@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ChevronRight, ExternalLink } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -27,6 +27,10 @@ import { useActiveProjectId } from "@/store/AppStore";
 import CreatedSuccess from "./CreatedSuccess";
 import { Dataset, DATASET_TYPE, DatasetListType } from "@/types/datasets";
 import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
+import {
+  PASS_CRITERIA_TITLE,
+  PASS_CRITERIA_DESCRIPTION,
+} from "@/constants/test-suites";
 
 const ACCEPTED_TYPE = ".csv";
 
@@ -63,18 +67,21 @@ const CreateDatasetSidebar: React.FunctionComponent<
   const entityLabel =
     config.entityName[0].toLowerCase() + config.entityName.slice(1);
 
+  const [step, setStep] = useState<Step>(Step.NAME_DESCRIPTION);
+  const [createdName, setCreatedName] = useState("");
+  const [navigateToEntity, setNavigateToEntity] = useState<(() => void) | null>(
+    null,
+  );
+  const [sdkLanguage, setSdkLanguage] = useState<"python" | "typescript">(
+    "python",
+  );
+
   const activeProjectId = useActiveProjectId();
   const { data: activeProject } = useProjectById(
     { projectId: activeProjectId! },
     { enabled: !!activeProjectId },
   );
   const projectName = activeProject?.name ?? "";
-
-  const [step, setStep] = useState<Step>(Step.NAME_DESCRIPTION);
-  const [createdName, setCreatedName] = useState("");
-  const [navigateToEntity, setNavigateToEntity] = useState<(() => void) | null>(
-    null,
-  );
 
   const handleNameConflict = useCallback(() => {
     setStep(Step.NAME_DESCRIPTION);
@@ -122,31 +129,22 @@ const CreateDatasetSidebar: React.FunctionComponent<
     onCreateSuccess: handleCreateSuccess,
   });
 
-  const [sdkLanguage, setSdkLanguage] = useState<"python" | "typescript">(
-    "python",
-  );
+  const escapedProjectName = projectName
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
 
-  const escapedProjectName = useMemo(
-    () => projectName.replace(/\\/g, "\\\\").replace(/"/g, '\\"'),
-    [projectName],
-  );
+  const escapedName = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const pythonSnippet =
+    type === "test_suite"
+      ? `import opik\n\nclient = opik.Opik()\nsuite = client.get_or_create_test_suite(name="${escapedName}", project_name="${escapedProjectName}")`
+      : `import opik\n\nclient = opik.Opik()\ndataset = client.get_or_create_dataset(name="${escapedName}", project_name="${escapedProjectName}")`;
 
-  const pythonSnippet = useMemo(() => {
-    const escapedName = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    if (type === "test_suite") {
-      return `import opik\n\nclient = opik.Opik()\nsuite = client.get_or_create_test_suite(name="${escapedName}", project_name="${escapedProjectName}")`;
-    }
-    return `import opik\n\nclient = opik.Opik()\ndataset = client.get_or_create_dataset(name="${escapedName}", project_name="${escapedProjectName}")`;
-  }, [name, type, escapedProjectName]);
-
-  const typescriptSnippet = useMemo(() => {
-    const escapedName = escapeJsString(name);
-    const jsProjectName = escapeJsString(projectName);
-    if (type === "test_suite") {
-      return `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst suite = await client.getOrCreateTestSuite({ name: "${escapedName}", projectName: "${jsProjectName}" });`;
-    }
-    return `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst dataset = await client.getOrCreateDataset("${escapedName}", undefined, "${jsProjectName}");`;
-  }, [name, type, projectName]);
+  const jsEscapedName = escapeJsString(name);
+  const jsProjectName = escapeJsString(projectName);
+  const typescriptSnippet =
+    type === "test_suite"
+      ? `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst suite = await client.getOrCreateTestSuite({ name: "${jsEscapedName}", projectName: "${jsProjectName}" });`
+      : `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst dataset = await client.getOrCreateDataset("${jsEscapedName}", undefined, "${jsProjectName}");`;
 
   const activeSnippet =
     sdkLanguage === "python" ? pythonSnippet : typescriptSnippet;
@@ -227,16 +225,14 @@ const CreateDatasetSidebar: React.FunctionComponent<
     </>
   );
 
+  const dataKindPrefix = type === "test_suite" ? "test " : "";
+
   const renderStepUploadAndConfig = () => (
     <>
       <div className="mb-4">
-        <h3 className="comet-body-s-accented">{`Add ${
-          type === "test_suite" ? "test " : ""
-        }data`}</h3>
+        <h3 className="comet-body-s-accented">{`Add ${dataKindPrefix}data`}</h3>
         <p className="comet-body-xs text-light-slate">
-          {`Choose how to provide your ${
-            type === "test_suite" ? "test " : ""
-          }data`}
+          {`Choose how to provide your ${dataKindPrefix}data`}
         </p>
       </div>
       <div className="mb-4">
@@ -317,9 +313,9 @@ const CreateDatasetSidebar: React.FunctionComponent<
             <AccordionContent className="pl-6">
               <Separator className="mb-4" />
               <div className="mb-4">
-                <h3 className="comet-body-s-accented">Evaluation criteria</h3>
+                <h3 className="comet-body-s-accented">{PASS_CRITERIA_TITLE}</h3>
                 <p className="comet-body-xs text-light-slate">
-                  Define the conditions required for the evaluation to pass
+                  {PASS_CRITERIA_DESCRIPTION}
                 </p>
               </div>
               <div className="mb-4 flex gap-4">
