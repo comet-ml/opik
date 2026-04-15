@@ -258,7 +258,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
-  describe("Update skips when values unchanged", () => {
+  describe("updateTestSettings skips when values unchanged", () => {
     it(
       "should not create a new version when update is called with identical values",
       async () => {
@@ -281,7 +281,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const versionIdBefore = versionBefore!.id;
 
         // Call update with the exact same values
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is helpful"],
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
@@ -320,7 +320,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const versionIdBefore = versionBefore!.id;
 
         // Update with different assertions
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is concise", "Response is accurate"],
           globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });
@@ -343,7 +343,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
-  describe("Partial update preserves unchanged fields", () => {
+  describe("updateTestSettings: partial update preserves unchanged fields", () => {
     it(
       "should retain existing assertions when only executionPolicy is updated",
       async () => {
@@ -360,7 +360,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         await waitForSuiteItems(suite, 1);
 
         // Update only executionPolicy, omit assertions
-        await suite.update({
+        await suite.updateTestSettings({
           globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
         });
 
@@ -392,7 +392,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         await waitForSuiteItems(suite, 1);
 
         // Update only assertions, omit executionPolicy
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is accurate"],
         });
 
@@ -494,7 +494,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
-  describe("Update on suite with no initial version", () => {
+  describe("updateTestSettings on suite with no initial version", () => {
     async function waitForDataset(name: string) {
       await searchAndWaitForDone(
         async () => {
@@ -522,7 +522,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         expect(await dataset.getVersionInfo()).toBeUndefined();
 
         // update() should create the initial version via override:true.
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is helpful"],
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
@@ -547,7 +547,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         await waitForDataset(suiteName);
         const suite = new TestSuite(dataset, client);
 
-        await suite.update({ globalAssertions: ["Response is concise"] });
+        await suite.updateTestSettings({ globalAssertions: ["Response is concise"] });
 
         const assertions = await suite.getGlobalAssertions();
         expect(assertions).toHaveLength(1);
@@ -570,7 +570,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         await waitForDataset(suiteName);
         const suite = new TestSuite(dataset, client);
 
-        await suite.update({
+        await suite.updateTestSettings({
           globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });
 
@@ -584,7 +584,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
-  describe("Suite Update", () => {
+  describe("Suite updateTestSettings", () => {
     it(
       "should update suite evaluators and execution policy",
       async () => {
@@ -597,7 +597,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is concise"],
           globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });

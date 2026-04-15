@@ -346,9 +346,9 @@ export class TestSuite {
     return this.dataset.getVersionView(versionName);
   }
 
-  async update(options: UpdateTestSuiteOptions): Promise<void> {
+  async updateTestSettings(options: UpdateTestSuiteOptions): Promise<void> {
     if (options.globalExecutionPolicy) {
-      validateExecutionPolicy(options.globalExecutionPolicy, "suite update");
+      validateExecutionPolicy(options.globalExecutionPolicy, "suite test settings update");
     }
 
     const resolvedEvaluators = resolveEvaluators(
