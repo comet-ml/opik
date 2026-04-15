@@ -190,7 +190,7 @@ const ConnectAgentStep: React.FC = () => {
             id="onboarding-step2-view-traces"
             data-fs-element="onboarding-step2-view-traces"
           >
-            View traces & start optimizing
+            Explore Opik
             <ArrowRight className="size-3.5" />
           </Button>
         ) : (
