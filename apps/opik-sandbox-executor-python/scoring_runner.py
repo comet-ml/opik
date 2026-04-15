@@ -5,7 +5,7 @@ import traceback
 import types
 import uuid
 from sys import argv
-from typing import Type, Union, List, Any, Dict
+from typing import Type, Union, List, Any
 
 # ---------------------------------------------------------------------------
 # Lightweight import patching
@@ -68,7 +68,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 # Constants
 TRACE_THREAD_METRIC_TYPE = "trace_thread"  # Referenced in the payload_types.py as it's not available in the scoring_commands.py process
 
-def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
+def get_metric_class(module: types.ModuleType) -> Type[BaseMetric]:
     for _, cls in inspect.getmembers(module, inspect.isclass):
         if issubclass(cls, BaseMetric) and cls != BaseMetric:
             return cls
@@ -92,7 +92,7 @@ code = argv[1]
 data = json.loads(argv[2])
 payload_type = argv[3] if len(argv) > 3 else None
 
-module = ModuleType(str(uuid.uuid4()))
+module = types.ModuleType(str(uuid.uuid4()))
 
 try:
     exec(code, module.__dict__)
