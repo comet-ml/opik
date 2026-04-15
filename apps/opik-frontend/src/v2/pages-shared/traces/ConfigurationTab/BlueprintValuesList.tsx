@@ -14,11 +14,16 @@ import {
   useFieldsCollapse,
 } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 
-const renderScalarValue = (v: BlueprintValue) => (
-  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-    {formatBlueprintValue(v)}
-  </div>
-);
+const renderScalarValue = (v: BlueprintValue) => {
+  if (v.value === null || v.value === undefined) {
+    return <div className="comet-body-xs text-light-slate">No value</div>;
+  }
+  return (
+    <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+      {formatBlueprintValue(v)}
+    </div>
+  );
+};
 
 type BlueprintValuesListProps = {
   values: BlueprintValue[];

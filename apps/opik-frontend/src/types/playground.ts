@@ -23,6 +23,9 @@ export interface PromptLibraryMetadata {
   };
 }
 
+import type { BlueprintPromptRef } from "@/types/agent-configs";
+export type { BlueprintPromptRef } from "@/types/agent-configs";
+
 export interface PlaygroundPromptType {
   name: string;
   id: string;
@@ -31,6 +34,7 @@ export interface PlaygroundPromptType {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
+  loadedBlueprintRef?: BlueprintPromptRef;
   skipInitialPromptLoad?: boolean;
 }
 

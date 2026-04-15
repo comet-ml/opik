@@ -120,6 +120,8 @@ module.exports = {
         "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
         "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
 
+        "library-loaded": "hsl(var(--library-loaded))",
+
         /* Chart colors (Figma Design System) */
         "chart-blue": "var(--chart-blue)",
         "chart-yellow": "var(--chart-yellow)",

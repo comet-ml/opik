@@ -9,7 +9,6 @@ import { Card } from "@/ui/card";
 import DeployToPopover from "./DeployToPopover";
 import BlueprintValuesList from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
 import BlueprintDiffDialog from "./BlueprintDiffDialog/BlueprintDiffDialog";
-import { generateBlueprintDescription } from "@/utils/agent-configurations";
 import { Button } from "@/ui/button";
 import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
 import useTracesList from "@/api/traces/useTracesList";
@@ -62,24 +61,26 @@ const AgentConfigurationDetailView: React.FC<
   const hasTraces = (tracesData?.total ?? 0) > 0;
 
   const [diffOpen, setDiffOpen] = useState(false);
-  const [diffBase, setDiffBase] = useState<{
+  const [comparedVersion, setComparedVersion] = useState<{
     label: string;
     blueprintId: string;
   } | null>(null);
   const [notesExpanded, setNotesExpanded] = useState(false);
 
   const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
-    setDiffBase({
+    setComparedVersion({
       label: versionItem.name,
       blueprintId: versionItem.id,
     });
     setDiffOpen(true);
   };
 
-  const description =
-    item.description || generateBlueprintDescription(item.values);
+  const isLatestVersion = versions[0]?.id === item.id;
 
-  const descriptionIsLong = description.length > DESCRIPTION_TRUNCATE_LENGTH;
+  const description = item.description;
+
+  const descriptionIsLong =
+    (description?.length ?? 0) > DESCRIPTION_TRUNCATE_LENGTH;
 
   const collapsibleKeys = useMemo(
     () => collectMultiLineKeys(agentConfig?.values ?? []),
@@ -134,39 +135,55 @@ const AgentConfigurationDetailView: React.FC<
                 }}
               />
             )}
-            <Button size="xs" variant="outline" onClick={onEdit}>
-              <Pencil className="mr-1.5 size-3.5 text-light-slate" />
-              Edit configuration
-            </Button>
+            <TooltipWrapper
+              content={
+                isLatestVersion
+                  ? undefined
+                  : "Editing is only available for the latest version"
+              }
+            >
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={onEdit}
+                disabled={!isLatestVersion}
+                style={!isLatestVersion ? { pointerEvents: "auto" } : undefined}
+              >
+                <Pencil className="mr-1.5 size-3.5 text-light-slate" />
+                Edit configuration
+              </Button>
+            </TooltipWrapper>
           </div>
         </div>
-        <div className="comet-body-s flex w-full min-w-0 items-start gap-1 text-light-slate">
-          <FilePen className="mt-1 size-3 shrink-0" />
-          <div
-            className={cn(
-              "flex min-w-0 flex-1 items-baseline gap-1",
-              notesExpanded && "flex-wrap",
-            )}
-          >
-            <span
+        {description && (
+          <div className="comet-body-s flex w-full min-w-0 items-start gap-1 text-light-slate">
+            <FilePen className="mt-1 size-3 shrink-0" />
+            <div
               className={cn(
-                "min-w-0",
-                notesExpanded ? "break-words" : "truncate",
+                "flex min-w-0 flex-1 items-baseline gap-1",
+                notesExpanded && "flex-wrap",
               )}
             >
-              {description}
-            </span>
-            {descriptionIsLong && (
-              <button
-                type="button"
-                className="shrink-0 text-light-slate underline"
-                onClick={() => setNotesExpanded((v) => !v)}
+              <span
+                className={cn(
+                  "min-w-0",
+                  notesExpanded ? "break-words" : "truncate",
+                )}
               >
-                {notesExpanded ? "Show less" : "Show more"}
-              </button>
-            )}
+                {description}
+              </span>
+              {descriptionIsLong && (
+                <button
+                  type="button"
+                  className="shrink-0 text-light-slate underline"
+                  onClick={() => setNotesExpanded((v) => !v)}
+                >
+                  {notesExpanded ? "Show less" : "Show more"}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         <div className="comet-body-s mt-1 flex items-center gap-1 text-light-slate">
           <Clock className="size-3 shrink-0" />
           <TooltipWrapper
@@ -198,17 +215,17 @@ const AgentConfigurationDetailView: React.FC<
         )}
       </Card>
 
-      {diffBase && (
+      {comparedVersion && (
         <BlueprintDiffDialog
           open={diffOpen}
           setOpen={setDiffOpen}
           base={{
-            label: diffBase.label,
-            blueprintId: diffBase.blueprintId,
-          }}
-          diff={{
             label: item.name,
             blueprintId: item.id,
+          }}
+          diff={{
+            label: comparedVersion.label,
+            blueprintId: comparedVersion.blueprintId,
           }}
         />
       )}

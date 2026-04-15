@@ -40,11 +40,3 @@ export const formatBlueprintValue = (v: BlueprintValue): string => {
       return v.value;
   }
 };
-
-export const generateBlueprintDescription = (
-  values: Array<{ key: string; value: unknown }>,
-): string => {
-  if (!values.length) return "";
-  const changes = values.map(({ key, value }) => `${key} to ${value}`);
-  return `Changed ${changes.join(", ")}`;
-};

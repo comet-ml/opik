@@ -1,4 +1,9 @@
-import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import {
+  QueryFunctionContext,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback } from "react";
 import api, { PROMPTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { PromptByCommit } from "@/types/prompts";
 
@@ -6,7 +11,7 @@ type UsePromptByCommitParams = {
   commitId: string;
 };
 
-const getPromptByCommit = async (
+export const getPromptByCommit = async (
   { signal }: QueryFunctionContext,
   { commitId }: UsePromptByCommitParams,
 ) => {
@@ -27,4 +32,19 @@ export default function usePromptByCommit(
     queryFn: (context) => getPromptByCommit(context, params),
     ...options,
   });
+}
+
+export function useFetchPromptByCommit() {
+  const queryClient = useQueryClient();
+
+  return useCallback(
+    async (params: UsePromptByCommitParams): Promise<PromptByCommit> => {
+      return queryClient.fetchQuery({
+        queryKey: ["prompt-by-commit", params],
+        queryFn: (context) => getPromptByCommit(context, params),
+        staleTime: 5 * 60 * 1000,
+      });
+    },
+    [queryClient],
+  );
 }
