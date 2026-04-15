@@ -4,7 +4,9 @@ import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetType;
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -37,9 +39,10 @@ import java.util.UUID;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DatasetExpansionService {
 
-    private static final int MAX_COMPLETION_TOKENS = 4000;
+    private static final int DEFAULT_MAX_COMPLETION_TOKENS = 4000;
 
     private final @NonNull ChatCompletionService chatCompletionService;
+    private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull DatasetItemService datasetItemService;
     private final @NonNull DatasetService datasetService;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -67,7 +70,9 @@ public class DatasetExpansionService {
             throw new BadRequestException("Cannot expand empty dataset. Add at least one sample first");
         }
 
-        var datasetType = datasetService.findById(datasetId).type();
+        var datasetType = datasetService.getById(datasetId, workspaceId)
+                .orElseThrow(() -> new BadRequestException("Dataset not found"))
+                .type();
 
         // Use custom prompt if provided, otherwise build default prompt
         var generationPrompt = StringUtils.isNotBlank(request.customPrompt())
@@ -135,6 +140,7 @@ public class DatasetExpansionService {
             String basePrompt, DatasetExpansion request, UUID datasetId, String workspaceId,
             DatasetType datasetType) {
         var allSamples = new ArrayList<DatasetItem>();
+        var maxCompletionTokens = resolveMaxCompletionTokens(request);
         var totalSamples = request.sampleCount();
         var batchSize = Math.min(20, totalSamples); // Process in batches of up to 20
         var remainingSamples = totalSamples;
@@ -173,7 +179,7 @@ public class DatasetExpansionService {
                             .preserveFields(request.preserveFields())
                             .variationInstructions(request.variationInstructions())
                             .build(),
-                    datasetId, workspaceId, datasetType);
+                    datasetId, workspaceId, datasetType, maxCompletionTokens);
 
             allSamples.addAll(batchSamples);
             remainingSamples -= currentBatchSize;
@@ -185,16 +191,19 @@ public class DatasetExpansionService {
 
     private List<DatasetItem> generateSamples(
             String prompt, DatasetExpansion request, UUID datasetId, String workspaceId,
-            DatasetType datasetType) {
+            DatasetType datasetType, Integer maxCompletionTokens) {
         try {
-            // Create chat completion request, request should handle most models including reasoning models like GPT-5, Sonnet, etc.
-            var chatRequest = ChatCompletionRequest.builder()
+            var builder = ChatCompletionRequest.builder()
                     .model(request.model())
                     .addUserMessage(prompt)
-                    .maxCompletionTokens(MAX_COMPLETION_TOKENS)
-                    .temperature(1.0) // Set temperature to 1.0 for consistent output
-                    .stream(false) // Non-streaming request for dataset expansion
-                    .build();
+                    .temperature(1.0)
+                    .stream(false);
+
+            if (maxCompletionTokens != null) {
+                builder.maxCompletionTokens(maxCompletionTokens);
+            }
+
+            var chatRequest = builder.build();
 
             // Call LLM
             var response = chatCompletionService.create(chatRequest, workspaceId);
@@ -218,6 +227,19 @@ public class DatasetExpansionService {
             log.error("Failed to generate samples using LLM", exception);
             throw new InternalServerErrorException("Failed to generate synthetic samples", exception);
         }
+    }
+
+    private Integer resolveMaxCompletionTokens(DatasetExpansion request) {
+        if (request.maxCompletionTokens() != null) {
+            return request.maxCompletionTokens();
+        }
+
+        var provider = llmProviderFactory.getLlmProvider(request.model());
+        if (provider == LlmProvider.ANTHROPIC) {
+            return DEFAULT_MAX_COMPLETION_TOKENS;
+        }
+
+        return null;
     }
 
     private List<DatasetItem> parseGeneratedSamples(
@@ -257,50 +279,12 @@ public class DatasetExpansionService {
             if (rootNode.isArray()) {
                 for (var sampleNode : rootNode) {
                     if (sampleNode.isObject()) {
-                        var dataNode = (ObjectNode) sampleNode;
-
-                        if (datasetType != DatasetType.TEST_SUITE) {
-                            dataNode.put("_generated", true);
-                            dataNode.put("_generation_model", model);
-                        }
-
-                        // Convert to Map for DatasetItem
-                        Map<String, JsonNode> dataMap = objectMapper.convertValue(dataNode,
-                                objectMapper.getTypeFactory().constructMapType(Map.class, String.class,
-                                        JsonNode.class));
-
-                        var sample = DatasetItem.builder()
-                                .id(idGenerator.generateId())
-                                .datasetId(datasetId)
-                                .data(dataMap)
-                                .source(com.comet.opik.api.DatasetItemSource.MANUAL)
-                                .build();
-
-                        samples.add(sample);
+                        samples.add(buildDatasetItem((ObjectNode) sampleNode, datasetId, model, datasetType));
                     }
                 }
             } else if (rootNode.isObject()) {
-                // Handle case where LLM returns a single object instead of array
                 log.warn("LLM returned single object instead of array, wrapping in array");
-                var dataNode = (ObjectNode) rootNode;
-
-                if (datasetType != DatasetType.TEST_SUITE) {
-                    dataNode.put("_generated", true);
-                    dataNode.put("_generation_model", model);
-                }
-
-                Map<String, JsonNode> dataMap = objectMapper.convertValue(dataNode,
-                        objectMapper.getTypeFactory().constructMapType(Map.class, String.class,
-                                JsonNode.class));
-
-                var sample = DatasetItem.builder()
-                        .id(idGenerator.generateId())
-                        .datasetId(datasetId)
-                        .data(dataMap)
-                        .source(com.comet.opik.api.DatasetItemSource.MANUAL)
-                        .build();
-
-                samples.add(sample);
+                samples.add(buildDatasetItem((ObjectNode) rootNode, datasetId, model, datasetType));
             } else {
                 throw new BadRequestException(
                         "Expected JSON array or object, but got: '%s'".formatted(rootNode.getNodeType()));
@@ -332,6 +316,24 @@ public class DatasetExpansionService {
             var userMessage = buildUserFriendlyErrorMessage(exception, generatedContent);
             throw new BadRequestException(userMessage, exception);
         }
+    }
+
+    private DatasetItem buildDatasetItem(ObjectNode dataNode, UUID datasetId, String model,
+            DatasetType datasetType) {
+        if (datasetType != DatasetType.TEST_SUITE) {
+            dataNode.put("_generated", true);
+            dataNode.put("_generation_model", model);
+        }
+
+        Map<String, JsonNode> dataMap = objectMapper.convertValue(dataNode,
+                objectMapper.getTypeFactory().constructMapType(Map.class, String.class, JsonNode.class));
+
+        return DatasetItem.builder()
+                .id(idGenerator.generateId())
+                .datasetId(datasetId)
+                .data(dataMap)
+                .source(com.comet.opik.api.DatasetItemSource.MANUAL)
+                .build();
     }
 
     private String buildUserFriendlyErrorMessage(Exception e, String generatedContent) {
