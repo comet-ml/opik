@@ -447,15 +447,36 @@ export class OpikClient {
     try {
       await this.datasetBatchQueue.flush();
 
-      let projectId: string | undefined;
-      try {
-        projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch {
-        // Project doesn't exist yet — list without project filter
-      }
+      const projectId = await this.resolveProjectId(resolvedProjectName);
+      const { TestSuite } = await import("@/evaluation/suite");
 
-      const { getTestSuites } = await import("@/evaluation/suite/getTestSuites");
-      const suites = await getTestSuites(this, maxResults, resolvedProjectName, projectId);
+      const suites: TestSuite[] = [];
+      let page = 1;
+      const pageSize = 100;
+
+      while (suites.length < maxResults) {
+        const response = await this.api.datasets.findDatasets({
+          page,
+          size: pageSize,
+          ...(projectId && { projectId }),
+        });
+
+        const content = response.content ?? [];
+        if (content.length === 0) break;
+
+        for (const datasetData of content) {
+          if (suites.length >= maxResults) break;
+          if (datasetData.type !== OpikApi.DatasetPublicType.EvaluationSuite) continue;
+          suites.push(
+            new TestSuite(
+              new Dataset({ ...datasetData, projectName: resolvedProjectName }, this),
+              this
+            )
+          );
+        }
+
+        page++;
+      }
 
       logger.info(`Retrieved ${suites.length} test suites`);
       return suites;
@@ -474,6 +495,18 @@ export class OpikClient {
       throw new Error(`Project "${projectName}" not found`);
     }
     return project.id;
+  }
+
+  /**
+   * Resolves a project name to its ID.
+   * Returns undefined if projectName is undefined (no API call made).
+   * Errors from the API are propagated — matching Python's resolve_project_id_by_name_optional().
+   */
+  private async resolveProjectId(projectName: string | undefined): Promise<string | undefined> {
+    if (projectName === undefined) {
+      return undefined;
+    }
+    return this.getProjectIdByName(projectName);
   }
 
   private async createAnnotationQueueInternal<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
