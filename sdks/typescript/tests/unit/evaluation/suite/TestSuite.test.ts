@@ -1217,62 +1217,40 @@ describe("TestSuite", () => {
   });
 
   describe("update", () => {
-    const createMockRawItem = (id: string, data: Record<string, unknown>) => {
-      const item = new DatasetItem({ id, ...data });
-      return item;
-    };
+    let insertSpy: MockInstance;
 
     beforeEach(() => {
-      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([
-        createMockRawItem("item-1", { input: "original", expected: "original_output" }),
-        createMockRawItem("item-2", { input: "original2", metadata: { source: "test" } }),
-      ]);
+      insertSpy = vi.spyOn(testDataset, "insert").mockResolvedValue(undefined);
     });
 
-    it("should update items via dataset.update with merged data", async () => {
-      const updateSpy = vi
-        .spyOn(testDataset, "update")
-        .mockResolvedValue(undefined);
-
+    it("should call insert with id embedded in data", async () => {
       await suite.update([
         { id: "item-1", data: { input: "updated" } },
         { id: "item-2", assertions: ["is correct"], description: "Updated item" },
       ]);
 
-      expect(updateSpy).toHaveBeenCalledTimes(1);
-      const updatedItems = updateSpy.mock.calls[0][0] as unknown[];
-      expect(updatedItems).toHaveLength(2);
-      expect(updatedItems[0]).toEqual(
-        expect.objectContaining({ id: "item-1", input: "updated", expected: "original_output" })
+      expect(insertSpy).toHaveBeenCalledTimes(1);
+      const insertedItems = insertSpy.mock.calls[0][0] as unknown[];
+      expect(insertedItems).toHaveLength(2);
+      expect(insertedItems[0]).toEqual(
+        expect.objectContaining({ id: "item-1", input: "updated" })
       );
-      expect(updatedItems[1]).toEqual(
+      expect(insertedItems[1]).toEqual(
         expect.objectContaining({
           id: "item-2",
-          input: "original2",
-          metadata: { source: "test" },
-          evaluators: [
-            expect.objectContaining({ name: "llm_judge", type: "llm_judge" }),
-          ],
+          evaluators: [expect.objectContaining({ name: "llm_judge", type: "llm_judge" })],
           description: "Updated item",
         })
       );
     });
 
-    it("should not call dataset.update for empty array", async () => {
-      const updateSpy = vi
-        .spyOn(testDataset, "update")
-        .mockResolvedValue(undefined);
-
+    it("should not call insert for empty array", async () => {
       await suite.update([]);
 
-      expect(updateSpy).not.toHaveBeenCalled();
+      expect(insertSpy).not.toHaveBeenCalled();
     });
 
     it("should pass execution policy per item", async () => {
-      const updateSpy = vi
-        .spyOn(testDataset, "update")
-        .mockResolvedValue(undefined);
-
       await suite.update([
         {
           id: "item-1",
@@ -1281,23 +1259,26 @@ describe("TestSuite", () => {
         },
       ]);
 
-      const updatedItems = updateSpy.mock.calls[0][0] as unknown[];
-      expect(updatedItems[0]).toEqual(
+      const insertedItems = insertSpy.mock.calls[0][0] as unknown[];
+      expect(insertedItems[0]).toEqual(
         expect.objectContaining({
           id: "item-1",
           input: "test",
-          expected: "original_output",
           executionPolicy: { runsPerItem: 3, passThreshold: 2 },
         })
       );
     });
 
-    it("should throw error when item to update is not found", async () => {
-      vi.spyOn(testDataset, "update").mockResolvedValue(undefined);
-
+    it("should throw when an item has an empty id", async () => {
       await expect(
-        suite.update([{ id: "non-existent-id", data: { foo: "bar" } }])
-      ).rejects.toThrow('Item with id "non-existent-id" not found in the test suite');
+        suite.update([{ id: "", data: { foo: "bar" } }])
+      ).rejects.toThrow("Missing id for test suite item to update");
+    });
+
+    it("should throw when an item has a whitespace-only id", async () => {
+      await expect(
+        suite.update([{ id: "   ", data: { foo: "bar" } }])
+      ).rejects.toThrow("Missing id for test suite item to update");
     });
   });
 
