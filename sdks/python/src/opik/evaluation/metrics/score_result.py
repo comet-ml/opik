@@ -1,12 +1,3 @@
-import dataclasses
-from typing import Optional, Dict, Any
+from _opik import ScoreResult
 
-
-@dataclasses.dataclass
-class ScoreResult:
-    name: str
-    value: float
-    reason: Optional[str] = None
-    category_name: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    scoring_failed: bool = False
+__all__ = ["ScoreResult"]
