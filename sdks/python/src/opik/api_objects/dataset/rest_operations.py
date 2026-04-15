@@ -368,6 +368,11 @@ def create_test_suite_dataset(
         project_name=project_name,
     )
 
+    # Skip initial version when there is no metadata to persist.
+    # This avoids an empty v1 that the TS SDK doesn't create (OPIK-5815).
+    if not evaluators and not exec_policy:
+        return dataset_fern.id
+
     resolved_policy = exec_policy or execution_policy.DEFAULT_EXECUTION_POLICY.copy()
     request: Dict[str, Any] = {
         "change_description": "Suite created via SDK",
@@ -390,6 +395,37 @@ def create_test_suite_dataset(
     )
 
     return dataset_fern.id
+
+
+def create_initial_test_suite_version(
+    rest_client: OpikApi,
+    dataset_id: str,
+    evaluators: List[llm_judge.LLMJudge],
+    exec_policy: execution_policy.ExecutionPolicy,
+) -> None:
+    """
+    Create the first version for a test suite that has no versions yet.
+    Uses override=True since there is no base version to build on.
+    """
+    request: Dict[str, Any] = {
+        "change_description": "Suite created via SDK",
+    }
+    if evaluators:
+        request["evaluators"] = [
+            {
+                "name": e.name,
+                "type": "llm_judge",
+                "config": e.to_config().model_dump(by_alias=True),
+            }
+            for e in evaluators
+        ]
+    request["execution_policy"] = {
+        "runs_per_item": exec_policy.get("runs_per_item", 1),
+        "pass_threshold": exec_policy.get("pass_threshold", 1),
+    }
+    rest_client.datasets.apply_dataset_item_changes(
+        id=dataset_id, request=request, override=True
+    )
 
 
 def update_test_suite_dataset(
