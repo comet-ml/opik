@@ -131,6 +131,31 @@ class TestSuiteVersion:
         return self._version_info.items_total
 
     @property
+    def version_hash(self) -> Optional[str]:
+        """The unique hash identifier of this version."""
+        return self._version_info.version_hash
+
+    @property
+    def tags(self) -> Optional[List[str]]:
+        """Tags associated with this version."""
+        return self._version_info.tags
+
+    @property
+    def items_added(self) -> Optional[int]:
+        """Number of items added since the previous version."""
+        return self._version_info.items_added
+
+    @property
+    def items_modified(self) -> Optional[int]:
+        """Number of items modified since the previous version."""
+        return self._version_info.items_modified
+
+    @property
+    def items_deleted(self) -> Optional[int]:
+        """Number of items deleted since the previous version."""
+        return self._version_info.items_deleted
+
+    @property
     def change_description(self) -> Optional[str]:
         """Description of changes in this version."""
         return self._version_info.change_description
@@ -139,6 +164,11 @@ class TestSuiteVersion:
     def created_at(self) -> Optional[datetime.datetime]:
         """Timestamp when this version was created."""
         return self._version_info.created_at
+
+    @property
+    def created_by(self) -> Optional[str]:
+        """User who created this version."""
+        return self._version_info.created_by
 
     @property
     def project_name(self) -> Optional[str]:
@@ -264,6 +294,11 @@ class TestSuite:
         """The project name associated with the test suite."""
         return self._dataset.project_name
 
+    @property
+    def items_count(self) -> Optional[int]:
+        """The total number of items in the test suite."""
+        return self._dataset.dataset_items_count
+
     def get_tags(self) -> List[str]:
         """
         Get the tags for the suite.
@@ -361,15 +396,14 @@ class TestSuite:
             )
         ]
 
-    def update(
+    def update_test_settings(
         self,
         *,
         global_execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
         global_assertions: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
     ) -> None:
         """
-        Update the suite-level assertions, execution policy, and/or tags.
+        Update the suite-level assertions and/or execution policy.
 
         Supports partial updates: any parameter not provided will retain
         its current value. If the new values are identical to the current
@@ -381,7 +415,6 @@ class TestSuite:
             global_assertions: New suite-level assertions. Each string
                 describes an expected behavior that will be checked by an
                 LLM. If not provided, the current assertions are kept.
-            tags: Tags for the suite.
 
         Raises:
             ValueError: If nothing to update is provided.
@@ -393,69 +426,58 @@ class TestSuite:
             global_assertions, None, "suite-level assertions"
         )
 
-        if resolved is None and global_execution_policy is None and tags is None:
+        if resolved is None and global_execution_policy is None:
             raise ValueError(
-                "At least one of 'global_assertions', "
-                "'global_execution_policy', or 'tags' must be provided."
+                "At least one of 'global_assertions' or "
+                "'global_execution_policy' must be provided."
             )
 
-        if tags is not None:
-            self._dataset._rest_client.datasets.update_dataset(
-                id=self._dataset.id,
-                name=self._name,
-                tags=tags,
-            )
+        version_info = self._dataset.get_version_info()
 
-        has_version_updates = (
-            resolved is not None or global_execution_policy is not None
-        )
-        if has_version_updates:
-            version_info = self._dataset.get_version_info()
-
-            if version_info is None:
-                new_evaluators = resolved or []
-                new_policy = (
-                    global_execution_policy
-                    or execution_policy.DEFAULT_EXECUTION_POLICY.copy()
-                )
-                rest_operations.create_initial_test_suite_version(
-                    rest_client=self._dataset._rest_client,
-                    dataset_id=self._dataset.id,
-                    evaluators=new_evaluators,
-                    exec_policy=new_policy,
-                )
-                return
-
-            current_evaluators = self._dataset.get_evaluators()
-            current_policy = self.get_global_execution_policy()
-
-            new_evaluators = resolved if resolved is not None else current_evaluators
+        if version_info is None:
+            new_evaluators = resolved or []
             new_policy = (
                 global_execution_policy
-                if global_execution_policy is not None
-                else current_policy
+                or execution_policy.DEFAULT_EXECUTION_POLICY.copy()
             )
-
-            if (
-                _evaluators_equal(new_evaluators, current_evaluators)
-                and new_policy == current_policy
-            ):
-                return
-
-            change_parts: List[str] = []
-            if resolved is not None:
-                change_parts.append("assertions")
-            if global_execution_policy is not None:
-                change_parts.append("execution policy")
-
-            rest_operations.update_test_suite_dataset(
+            rest_operations.create_initial_test_suite_version(
                 rest_client=self._dataset._rest_client,
                 dataset_id=self._dataset.id,
-                base_version_id=version_info.id,
                 evaluators=new_evaluators,
                 exec_policy=new_policy,
-                change_description=f"Updated {' and '.join(change_parts)} via SDK",
             )
+            return
+
+        current_evaluators = self._dataset.get_evaluators()
+        current_policy = self.get_global_execution_policy()
+
+        new_evaluators = resolved if resolved is not None else current_evaluators
+        new_policy = (
+            global_execution_policy
+            if global_execution_policy is not None
+            else current_policy
+        )
+
+        if (
+            _evaluators_equal(new_evaluators, current_evaluators)
+            and new_policy == current_policy
+        ):
+            return
+
+        change_parts: List[str] = []
+        if resolved is not None:
+            change_parts.append("assertions")
+        if global_execution_policy is not None:
+            change_parts.append("execution policy")
+
+        rest_operations.update_test_suite_dataset(
+            rest_client=self._dataset._rest_client,
+            dataset_id=self._dataset.id,
+            base_version_id=version_info.id,
+            evaluators=new_evaluators,
+            exec_policy=new_policy,
+            change_description=f"Updated {' and '.join(change_parts)} via SDK",
+        )
 
     def delete(self, items_ids: List[str]) -> None:
         """
@@ -496,7 +518,7 @@ class TestSuite:
         """
         return converters.evaluators_to_assertions(self._dataset.get_evaluators())
 
-    def update_items(
+    def update(
         self,
         items: List[suite_types.TestSuiteItem],
     ) -> None:

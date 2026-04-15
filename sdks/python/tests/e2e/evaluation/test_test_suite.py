@@ -883,7 +883,7 @@ def test_test_suite__get_global_execution_policy__default_when_not_set(
     assert policy["pass_threshold"] == 1
 
 
-def test_test_suite__update__changes_assertions_and_policy(
+def test_test_suite__update_test_settings__changes_assertions_and_policy(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
@@ -904,7 +904,7 @@ def test_test_suite__update__changes_assertions_and_policy(
     assert policy["runs_per_item"] == 1
 
     # Update with new assertions and policy
-    suite.update(
+    suite.update_test_settings(
         global_assertions=["Response is accurate", "Response is concise"],
         global_execution_policy={"runs_per_item": 3, "pass_threshold": 2},
     )
@@ -1013,7 +1013,7 @@ def test_get_or_create_test_suite__existing_with_different_policy__does_not_modi
     assert set(assertions) == {"Response is helpful"}
 
 
-def test_test_suite__update_assertions_only__keeps_existing_policy(
+def test_test_suite__update_test_settings_assertions_only__keeps_existing_policy(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
@@ -1026,7 +1026,7 @@ def test_test_suite__update_assertions_only__keeps_existing_policy(
         global_execution_policy={"runs_per_item": 3, "pass_threshold": 2},
     )
 
-    suite.update(global_assertions=["Response is accurate"])
+    suite.update_test_settings(global_assertions=["Response is accurate"])
 
     retrieved = opik_client.get_test_suite(name=dataset_name)
 
@@ -1038,7 +1038,7 @@ def test_test_suite__update_assertions_only__keeps_existing_policy(
     assert policy["pass_threshold"] == 2
 
 
-def test_test_suite__update_policy_only__keeps_existing_assertions(
+def test_test_suite__update_test_settings_policy_only__keeps_existing_assertions(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
@@ -1051,7 +1051,9 @@ def test_test_suite__update_policy_only__keeps_existing_assertions(
         global_execution_policy={"runs_per_item": 1, "pass_threshold": 1},
     )
 
-    suite.update(global_execution_policy={"runs_per_item": 5, "pass_threshold": 3})
+    suite.update_test_settings(
+        global_execution_policy={"runs_per_item": 5, "pass_threshold": 3}
+    )
 
     retrieved = opik_client.get_test_suite(name=dataset_name)
 
@@ -1066,7 +1068,7 @@ def test_test_suite__update_policy_only__keeps_existing_assertions(
     }
 
 
-def test_test_suite__update_with_empty_assertions__clears_assertions(
+def test_test_suite__update_test_settings_with_empty_assertions__clears_assertions(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
@@ -1081,7 +1083,7 @@ def test_test_suite__update_with_empty_assertions__clears_assertions(
 
     assert len(suite.get_global_assertions()) == 2
 
-    suite.update(global_assertions=[])
+    suite.update_test_settings(global_assertions=[])
 
     retrieved = opik_client.get_test_suite(name=dataset_name)
     assert retrieved.get_global_assertions() == []
@@ -1111,25 +1113,6 @@ def test_test_suite__create_with_tags__tags_persisted(
 
     suite = opik_client.get_test_suite(dataset_name)
     assert sorted(suite.get_tags()) == ["regression", "v2"]
-
-
-def test_test_suite__update_tags__tags_updated(
-    opik_client: opik.Opik, dataset_name: str
-):
-    """
-    Test that tags can be updated on an existing test suite
-    and verified via get_test_suite().
-    """
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Suite for tag update test",
-        tags=["initial"],
-    )
-
-    suite.update(tags=["updated", "new-tag"])
-
-    suite = opik_client.get_test_suite(dataset_name)
-    assert sorted(suite.get_tags()) == ["new-tag", "updated"]
 
 
 def test_get_or_create_test_suite__with_tags__tags_persisted(
@@ -1292,9 +1275,7 @@ def test_get_test_suite_experiments__returns_experiments(
 # =============================================================================
 
 
-def test_update_items__updates_existing_items(
-    opik_client: opik.Opik, dataset_name: str
-):
+def test_update__updates_existing_items(opik_client: opik.Opik, dataset_name: str):
     """
     Test that update_items() updates data on existing items.
     """
@@ -1309,7 +1290,7 @@ def test_update_items__updates_existing_items(
     assert len(items) == 1
     item_id = items[0]["id"]
 
-    suite.update_items(
+    suite.update(
         [
             {"id": item_id, "data": {"question": "Updated question"}},
         ]
@@ -1320,16 +1301,14 @@ def test_update_items__updates_existing_items(
     assert updated_items[0]["data"]["question"] == "Updated question"
 
 
-def test_update_items__missing_id__raises_error(
-    opik_client: opik.Opik, dataset_name: str
-):
+def test_update__missing_id__raises_error(opik_client: opik.Opik, dataset_name: str):
     """
     Test that update_items() raises error when item has no id.
     """
     suite = opik_client.create_test_suite(name=dataset_name)
 
     with pytest.raises(Exception, match="Missing id"):
-        suite.update_items([{"data": {"question": "No ID"}}])
+        suite.update([{"data": {"question": "No ID"}}])
 
 
 # =============================================================================
@@ -1417,7 +1396,7 @@ def test_test_suite__create_without_metadata_then_update__metadata_persisted(
 
     assert suite.get_version_info() is None
 
-    suite.update(
+    suite.update_test_settings(
         global_assertions=[assertion],
         global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
     )
