@@ -168,10 +168,13 @@ def test_prompt_field_and_trace_metadata__happyflow(
     prompt_name = f"e2e-prompt-{uuid.uuid4().hex[:8]}"
     chat_prompt_name = f"e2e-chat-prompt-{uuid.uuid4().hex[:8]}"
 
-    prompt_v1 = opik_client.create_prompt(name=prompt_name, prompt="Hello v1")
+    prompt_v1 = opik_client.create_prompt(
+        name=prompt_name, prompt="Hello v1", project_name=project_name
+    )
     chat_prompt_v1 = opik_client.create_chat_prompt(
         name=chat_prompt_name,
         messages=[{"role": "user", "content": "Hi v1"}],
+        project_name=project_name,
     )
 
     class PromptConfig(opik.Config):
