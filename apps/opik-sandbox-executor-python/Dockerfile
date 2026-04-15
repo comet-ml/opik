@@ -58,6 +58,10 @@ COPY --from=builder /prewarm.pyc /tmp/prewarm.pyc
 # setting it to any other value suppresses the call.
 ENV LITELLM_MODE=PRODUCTION
 
+# Skip heavy opik SDK imports (config, rest_api, sentry, logfire, 40+ metrics).
+# The sandbox only needs BaseMetric and ScoreResult for scoring execution.
+ENV OPIK_SCORING_LIGHTWEIGHT=true
+
 # Runtime pre-warming for additional performance boost
 RUN python /tmp/prewarm.pyc
 

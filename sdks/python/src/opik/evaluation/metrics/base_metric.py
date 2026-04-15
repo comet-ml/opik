@@ -1,8 +1,7 @@
 import abc
+import os
 from typing import Any, List, Optional, Union
 
-import opik
-import opik.config as opik_config
 from ..metrics import score_result
 
 
@@ -43,15 +42,20 @@ class BaseMetric(abc.ABC):
         self.name = name if name is not None else self.__class__.__name__
         self.track = track
 
-        config = opik_config.OpikConfig()
-
         if not track and project_name is not None:
             raise ValueError("project_name can be set only when `track` is set to True")
 
-        if track and config.check_for_known_misconfigurations() is False:
-            track_decorator = opik.track(name=self.name, project_name=project_name)
-            self.score = track_decorator(self.score)  # type: ignore
-            self.ascore = track_decorator(self.ascore)  # type: ignore
+        if track and os.environ.get("OPIK_SCORING_LIGHTWEIGHT") != "true":
+            import opik.config as opik_config
+
+            config = opik_config.OpikConfig()
+
+            if config.check_for_known_misconfigurations() is False:
+                import opik
+
+                track_decorator = opik.track(name=self.name, project_name=project_name)
+                self.score = track_decorator(self.score)  # type: ignore
+                self.ascore = track_decorator(self.ascore)  # type: ignore
 
     @abc.abstractmethod
     def score(

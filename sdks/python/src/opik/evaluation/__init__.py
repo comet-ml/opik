@@ -1,12 +1,15 @@
-from .evaluator import (
-    evaluate,
-    evaluate_prompt,
-    evaluate_experiment,
-    evaluate_on_dict_items,
-    evaluate_optimization_trial,
-    run_tests,
-)
-from .threads.evaluator import evaluate_threads
+import os
+
+if os.environ.get("OPIK_SCORING_LIGHTWEIGHT") != "true":
+    from .evaluator import (
+        evaluate,
+        evaluate_prompt,
+        evaluate_experiment,
+        evaluate_on_dict_items,
+        evaluate_optimization_trial,
+        run_tests,
+    )
+    from .threads.evaluator import evaluate_threads
 
 __all__ = [
     "evaluate",

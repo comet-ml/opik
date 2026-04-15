@@ -1,53 +1,71 @@
-from . import _logging, environment, error_tracking, package_version
-from .api_objects.annotation_queue import (
-    TracesAnnotationQueue,
-    ThreadsAnnotationQueue,
-)
-from .api_objects.attachment import Attachment
-from .api_objects.dataset import Dataset
-from .api_objects.dataset.test_suite import TestSuite
-from .api_objects.dataset.test_suite.types import TestSuiteResult
-from .api_objects.experiment.experiment_item import (
-    ExperimentItemContent,
-    ExperimentItemReferences,
-)
-from .api_objects.agent_config import Config, Blueprint
-from .api_objects.agent_config.context import agent_config_context
-from .exceptions import ConfigNotFound, ConfigMismatch
-from .api_objects.opik_client import Opik, get_global_client, set_global_client
-from .api_objects.prompt import Prompt, ChatPrompt
-from .api_objects.prompt.types import PromptType
-from .api_objects.span import Span
-from .api_objects.trace import Trace
-from .configurator.configure import configure
-from .decorator.tracker import flush_tracker, track
-from .evaluation import (
-    evaluate,
-    evaluate_experiment,
-    evaluate_on_dict_items,
-    evaluate_prompt,
-    run_tests,
-)
-from .integrations.sagemaker import auth as sagemaker_auth
-from .plugins.pytest.decorator import llm_unit
-from .types import LLMProvider
-from . import opik_context
-from .tracing_runtime_config import (
-    is_tracing_active,
-    reset_tracing_to_config_default,
-    set_tracing_active,
-)
-from .decorator.context_manager.span_context_manager import start_as_current_span
-from .decorator.context_manager.trace_context_manager import start_as_current_trace
-from .simulation import SimulatedUser, run_simulation
-from .api_objects.local_recording import record_traces_locally
-from .context_storage import project_context
-from .opik_context import update_current_trace, update_current_span
+import os
 
+# Lightweight mode: skip all heavy imports and SDK initialization.
+# Used by the scoring sandbox where only BaseMetric and ScoreResult are needed.
+_LIGHTWEIGHT_MODE = os.environ.get("OPIK_SCORING_LIGHTWEIGHT") == "true"
 
-_logging.setup()
+if not _LIGHTWEIGHT_MODE:
+    from . import _logging, environment, error_tracking, package_version
+    from .api_objects.annotation_queue import (
+        TracesAnnotationQueue,
+        ThreadsAnnotationQueue,
+    )
+    from .api_objects.attachment import Attachment
+    from .api_objects.dataset import Dataset
+    from .api_objects.dataset.test_suite import TestSuite
+    from .api_objects.dataset.test_suite.types import TestSuiteResult
+    from .api_objects.experiment.experiment_item import (
+        ExperimentItemContent,
+        ExperimentItemReferences,
+    )
+    from .api_objects.agent_config import Config, Blueprint
+    from .api_objects.agent_config.context import agent_config_context
+    from .exceptions import ConfigNotFound, ConfigMismatch
+    from .api_objects.opik_client import Opik, get_global_client, set_global_client
+    from .api_objects.prompt import Prompt, ChatPrompt
+    from .api_objects.prompt.types import PromptType
+    from .api_objects.span import Span
+    from .api_objects.trace import Trace
+    from .configurator.configure import configure
+    from .decorator.tracker import flush_tracker, track
+    from .evaluation import (
+        evaluate,
+        evaluate_experiment,
+        evaluate_on_dict_items,
+        evaluate_prompt,
+        run_tests,
+    )
+    from .integrations.sagemaker import auth as sagemaker_auth
+    from .plugins.pytest.decorator import llm_unit
+    from .types import LLMProvider
+    from . import opik_context
+    from .tracing_runtime_config import (
+        is_tracing_active,
+        reset_tracing_to_config_default,
+        set_tracing_active,
+    )
+    from .decorator.context_manager.span_context_manager import start_as_current_span
+    from .decorator.context_manager.trace_context_manager import start_as_current_trace
+    from .simulation import SimulatedUser, run_simulation
+    from .api_objects.local_recording import record_traces_locally
+    from .context_storage import project_context
+    from .opik_context import update_current_trace, update_current_span
 
-__version__ = package_version.VERSION
+    _logging.setup()
+
+    __version__ = package_version.VERSION
+
+    sagemaker_auth.setup_aws_sagemaker_session_hook()
+
+    if (
+        error_tracking.enabled_in_config()
+        and not environment.in_pytest()
+        and error_tracking.randomized_should_enable_reporting()
+    ):
+        error_tracking.setup_sentry_error_tracker()
+else:
+    __version__ = "unknown"
+
 __all__ = [
     "__version__",
     "TracesAnnotationQueue",
@@ -94,13 +112,3 @@ __all__ = [
     "update_current_span",
     "project_context",
 ]
-
-sagemaker_auth.setup_aws_sagemaker_session_hook()
-
-
-if (
-    error_tracking.enabled_in_config()
-    and not environment.in_pytest()
-    and error_tracking.randomized_should_enable_reporting()
-):
-    error_tracking.setup_sentry_error_tracker()
