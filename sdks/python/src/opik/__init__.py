@@ -7,16 +7,28 @@ __version__ = package_version.VERSION
 _LAZY_IMPORTS: dict = {
     # api_objects
     "TracesAnnotationQueue": (".api_objects.annotation_queue", "TracesAnnotationQueue"),
-    "ThreadsAnnotationQueue": (".api_objects.annotation_queue", "ThreadsAnnotationQueue"),
+    "ThreadsAnnotationQueue": (
+        ".api_objects.annotation_queue",
+        "ThreadsAnnotationQueue",
+    ),
     "Attachment": (".api_objects.attachment", "Attachment"),
     "Dataset": (".api_objects.dataset", "Dataset"),
     "TestSuite": (".api_objects.dataset.test_suite", "TestSuite"),
     "TestSuiteResult": (".api_objects.dataset.test_suite.types", "TestSuiteResult"),
-    "ExperimentItemContent": (".api_objects.experiment.experiment_item", "ExperimentItemContent"),
-    "ExperimentItemReferences": (".api_objects.experiment.experiment_item", "ExperimentItemReferences"),
+    "ExperimentItemContent": (
+        ".api_objects.experiment.experiment_item",
+        "ExperimentItemContent",
+    ),
+    "ExperimentItemReferences": (
+        ".api_objects.experiment.experiment_item",
+        "ExperimentItemReferences",
+    ),
     "Config": (".api_objects.agent_config", "Config"),
     "Blueprint": (".api_objects.agent_config", "Blueprint"),
-    "agent_config_context": (".api_objects.agent_config.context", "agent_config_context"),
+    "agent_config_context": (
+        ".api_objects.agent_config.context",
+        "agent_config_context",
+    ),
     "ConfigNotFound": (".exceptions", "ConfigNotFound"),
     "ConfigMismatch": (".exceptions", "ConfigMismatch"),
     "Opik": (".api_objects.opik_client", "Opik"),
@@ -33,8 +45,14 @@ _LAZY_IMPORTS: dict = {
     # decorator
     "flush_tracker": (".decorator.tracker", "flush_tracker"),
     "track": (".decorator.tracker", "track"),
-    "start_as_current_span": (".decorator.context_manager.span_context_manager", "start_as_current_span"),
-    "start_as_current_trace": (".decorator.context_manager.trace_context_manager", "start_as_current_trace"),
+    "start_as_current_span": (
+        ".decorator.context_manager.span_context_manager",
+        "start_as_current_span",
+    ),
+    "start_as_current_trace": (
+        ".decorator.context_manager.trace_context_manager",
+        "start_as_current_trace",
+    ),
     # evaluation
     "evaluate": (".evaluation", "evaluate"),
     "evaluate_experiment": (".evaluation", "evaluate_experiment"),
@@ -45,7 +63,10 @@ _LAZY_IMPORTS: dict = {
     "LLMProvider": (".types", "LLMProvider"),
     # tracing runtime config
     "is_tracing_active": (".tracing_runtime_config", "is_tracing_active"),
-    "reset_tracing_to_config_default": (".tracing_runtime_config", "reset_tracing_to_config_default"),
+    "reset_tracing_to_config_default": (
+        ".tracing_runtime_config",
+        "reset_tracing_to_config_default",
+    ),
     "set_tracing_active": (".tracing_runtime_config", "set_tracing_active"),
     # simulation
     "SimulatedUser": (".simulation", "SimulatedUser"),

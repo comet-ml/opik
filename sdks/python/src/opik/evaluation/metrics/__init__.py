@@ -7,20 +7,59 @@ _LAZY_IMPORTS: dict = {
     # aggregated
     "AggregatedMetric": (".aggregated_metric", "AggregatedMetric"),
     # conversation
-    "ConversationThreadMetric": (".conversation.conversation_thread_metric", "ConversationThreadMetric"),
+    "ConversationThreadMetric": (
+        ".conversation.conversation_thread_metric",
+        "ConversationThreadMetric",
+    ),
     "conversation_types": (".conversation", "types"),
-    "ConversationDegenerationMetric": (".conversation.heuristics.degeneration.metric", "ConversationDegenerationMetric"),
-    "KnowledgeRetentionMetric": (".conversation.heuristics.knowledge_retention.metric", "KnowledgeRetentionMetric"),
-    "ConversationalCoherenceMetric": (".conversation.llm_judges.conversational_coherence.metric", "ConversationalCoherenceMetric"),
-    "GEvalConversationMetric": (".conversation.llm_judges.g_eval_wrappers", "GEvalConversationMetric"),
-    "ConversationComplianceRiskMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationComplianceRiskMetric"),
-    "ConversationDialogueHelpfulnessMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationDialogueHelpfulnessMetric"),
-    "ConversationQARelevanceMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationQARelevanceMetric"),
-    "ConversationSummarizationCoherenceMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationSummarizationCoherenceMetric"),
-    "ConversationSummarizationConsistencyMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationSummarizationConsistencyMetric"),
-    "ConversationPromptUncertaintyMetric": (".conversation.llm_judges.g_eval_wrappers", "ConversationPromptUncertaintyMetric"),
-    "SessionCompletenessQuality": (".conversation.llm_judges.session_completeness.metric", "SessionCompletenessQuality"),
-    "UserFrustrationMetric": (".conversation.llm_judges.user_frustration.metric", "UserFrustrationMetric"),
+    "ConversationDegenerationMetric": (
+        ".conversation.heuristics.degeneration.metric",
+        "ConversationDegenerationMetric",
+    ),
+    "KnowledgeRetentionMetric": (
+        ".conversation.heuristics.knowledge_retention.metric",
+        "KnowledgeRetentionMetric",
+    ),
+    "ConversationalCoherenceMetric": (
+        ".conversation.llm_judges.conversational_coherence.metric",
+        "ConversationalCoherenceMetric",
+    ),
+    "GEvalConversationMetric": (
+        ".conversation.llm_judges.g_eval_wrappers",
+        "GEvalConversationMetric",
+    ),
+    "ConversationComplianceRiskMetric": (
+        ".conversation.llm_judges.g_eval_wrappers",
+        "ConversationComplianceRiskMetric",
+    ),
+    "ConversationDialogueHelpfulnessMetric": (
+        ".conversation.llm_judges.g_eval_wrappers",
+        "ConversationDialogueHelpfulnessMetric",
+    ),
+    "ConversationQARelevanceMetric": (
+        ".conversation.llm_judges.g_eval_wrappers",
+        "ConversationQARelevanceMetric",
+    ),
+    "ConversationSummarizationCoherenceMetric": (
+        ".conversation.llm_judges.g_eval_wrappers",
+        "ConversationSummarizationCoherenceMetric",
+    ),
+    "ConversationSummarizationConsistencyMetric": (
+        ".conversation.llm_judges.g_eval_wrappers",
+        "ConversationSummarizationConsistencyMetric",
+    ),
+    "ConversationPromptUncertaintyMetric": (
+        ".conversation.llm_judges.g_eval_wrappers",
+        "ConversationPromptUncertaintyMetric",
+    ),
+    "SessionCompletenessQuality": (
+        ".conversation.llm_judges.session_completeness.metric",
+        "SessionCompletenessQuality",
+    ),
+    "UserFrustrationMetric": (
+        ".conversation.llm_judges.user_frustration.metric",
+        "UserFrustrationMetric",
+    ),
     # heuristics
     "Contains": (".heuristics.contains", "Contains"),
     "Equals": (".heuristics.equals", "Equals"),
@@ -37,7 +76,10 @@ _LAZY_IMPORTS: dict = {
     "Readability": (".heuristics.readability", "Readability"),
     "Tone": (".heuristics.tone", "Tone"),
     "PromptInjection": (".heuristics.prompt_injection", "PromptInjection"),
-    "LanguageAdherenceMetric": (".heuristics.language_adherence", "LanguageAdherenceMetric"),
+    "LanguageAdherenceMetric": (
+        ".heuristics.language_adherence",
+        "LanguageAdherenceMetric",
+    ),
     "RegexMatch": (".heuristics.regex_match", "RegexMatch"),
     "SentenceBLEU": (".heuristics.bleu", "SentenceBLEU"),
     "CorpusBLEU": (".heuristics.bleu", "CorpusBLEU"),
@@ -46,19 +88,34 @@ _LAZY_IMPORTS: dict = {
     "VADERSentiment": (".heuristics.vader_sentiment", "VADERSentiment"),
     # llm judges
     "AnswerRelevance": (".llm_judges.answer_relevance.metric", "AnswerRelevance"),
-    "AgentTaskCompletionJudge": (".llm_judges.g_eval_presets", "AgentTaskCompletionJudge"),
-    "AgentToolCorrectnessJudge": (".llm_judges.g_eval_presets", "AgentToolCorrectnessJudge"),
+    "AgentTaskCompletionJudge": (
+        ".llm_judges.g_eval_presets",
+        "AgentTaskCompletionJudge",
+    ),
+    "AgentToolCorrectnessJudge": (
+        ".llm_judges.g_eval_presets",
+        "AgentToolCorrectnessJudge",
+    ),
     "ComplianceRiskJudge": (".llm_judges.g_eval_presets", "ComplianceRiskJudge"),
     "DemographicBiasJudge": (".llm_judges.g_eval_presets", "DemographicBiasJudge"),
-    "DialogueHelpfulnessJudge": (".llm_judges.g_eval_presets", "DialogueHelpfulnessJudge"),
+    "DialogueHelpfulnessJudge": (
+        ".llm_judges.g_eval_presets",
+        "DialogueHelpfulnessJudge",
+    ),
     "GenderBiasJudge": (".llm_judges.g_eval_presets", "GenderBiasJudge"),
     "PoliticalBiasJudge": (".llm_judges.g_eval_presets", "PoliticalBiasJudge"),
     "PromptUncertaintyJudge": (".llm_judges.g_eval_presets", "PromptUncertaintyJudge"),
     "QARelevanceJudge": (".llm_judges.g_eval_presets", "QARelevanceJudge"),
     "RegionalBiasJudge": (".llm_judges.g_eval_presets", "RegionalBiasJudge"),
     "ReligiousBiasJudge": (".llm_judges.g_eval_presets", "ReligiousBiasJudge"),
-    "SummarizationCoherenceJudge": (".llm_judges.g_eval_presets", "SummarizationCoherenceJudge"),
-    "SummarizationConsistencyJudge": (".llm_judges.g_eval_presets", "SummarizationConsistencyJudge"),
+    "SummarizationCoherenceJudge": (
+        ".llm_judges.g_eval_presets",
+        "SummarizationCoherenceJudge",
+    ),
+    "SummarizationConsistencyJudge": (
+        ".llm_judges.g_eval_presets",
+        "SummarizationConsistencyJudge",
+    ),
     "ContextPrecision": (".llm_judges.context_precision.metric", "ContextPrecision"),
     "ContextRecall": (".llm_judges.context_recall.metric", "ContextRecall"),
     "GEval": (".llm_judges.g_eval.metric", "GEval"),
@@ -69,7 +126,10 @@ _LAZY_IMPORTS: dict = {
     "TrajectoryAccuracy": (".llm_judges.trajectory_accuracy", "TrajectoryAccuracy"),
     "SycEval": (".llm_judges.syc_eval.metric", "SycEval"),
     "Usefulness": (".llm_judges.usefulness.metric", "Usefulness"),
-    "StructuredOutputCompliance": (".llm_judges.structure_output_compliance.metric", "StructuredOutputCompliance"),
+    "StructuredOutputCompliance": (
+        ".llm_judges.structure_output_compliance.metric",
+        "StructuredOutputCompliance",
+    ),
     # wrappers
     "RagasMetricWrapper": (".ragas_metric", "RagasMetricWrapper"),
     # exceptions
