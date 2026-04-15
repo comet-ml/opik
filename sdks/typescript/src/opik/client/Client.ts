@@ -437,22 +437,24 @@ export class OpikClient {
    * @returns List of TestSuite objects
    */
   public getTestSuites = async (
-    maxResults: number = 100,
+    maxResults: number = 1000,
     projectName?: string
   ): Promise<TestSuite[]> => {
     const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Getting all test suites (limit: ${maxResults})`);
 
     try {
-      const datasets = await this.getDatasets(maxResults, resolvedProjectName);
-      const { TestSuite } = await import("@/evaluation/suite");
+      await this.datasetBatchQueue.flush();
 
-      const suites: TestSuite[] = [];
-      for (const dataset of datasets) {
-        if (dataset.id) {
-          suites.push(new TestSuite(dataset, this));
-        }
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — list without project filter
       }
+
+      const { getTestSuites } = await import("@/evaluation/suite/getTestSuites");
+      const suites = await getTestSuites(this, maxResults, resolvedProjectName, projectId);
 
       logger.info(`Retrieved ${suites.length} test suites`);
       return suites;

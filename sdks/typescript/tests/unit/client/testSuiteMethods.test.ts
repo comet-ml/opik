@@ -484,15 +484,20 @@ describe("OpikClient TestSuite methods", () => {
         createMockHttpResponsePromise({ id: "project-123", name: "opik-sdk-typescript-test" })
       );
 
+      // Return two suites on page 1, empty page on page 2 to stop pagination
       findDatasetsSpy = vi
         .spyOn(opikClient.api.datasets, "findDatasets")
-        .mockImplementation(() =>
-          createMockHttpResponsePromise({
-            content: [
-              { id: "ds-1", name: "suite-1", description: "Suite 1" },
-              { id: "ds-2", name: "suite-2", description: "Suite 2" },
-            ],
-          })
+        .mockImplementation((req) =>
+          createMockHttpResponsePromise(
+            (req as { page?: number }).page === 1 || (req as { page?: number }).page === undefined
+              ? {
+                  content: [
+                    { id: "ds-1", name: "suite-1", description: "Suite 1", type: "evaluation_suite" },
+                    { id: "ds-2", name: "suite-2", description: "Suite 2", type: "evaluation_suite" },
+                  ],
+                }
+              : { content: [] }
+          )
         );
     });
 
@@ -503,19 +508,59 @@ describe("OpikClient TestSuite methods", () => {
       expect(suites[0]).toBeInstanceOf(TestSuite);
       expect(suites[0].name).toBe("suite-1");
       expect(suites[1].name).toBe("suite-2");
+      // pagination: always uses PAGE_SIZE=100, includes page number
       expect(findDatasetsSpy).toHaveBeenCalledWith({
+        page: 1,
         size: 100,
         projectId: "project-123",
       });
     });
 
-    it("should get test suites with custom limit", async () => {
-      await opikClient.getTestSuites(50);
+    it("should filter out non-suite datasets", async () => {
+      findDatasetsSpy.mockImplementation((req) =>
+        createMockHttpResponsePromise(
+          (req as { page?: number }).page === 1 || (req as { page?: number }).page === undefined
+            ? {
+                content: [
+                  { id: "ds-1", name: "suite-1", type: "evaluation_suite" },
+                  { id: "ds-2", name: "plain-dataset", type: "dataset" },
+                  { id: "ds-3", name: "suite-2", type: "evaluation_suite" },
+                ],
+              }
+            : { content: [] }
+        )
+      );
 
-      expect(findDatasetsSpy).toHaveBeenCalledWith({
-        size: 50,
-        projectId: "project-123",
+      const suites = await opikClient.getTestSuites();
+
+      expect(suites).toHaveLength(2);
+      expect(suites[0].name).toBe("suite-1");
+      expect(suites[1].name).toBe("suite-2");
+    });
+
+    it("should respect maxResults cap across pages", async () => {
+      const suites = await opikClient.getTestSuites(1);
+
+      expect(suites).toHaveLength(1);
+      expect(suites[0].name).toBe("suite-1");
+    });
+
+    it("should paginate until empty page is returned", async () => {
+      findDatasetsSpy.mockImplementation((req) => {
+        const page = (req as { page?: number }).page ?? 1;
+        return createMockHttpResponsePromise(
+          page === 1
+            ? { content: [{ id: "ds-1", name: "suite-1", type: "evaluation_suite" }] }
+            : page === 2
+              ? { content: [{ id: "ds-2", name: "suite-2", type: "evaluation_suite" }] }
+              : { content: [] }
+        );
       });
+
+      const suites = await opikClient.getTestSuites();
+
+      expect(suites).toHaveLength(2);
+      expect(findDatasetsSpy).toHaveBeenCalledTimes(3); // page 1, 2, 3 (empty)
     });
 
     it("should get test suites with custom project name", async () => {
@@ -527,9 +572,10 @@ describe("OpikClient TestSuite methods", () => {
           })
       );
 
-      await opikClient.getTestSuites(100, "custom-project");
+      await opikClient.getTestSuites(1000, "custom-project");
 
       expect(findDatasetsSpy).toHaveBeenCalledWith({
+        page: 1,
         size: 100,
         projectId: "project-custom",
       });
