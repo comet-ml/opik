@@ -49,6 +49,7 @@ module.exports = {
         warning: "hsl(var(--warning))",
         success: "hsl(var(--success))",
         "light-slate": "hsl(var(--light-slate))",
+        "tree-line": "hsl(var(--tree-line))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -118,6 +119,8 @@ module.exports = {
         "warning-box-text": "hsl(var(--warning-box-text))",
         "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
         "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
+
+        "library-loaded": "hsl(var(--library-loaded))",
 
         /* Chart colors (Figma Design System) */
         "chart-blue": "var(--chart-blue)",

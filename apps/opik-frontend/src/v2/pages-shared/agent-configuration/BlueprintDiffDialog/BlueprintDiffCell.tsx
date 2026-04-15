@@ -93,24 +93,29 @@ export const PromptDiffPair: React.FC<{
     );
   };
 
+  const hasBase = !!baseCommit || !!baseTemplate;
+  const hasDiff = !!diffCommit || !!diffTemplate;
+
   return (
     <>
       <TableCell className="w-1/2 py-3 pr-2 align-top">
-        {baseCommit ? (
+        {hasBase ? (
           <div className="flex flex-col gap-1">
-            <Tag
-              className={cn(
-                "flex w-fit items-center gap-1",
-                commitsChanged &&
-                  "border-[var(--diff-removed-border)] bg-[var(--diff-removed-bg)] text-[var(--diff-removed-text)]",
-              )}
-              variant="gray"
-              size="sm"
-              title={baseCommit}
-            >
-              <GitCommitVertical className="size-3.5 shrink-0" />
-              {baseCommit.slice(0, 8)}
-            </Tag>
+            {baseCommit && (
+              <Tag
+                className={cn(
+                  "flex w-fit items-center gap-1",
+                  commitsChanged &&
+                    "border-[var(--diff-removed-border)] bg-[var(--diff-removed-bg)] text-[var(--diff-removed-text)]",
+                )}
+                variant="gray"
+                size="sm"
+                title={baseCommit}
+              >
+                <GitCommitVertical className="size-3.5 shrink-0" />
+                {baseCommit.slice(0, 8)}
+              </Tag>
+            )}
             {renderDiffContent(baseText, true)}
           </div>
         ) : (
@@ -118,21 +123,23 @@ export const PromptDiffPair: React.FC<{
         )}
       </TableCell>
       <TableCell className="w-1/2 py-3 pl-2 align-top">
-        {diffCommit ? (
+        {hasDiff ? (
           <div className="flex flex-col gap-1">
-            <Tag
-              className={cn(
-                "flex w-fit items-center gap-1",
-                commitsChanged &&
-                  "border-[var(--diff-added-border)] bg-[var(--diff-added-bg)] text-[var(--diff-added-text)]",
-              )}
-              variant="gray"
-              size="sm"
-              title={diffCommit}
-            >
-              <GitCommitVertical className="size-3.5 shrink-0" />
-              {diffCommit.slice(0, 8)}
-            </Tag>
+            {diffCommit && (
+              <Tag
+                className={cn(
+                  "flex w-fit items-center gap-1",
+                  commitsChanged &&
+                    "border-[var(--diff-added-border)] bg-[var(--diff-added-bg)] text-[var(--diff-added-text)]",
+                )}
+                variant="gray"
+                size="sm"
+                title={diffCommit}
+              >
+                <GitCommitVertical className="size-3.5 shrink-0" />
+                {diffCommit.slice(0, 8)}
+              </Tag>
+            )}
             {renderDiffContent(diffText, false)}
           </div>
         ) : (

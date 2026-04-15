@@ -450,7 +450,18 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           ...rest
         } = state;
         /* eslint-enable @typescript-eslint/no-unused-vars */
-        return rest;
+
+        // skipInitialPromptLoad is only meaningful within a single session
+        const cleanedPromptMap = Object.fromEntries(
+          Object.entries(rest.promptMap).map(([id, prompt]) => {
+            if (!prompt.skipInitialPromptLoad) return [id, prompt];
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { skipInitialPromptLoad, ...cleanPrompt } = prompt;
+            return [id, cleanPrompt];
+          }),
+        );
+
+        return { ...rest, promptMap: cleanedPromptMap };
       },
     },
   ),

@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { ChevronDown, Database, UserPen } from "lucide-react";
 
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +18,8 @@ export type AddToDropdownProps = {
   selectedRows: Array<Trace | Span | Thread>;
   disabled?: boolean;
   dataType?: "traces" | "spans" | "threads";
-  buttonVariant?: "outline" | "ghost" | "ghostInverted";
+  buttonVariant?: ButtonProps["variant"];
+  buttonSize?: ButtonProps["size"];
 };
 
 const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
@@ -27,6 +28,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
     disabled = false,
     dataType = "traces",
     buttonVariant = "outline",
+    buttonSize = "sm",
   } = props;
   // getDataForExport is accepted for backwards compatibility but no longer used
   const resetKeyRef = useRef(0);
@@ -67,7 +69,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
         <DropdownMenuTrigger asChild>
           <Button
             variant={buttonVariant}
-            size="sm"
+            size={buttonSize}
             disabled={disabled}
             className="font-normal"
           >

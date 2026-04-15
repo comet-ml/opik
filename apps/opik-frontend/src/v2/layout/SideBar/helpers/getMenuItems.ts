@@ -4,7 +4,6 @@ import {
   Bot,
   ChartLine,
   Database,
-  FileTerminal,
   FlaskConical,
   LayoutDashboard,
   ListChecks,
@@ -113,14 +112,6 @@ const getMenuItems = ({
       id: "prompt_engineering",
       label: "Prompt engineering",
       items: [
-        {
-          id: "prompts",
-          path: projectPath("/prompts"),
-          type: MENU_ITEM_TYPE.router,
-          icon: FileTerminal,
-          label: "Prompt library",
-          disabled: !projectPrefix,
-        },
         ...(canUsePlayground
           ? [
               {

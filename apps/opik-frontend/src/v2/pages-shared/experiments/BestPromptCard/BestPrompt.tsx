@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Save, Split } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { ArrowRight, Split } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
 import get from "lodash/get";
@@ -8,8 +8,7 @@ import get from "lodash/get";
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
-import { Optimization, OPTIMIZATION_STATUS } from "@/types/optimizations";
-import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
+import { Optimization } from "@/types/optimizations";
 import {
   Card,
   CardContent,
@@ -35,18 +34,12 @@ import {
   MessagesList,
   NamedPromptsList,
 } from "@/v2/pages-shared/prompts/PromptMessageDisplay";
-import { useSaveToPromptLibrary } from "@/v2/pages-shared/shared/useSaveToPromptLibrary";
-import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
-import { PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
-import { useToast } from "@/ui/use-toast";
-import { ToastAction } from "@/ui/toast";
 
 type BestPromptProps = {
   optimization: Optimization;
   experiment: Experiment;
   scoreMap: Record<string, { score: number; percentage?: number }>;
   baselineExperiment?: Experiment | null;
-  status?: OPTIMIZATION_STATUS;
 };
 
 export const BestPrompt: React.FC<BestPromptProps> = ({
@@ -54,16 +47,10 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
   experiment,
   scoreMap,
   baselineExperiment,
-  status,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
-  const navigate = useNavigate();
-  const { toast } = useToast();
   const [diffOpen, setDiffOpen] = useState(false);
-
-  const isInProgress =
-    status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
   const { score, percentage } = useMemo(() => {
     const retVal: {
@@ -136,78 +123,6 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
     );
   }, [extractedPrompt, fallbackPrompt]);
 
-  const {
-    canSaveToLibrary,
-    saveDialogOpen,
-    openSaveDialog,
-    closeSaveDialog,
-    dialogKey,
-    existingPrompt,
-    saveTemplate,
-    saveMetadata,
-  } = useSaveToPromptLibrary({
-    projectId: activeProjectId!,
-    promptName: optimization.name,
-    extractedPrompt,
-    optimizationId: optimization.id,
-    optimizationName: optimization.name,
-    experimentId: experiment.id,
-  });
-
-  const canSave = canSaveToLibrary && !isInProgress;
-
-  const handlePromptSaved = useCallback(
-    (_version: PromptVersion, promptName?: string, promptId?: string) => {
-      closeSaveDialog();
-
-      if (promptId && promptName) {
-        const isNewPrompt = promptId !== existingPrompt?.id;
-        const message = isNewPrompt ? (
-          <span>
-            New prompt <b>{promptName}</b> created
-          </span>
-        ) : (
-          <span>
-            New version saved to <b>{promptName}</b>
-          </span>
-        );
-
-        toast({
-          description: message,
-          actions: [
-            <ToastAction
-              key="save-new-prompt-version"
-              altText="Go to prompt"
-              variant="link"
-              size="sm"
-              className="px-0"
-              onClick={() =>
-                navigate({
-                  to: "/$workspaceName/projects/$projectId/prompts/$promptId",
-                  params: {
-                    workspaceName,
-                    projectId: activeProjectId!,
-                    promptId,
-                  },
-                })
-              }
-            >
-              Go to prompt
-            </ToastAction>,
-          ],
-        });
-      }
-    },
-    [
-      closeSaveDialog,
-      toast,
-      workspaceName,
-      navigate,
-      existingPrompt?.id,
-      activeProjectId,
-    ],
-  );
-
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="shrink-0 gap-y-0.5 px-5">
@@ -225,17 +140,6 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
                   variant="ghost"
                   size="icon-xs"
                 />
-                {canSave && (
-                  <TooltipWrapper content="Save to Prompt library">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={openSaveDialog}
-                    >
-                      <Save />
-                    </Button>
-                  </TooltipWrapper>
-                )}
               </div>
             </div>
             <CardDescription className="!mt-0">
@@ -361,20 +265,6 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
           )}
         </div>
       </CardContent>
-
-      {canSave && (
-        <AddNewPromptVersionDialog
-          key={dialogKey}
-          open={saveDialogOpen}
-          setOpen={closeSaveDialog}
-          prompt={existingPrompt}
-          template={saveTemplate}
-          templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-          defaultName={optimization.name}
-          metadata={saveMetadata}
-          onSave={handlePromptSaved}
-        />
-      )}
     </Card>
   );
 };

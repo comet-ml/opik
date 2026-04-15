@@ -9,6 +9,7 @@ import { Hand, ZoomIn, ZoomOut, RotateCcw, Expand } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { Separator } from "@/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
@@ -150,26 +151,13 @@ const ZoomPanContainer: React.FC<ZoomPanContainerProps> = ({
   return (
     <>
       <div className={cn("relative size-full overflow-hidden p-6", className)}>
-        <div className="absolute right-0 top-0 z-10 flex gap-1.5">
-          <TooltipWrapper
-            content={isPanning ? "Disable pan mode" : "Enable pan mode"}
-          >
-            <Button
-              variant={isPanning ? "secondary" : "outline"}
-              size="icon-2xs"
-              onClick={togglePanning}
-              aria-label={isPanning ? "Disable pan mode" : "Enable pan mode"}
-            >
-              <Hand />
-            </Button>
-          </TooltipWrapper>
-
+        <div className="absolute right-0 top-0 z-10 flex items-center gap-1.5">
           <TooltipWrapper
             content={canZoomIn ? "Zoom in" : "Maximum zoom reached"}
           >
             <Button
-              variant="outline"
-              size="icon-2xs"
+              variant="ghost"
+              size="icon-xs"
               onClick={handleZoomIn}
               disabled={!canZoomIn}
               aria-label="Zoom in"
@@ -182,13 +170,28 @@ const ZoomPanContainer: React.FC<ZoomPanContainerProps> = ({
             content={canZoomOut ? "Zoom out" : "Minimum zoom reached"}
           >
             <Button
-              variant="outline"
-              size="icon-2xs"
+              variant="ghost"
+              size="icon-xs"
               onClick={handleZoomOut}
               disabled={!canZoomOut}
               aria-label="Zoom out"
             >
               <ZoomOut />
+            </Button>
+          </TooltipWrapper>
+
+          <Separator orientation="vertical" className="h-4" />
+
+          <TooltipWrapper
+            content={isPanning ? "Disable pan mode" : "Enable pan mode"}
+          >
+            <Button
+              variant={isPanning ? "secondary" : "ghost"}
+              size="icon-xs"
+              onClick={togglePanning}
+              aria-label={isPanning ? "Disable pan mode" : "Enable pan mode"}
+            >
+              <Hand />
             </Button>
           </TooltipWrapper>
 
@@ -200,8 +203,8 @@ const ZoomPanContainer: React.FC<ZoomPanContainerProps> = ({
             }
           >
             <Button
-              variant="outline"
-              size="icon-2xs"
+              variant="ghost"
+              size="icon-xs"
               onClick={handleReset}
               disabled={!canReset}
               aria-label="Reset zoom and position"
@@ -213,8 +216,8 @@ const ZoomPanContainer: React.FC<ZoomPanContainerProps> = ({
           {expandButton && (
             <TooltipWrapper content="Open in fullscreen">
               <Button
-                variant="outline"
-                size="icon-2xs"
+                variant="ghost"
+                size="icon-xs"
                 onClick={handleExpandClick}
                 aria-label="Open in fullscreen"
               >

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from . import BaseHandler, CommandError, FileLockRegistry
 from . import common
+from .syntax_check import check_syntax
 
 
 class WriteFileArgs(BaseModel):
@@ -65,8 +66,13 @@ class WriteFileHandler(BaseHandler):
                 )
             )
 
-        return {
+        syntax_result = check_syntax(parsed.path, parsed.content)
+
+        response: Dict[str, Any] = {
             "bytes_written": len(parsed.content.encode("utf-8")),
             "created": old_content is None,
             "diff": diff,
         }
+        if syntax_result is not None:
+            response["syntax_check"] = syntax_result
+        return response

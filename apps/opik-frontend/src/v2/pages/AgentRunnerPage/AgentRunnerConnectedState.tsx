@@ -55,6 +55,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
     isDirty: false,
     isSaving: false,
     hasErrors: false,
+    isEmpty: false,
     collapsibleKeys: [],
     hasExpandableFields: false,
   });
@@ -246,7 +247,8 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
                     disabled={
                       editState.isSaving ||
                       editState.hasErrors ||
-                      !editState.isDirty
+                      !editState.isDirty ||
+                      editState.isEmpty
                     }
                   >
                     <Save className="mr-1 size-3.5" />

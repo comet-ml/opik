@@ -253,7 +253,7 @@ const PlaygroundHeader = ({
             className="flex items-center gap-1.5 px-2 text-muted-slate hover:text-primary-hover"
             onClick={() => setRunOnDatasetOpen(true)}
           >
-            <Database className="size-3.5 shrink-0 text-[#b8e54a]" />
+            <Database className="size-3.5 shrink-0 text-library-loaded" />
             <span className="comet-body-xs max-w-[200px] truncate">
               {chipLabel}
             </span>

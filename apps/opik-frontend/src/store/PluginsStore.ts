@@ -30,6 +30,7 @@ type PluginStore = {
     surface?: BridgeSurface;
     onWidthChange: (width: number) => void;
   }> | null;
+  AssistantPrewarmer: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
@@ -51,6 +52,7 @@ const PLUGIN_NAMES = [
   "WorkspaceSelector",
   "SidebarWorkspaceSelector",
   "AssistantSidebar",
+  "AssistantPrewarmer",
   "UpgradeButton",
   "init",
 ];
@@ -70,6 +72,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   WorkspaceSelector: null,
   SidebarWorkspaceSelector: null,
   AssistantSidebar: null,
+  AssistantPrewarmer: null,
   UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {

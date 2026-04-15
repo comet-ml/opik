@@ -17,4 +17,6 @@ export interface DatasetExpansionWrite {
     variationInstructions?: string;
     /** Custom prompt to use for generation instead of auto-generated one */
     customPrompt?: string;
+    /** Maximum number of tokens for the LLM response. Required by Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults to 4000 for Anthropic models only. */
+    maxCompletionTokens?: number;
 }
