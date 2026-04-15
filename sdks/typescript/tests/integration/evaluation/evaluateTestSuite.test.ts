@@ -495,6 +495,18 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
   });
 
   describe("Update on suite with no initial version", () => {
+    async function waitForDataset(name: string) {
+      await searchAndWaitForDone(
+        async () => {
+          const datasets = await client.getDatasets();
+          return datasets.filter((d) => d.name === name);
+        },
+        1,
+        WAIT_OPTIONS.timeout,
+        WAIT_OPTIONS.interval
+      );
+    }
+
     it(
       "should create the initial version when update is called on a freshly created dataset",
       async () => {
@@ -503,6 +515,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
 
         // Create only the backing dataset — no TestSuite.create, so no version exists yet.
         const dataset = await client.createDataset(suiteName);
+        await waitForDataset(suiteName);
         const suite = new TestSuite(dataset, client);
 
         // Confirm precondition: no version on the server.
@@ -530,8 +543,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const suiteName = `test-suite-update-no-version-defaults-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        // Create only the backing dataset — no TestSuite.create, so no version exists yet.
         const dataset = await client.createDataset(suiteName);
+        await waitForDataset(suiteName);
         const suite = new TestSuite(dataset, client);
 
         await suite.update({ globalAssertions: ["Response is concise"] });
@@ -553,8 +566,8 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const suiteName = `test-suite-update-no-version-policy-only-${Date.now()}`;
         createdDatasetNames.push(suiteName);
 
-        // Create only the backing dataset — no TestSuite.create, so no version exists yet.
         const dataset = await client.createDataset(suiteName);
+        await waitForDataset(suiteName);
         const suite = new TestSuite(dataset, client);
 
         await suite.update({
