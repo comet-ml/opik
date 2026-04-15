@@ -20,7 +20,7 @@ import httpx
 from opik.api_objects.rest_helpers import resolve_project_id_by_name
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.errors.not_found_error import NotFoundError
-from opik.url_helpers import get_base_url
+from opik.url_helpers import get_base_url, get_project_url_by_id
 
 LOGGER = logging.getLogger(__name__)
 
@@ -294,7 +294,12 @@ def run_pairing(
                 continue
             if runner.status == "connected":
                 if tui:
-                    tui.pairing_completed()
+                    project_url = (
+                        get_project_url_by_id(base_url, session.project_id, workspace)
+                        if workspace
+                        else None
+                    )
+                    tui.pairing_completed(project_url=project_url)
                 break
             time.sleep(POLL_INTERVAL_SECONDS)
         else:

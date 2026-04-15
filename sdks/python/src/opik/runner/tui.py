@@ -59,6 +59,7 @@ class RunnerTUI:
         self._pairing_active = False
         self._pairing_deadline: Optional[float] = None
         self._pairing_url: Optional[str] = None
+        self._project_url: Optional[str] = None
 
     def start(self) -> None:
         if self._is_tty:
@@ -106,12 +107,13 @@ class RunnerTUI:
                 f"Open this link to pair:  \U0001f517 {url}\nOr copy this URL into your browser:\n{url}"
             )
 
-    def pairing_completed(self) -> None:
+    def pairing_completed(self, project_url: Optional[str] = None) -> None:
         with self._lock:
             was_active = self._pairing_active
             self._pairing_active = False
             self._pairing_deadline = None
             self._pairing_url = None
+            self._project_url = project_url
         if not was_active:
             return
 
@@ -120,6 +122,16 @@ class RunnerTUI:
         text.append("Status".ljust(self._LABEL_WIDTH), style="dim")
         text.append("Paired ", style="green")
         text.append("\u2714", style="green")
+        if project_url:
+            text.append(f"\n\n{self._PADDING}")
+            text.append(
+                "Continue developing in Opik:  \u2197\ufe0f ", style="rgb(91,74,228)"
+            )
+            text.append(
+                "Link", style=Style(link=project_url, bold=True, underline=True)
+            )
+            text.append(f"\n{self._PADDING}")
+            text.append(project_url, style="dim")
         self._print(text)
         self._update_live()
 
