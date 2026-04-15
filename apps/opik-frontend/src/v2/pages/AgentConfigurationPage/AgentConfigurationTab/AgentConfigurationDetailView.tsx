@@ -186,7 +186,7 @@ const AgentConfigurationDetailView: React.FC<
           )}
         </div>
 
-        <Separator className="mb-2 mt-4" />
+        <Separator className="my-4" />
 
         {isPending ? (
           <Loader />
