@@ -715,6 +715,7 @@ class DatasetsClient:
         preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
         variation_instructions: typing.Optional[str] = OMIT,
         custom_prompt: typing.Optional[str] = OMIT,
+        max_completion_tokens: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetExpansionResponse:
         """
@@ -739,6 +740,9 @@ class DatasetsClient:
         custom_prompt : typing.Optional[str]
             Custom prompt to use for generation instead of auto-generated one
 
+        max_completion_tokens : typing.Optional[int]
+            Maximum number of tokens for the LLM response. Required by Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults to 4000 for Anthropic models only.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -760,6 +764,7 @@ class DatasetsClient:
             preserve_fields=preserve_fields,
             variation_instructions=variation_instructions,
             custom_prompt=custom_prompt,
+            max_completion_tokens=max_completion_tokens,
             request_options=request_options,
         )
         return _response.data
@@ -2199,6 +2204,7 @@ class AsyncDatasetsClient:
         preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
         variation_instructions: typing.Optional[str] = OMIT,
         custom_prompt: typing.Optional[str] = OMIT,
+        max_completion_tokens: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetExpansionResponse:
         """
@@ -2222,6 +2228,9 @@ class AsyncDatasetsClient:
 
         custom_prompt : typing.Optional[str]
             Custom prompt to use for generation instead of auto-generated one
+
+        max_completion_tokens : typing.Optional[int]
+            Maximum number of tokens for the LLM response. Required by Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults to 4000 for Anthropic models only.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2247,6 +2256,7 @@ class AsyncDatasetsClient:
             preserve_fields=preserve_fields,
             variation_instructions=variation_instructions,
             custom_prompt=custom_prompt,
+            max_completion_tokens=max_completion_tokens,
             request_options=request_options,
         )
         return _response.data
