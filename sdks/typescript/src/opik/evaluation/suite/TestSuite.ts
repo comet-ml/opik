@@ -161,31 +161,22 @@ export class TestSuite {
       projectName: resolvedProjectName,
     });
 
-    const dataset = new Dataset(
-      { id: datasetId, name: options.name, description: options.description, projectName: resolvedProjectName },
+    const suite = new TestSuite(
+      new Dataset(
+        { id: datasetId, name: options.name, description: options.description, projectName: resolvedProjectName },
+        client
+      ),
       client
     );
 
     if (resolvedEvaluators || options.globalExecutionPolicy) {
-      const evaluators = resolvedEvaluators
-        ? serializeEvaluators(resolvedEvaluators)
-        : undefined;
-
-      await client.api.datasets.applyDatasetItemChanges(datasetId, {
-        override: true,
-        body: {
-          ...(evaluators && { evaluators }),
-          ...(options.globalExecutionPolicy && {
-            execution_policy: {
-              runs_per_item: options.globalExecutionPolicy.runsPerItem,
-              pass_threshold: options.globalExecutionPolicy.passThreshold,
-            },
-          }),
-        },
-      });
+      await suite.createInitialTestSuiteVersion(
+        resolvedEvaluators ?? [],
+        resolveExecutionPolicy(options.globalExecutionPolicy)
+      );
     }
 
-    return new TestSuite(dataset, client);
+    return suite;
   }
 
   static async get(
