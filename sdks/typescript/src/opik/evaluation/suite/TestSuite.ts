@@ -238,7 +238,7 @@ export class TestSuite {
    *                retain their current values.
    * @throws Error if an item with the specified ID is not found
    */
-  async updateItems(items: UpdateTestSuiteItem[]): Promise<void> {
+  async update(items: UpdateTestSuiteItem[]): Promise<void> {
     if (!items || items.length === 0) {
       return;
     }

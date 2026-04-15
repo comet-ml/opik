@@ -1216,7 +1216,7 @@ describe("TestSuite", () => {
     });
   });
 
-  describe("updateItems", () => {
+  describe("update", () => {
     const createMockRawItem = (id: string, data: Record<string, unknown>) => {
       const item = new DatasetItem({ id, ...data });
       return item;
@@ -1234,7 +1234,7 @@ describe("TestSuite", () => {
         .spyOn(testDataset, "update")
         .mockResolvedValue(undefined);
 
-      await suite.updateItems([
+      await suite.update([
         { id: "item-1", data: { input: "updated" } },
         { id: "item-2", assertions: ["is correct"], description: "Updated item" },
       ]);
@@ -1263,7 +1263,7 @@ describe("TestSuite", () => {
         .spyOn(testDataset, "update")
         .mockResolvedValue(undefined);
 
-      await suite.updateItems([]);
+      await suite.update([]);
 
       expect(updateSpy).not.toHaveBeenCalled();
     });
@@ -1273,7 +1273,7 @@ describe("TestSuite", () => {
         .spyOn(testDataset, "update")
         .mockResolvedValue(undefined);
 
-      await suite.updateItems([
+      await suite.update([
         {
           id: "item-1",
           data: { input: "test" },
@@ -1296,7 +1296,7 @@ describe("TestSuite", () => {
       vi.spyOn(testDataset, "update").mockResolvedValue(undefined);
 
       await expect(
-        suite.updateItems([{ id: "non-existent-id", data: { foo: "bar" } }])
+        suite.update([{ id: "non-existent-id", data: { foo: "bar" } }])
       ).rejects.toThrow('Item with id "non-existent-id" not found in the test suite');
     });
   });
