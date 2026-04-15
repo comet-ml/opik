@@ -318,7 +318,7 @@ function DatasetVersionSelectBox({
               <SelectValue
                 placeholder={
                   <div className="flex w-full items-center text-light-slate">
-                    <Database className="mr-2 size-4 text-[#b8e54a]" />
+                    <Database className="mr-2 size-4 text-library-loaded" />
                     <span className="truncate font-normal">
                       Select a test suite
                     </span>
@@ -327,7 +327,7 @@ function DatasetVersionSelectBox({
               >
                 <div className="flex w-full items-center justify-between gap-2 text-foreground">
                   <div className="flex min-w-0 items-center gap-2">
-                    <Database className="size-4 shrink-0 text-[#b8e54a]" />
+                    <Database className="size-4 shrink-0 text-library-loaded" />
                     <span className="min-w-0 truncate">
                       {selectedDataset?.name}
                     </span>

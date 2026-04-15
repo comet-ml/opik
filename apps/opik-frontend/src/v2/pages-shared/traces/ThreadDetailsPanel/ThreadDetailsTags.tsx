@@ -38,6 +38,7 @@ const ThreadDetailsTags: React.FunctionComponent<ThreadDetailsTagsProps> = ({
       tags={tags}
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
+      tagVariant="gray"
     />
   );
 };

@@ -23,8 +23,6 @@ import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
 import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
-import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
@@ -320,30 +318,6 @@ const testSuiteItemsRoute = createRoute({
   component: TestSuiteItemsPage,
 });
 
-// ----------- prompts (project-scoped)
-const promptsRoute = createRoute({
-  path: "/prompts",
-  getParentRoute: () => projectScopedRoute,
-  staticData: {
-    title: "Prompt library",
-  },
-});
-
-const promptsListRoute = createRoute({
-  path: "/",
-  getParentRoute: () => promptsRoute,
-  component: PromptsPage,
-});
-
-const promptRoute = createRoute({
-  path: "/$promptId",
-  getParentRoute: () => promptsRoute,
-  component: PromptPage,
-  staticData: {
-    param: "promptId",
-  },
-});
-
 // ----------- playground (project-scoped)
 const playgroundRoute = createRoute({
   path: "/playground",
@@ -620,7 +594,6 @@ const routeTree = rootRoute.addChildren([
             testSuitesListRoute,
             testSuiteRoute.addChildren([testSuiteItemsRoute]),
           ]),
-          promptsRoute.addChildren([promptsListRoute, promptRoute]),
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,

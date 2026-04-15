@@ -47,7 +47,7 @@ const AgentConfigurationEmptyState: React.FC = () => {
 
           <TimelineStep number={3} isLast>
             <div className="flex flex-col gap-1">
-              <h4 className="comet-body-s-accented">Publish and deploy</h4>
+              <h4 className="comet-body-s-accented">Run your agent</h4>
               <p className="comet-body-xs text-muted-slate">
                 Your configuration will appear here automatically
               </p>
