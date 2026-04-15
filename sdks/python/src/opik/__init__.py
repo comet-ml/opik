@@ -138,20 +138,22 @@ def _ensure_initialized() -> None:
         return
     _initialized = True
 
-    from . import _logging, environment, error_tracking
+    from . import _logging  # type: ignore[attr-defined]
+    from . import environment  # type: ignore[attr-defined]
+    from . import error_tracking  # type: ignore[attr-defined]
 
-    _logging.setup()
+    _logging.setup()  # type: ignore[attr-defined]
 
     from .integrations.sagemaker import auth as sagemaker_auth
 
     sagemaker_auth.setup_aws_sagemaker_session_hook()
 
     if (
-        error_tracking.enabled_in_config()
-        and not environment.in_pytest()
-        and error_tracking.randomized_should_enable_reporting()
+        error_tracking.enabled_in_config()  # type: ignore[attr-defined]
+        and not environment.in_pytest()  # type: ignore[attr-defined]
+        and error_tracking.randomized_should_enable_reporting()  # type: ignore[attr-defined]
     ):
-        error_tracking.setup_sentry_error_tracker()
+        error_tracking.setup_sentry_error_tracker()  # type: ignore[attr-defined]
 
 
 def __getattr__(name: str) -> object:

@@ -52,7 +52,7 @@ class BaseMetric(abc.ABC):
             if config.check_for_known_misconfigurations() is False:
                 import opik
 
-                track_decorator = opik.track(name=self.name, project_name=project_name)
+                track_decorator = opik.track(name=self.name, project_name=project_name)  # type: ignore[operator]
                 self.score = track_decorator(self.score)  # type: ignore
                 self.ascore = track_decorator(self.ascore)  # type: ignore
 
