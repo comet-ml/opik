@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import cometApi from "@/plugins/comet/api";
 import { useActiveWorkspaceName } from "@/store/AppStore";
+import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
 
-const IS_DEV = import.meta.env.DEV;
 const HEALTH_POLL_INTERVAL_MS = 5000;
 const HEALTH_POLL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 const HEALTH_KEEPALIVE_MS = 30_000; // 30s keepalive after ready
@@ -92,14 +92,14 @@ export default function useAssistantBackend(
       );
       return { baseUrl, enabled: true };
     },
-    enabled: !IS_DEV && configEnabled && !!workspaceName,
+    enabled: !IS_ASSISTANT_DEV && configEnabled && !!workspaceName,
     staleTime: Infinity,
     retry: 2,
   });
 
   const baseUrl = computeResult?.baseUrl ?? null;
   const computeEnabled = computeResult?.enabled ?? false;
-  const shouldPollHealth = !IS_DEV && !!baseUrl && computeEnabled;
+  const shouldPollHealth = !IS_ASSISTANT_DEV && !!baseUrl && computeEnabled;
 
   // Track when health polling started — only reset when baseUrl changes
   // (not on transient shouldPollHealth flickers)
@@ -218,8 +218,8 @@ export default function useAssistantBackend(
     queueMicrotask(() => resetBackend());
   }
 
-  // Dev mode — static URL, no network calls (queries are disabled via enabled: !IS_DEV)
-  if (IS_DEV) return DEV_RESULT;
+  // Dev mode or local override — static URL, no network calls
+  if (IS_ASSISTANT_DEV) return DEV_RESULT;
 
   if (computeResult && !computeResult.enabled)
     return notReadyResult(null, "disabled", retry, retryCount);
