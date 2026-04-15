@@ -561,6 +561,43 @@ describe("createConfig prompt project validation", () => {
       client.createConfig({ systemPrompt: prompt }), // no options.projectName
     ).rejects.toBeInstanceOf(ConfigMismatchError);
   });
+
+  it("should throw ConfigMismatchError for a prompt with a different projectName (e.g. from getPrompt)", async () => {
+    // Simulates a prompt returned by getPrompt({ projectName: "other-project" })
+    const prompt = new Prompt(
+      {
+        name: "fetched-prompt",
+        prompt: "Hello",
+        type: PromptType.MUSTACHE,
+        synced: true,
+        projectName: "other-project",
+      },
+      client,
+    );
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" }),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should throw ConfigMismatchError for a searchPrompts result from a different project", async () => {
+    // searchPrompts uses this.resolveProjectName() → "other-project" if client configured that way
+    const otherClient = new Opik({ projectName: "other-project" });
+    const prompt = new Prompt(
+      {
+        name: "search-result",
+        prompt: "Hello",
+        type: PromptType.MUSTACHE,
+        synced: true,
+        projectName: "other-project",
+      },
+      otherClient,
+    );
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" }),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
 });
 
 describe("getOrCreateConfig prompt project validation", () => {

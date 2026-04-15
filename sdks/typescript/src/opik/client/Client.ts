@@ -1209,7 +1209,7 @@ export class OpikClient {
       }
 
       // Step 4: Create the Prompt object with metadata
-      return Prompt.fromApiResponse(promptData, versionData, this);
+      return Prompt.fromApiResponse(promptData, versionData, this, resolvedProjectName);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         return null;
@@ -1287,7 +1287,7 @@ export class OpikClient {
       }
 
       // Step 4: Create the ChatPrompt object with metadata
-      return ChatPrompt.fromApiResponse(promptData, versionData, this);
+      return ChatPrompt.fromApiResponse(promptData, versionData, this, resolvedProjectName);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         return null;
@@ -1392,14 +1392,16 @@ export class OpikClient {
 
             const templateStructure = versionResponse.templateStructure;
 
+            const searchProjectName = this.resolveProjectName();
             // Default to text for backwards compatibility
             if (!templateStructure || templateStructure === PromptTemplateStructure.Text) {
-              return Prompt.fromApiResponse(promptData, versionResponse, this);
+              return Prompt.fromApiResponse(promptData, versionResponse, this, searchProjectName);
             } else if (templateStructure === PromptTemplateStructure.Chat) {
               return ChatPrompt.fromApiResponse(
                 promptData,
                 versionResponse,
-                this
+                this,
+                searchProjectName
               );
             }
 
@@ -1813,6 +1815,30 @@ export class OpikClient {
   }
 
   /** Build a Config from a local fallback object (no backend involved). */
+  /**
+   * Validates that every BasePrompt value in `values` belongs to `projectName`.
+   * Prompts with an undefined projectName are skipped (cannot be validated).
+   * Throws ConfigMismatchError on the first mismatch found.
+   */
+  private _validatePromptProjects(
+    values: Record<string, unknown>,
+    projectName: string
+  ): void {
+    for (const [key, value] of Object.entries(values)) {
+      if (
+        value instanceof BasePrompt &&
+        value.projectName !== undefined &&
+        value.projectName !== projectName
+      ) {
+        throw new ConfigMismatchError(
+          `Field "${key}": prompt project "${value.projectName}" does not match ` +
+          `config project "${projectName}". All prompts referenced in a config must ` +
+          `belong to the same project as the config.`
+        );
+      }
+    }
+  }
+
   private _makeFallbackConfig<T extends Record<string, unknown>>(
     fallback: T,
     maskId: string | undefined
@@ -1951,19 +1977,7 @@ export class OpikClient {
     }
 
     // Validate that all Prompt/ChatPrompt values in the fallback belong to this project.
-    for (const [key, value] of Object.entries(fallback)) {
-      if (
-        value instanceof BasePrompt &&
-        value.projectName !== undefined &&
-        value.projectName !== projectName
-      ) {
-        throw new ConfigMismatchError(
-          `Field "${key}": prompt project "${value.projectName}" does not match ` +
-          `config project "${projectName}". All prompts referenced in a config must ` +
-          `belong to the same project as the config.`
-        );
-      }
-    }
+    this._validatePromptProjects(fallback as Record<string, unknown>, projectName);
 
     // Auto-create from fallback (handle 409 race: another caller created it concurrently)
     let blueprint: Blueprint;
@@ -2101,19 +2115,7 @@ export class OpikClient {
   ): Promise<string> => {
     const projectName = options?.projectName ?? this.config.projectName;
 
-    for (const [key, value] of Object.entries(values)) {
-      if (
-        value instanceof BasePrompt &&
-        value.projectName !== undefined &&
-        value.projectName !== projectName
-      ) {
-        throw new ConfigMismatchError(
-          `Field "${key}": prompt project "${value.projectName}" does not match ` +
-          `config project "${projectName}". All prompts referenced in a config must ` +
-          `belong to the same project as the config.`
-        );
-      }
-    }
+    this._validatePromptProjects(values as Record<string, unknown>, projectName);
 
     const manager = new ConfigManager(projectName, this);
     const serialized = serializeValuesRecord(values as Record<string, unknown>);
