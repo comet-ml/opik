@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { CheckCircle2, CircleAlert } from "lucide-react";
 import api from "@/api/api";
 import { fetchWorkspaceVersion } from "@/api/workspaces/useWorkspaceVersion";
+import { Spinner } from "@/ui/spinner";
 
 // ---------------------------------------------------------------------------
 // Binary helpers
@@ -160,8 +163,10 @@ async function activate(
 // ---------------------------------------------------------------------------
 
 type WorkspacePhase = "missing" | "checking" | "ok" | "v1";
+type Status = "loading" | "success" | "error";
 
 const PairingPage: React.FC = () => {
+  const navigate = useNavigate();
   const fragment = window.location.hash.slice(1);
 
   const [payload, parseError] = useMemo<
@@ -204,10 +209,24 @@ const PairingPage: React.FC = () => {
   } = useMutation({
     mutationFn: async (p: PairingPayload) => {
       if (!crypto?.subtle) throw new Error("SECURE_CONTEXT_REQUIRED");
-      await activate(p, workspaceName);
+      try {
+        await activate(p, workspaceName);
+      } catch (err) {
+        // 409 = runner already paired; treat as success so the user still
+        // gets redirected to their agent instead of seeing an error screen.
+        const status =
+          err && typeof err === "object" && "response" in err
+            ? (err as { response?: { status?: number } }).response?.status
+            : undefined;
+        if (status !== 409) throw err;
+      }
     },
-    onSuccess: () => {
-      setTimeout(() => window.close(), 10000);
+    onSuccess: (_data, variables) => {
+      if (!workspaceName) return;
+      navigate({
+        to: "/$workspaceName/projects/$projectId/agent-configuration",
+        params: { workspaceName, projectId: variables.projectId },
+      });
     },
   });
 
@@ -228,26 +247,49 @@ const PairingPage: React.FC = () => {
       return "This pairing link is invalid or has been tampered with.";
     if (s === 404)
       return "This pairing link has expired. Run the CLI command again.";
-    if (s === 409)
-      return "This runner is already connected. You can close this tab.";
     return "Could not reach Opik. Check your connection.";
   }
 
-  function getMessage(): string {
-    if (workspacePhase === "missing") return "This pairing link is invalid.";
-    if (workspacePhase === "v1") {
-      return "Opik Connect requires Opik 2.0. Please upgrade your workspace to continue.";
+  function getDisplay(): { status: Status; message: string } {
+    if (workspacePhase === "missing") {
+      return { status: "error", message: "This pairing link is invalid." };
     }
-    if (workspacePhase === "checking") return "Connecting…";
-    if (parseError) return parseError;
-    if (activationIsError) return getActivationErrorMessage(activationError);
-    if (activationIsSuccess) return "Connected ✔";
-    return "Connecting…";
+    if (workspacePhase === "v1") {
+      return {
+        status: "error",
+        message:
+          "Opik Connect requires Opik 2.0. Please upgrade your workspace to continue.",
+      };
+    }
+    if (workspacePhase === "checking") {
+      return { status: "loading", message: "Connecting…" };
+    }
+    if (parseError) return { status: "error", message: parseError };
+    if (activationIsError) {
+      return {
+        status: "error",
+        message: getActivationErrorMessage(activationError),
+      };
+    }
+    if (activationIsSuccess) return { status: "success", message: "Connected" };
+    return { status: "loading", message: "Connecting…" };
   }
 
+  const { status, message } = getDisplay();
+
+  const icon =
+    status === "loading" ? (
+      <Spinner size="medium" />
+    ) : status === "success" ? (
+      <CheckCircle2 className="size-8 shrink-0 text-green-600" />
+    ) : (
+      <CircleAlert className="size-8 shrink-0 text-destructive" />
+    );
+
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <p className="comet-body text-center text-muted-slate">{getMessage()}</p>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6">
+      {icon}
+      <p className="comet-body text-center text-muted-slate">{message}</p>
     </div>
   );
 };

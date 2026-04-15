@@ -40,3 +40,15 @@ export function getForcedVersionFromPath(): WorkspaceVersion | null {
   const head = segments[0] === "opik" ? segments[1] : segments[0];
   return head && V2_ONLY_SEGMENTS.has(head) ? "v2" : null;
 }
+
+// Resolves the workspace version synchronously when possible. Returns null
+// only when the workspace name is in the URL but its version requires an
+// API fetch — the one case that needs to fall back to a Loader.
+export function resolveSyncWorkspaceVersion(): WorkspaceVersion | null {
+  const override = getVersionOverride();
+  if (override) return override;
+  const forced = getForcedVersionFromPath();
+  if (forced) return forced;
+  if (!getWorkspaceNameFromPath()) return DEFAULT_WORKSPACE_VERSION;
+  return null;
+}
