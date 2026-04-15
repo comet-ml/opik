@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSuiteAssertions } from "@/store/EvaluationSuiteDraftStore";
+import { useSuiteAssertions } from "@/store/TestSuiteDraftStore";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import { extractAssertions } from "@/lib/assertion-converters";
 

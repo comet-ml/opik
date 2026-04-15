@@ -66,16 +66,13 @@ export type MetricKPICardConfig = {
 };
 
 export const getMetricKPICardConfigs = (options?: {
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
   objectiveName?: string;
 }): MetricKPICardConfig[] => [
   {
     key: "score",
     icon: PenLine,
-    label: getObjectiveLabel(
-      options?.isEvaluationSuite,
-      options?.objectiveName,
-    ),
+    label: getObjectiveLabel(options?.isTestSuite, options?.objectiveName),
     formatter: formatAsPercentage,
   },
   {

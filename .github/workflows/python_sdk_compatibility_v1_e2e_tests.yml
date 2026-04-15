@@ -10,6 +10,7 @@ on:
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
+          - 'apps/opik-guardrails-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
     push:
         branches:
@@ -17,6 +18,7 @@ on:
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
+          - 'apps/opik-guardrails-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
 
 concurrency:

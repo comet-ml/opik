@@ -38,7 +38,7 @@ const RedirectDatasets: React.FC = () => {
       const projectId = dataset.project_id || activeProjectId;
       if (projectId) {
         navigate({
-          to: "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+          to: "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
           params: {
             suiteId: dataset.id,
             workspaceName,
@@ -64,15 +64,15 @@ const RedirectDatasets: React.FC = () => {
   ]);
 
   if (!query.id && !query.name) {
-    return <NoData message="No evaluation suite params set" />;
+    return <NoData message="No test suite params set" />;
   }
 
   if (!isPending && !dataset) {
     return (
       <NoData
         icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
-        title="This evaluation suite could not be found"
-        message="The evaluation suite you're looking for doesn't exist or has been deleted."
+        title="This test suite could not be found"
+        message="The test suite you're looking for doesn't exist or has been deleted."
       >
         <div className="pt-5">
           <Link to="/$workspaceName/home" params={{ workspaceName }}>

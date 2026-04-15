@@ -378,6 +378,85 @@ class RawRunnersClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_runner(
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[LocalRunner]:
+        """
+        Get a single local runner with its registered agents
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[LocalRunner]
+            Runner details
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    LocalRunner,
+                    parse_obj_as(
+                        type_=LocalRunner,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def disconnect_runner(
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Disconnect a local runner, terminating its connection and failing any pending jobs
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}",
+            method="DELETE",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_bridge_command(
         self,
         runner_id: str,
@@ -472,55 +551,6 @@ class RawRunnersClient:
                     LocalRunnerJob,
                     parse_obj_as(
                         type_=LocalRunnerJob,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def get_runner(
-        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[LocalRunner]:
-        """
-        Get a single local runner with its registered agents
-
-        Parameters
-        ----------
-        runner_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[LocalRunner]
-            Runner details
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}",
-            method="GET",
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    LocalRunner,
-                    parse_obj_as(
-                        type_=LocalRunner,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1475,6 +1505,85 @@ class AsyncRawRunnersClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def get_runner(
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[LocalRunner]:
+        """
+        Get a single local runner with its registered agents
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[LocalRunner]
+            Runner details
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    LocalRunner,
+                    parse_obj_as(
+                        type_=LocalRunner,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def disconnect_runner(
+        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Disconnect a local runner, terminating its connection and failing any pending jobs
+
+        Parameters
+        ----------
+        runner_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/local-runners/{jsonable_encoder(runner_id)}",
+            method="DELETE",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_bridge_command(
         self,
         runner_id: str,
@@ -1569,55 +1678,6 @@ class AsyncRawRunnersClient:
                     LocalRunnerJob,
                     parse_obj_as(
                         type_=LocalRunnerJob,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def get_runner(
-        self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[LocalRunner]:
-        """
-        Get a single local runner with its registered agents
-
-        Parameters
-        ----------
-        runner_id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[LocalRunner]
-            Runner details
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/local-runners/{jsonable_encoder(runner_id)}",
-            method="GET",
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    LocalRunner,
-                    parse_obj_as(
-                        type_=LocalRunner,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

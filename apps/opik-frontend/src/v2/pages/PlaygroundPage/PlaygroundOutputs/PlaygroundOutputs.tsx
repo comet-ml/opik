@@ -130,15 +130,15 @@ const PlaygroundOutputs = ({
               <StatusMessage
                 icon={Loader2}
                 iconClassName="animate-spin"
-                title="Evaluation suite still loading"
-                description="Experiments will run, but may not use the full evaluation suite until loading completes."
+                title="Test suite still loading"
+                description="Experiments will run, but may not use the full test suite until loading completes."
                 className="mb-2"
               />
             )}
             {showSuccessMessage && (
               <StatusMessage
                 icon={Check}
-                title="Evaluation suite fully loaded"
+                title="Test suite fully loaded"
                 description="All items are now available."
                 className="mb-2"
               />

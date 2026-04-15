@@ -43,8 +43,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
@@ -127,7 +125,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
 export const FILTER_COLUMNS = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Evaluation suite",
+    label: "Test suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -345,9 +343,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
         />
       ) : (
         <>
-          <ExplainerDescription
-            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
-          />
           {isOptimizationStudioEnabled && <StudioTemplates />}
           <div className="pt-4">
             <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">

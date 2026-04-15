@@ -3,6 +3,7 @@ import {
   Blocks,
   Bot,
   ChartLine,
+  Database,
   FileTerminal,
   FlaskConical,
   LayoutDashboard,
@@ -81,11 +82,19 @@ const getMenuItems = ({
         ...(canViewDatasets
           ? [
               {
-                id: "evaluation_suites",
-                path: projectPath("/evaluation-suites"),
+                id: "datasets",
+                path: projectPath("/datasets"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Database,
+                label: "Datasets",
+                disabled: !projectPrefix,
+              },
+              {
+                id: "test_suites",
+                path: projectPath("/test-suites"),
                 type: MENU_ITEM_TYPE.router as const,
                 icon: ListChecks,
-                label: "Evaluation suites",
+                label: "Test suites",
                 disabled: !projectPrefix,
               },
             ]

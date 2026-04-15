@@ -13,7 +13,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { DatasetVersion } from "@/types/datasets";
 import { isLatestVersionTag } from "@/constants/datasets";
 import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
-import { useHasDraft, useClearDraft } from "@/store/EvaluationSuiteDraftStore";
+import { useHasDraft, useClearDraft } from "@/store/TestSuiteDraftStore";
 import EditVersionDialog from "./EditVersionDialog";
 
 type CustomMeta = {

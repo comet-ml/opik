@@ -169,7 +169,6 @@ class PromptsClient:
         name: str,
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
-        exclude_blueprint_update_for_projects: typing.Optional[typing.Sequence[str]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -185,9 +184,6 @@ class PromptsClient:
 
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
             Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
-
-        exclude_blueprint_update_for_projects : typing.Optional[typing.Sequence[str]]
-            Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed.
 
         project_id : typing.Optional[str]
             Project ID. Takes precedence over project_name when both are provided.
@@ -214,7 +210,6 @@ class PromptsClient:
             name=name,
             version=version,
             template_structure=template_structure,
-            exclude_blueprint_update_for_projects=exclude_blueprint_update_for_projects,
             project_id=project_id,
             project_name=project_name,
             request_options=request_options,
@@ -740,7 +735,6 @@ class AsyncPromptsClient:
         name: str,
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
-        exclude_blueprint_update_for_projects: typing.Optional[typing.Sequence[str]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -756,9 +750,6 @@ class AsyncPromptsClient:
 
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
             Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
-
-        exclude_blueprint_update_for_projects : typing.Optional[typing.Sequence[str]]
-            Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed.
 
         project_id : typing.Optional[str]
             Project ID. Takes precedence over project_name when both are provided.
@@ -788,7 +779,6 @@ class AsyncPromptsClient:
             name=name,
             version=version,
             template_structure=template_structure,
-            exclude_blueprint_update_for_projects=exclude_blueprint_update_for_projects,
             project_id=project_id,
             project_name=project_name,
             request_options=request_options,

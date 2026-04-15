@@ -584,13 +584,14 @@ public class ExperimentDAO {
             pass_rate_agg AS (
                 SELECT
                     experiment_id,
-                    toNullable(sum(item_passed)) AS passed_count,
-                    toNullable(count(*)) AS total_count,
-                    if(count(*) = 0, NULL, toNullable(toDecimal64(sum(item_passed) / count(*), 9))) AS pass_rate
+                    toNullable(sumIf(item_passed, has_assertions)) AS passed_count,
+                    toNullable(countIf(has_assertions)) AS total_count,
+                    if(countIf(has_assertions) = 0, NULL, toNullable(toDecimal64(ifNull(sumIf(item_passed, has_assertions) / nullIf(toFloat64(countIf(has_assertions)), 0), 0), 9))) AS pass_rate
                 FROM (
                     SELECT
                         experiment_id,
                         dataset_item_id,
+                        max(has_assertions) AS has_assertions,
                         if(sum(run_passed) >=
                            if(item_pass_threshold > 0, item_pass_threshold,
                               if(suite_pass_threshold > 0, suite_pass_threshold, 1)),
@@ -602,9 +603,10 @@ public class ExperimentDAO {
                             ei.trace_id AS trace_id,
                             JSONExtractUInt(ei.execution_policy, 'pass_threshold') AS item_pass_threshold,
                             JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold,
+                            countIf(ar.name != '') > 0 AS has_assertions,
                             if(
                                 countIf(ar.name != '') = 0,
-                                1,
+                                0,
                                 if(minIf(ar.value, ar.name != '') >= 1.0, 1, 0)
                             ) AS run_passed
                         FROM experiment_items_final ei
@@ -1423,13 +1425,14 @@ public class ExperimentDAO {
             pass_rate_agg AS (
                 SELECT
                     experiment_id,
-                    toNullable(sum(item_passed)) AS passed_count,
-                    toNullable(count(*)) AS total_count,
-                    if(count(*) = 0, NULL, toNullable(toDecimal64(sum(item_passed) / count(*), 9))) AS pass_rate
+                    toNullable(sumIf(item_passed, has_assertions)) AS passed_count,
+                    toNullable(countIf(has_assertions)) AS total_count,
+                    if(countIf(has_assertions) = 0, NULL, toNullable(toDecimal64(ifNull(sumIf(item_passed, has_assertions) / nullIf(toFloat64(countIf(has_assertions)), 0), 0), 9))) AS pass_rate
                 FROM (
                     SELECT
                         experiment_id,
                         dataset_item_id,
+                        max(has_assertions) AS has_assertions,
                         if(sum(run_passed) >=
                            if(item_pass_threshold > 0, item_pass_threshold,
                               if(suite_pass_threshold > 0, suite_pass_threshold, 1)),
@@ -1441,9 +1444,10 @@ public class ExperimentDAO {
                             ei.trace_id AS trace_id,
                             JSONExtractUInt(ei.execution_policy, 'pass_threshold') AS item_pass_threshold,
                             JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold,
+                            countIf(ar.name != '') > 0 AS has_assertions,
                             if(
                                 countIf(ar.name != '') = 0,
-                                1,
+                                0,
                                 if(minIf(ar.value, ar.name != '') >= 1.0, 1, 0)
                             ) AS run_passed
                         FROM experiment_items_final ei

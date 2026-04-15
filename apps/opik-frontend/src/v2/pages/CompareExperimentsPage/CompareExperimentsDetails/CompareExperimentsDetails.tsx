@@ -20,7 +20,7 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import { LOGS_SOURCE } from "@/types/traces";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
@@ -117,7 +117,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
               style={{ color: "var(--color-yellow)" }}
             />
             <span className="comet-body-s-accented truncate text-muted-slate">
-              {experiment.dataset_name || "Deleted evaluation suite"}
+              {experiment.dataset_name || "Deleted test suite"}
             </span>
           </Tag>
         )}
@@ -139,7 +139,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
         )}
         {!isCompare &&
-          isEvalSuiteExperiment(experiment) &&
+          isTestSuiteExperiment(experiment) &&
           isNumber(experiment.pass_rate) && (
             <TooltipWrapper
               content={formatPassRate(
