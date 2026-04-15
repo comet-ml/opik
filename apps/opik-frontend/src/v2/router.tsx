@@ -99,7 +99,22 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 });
 
 // ----------- pairing (root-level, no layout)
+// TanStack strips the router basepath before matching, so the canonical
+// route is basepath-relative: "/pair/v1" covers cloud (basepath "/opik"
+// → URL "/opik/pair/v1" strips to "/pair/v1").
+//
+// The legacy "/opik/pair/v1" alias below is an OSS-only fallback: the
+// Python SDK hardcodes "{origin}/opik/pair/v1" regardless of deployment
+// (see sdks/python/src/opik/cli/pairing.py), so on OSS (basepath "/") the
+// "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
+// TODO: make the Python SDK build basepath-aware pairing URLs and drop
+// this alias once shipped CLI versions roll over.
 const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pair/v1",
+  component: PairingPage,
+});
+const pairingRouteOssAlias = createRoute({
   getParentRoute: () => rootRoute,
   path: "/opik/pair/v1",
   component: PairingPage,
@@ -540,6 +555,7 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 
 const routeTree = rootRoute.addChildren([
   pairingRoute,
+  pairingRouteOssAlias,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,

@@ -1,5 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { CheckCircle2, CircleAlert } from "lucide-react";
 import api from "@/api/api";
+import { fetchWorkspaceVersion } from "@/api/workspaces/useWorkspaceVersion";
+import { Spinner } from "@/ui/spinner";
 
 // ---------------------------------------------------------------------------
 // Binary helpers
@@ -123,23 +128,20 @@ async function deriveBridgeKey(
 // Activate + derive + store — runs once on mount
 // ---------------------------------------------------------------------------
 
-async function activate(payload: PairingPayload): Promise<void> {
-  const workspace = new URLSearchParams(window.location.search).get(
-    "workspace",
-  );
-  if (workspace) {
-    api.defaults.headers.common["Comet-Workspace"] = workspace;
-  }
-
+async function activate(
+  payload: PairingPayload,
+  workspace: string | null,
+): Promise<void> {
   const hmac = await computeActivationHmac(
     payload.activationKey,
     payload.sessionId,
     payload.runnerName,
   );
-  await api.post(`/v1/private/pairing/sessions/${payload.sessionId}/activate`, {
-    runner_name: payload.runnerName,
-    hmac,
-  });
+  await api.post(
+    `/v1/private/pairing/sessions/${payload.sessionId}/activate`,
+    { runner_name: payload.runnerName, hmac },
+    workspace ? { headers: { "Comet-Workspace": workspace } } : undefined,
+  );
 
   // Only CONNECT runners use bridge keys for HMAC-signed file commands.
   // ENDPOINT runners don't need one — storing it would overwrite the
@@ -160,7 +162,11 @@ async function activate(payload: PairingPayload): Promise<void> {
 // Page component
 // ---------------------------------------------------------------------------
 
+type WorkspacePhase = "missing" | "checking" | "ok" | "v1";
+type Status = "loading" | "success" | "error";
+
 const PairingPage: React.FC = () => {
+  const navigate = useNavigate();
   const fragment = window.location.hash.slice(1);
 
   const [payload, parseError] = useMemo<
@@ -174,52 +180,119 @@ const PairingPage: React.FC = () => {
     }
   }, [fragment]);
 
-  const [status, setStatus] = useState<"busy" | "done" | "error">(
-    parseError ? "error" : "busy",
+  const workspaceName = new URLSearchParams(window.location.search).get(
+    "workspace",
   );
-  const [error, setError] = useState(parseError ?? "");
 
-  // Auto-activate on mount
-  useEffect(() => {
-    if (!payload) return;
-    if (!crypto?.subtle) {
-      setStatus("error");
-      setError("Pairing requires a secure connection (HTTPS).");
-      return;
-    }
-    activate(payload)
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
-        setStatus("error");
-        const s =
+  const versionQuery = useQuery({
+    queryKey: ["pairing-workspace-version", workspaceName],
+    queryFn: ({ signal }) =>
+      fetchWorkspaceVersion({ workspaceName: workspaceName!, signal }),
+    enabled: !!workspaceName,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const workspacePhase: WorkspacePhase = useMemo(() => {
+    if (!workspaceName) return "missing";
+    if (versionQuery.isPending) return "checking";
+    if (versionQuery.data === "v2") return "ok";
+    return "v1";
+  }, [workspaceName, versionQuery.isPending, versionQuery.data]);
+
+  const {
+    mutate: runActivation,
+    isIdle: activationIdle,
+    isError: activationIsError,
+    isSuccess: activationIsSuccess,
+    error: activationError,
+  } = useMutation({
+    mutationFn: async (p: PairingPayload) => {
+      if (!crypto?.subtle) throw new Error("SECURE_CONTEXT_REQUIRED");
+      try {
+        await activate(p, workspaceName);
+      } catch (err) {
+        // 409 = runner already paired; treat as success so the user still
+        // gets redirected to their agent instead of seeing an error screen.
+        const status =
           err && typeof err === "object" && "response" in err
             ? (err as { response?: { status?: number } }).response?.status
             : undefined;
-        if (s === 403)
-          setError("This pairing link is invalid or has been tampered with.");
-        else if (s === 404)
-          setError("This pairing link has expired. Run the CLI command again.");
-        else if (s === 409)
-          setError("This runner is already connected. You can close this tab.");
-        else setError("Could not reach Opik. Check your connection.");
+        if (status !== 409) throw err;
+      }
+    },
+    onSuccess: (_data, variables) => {
+      if (!workspaceName) return;
+      navigate({
+        to: "/$workspaceName/projects/$projectId/agent-configuration",
+        params: { workspaceName, projectId: variables.projectId },
       });
-  }, [payload]);
+    },
+  });
 
-  // Auto-close on success
   useEffect(() => {
-    if (status !== "done") return;
-    const t = setTimeout(() => window.close(), 1500);
-    return () => clearTimeout(t);
-  }, [status]);
+    if (workspacePhase !== "ok" || !payload || !activationIdle) return;
+    runActivation(payload);
+  }, [workspacePhase, payload, activationIdle, runActivation]);
+
+  function getActivationErrorMessage(err: unknown): string {
+    if (err instanceof Error && err.message === "SECURE_CONTEXT_REQUIRED") {
+      return "Pairing requires a secure connection (HTTPS).";
+    }
+    const s =
+      err && typeof err === "object" && "response" in err
+        ? (err as { response?: { status?: number } }).response?.status
+        : undefined;
+    if (s === 403)
+      return "This pairing link is invalid or has been tampered with.";
+    if (s === 404)
+      return "This pairing link has expired. Run the CLI command again.";
+    return "Could not reach Opik. Check your connection.";
+  }
+
+  function getDisplay(): { status: Status; message: string } {
+    // Fragment-level errors surface first: a bad link is invalid regardless
+    // of workspace state, and we shouldn't block on the version query to
+    // tell the user.
+    if (parseError) return { status: "error", message: parseError };
+    if (workspacePhase === "missing") {
+      return { status: "error", message: "This pairing link is invalid." };
+    }
+    if (workspacePhase === "v1") {
+      return {
+        status: "error",
+        message:
+          "Opik Connect requires Opik 2.0. Please upgrade your workspace to continue.",
+      };
+    }
+    if (workspacePhase === "checking") {
+      return { status: "loading", message: "Connecting…" };
+    }
+    if (activationIsError) {
+      return {
+        status: "error",
+        message: getActivationErrorMessage(activationError),
+      };
+    }
+    if (activationIsSuccess) return { status: "success", message: "Connected" };
+    return { status: "loading", message: "Connecting…" };
+  }
+
+  const { status, message } = getDisplay();
+
+  const icon =
+    status === "loading" ? (
+      <Spinner size="medium" />
+    ) : status === "success" ? (
+      <CheckCircle2 className="size-8 shrink-0 text-green-600" />
+    ) : (
+      <CircleAlert className="size-8 shrink-0 text-destructive" />
+    );
 
   return (
-    <p>
-      {status === "done"
-        ? "Connected ✔"
-        : status === "error"
-          ? error
-          : "Connecting…"}
-    </p>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6">
+      {icon}
+      <p className="comet-body text-center text-muted-slate">{message}</p>
+    </div>
   );
 };
 
