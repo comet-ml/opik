@@ -22,7 +22,6 @@ import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import FieldSection from "./fields/FieldSection";
 import {
   collectMultiLineKeys,
-  collectNonPromptMultiLineKeys,
   hasAnyExpandableField,
   isMultiLineField,
 } from "./fields/blueprintFieldLayout";
@@ -47,7 +46,6 @@ export type AgentConfigurationEditViewState = {
   isSaving: boolean;
   hasErrors: boolean;
   collapsibleKeys: string[];
-  initiallyExpandedKeys: string[];
   hasExpandableFields: boolean;
 };
 
@@ -163,15 +161,8 @@ const AgentConfigurationEditView = React.forwardRef<
       () => collectMultiLineKeys(agentConfig?.values ?? []),
       [agentConfig],
     );
-    const initiallyExpandedKeys = useMemo(
-      () => collectNonPromptMultiLineKeys(agentConfig?.values ?? []),
-      [agentConfig],
-    );
 
-    const internalController = useFieldsCollapse({
-      collapsibleKeys,
-      initiallyExpandedKeys,
-    });
+    const internalController = useFieldsCollapse({ collapsibleKeys });
     const controller = externalController ?? internalController;
 
     const currentValues = useMemo<BlueprintValue[]>(() => {
@@ -207,7 +198,6 @@ const AgentConfigurationEditView = React.forwardRef<
         isSaving,
         hasErrors,
         collapsibleKeys,
-        initiallyExpandedKeys,
         hasExpandableFields,
       });
     }, [
@@ -215,7 +205,6 @@ const AgentConfigurationEditView = React.forwardRef<
       isSaving,
       hasErrors,
       collapsibleKeys,
-      initiallyExpandedKeys,
       hasExpandableFields,
       onStateChange,
     ]);

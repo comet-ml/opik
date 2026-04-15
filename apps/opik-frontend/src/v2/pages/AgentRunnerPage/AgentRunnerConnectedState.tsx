@@ -56,7 +56,6 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
     isSaving: false,
     hasErrors: false,
     collapsibleKeys: [],
-    initiallyExpandedKeys: [],
     hasExpandableFields: false,
   });
 

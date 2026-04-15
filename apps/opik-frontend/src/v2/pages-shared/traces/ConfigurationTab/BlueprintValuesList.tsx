@@ -7,7 +7,6 @@ import BlueprintValuePromptCompact from "@/v2/pages-shared/agent-configuration/f
 import FieldSection from "@/v2/pages-shared/agent-configuration/fields/FieldSection";
 import {
   collectMultiLineKeys,
-  collectNonPromptMultiLineKeys,
   isMultiLineField,
 } from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
 import {
@@ -31,14 +30,7 @@ const BlueprintValuesList: React.FC<BlueprintValuesListProps> = ({
   controller: externalController,
 }) => {
   const collapsibleKeys = useMemo(() => collectMultiLineKeys(values), [values]);
-  const initiallyExpandedKeys = useMemo(
-    () => collectNonPromptMultiLineKeys(values),
-    [values],
-  );
-  const internalController = useFieldsCollapse({
-    collapsibleKeys,
-    initiallyExpandedKeys,
-  });
+  const internalController = useFieldsCollapse({ collapsibleKeys });
   const controller = externalController ?? internalController;
 
   return (
