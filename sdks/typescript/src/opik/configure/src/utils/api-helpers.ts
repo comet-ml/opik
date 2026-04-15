@@ -4,6 +4,7 @@
 
 import axios from 'axios';
 import { DEFAULT_HOST_URL } from '../lib/constants';
+import { buildOpikApiUrl } from './urls';
 
 export interface AccountDetails {
   defaultWorkspaceName: string;
@@ -127,12 +128,7 @@ export async function getMostRecentProjectName(
   apiKey?: string,
   workspace?: string,
 ): Promise<string | null> {
-  const normalizedHost = host.endsWith('/') ? host.slice(0, -1) : host;
-  const isLocalHost =
-    normalizedHost.includes('localhost') ||
-    normalizedHost.includes('127.0.0.1');
-  const apiPath = isLocalHost ? '/api' : '/opik/api';
-  const projectsUrl = `${normalizedHost}${apiPath}/v1/private/projects`;
+  const projectsUrl = `${buildOpikApiUrl(host)}/v1/private/projects`;
 
   try {
     const headers: Record<string, string> = {
