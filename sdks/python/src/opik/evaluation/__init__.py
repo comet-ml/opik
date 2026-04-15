@@ -1,6 +1,9 @@
+# ruff: noqa: F401 — re-exports for public API
 import os
 
-if os.environ.get("OPIK_SCORING_LIGHTWEIGHT") != "true":
+_LIGHTWEIGHT_MODE = os.environ.get("OPIK_SCORING_LIGHTWEIGHT") == "true"
+
+if not _LIGHTWEIGHT_MODE:
     from .evaluator import (
         evaluate,
         evaluate_prompt,
@@ -11,12 +14,16 @@ if os.environ.get("OPIK_SCORING_LIGHTWEIGHT") != "true":
     )
     from .threads.evaluator import evaluate_threads
 
-__all__ = [
-    "evaluate",
-    "evaluate_prompt",
-    "evaluate_experiment",
-    "evaluate_on_dict_items",
-    "evaluate_optimization_trial",
-    "evaluate_threads",
-    "run_tests",
-]
+__all__: list[str] = (
+    []
+    if _LIGHTWEIGHT_MODE
+    else [
+        "evaluate",
+        "evaluate_prompt",
+        "evaluate_experiment",
+        "evaluate_on_dict_items",
+        "evaluate_optimization_trial",
+        "evaluate_threads",
+        "run_tests",
+    ]
+)
