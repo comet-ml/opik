@@ -154,7 +154,7 @@ def _ensure_initialized() -> None:
         error_tracking.setup_sentry_error_tracker()
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     if name in _LAZY_IMPORTS:
         _ensure_initialized()
 
@@ -172,5 +172,5 @@ def __getattr__(name: str):
     raise AttributeError(f"module 'opik' has no attribute {name!r}")
 
 
-def __dir__():
+def __dir__() -> list[str]:
     return list(__all__) + list(_LAZY_IMPORTS.keys())

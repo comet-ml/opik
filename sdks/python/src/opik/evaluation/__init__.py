@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     if name in _LAZY_IMPORTS:
         module_path, attr_name = _LAZY_IMPORTS[name]
 
@@ -34,5 +34,5 @@ def __getattr__(name: str):
     raise AttributeError(f"module 'opik.evaluation' has no attribute {name!r}")
 
 
-def __dir__():
+def __dir__() -> list[str]:
     return list(__all__)
