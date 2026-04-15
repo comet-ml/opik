@@ -30,6 +30,7 @@ import {
   PromptType,
 } from "@/prompt";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
+import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptTemplateStructure, type CreateChatPromptOptions, type CommonPromptOptions } from "@/prompt/types";
 import { PromptTemplateStructureMismatch } from "@/prompt/errors";
 import {
@@ -1060,7 +1061,7 @@ export class OpikClient {
         // No structure validation needed for text prompts
       },
       (promptData, versionData) =>
-        Prompt.fromApiResponse(promptData, versionData, this),
+        Prompt.fromApiResponse(promptData, versionData, this, resolvedProjectName),
       () =>
         new Prompt(
           {
@@ -1071,6 +1072,7 @@ export class OpikClient {
             description: options.description,
             tags: options.tags,
             synced: false,
+            projectName: resolvedProjectName,
           },
           this
         ),
@@ -1127,7 +1129,7 @@ export class OpikClient {
         }
       },
       (promptData, versionData) =>
-        ChatPrompt.fromApiResponse(promptData, versionData, this),
+        ChatPrompt.fromApiResponse(promptData, versionData, this, resolvedProjectName),
       () =>
         new ChatPrompt(
           {
@@ -1138,6 +1140,7 @@ export class OpikClient {
             description: options.description,
             tags: options.tags,
             synced: false,
+            projectName: resolvedProjectName,
           },
           this
         ),
@@ -1947,6 +1950,21 @@ export class OpikClient {
       );
     }
 
+    // Validate that all Prompt/ChatPrompt values in the fallback belong to this project.
+    for (const [key, value] of Object.entries(fallback)) {
+      if (
+        value instanceof BasePrompt &&
+        value.projectName !== undefined &&
+        value.projectName !== projectName
+      ) {
+        throw new ConfigMismatchError(
+          `Field "${key}": prompt project "${value.projectName}" does not match ` +
+          `config project "${projectName}". All prompts referenced in a config must ` +
+          `belong to the same project as the config.`
+        );
+      }
+    }
+
     // Auto-create from fallback (handle 409 race: another caller created it concurrently)
     let blueprint: Blueprint;
     try {
@@ -2082,6 +2100,21 @@ export class OpikClient {
     options?: { projectName?: string; description?: string }
   ): Promise<string> => {
     const projectName = options?.projectName ?? this.config.projectName;
+
+    for (const [key, value] of Object.entries(values)) {
+      if (
+        value instanceof BasePrompt &&
+        value.projectName !== undefined &&
+        value.projectName !== projectName
+      ) {
+        throw new ConfigMismatchError(
+          `Field "${key}": prompt project "${value.projectName}" does not match ` +
+          `config project "${projectName}". All prompts referenced in a config must ` +
+          `belong to the same project as the config.`
+        );
+      }
+    }
+
     const manager = new ConfigManager(projectName, this);
     const serialized = serializeValuesRecord(values as Record<string, unknown>);
 
