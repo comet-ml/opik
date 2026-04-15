@@ -122,14 +122,13 @@ export class TestSuite {
    *
    * @param client - The Opik client instance.
    * @param name - The name of the test suite to delete.
-   * @param projectName - The name of the project containing the test suite. If not provided, the default project is used.
+   * @param projectName - The name of the project containing the test suite.
    */
   static async delete(client: OpikClient, name: string, projectName?: string): Promise<void> {
     validateSuiteName(name);
-    const resolvedProjectName = client.resolveProjectName(projectName);
     await client.api.datasets.deleteDatasetByName({
       datasetName: name,
-      projectName: resolvedProjectName,
+      projectName: projectName,
     });
   }
 

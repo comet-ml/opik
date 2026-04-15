@@ -424,9 +424,10 @@ export class OpikClient {
     name: string,
     projectName?: string
   ): Promise<void> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Deleting test suite with name "${name}"`);
     const { TestSuite } = await import("@/evaluation/suite");
-    await TestSuite.delete(this, name, projectName);
+    await TestSuite.delete(this, name, resolvedProjectName);
   };
 
   /**

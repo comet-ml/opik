@@ -302,7 +302,7 @@ describe("TestSuite static methods", () => {
 
       expect(deleteDatasetByNameSpy).toHaveBeenCalledWith({
         datasetName: "test-suite",
-        projectName: "opik-sdk-typescript-test",
+        projectName: undefined,
       });
     });
 
