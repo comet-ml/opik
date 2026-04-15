@@ -424,9 +424,10 @@ export class OpikClient {
     name: string,
     projectName?: string
   ): Promise<void> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Deleting test suite with name "${name}"`);
     const { TestSuite } = await import("@/evaluation/suite");
-    await TestSuite.delete(this, name, projectName);
+    await TestSuite.delete(this, name, resolvedProjectName);
   };
 
   /**
@@ -437,21 +438,44 @@ export class OpikClient {
    * @returns List of TestSuite objects
    */
   public getTestSuites = async (
-    maxResults: number = 100,
+    maxResults: number = 1000,
     projectName?: string
   ): Promise<TestSuite[]> => {
     const resolvedProjectName = this.resolveProjectName(projectName);
     logger.debug(`Getting all test suites (limit: ${maxResults})`);
 
     try {
-      const datasets = await this.getDatasets(maxResults, resolvedProjectName);
+      await this.datasetBatchQueue.flush();
+
+      const projectId = await this.resolveProjectId(resolvedProjectName);
       const { TestSuite } = await import("@/evaluation/suite");
 
       const suites: TestSuite[] = [];
-      for (const dataset of datasets) {
-        if (dataset.id) {
-          suites.push(new TestSuite(dataset, this));
+      let page = 1;
+      const pageSize = 100;
+
+      while (suites.length < maxResults) {
+        const response = await this.api.datasets.findDatasets({
+          page,
+          size: pageSize,
+          ...(projectId && { projectId }),
+        });
+
+        const content = response.content ?? [];
+        if (content.length === 0) break;
+
+        for (const datasetData of content) {
+          if (suites.length >= maxResults) break;
+          if (datasetData.type !== OpikApi.DatasetPublicType.EvaluationSuite) continue;
+          suites.push(
+            new TestSuite(
+              new Dataset({ ...datasetData, projectName: resolvedProjectName }, this),
+              this
+            )
+          );
         }
+
+        page++;
       }
 
       logger.info(`Retrieved ${suites.length} test suites`);
@@ -471,6 +495,18 @@ export class OpikClient {
       throw new Error(`Project "${projectName}" not found`);
     }
     return project.id;
+  }
+
+  /**
+   * Resolves a project name to its ID.
+   * Returns undefined if projectName is undefined (no API call made).
+   * Errors from the API are propagated — matching Python's resolve_project_id_by_name_optional().
+   */
+  private async resolveProjectId(projectName: string | undefined): Promise<string | undefined> {
+    if (projectName === undefined) {
+      return undefined;
+    }
+    return this.getProjectIdByName(projectName);
   }
 
   private async createAnnotationQueueInternal<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
