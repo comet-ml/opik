@@ -21,7 +21,7 @@ const JSON_MODE_FILE_SIZE_LIMIT_IN_MB = 20;
 const JSON_MODE_MAX_ITEMS = 1000;
 const CSV_MODE_FILE_SIZE_LIMIT_IN_MB = 2000;
 
-type UseTestSuiteFormParams = {
+type UseDatasetFormParams = {
   dataset?: Dataset;
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -29,12 +29,12 @@ type UseTestSuiteFormParams = {
   hideUpload?: boolean;
   csvRequired?: boolean;
   skipEvaluationCriteria?: boolean;
-  datasetType?: DATASET_TYPE;
+  datasetType: DATASET_TYPE;
   onNameConflict?: () => void;
   onCreateSuccess?: (dataset: Dataset, navigate: () => void) => void;
 };
 
-const useTestSuiteForm = ({
+const useDatasetForm = ({
   dataset,
   open,
   setOpen,
@@ -45,7 +45,7 @@ const useTestSuiteForm = ({
   datasetType,
   onNameConflict,
   onCreateSuccess,
-}: UseTestSuiteFormParams) => {
+}: UseDatasetFormParams) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
@@ -67,7 +67,7 @@ const useTestSuiteForm = ({
   );
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
-  const [type, setType] = useState<DATASET_TYPE>(DATASET_TYPE.TEST_SUITE);
+  const [type, setType] = useState<DATASET_TYPE>(datasetType);
   const [name, setName] = useState(dataset ? dataset.name : "");
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState(
@@ -106,7 +106,7 @@ const useTestSuiteForm = ({
         setCsvFile(undefined);
         setCsvError(undefined);
         setCsvData(undefined);
-        setType(DATASET_TYPE.TEST_SUITE);
+        setType(datasetType);
         setRunsPerItem(1);
         setPassThreshold(1);
         setAssertions([]);
@@ -120,7 +120,7 @@ const useTestSuiteForm = ({
       setName(dataset.name);
       setDescription(dataset.description || "");
     }
-  }, [open, dataset]);
+  }, [open, dataset, datasetType]);
 
   const isEdit = Boolean(dataset);
   const hasValidCsvFile = csvFile && !csvError;
@@ -419,4 +419,4 @@ const useTestSuiteForm = ({
   };
 };
 
-export default useTestSuiteForm;
+export default useDatasetForm;

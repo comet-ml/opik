@@ -13,8 +13,8 @@ import { Plus } from "lucide-react";
 
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/lib/utils";
-import emptyEvalSuitesLightUrl from "/images/empty-evaluation-suites-light.svg";
-import emptyEvalSuitesDarkUrl from "/images/empty-evaluation-suites-dark.svg";
+import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
+import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -367,8 +367,8 @@ const DashboardsPage: React.FunctionComponent = () => {
       </div>
       {isEmpty ? (
         <PageEmptyState
-          lightImageUrl={emptyEvalSuitesLightUrl}
-          darkImageUrl={emptyEvalSuitesDarkUrl}
+          lightImageUrl={emptyTestSuitesLightUrl}
+          darkImageUrl={emptyTestSuitesDarkUrl}
           title="No dashboards yet"
           description={
             "Build a cross-project dashboard to get a real-time view of your agents, metrics,\nand costs. Or explore a project to see detailed insights."

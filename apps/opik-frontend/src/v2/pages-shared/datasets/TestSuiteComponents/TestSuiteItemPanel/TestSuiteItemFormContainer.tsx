@@ -22,7 +22,6 @@ interface TestSuiteItemFormContainerProps {
   setHasUnsavedChanges?: (v: boolean) => void;
   formId?: string;
   onSubmit?: (values: TestSuiteItemFormValues) => void;
-  showEvaluationCriteria?: boolean;
 }
 
 const TestSuiteItemFormContainer: React.FC<TestSuiteItemFormContainerProps> = ({
@@ -34,7 +33,6 @@ const TestSuiteItemFormContainer: React.FC<TestSuiteItemFormContainerProps> = ({
   setHasUnsavedChanges,
   formId,
   onSubmit,
-  showEvaluationCriteria,
 }) => {
   const form = useForm<TestSuiteItemFormValues>({
     resolver: zodResolver(testSuiteItemFormSchema),
@@ -65,7 +63,6 @@ const TestSuiteItemFormContainer: React.FC<TestSuiteItemFormContainerProps> = ({
           suiteAssertions={suiteAssertions}
           suitePolicy={suitePolicy}
           onOpenSettings={onOpenSettings}
-          showEvaluationCriteria={showEvaluationCriteria}
         />
       </form>
     </Form>

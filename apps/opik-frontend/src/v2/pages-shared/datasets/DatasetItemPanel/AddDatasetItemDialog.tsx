@@ -14,15 +14,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/ui/dialog";
+import { Alert, AlertTitle } from "@/ui/alert";
 import { DATASET_ITEM_SOURCE } from "@/types/datasets";
 import useAppStore from "@/store/AppStore";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { Alert, AlertTitle } from "@/ui/alert";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { DATASET_ITEM_PREFILLED_DATA } from "@/constants/datasets";
+
+const DATA_PREFILLED_CONTENT = `{
+  "input": "<user question>",
+  "expected_output": "<expected response>",
+  "<any additional fields>": "<any value>"
+}`;
 
 type AddDatasetItemDialogProps = {
   datasetId: string;
@@ -40,7 +45,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
     editable: true,
   });
   const datasetItemBatchMutation = useDatasetItemBatchMutation();
-  const [data, setData] = useState<string>(DATASET_ITEM_PREFILLED_DATA);
+  const [data, setData] = useState<string>(DATA_PREFILLED_CONTENT);
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
 
   const isValid = Boolean(data.length);
@@ -70,7 +75,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Add suite item</DialogTitle>
+          <DialogTitle>Add dataset item</DialogTitle>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto">
           <div className="flex flex-col gap-2 pb-4">
@@ -86,7 +91,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
             <Description className="comet-body-xs">
               {
                 EXPLAINERS_MAP[
-                  EXPLAINER_ID.what_format_is_this_to_add_my_test_suite_item
+                  EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item
                 ].description
               }
             </Description>
@@ -102,7 +107,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button type="submit" disabled={!isValid} onClick={submitHandler}>
-            Add suite item
+            Add dataset item
           </Button>
         </DialogFooter>
       </DialogContent>

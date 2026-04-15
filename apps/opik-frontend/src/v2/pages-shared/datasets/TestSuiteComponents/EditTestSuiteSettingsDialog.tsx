@@ -14,17 +14,12 @@ import {
 } from "@/ui/dialog";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
-import TextareaAutosize from "react-textarea-autosize";
 import { cn } from "@/lib/utils";
-import { TEXT_AREA_CLASSES } from "@/ui/textarea";
 import { Label } from "@/ui/label";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
-import { Separator } from "@/ui/separator";
-import useDatasetById from "@/api/datasets/useDatasetById";
-import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
+import { Form } from "@/ui/form";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
-import { useSuiteIdFromURL } from "@/v2/pages-shared/test-suites/useSuiteIdFromURL";
+import { useDatasetEntityIdFromURL } from "@/v2/hooks/useDatasetEntityIdFromURL";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import {
   useSuiteAssertions,
@@ -35,11 +30,13 @@ import {
   DEFAULT_EXECUTION_POLICY,
   MAX_RUNS_PER_ITEM,
 } from "@/types/test-suites";
+import {
+  PASS_CRITERIA_TITLE,
+  PASS_CRITERIA_DESCRIPTION,
+} from "@/constants/test-suites";
 import { extractAssertions } from "@/lib/assertion-converters";
 
 const settingsSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  description: z.string(),
   runsPerItem: z.number().min(1).max(MAX_RUNS_PER_ITEM),
   passThreshold: z.number().min(1),
   assertions: z.array(z.object({ value: z.string() })),
@@ -98,58 +95,18 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
         <DialogHeader>
-          <DialogTitle>Edit test suite</DialogTitle>
+          <DialogTitle>Test settings</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
           <div className="flex flex-col">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem className="pb-4">
-                  <Label>Name</Label>
-                  <FormControl>
-                    <Input
-                      dimension="sm"
-                      placeholder="Enter test suite name"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem className="pb-4">
-                  <Label>Description</Label>
-                  <FormControl>
-                    <TextareaAutosize
-                      placeholder="Test suite description"
-                      className={cn(TEXT_AREA_CLASSES, "min-h-0 resize-none")}
-                      minRows={2}
-                      maxRows={6}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <Separator className="mb-4" />
-
             <div className="mb-4 flex flex-col gap-1">
               <div className="mb-1">
                 <Label className="comet-body-s-accented">
                   Global assertions
                 </Label>
                 <p className="comet-body-xs text-light-slate">
-                  Define the global conditions all items in this evaluation
-                  suite must pass.
+                  Define the global conditions all items in this test suite must
+                  pass.
                 </p>
               </div>
               <div className="pt-1.5">
@@ -164,9 +121,9 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
             </div>
 
             <div className="mb-4">
-              <h3 className="comet-body-s-accented">Evaluation criteria</h3>
+              <h3 className="comet-body-s-accented">{PASS_CRITERIA_TITLE}</h3>
               <p className="comet-body-xs text-light-slate">
-                Define the conditions required for the evaluation to pass
+                {PASS_CRITERIA_DESCRIPTION}
               </p>
             </div>
 
@@ -224,7 +181,7 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit">Update test suite</Button>
+          <Button type="submit">Save</Button>
         </DialogFooter>
       </form>
     </Form>
@@ -234,15 +191,13 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
 export const EditTestSuiteSettingsDialog: React.FC<
   EditTestSuiteSettingsDialogProps
 > = ({ open, setOpen }) => {
-  const suiteId = useSuiteIdFromURL();
+  const suiteId = useDatasetEntityIdFromURL();
 
-  const { data: suite } = useDatasetById({ datasetId: suiteId });
   const { data: versionsData } = useDatasetVersionsList({
     datasetId: suiteId,
     page: 1,
     size: 1,
   });
-  const { mutate: updateSuite } = useDatasetUpdateMutation();
   const draftAssertions = useSuiteAssertions();
   const draftExecutionPolicy = useDraftExecutionPolicy();
   const { updateSuiteAssertions, updateExecutionPolicy } =
@@ -265,32 +220,15 @@ export const EditTestSuiteSettingsDialog: React.FC<
 
   const defaultValues: SettingsFormType = useMemo(
     () => ({
-      name: suite?.name ?? "",
-      description: suite?.description ?? "",
       runsPerItem: effectiveExecutionPolicy.runs_per_item,
       passThreshold: effectiveExecutionPolicy.pass_threshold,
       assertions: effectiveAssertions.map((a) => ({ value: a })),
     }),
-    [suite, effectiveExecutionPolicy, effectiveAssertions],
+    [effectiveExecutionPolicy, effectiveAssertions],
   );
 
   const handleSubmit = useCallback(
     (data: SettingsFormType) => {
-      const nameChanged = data.name !== (suite?.name ?? "");
-      const descriptionChanged =
-        data.description !== (suite?.description ?? "");
-
-      if (nameChanged || descriptionChanged) {
-        updateSuite({
-          dataset: {
-            ...suite,
-            id: suiteId,
-            name: data.name,
-            description: data.description,
-          },
-        });
-      }
-
       updateSuiteAssertions(
         data.assertions.map((a) => a.value.trim()).filter(Boolean),
         serverAssertions,
@@ -303,11 +241,8 @@ export const EditTestSuiteSettingsDialog: React.FC<
       setOpen(false);
     },
     [
-      suite,
-      suiteId,
       serverAssertions,
       serverExecutionPolicy,
-      updateSuite,
       updateSuiteAssertions,
       updateExecutionPolicy,
       setOpen,

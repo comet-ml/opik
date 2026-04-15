@@ -48,9 +48,12 @@ import AlertsRouteWrapper from "@/v2/pages/AlertsPage/AlertsRouteWrapper";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
+import DatasetsPage from "@/v2/pages/DatasetsPage/DatasetsPage";
+import DatasetDetailPage from "@/v2/pages-shared/datasets/DatasetDetailPage/DatasetDetailPage";
 import TestSuitesPage from "@/v2/pages/TestSuitesPage/TestSuitesPage";
-import TestSuitePage from "@/v2/pages/TestSuitePage/TestSuitePage";
 import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage";
+import DatasetItemsPage from "@/v2/pages/DatasetItemsPage/DatasetItemsPage";
+
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
@@ -255,6 +258,37 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
+// ----------- datasets (project-scoped)
+const datasetsRoute = createRoute({
+  path: "/datasets",
+  getParentRoute: () => projectScopedRoute,
+  component: DatasetsPageGuard,
+  staticData: {
+    title: "Datasets",
+  },
+});
+
+const datasetsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => datasetsRoute,
+  component: DatasetsPage,
+});
+
+const datasetDetailRoute = createRoute({
+  path: "/$datasetId",
+  getParentRoute: () => datasetsRoute,
+  component: DatasetDetailPage,
+  staticData: {
+    param: "datasetId",
+  },
+});
+
+const datasetItemsRoute = createRoute({
+  path: "/items",
+  getParentRoute: () => datasetDetailRoute,
+  component: DatasetItemsPage,
+});
+
 // ----------- test suites (project-scoped)
 const testSuitesRoute = createRoute({
   path: "/test-suites",
@@ -274,7 +308,7 @@ const testSuitesListRoute = createRoute({
 const testSuiteRoute = createRoute({
   path: "/$suiteId",
   getParentRoute: () => testSuitesRoute,
-  component: TestSuitePage,
+  component: DatasetDetailPage,
   staticData: {
     param: "suiteId",
   },
@@ -577,6 +611,10 @@ const routeTree = rootRoute.addChildren([
           experimentsRoute.addChildren([
             experimentsListRoute,
             compareExperimentsRoute,
+          ]),
+          datasetsRoute.addChildren([
+            datasetsListRoute,
+            datasetDetailRoute.addChildren([datasetItemsRoute]),
           ]),
           testSuitesRoute.addChildren([
             testSuitesListRoute,

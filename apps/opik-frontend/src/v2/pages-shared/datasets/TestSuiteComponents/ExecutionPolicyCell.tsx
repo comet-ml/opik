@@ -3,7 +3,7 @@ import { CellContext, ColumnMeta, TableMeta } from "@tanstack/react-table";
 import { DatasetItem } from "@/types/datasets";
 import { useEffectiveItemExecutionPolicy } from "@/hooks/useEffectiveItemExecutionPolicy";
 import { useEffectiveExecutionPolicy } from "@/hooks/useEffectiveExecutionPolicy";
-import { useSuiteIdFromURL } from "@/v2/pages-shared/test-suites/useSuiteIdFromURL";
+import { useDatasetEntityIdFromURL } from "@/v2/hooks/useDatasetEntityIdFromURL";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 
 interface ExecutionPolicyCellInnerProps {
@@ -19,7 +19,7 @@ const ExecutionPolicyCellInner: React.FC<ExecutionPolicyCellInnerProps> = ({
   metadata,
   tableMetadata,
 }) => {
-  const suiteId = useSuiteIdFromURL();
+  const suiteId = useDatasetEntityIdFromURL();
   const globalPolicy = useEffectiveExecutionPolicy(suiteId);
   const localPolicy = useEffectiveItemExecutionPolicy(
     itemId,
