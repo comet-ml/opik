@@ -1374,3 +1374,57 @@ def test_get_items__nb_samples__limits_results(
 
     items = suite.get_items(nb_samples=2)
     assert len(items) == 2
+
+
+# =============================================================================
+# VERSIONING: suite without initial version (OPIK-5815)
+# =============================================================================
+
+
+def test_test_suite__create_without_metadata_then_insert__items_persisted(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    OPIK-5815: create a suite without evaluators or execution_policy,
+    then add items. Verifies insert works without an initial version.
+    """
+    suite = opik_client.create_test_suite(name=dataset_name)
+
+    assert suite.get_version_info() is None
+
+    suite.insert(
+        [
+            {"data": {"input": {"question": "What is 2+2?"}}},
+            {"data": {"input": {"question": "What is 3+3?"}}},
+        ]
+    )
+
+    reloaded = opik_client.get_test_suite(name=dataset_name)
+    assert len(reloaded.get_items()) == 2
+
+
+def test_test_suite__create_without_metadata_then_update__metadata_persisted(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    OPIK-5815: create a suite without evaluators or execution_policy,
+    then update with assertions and policy. Verifies update works
+    without an initial version.
+    """
+    assertion = "The response is factually correct"
+
+    suite = opik_client.create_test_suite(name=dataset_name)
+
+    assert suite.get_version_info() is None
+
+    suite.update(
+        global_assertions=[assertion],
+        global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
+    )
+
+    reloaded = opik_client.get_test_suite(name=dataset_name)
+    assert reloaded.get_global_assertions() == [assertion]
+    assert reloaded.get_global_execution_policy() == {
+        "runs_per_item": 2,
+        "pass_threshold": 1,
+    }
