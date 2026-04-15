@@ -203,8 +203,8 @@ const BlueprintValuePromptCompact = forwardRef<
       ],
     );
 
-    if (isPending) return <Loader />;
     if (!expanded) return null;
+    if (isPending) return <Loader />;
 
     if (isChatPrompt) {
       return (
