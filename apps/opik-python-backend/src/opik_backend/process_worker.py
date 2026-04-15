@@ -57,8 +57,8 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
 
     score_result: Union[ScoreResult, List[ScoreResult]] = []
     try:
-        metric = metric_class(track=False)
-
+        metric = metric_class()
+        
         # Handle trace_thread type differently - pass data as first positional argument
         if payload_type == PayloadType.TRACE_THREAD.value:
             score_result = metric.score(data)

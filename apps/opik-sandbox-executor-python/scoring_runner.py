@@ -52,8 +52,8 @@ if metric_class is None:
 
 score_result : Union[ScoreResult, List[ScoreResult]] = []
 try:
-    metric = metric_class(track=False)
-
+    metric = metric_class()
+    
     # Handle trace_thread type differently - pass data as first positional argument
     if payload_type == TRACE_THREAD_METRIC_TYPE:
         score_result = metric.score(data)
