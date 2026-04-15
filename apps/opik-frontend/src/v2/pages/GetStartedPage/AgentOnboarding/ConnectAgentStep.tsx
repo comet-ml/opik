@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
@@ -9,6 +10,7 @@ import useProjectByName from "@/api/projects/useProjectByName";
 import useTracesList from "@/api/traces/useTracesList";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
 import { RunnerConnectionStatus } from "@/types/agent-sandbox";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
@@ -26,6 +28,7 @@ import {
 } from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/HelpLinks";
 
 const TRACE_POLL_INTERVAL = 5000;
+const FIRST_TRACE_TRACKED_KEY = "agent-onboarding-first-trace-tracked";
 
 const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
@@ -63,6 +66,20 @@ const ConnectAgentStep: React.FC = () => {
   const firstTraceId = tracesData?.content?.[0]?.id;
   const traceReceived = !!firstTraceId;
 
+  const [trackedTraceId, setTrackedTraceId] = useLocalStorageState<
+    string | null
+  >(FIRST_TRACE_TRACKED_KEY, { defaultValue: null });
+
+  useEffect(() => {
+    if (firstTraceId && firstTraceId !== trackedTraceId) {
+      trackEvent(OpikEvent.ONBOARDING_FIRST_TRACE_RECEIVED, {
+        agent_name: agentName,
+        trace_id: firstTraceId,
+      });
+      setTrackedTraceId(firstTraceId);
+    }
+  }, [firstTraceId, trackedTraceId, agentName, setTrackedTraceId]);
+
   const { data: runner } = useSandboxConnectionStatus(
     { projectId: projectId ?? "", runnerType: "connect" },
     { enabled: !!projectId && activeTab === "connect-to-ollie" },
@@ -89,6 +106,7 @@ const ConnectAgentStep: React.FC = () => {
   };
 
   const handleSkip = () => {
+    trackEvent(OpikEvent.ONBOARDING_SKIPPED, { agent_name: agentName });
     goToStep(AGENT_ONBOARDING_STEPS.DONE, { agentName });
   };
 
