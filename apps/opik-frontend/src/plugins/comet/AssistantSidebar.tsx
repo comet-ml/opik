@@ -37,6 +37,14 @@ const BRIDGE_PROTOCOL_VERSION = 1;
 const LOADER_DEFAULT_WIDTH = 400;
 const LOADER_COLLAPSED_WIDTH = 33;
 
+// Pod may serve /console/manifest.json before /health/ready flips — retry
+// with backoff so transient 404/503 during warmup don't permanently fail.
+// Budget (~140s) exceeds the 2 min health-poll timeout so manifest doesn't
+// give up before health polling does.
+const MANIFEST_RETRY_COUNT = 30;
+const MANIFEST_RETRY_BASE_DELAY_MS = 500;
+const MANIFEST_RETRY_MAX_DELAY_MS = 5000;
+
 function getStoredSidebarWidth(): number {
   try {
     const parsed = parseInt(
@@ -334,12 +342,12 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
     },
     enabled: !IS_ASSISTANT_DEV && !!manifestUrl,
     staleTime: Infinity,
-    // Pod may serve /console/manifest.json before /health/ready flips — retry
-    // with backoff so transient 404/503 during warmup don't permanently fail.
-    // Budget (~140s) exceeds the 2 min health-poll timeout so manifest doesn't
-    // give up before health polling does.
-    retry: 30,
-    retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 5000),
+    retry: MANIFEST_RETRY_COUNT,
+    retryDelay: (attempt) =>
+      Math.min(
+        MANIFEST_RETRY_BASE_DELAY_MS * 2 ** attempt,
+        MANIFEST_RETRY_MAX_DELAY_MS,
+      ),
   });
 
   if (IS_ASSISTANT_DEV) return DEV_META;
