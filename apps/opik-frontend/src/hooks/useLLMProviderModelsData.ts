@@ -1433,6 +1433,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/bodybuilder",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_ELEPHANT_ALPHA,
+      label: "openrouter/elephant-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
       label: "openrouter/free",
     },

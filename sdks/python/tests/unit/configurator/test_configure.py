@@ -590,7 +590,13 @@ class TestSetProjectName:
         assert result is False
         assert configurator.project_name == "config_project"
 
-    def test_set_project_name__config_has_default_name__falls_through_to_prompt(self):
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
+    def test_set_project_name__config_has_default_name__falls_through_to_prompt(
+        self, _mock_get_project
+    ):
         """
         Case 2: If config has the default project name, it should NOT be reused
         and instead fall through to Case 3.
@@ -601,7 +607,13 @@ class TestSetProjectName:
         assert result is True
         assert configurator.project_name == OPIK_PROJECT_DEFAULT_NAME
 
-    def test_set_project_name__config_exists_with_force__skips_config_value(self):
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
+    def test_set_project_name__config_exists_with_force__skips_config_value(
+        self, _mock_get_project
+    ):
         """
         Case 2: Even when config has a project name, force=True skips it
         and falls through to Case 3.
@@ -613,11 +625,15 @@ class TestSetProjectName:
         assert configurator.project_name == OPIK_PROJECT_DEFAULT_NAME
 
     @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
+    @patch(
         "opik.configurator.configure.ask_user_for_approval",
         return_value=True,
     )
     def test_set_project_name__no_name__user_approves_default__uses_default(
-        self, mock_ask_approval
+        self, mock_ask_approval, _mock_get_project
     ):
         """
         Case 3: No project name provided, user approves the default project name.
@@ -628,13 +644,17 @@ class TestSetProjectName:
         assert configurator.project_name == OPIK_PROJECT_DEFAULT_NAME
         mock_ask_approval.assert_called_once()
 
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
     @patch("builtins.input", return_value="custom_project")
     @patch(
         "opik.configurator.configure.ask_user_for_approval",
         return_value=False,
     )
     def test_set_project_name__user_rejects_default__enters_custom_and_sets_custom_name(
-        self, mock_ask_approval, mock_input
+        self, mock_ask_approval, mock_input, _mock_get_project
     ):
         """
         Case 3: No project name provided, user rejects default and enters a custom name.
@@ -645,13 +665,17 @@ class TestSetProjectName:
         assert configurator.project_name == "custom_project"
         mock_ask_approval.assert_called_once()
 
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
     @patch("builtins.input", return_value="")
     @patch(
         "opik.configurator.configure.ask_user_for_approval",
         return_value=False,
     )
     def test_set_project_name__user_rejects_default_enters_empty__raises_configuration_error(
-        self, mock_ask_approval, mock_input
+        self, mock_ask_approval, mock_input, _mock_get_project
     ):
         """
         Case 3: No project name provided, user rejects default, and enters empty string.
@@ -663,7 +687,13 @@ class TestSetProjectName:
         ):
             configurator._set_project_name()
 
-    def test_set_project_name__automatic_approvals__uses_default_without_prompt(self):
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
+    def test_set_project_name__automatic_approvals__uses_default_without_prompt(
+        self, _mock_get_project
+    ):
         """
         Case 3: With automatic_approvals=True, the default project name is used without prompting.
         """
@@ -671,6 +701,81 @@ class TestSetProjectName:
         result = configurator._set_project_name()
         assert result is True
         assert configurator.project_name == OPIK_PROJECT_DEFAULT_NAME
+
+
+class TestSmartProjectDefault:
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value="My Onboarding Agent",
+    )
+    def test_set_project_name__api_returns_recent_project__suggests_it(
+        self, _mock_get_project
+    ):
+        """
+        When the API returns a recently created project, it should be suggested
+        as the default instead of 'Default Project'.
+        """
+        configurator = OpikConfigurator(automatic_approvals=True)
+        result = configurator._set_project_name()
+        assert result is True
+        assert configurator.project_name == "My Onboarding Agent"
+
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
+    def test_set_project_name__api_returns_none__falls_back_to_default(
+        self, _mock_get_project
+    ):
+        """
+        When the API returns no projects, fall back to 'Default Project'.
+        """
+        configurator = OpikConfigurator(automatic_approvals=True)
+        result = configurator._set_project_name()
+        assert result is True
+        assert configurator.project_name == OPIK_PROJECT_DEFAULT_NAME
+
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value="My Onboarding Agent",
+    )
+    @patch(
+        "opik.configurator.configure.ask_user_for_approval",
+        return_value=True,
+    )
+    def test_set_project_name__api_returns_recent_project__user_approves__uses_it(
+        self, mock_ask_approval, _mock_get_project
+    ):
+        """
+        When the API returns a project and user approves, that project is used.
+        """
+        configurator = OpikConfigurator()
+        result = configurator._set_project_name()
+        assert result is True
+        assert configurator.project_name == "My Onboarding Agent"
+        mock_ask_approval.assert_called_once_with(
+            'Do you want to use "My Onboarding Agent" project name? (Y/n)'
+        )
+
+    @patch(
+        "opik.configurator.opik_rest_helpers.get_most_recent_project_name",
+        return_value="My Onboarding Agent",
+    )
+    @patch("builtins.input", return_value="other_project")
+    @patch(
+        "opik.configurator.configure.ask_user_for_approval",
+        return_value=False,
+    )
+    def test_set_project_name__api_returns_recent_project__user_rejects__enters_custom(
+        self, mock_ask_approval, mock_input, _mock_get_project
+    ):
+        """
+        When the API returns a project but user rejects, they can enter a custom name.
+        """
+        configurator = OpikConfigurator()
+        result = configurator._set_project_name()
+        assert result is True
+        assert configurator.project_name == "other_project"
 
 
 class TestGetApiKey:

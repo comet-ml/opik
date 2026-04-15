@@ -719,7 +719,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
         - `output` (Dict[str, Any], optional): Output data for the trace
         - `tags` (List[str], optional): Tags to categorize the trace
         - `metadata` (Dict[str, Any], optional): Additional metadata
-        - `project_name` (str, optional): Project name (defaults to environment variable)
+        - `project_name` (str, optional): Project name (falls back to active project context, then client configuration)
         - `thread_id` (str, optional): Thread identifier for multi-threaded applications
         - `flush` (bool, optional): Whether to flush data immediately (default: False)
 
@@ -902,6 +902,81 @@ the trace to be logged to in a couple of ways:
     </Tab>
 
 </Tabs>
+
+### Project name resolution (Python SDK)
+
+The project name is determined differently depending on whether an active project context already exists.
+
+#### When no project context is active
+
+This applies to the **top-level** `@track`-decorated function call, the `Opik()` client, or a native integration (e.g., `track_openai`, `OpikTracer`) used outside any traced context. The project name is resolved in this order:
+
+1. **Explicit `project_name` argument** — passed directly to `@track(project_name="...")`, `Opik(project_name="...")`, `OpikTracer(project_name="...")`, or a client method like `client.trace(project_name="...")`
+2. **Client configuration** — from the `OPIK_PROJECT_NAME` environment variable or `~/.opik.config` file
+3. **Default** — falls back to `"Default Project"` (a warning is logged once to remind you to configure a project name)
+
+The first `@track(project_name="...")` or `opik.project_context("...")` call that runs establishes the **active project context** for all nested operations.
+
+#### When a project context is active
+
+Once a project context is established (by a parent `@track(project_name="...")` or `opik.project_context("...")`), **all nested operations use the context project name**. This includes:
+
+- Nested `@track`-decorated functions — even if they pass a different `project_name`, the outer context wins (a warning is logged)
+- Native integrations (e.g., `OpikTracer`, `track_openai`) — if initialized inside an active context, the context project overrides the integration's `project_name` argument (a warning is logged)
+- `Opik()` client methods — if a method like `client.trace(project_name="...")` is called with an explicit `project_name`, the explicit argument wins; if `project_name` is omitted, the context project is used
+
+This ensures that all traces and spans within a single execution flow are logged to the same project.
+
+#### `@track` context propagation
+
+When `@track(project_name="...")` is used on the top-level function, it sets the project context for the entire call tree:
+
+```python
+from opik import track
+
+@track(project_name="my-agent")
+def agent(query):
+    context = retrieve(query)
+    return generate(context)
+
+@track
+def retrieve(query):
+    # Inherits "my-agent" from the parent context
+    ...
+
+@track
+def generate(context):
+    # Also inherits "my-agent" from the parent context
+    ...
+```
+
+If a nested function specifies a different `project_name`, it is ignored and the outer project is preserved:
+
+```python
+@track(project_name="my-agent")
+def agent(query):
+    helper(query)  # Still logs to "my-agent", NOT "other-project"
+
+@track(project_name="other-project")
+def helper(query):
+    # Warning is logged: outer project "my-agent" will be used
+    ...
+```
+
+#### `opik.project_context()`
+
+The `opik.project_context()` context manager sets the project name for all Opik operations within a block — `@track`-decorated functions, native integrations, and `Opik()` client calls (when `project_name` is not passed explicitly):
+
+```python
+import opik
+
+with opik.project_context("customer-support"):
+    # @track-decorated functions and native integrations
+    # all use "customer-support" as the project name
+    my_agent(query)
+```
+
+Nesting rules are the same: the first `project_context` or `@track(project_name=...)` to run owns the context. Inner calls with a different project name are ignored (a warning is logged).
 
 ### Flushing traces and spans
 

@@ -67,6 +67,8 @@ openai:
     structuredOutput: true
   - id: "gpt-5.4"
     structuredOutput: true
+  - id: "gpt-5.4-mini"
+  - id: "gpt-5.4-nano"
   - id: "gpt-5.4-pro"
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
@@ -103,19 +105,25 @@ openai:
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
-
 anthropic:
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-haiku-4-5-20251001"
+    structuredOutput: true
   - id: "claude-opus-4-1-20250805"
+    structuredOutput: true
   - id: "claude-opus-4-20250514"
+    structuredOutput: true
   - id: "claude-opus-4-5-20251101"
+    structuredOutput: true
   - id: "claude-opus-4-6"
+    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
+    structuredOutput: true
   - id: "claude-sonnet-4-5"
   - id: "claude-sonnet-4-5-20250929"
+    structuredOutput: true
   - id: "claude-sonnet-4-6"
-
+    structuredOutput: true
 gemini:
   - id: "aqa"
   - id: "gemini-1.0-pro"
@@ -148,9 +156,10 @@ gemini:
   - id: "gemini-3.1-pro-preview"
     structuredOutput: true
   - id: "gemini-pro-vision"
+  - id: "lyria-3-clip-preview"
+  - id: "lyria-3-pro-preview"
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
-
 vertex-ai:
   - id: "gemini-2.0-flash-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-001"
@@ -187,7 +196,6 @@ vertex-ai:
   - id: "gemini-3.1-pro-preview"
     qualifiedName: "vertex_ai/gemini-3.1-pro-preview"
     structuredOutput: true
-
 openrouter:
   - id: "ai21/jamba-large-1.7"
   - id: "ai21/jamba-mini-1.7"
@@ -223,6 +231,7 @@ openrouter:
   - id: "anthropic/claude-opus-4.1"
   - id: "anthropic/claude-opus-4.5"
   - id: "anthropic/claude-opus-4.6"
+  - id: "anthropic/claude-opus-4.6-fast"
   - id: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
   - id: "anthropic/claude-sonnet-4.6"
@@ -231,6 +240,7 @@ openrouter:
   - id: "arcee-ai/maestro-reasoning"
   - id: "arcee-ai/spotlight"
   - id: "arcee-ai/trinity-large-preview:free"
+  - id: "arcee-ai/trinity-large-thinking"
   - id: "arcee-ai/trinity-mini"
   - id: "arcee-ai/trinity-mini:free"
   - id: "arcee-ai/virtuoso-large"
@@ -249,21 +259,28 @@ openrouter:
   - id: "bytedance-seed/seed-2.0-lite"
   - id: "bytedance-seed/seed-2.0-mini"
   - id: "bytedance/ui-tars-1.5-7b"
+  - id: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
   - id: "cohere/command-a"
+    structuredOutput: true
   - id: "cohere/command-r-08-2024"
+    structuredOutput: true
   - id: "cohere/command-r-plus-08-2024"
+    structuredOutput: true
   - id: "cohere/command-r7b-12-2024"
+    structuredOutput: true
   - id: "deepcogito/cogito-v2-preview-deepseek-671b"
   - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
   - id: "deepcogito/cogito-v2-preview-llama-405b"
   - id: "deepcogito/cogito-v2-preview-llama-70b"
   - id: "deepcogito/cogito-v2.1-671b"
   - id: "deepseek/deepseek-chat"
+    structuredOutput: true
   - id: "deepseek/deepseek-chat-v3-0324"
   - id: "deepseek/deepseek-chat-v3-0324:free"
   - id: "deepseek/deepseek-chat-v3.1"
   - id: "deepseek/deepseek-prover-v2"
   - id: "deepseek/deepseek-r1"
+    structuredOutput: true
     reasoning: true
   - id: "deepseek/deepseek-r1-0528"
     reasoning: true
@@ -291,23 +308,30 @@ openrouter:
   - id: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
   - id: "google/gemini-2.0-flash-001"
+    structuredOutput: true
   - id: "google/gemini-2.0-flash-exp:free"
+    structuredOutput: true
   - id: "google/gemini-2.0-flash-lite-001"
   - id: "google/gemini-2.5-flash"
+    structuredOutput: true
   - id: "google/gemini-2.5-flash-image"
   - id: "google/gemini-2.5-flash-image-preview"
   - id: "google/gemini-2.5-flash-lite"
   - id: "google/gemini-2.5-flash-lite-preview-09-2025"
   - id: "google/gemini-2.5-flash-preview-09-2025"
   - id: "google/gemini-2.5-pro"
+    structuredOutput: true
   - id: "google/gemini-2.5-pro-preview"
   - id: "google/gemini-2.5-pro-preview-05-06"
   - id: "google/gemini-3-flash-preview"
+    structuredOutput: true
   - id: "google/gemini-3-pro-image-preview"
   - id: "google/gemini-3-pro-preview"
+    structuredOutput: true
   - id: "google/gemini-3.1-flash-image-preview"
   - id: "google/gemini-3.1-flash-lite-preview"
   - id: "google/gemini-3.1-pro-preview"
+    structuredOutput: true
   - id: "google/gemini-3.1-pro-preview-customtools"
   - id: "google/gemma-2-27b-it"
   - id: "google/gemma-2-9b-it"
@@ -320,7 +344,14 @@ openrouter:
   - id: "google/gemma-3n-e2b-it:free"
   - id: "google/gemma-3n-e4b-it"
   - id: "google/gemma-3n-e4b-it:free"
+  - id: "google/gemma-4-26b-a4b-it"
+  - id: "google/gemma-4-26b-a4b-it:free"
+  - id: "google/gemma-4-31b-it"
+  - id: "google/gemma-4-31b-it:free"
+  - id: "google/lyria-3-clip-preview"
+  - id: "google/lyria-3-pro-preview"
   - id: "gryphe/mythomax-l2-13b"
+    structuredOutput: true
   - id: "ibm-granite/granite-4.0-h-micro"
   - id: "inception/mercury"
   - id: "inception/mercury-2"
@@ -328,6 +359,7 @@ openrouter:
   - id: "inflection/inflection-3-pi"
   - id: "inflection/inflection-3-productivity"
   - id: "kwaipilot/kat-coder-pro"
+  - id: "kwaipilot/kat-coder-pro-v2"
   - id: "kwaipilot/kat-coder-pro:free"
   - id: "liquid/lfm-2-24b-a2b"
   - id: "liquid/lfm-2.2-6b"
@@ -338,17 +370,26 @@ openrouter:
   - id: "meituan/longcat-flash-chat"
   - id: "meituan/longcat-flash-chat:free"
   - id: "meta-llama/llama-3-70b-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3-8b-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.1-405b"
   - id: "meta-llama/llama-3.1-405b-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.1-70b-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.1-8b-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.2-11b-vision-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.2-1b-instruct"
   - id: "meta-llama/llama-3.2-3b-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.2-3b-instruct:free"
   - id: "meta-llama/llama-3.2-90b-vision-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.3-70b-instruct"
+    structuredOutput: true
   - id: "meta-llama/llama-3.3-70b-instruct:free"
   - id: "meta-llama/llama-4-maverick"
   - id: "meta-llama/llama-4-scout"
@@ -372,7 +413,9 @@ openrouter:
   - id: "minimax/minimax-m2.1"
   - id: "minimax/minimax-m2.5"
   - id: "minimax/minimax-m2.5:free"
+  - id: "minimax/minimax-m2.7"
   - id: "mistralai/codestral-2501"
+    structuredOutput: true
   - id: "mistralai/codestral-2508"
   - id: "mistralai/devstral-2512"
   - id: "mistralai/devstral-medium"
@@ -384,8 +427,10 @@ openrouter:
   - id: "mistralai/magistral-small-2506"
   - id: "mistralai/ministral-14b-2512"
   - id: "mistralai/ministral-3b"
+    structuredOutput: true
   - id: "mistralai/ministral-3b-2512"
   - id: "mistralai/ministral-8b"
+    structuredOutput: true
   - id: "mistralai/ministral-8b-2512"
   - id: "mistralai/mistral-7b-instruct"
   - id: "mistralai/mistral-7b-instruct-v0.1"
@@ -393,27 +438,40 @@ openrouter:
   - id: "mistralai/mistral-7b-instruct-v0.3"
   - id: "mistralai/mistral-7b-instruct:free"
   - id: "mistralai/mistral-large"
+    structuredOutput: true
   - id: "mistralai/mistral-large-2407"
+    structuredOutput: true
   - id: "mistralai/mistral-large-2411"
+    structuredOutput: true
   - id: "mistralai/mistral-large-2512"
   - id: "mistralai/mistral-medium-3"
   - id: "mistralai/mistral-medium-3.1"
   - id: "mistralai/mistral-nemo"
+    structuredOutput: true
   - id: "mistralai/mistral-nemo:free"
   - id: "mistralai/mistral-saba"
+    structuredOutput: true
   - id: "mistralai/mistral-small"
+    structuredOutput: true
   - id: "mistralai/mistral-small-24b-instruct-2501"
+    structuredOutput: true
   - id: "mistralai/mistral-small-24b-instruct-2501:free"
+  - id: "mistralai/mistral-small-2603"
   - id: "mistralai/mistral-small-3.1-24b-instruct"
   - id: "mistralai/mistral-small-3.1-24b-instruct:free"
   - id: "mistralai/mistral-small-3.2-24b-instruct"
   - id: "mistralai/mistral-small-3.2-24b-instruct:free"
   - id: "mistralai/mistral-small-creative"
   - id: "mistralai/mistral-tiny"
+    structuredOutput: true
   - id: "mistralai/mixtral-8x22b-instruct"
+    structuredOutput: true
   - id: "mistralai/mixtral-8x7b-instruct"
+    structuredOutput: true
   - id: "mistralai/pixtral-12b"
+    structuredOutput: true
   - id: "mistralai/pixtral-large-2411"
+    structuredOutput: true
   - id: "mistralai/voxtral-small-24b-2507"
   - id: "moonshotai/kimi-dev-72b"
   - id: "moonshotai/kimi-k2"
@@ -441,6 +499,7 @@ openrouter:
   - id: "nvidia/llama-3.3-nemotron-super-49b-v1.5"
   - id: "nvidia/nemotron-3-nano-30b-a3b"
   - id: "nvidia/nemotron-3-nano-30b-a3b:free"
+  - id: "nvidia/nemotron-3-super-120b-a12b"
   - id: "nvidia/nemotron-3-super-120b-a12b:free"
   - id: "nvidia/nemotron-nano-12b-v2-vl"
   - id: "nvidia/nemotron-nano-12b-v2-vl:free"
@@ -458,18 +517,28 @@ openrouter:
   - id: "openai/gpt-4-turbo"
   - id: "openai/gpt-4-turbo-preview"
   - id: "openai/gpt-4.1"
+    structuredOutput: true
   - id: "openai/gpt-4.1-mini"
+    structuredOutput: true
   - id: "openai/gpt-4.1-nano"
+    structuredOutput: true
   - id: "openai/gpt-4o"
+    structuredOutput: true
   - id: "openai/gpt-4o-2024-05-13"
+    structuredOutput: true
   - id: "openai/gpt-4o-2024-08-06"
+    structuredOutput: true
   - id: "openai/gpt-4o-2024-11-20"
+    structuredOutput: true
   - id: "openai/gpt-4o-audio-preview"
   - id: "openai/gpt-4o-mini"
+    structuredOutput: true
   - id: "openai/gpt-4o-mini-2024-07-18"
+    structuredOutput: true
   - id: "openai/gpt-4o-mini-search-preview"
   - id: "openai/gpt-4o-search-preview"
   - id: "openai/gpt-4o:extended"
+    structuredOutput: true
   - id: "openai/gpt-5"
   - id: "openai/gpt-5-chat"
   - id: "openai/gpt-5-codex"
@@ -484,23 +553,30 @@ openrouter:
   - id: "openai/gpt-5.1-codex-max"
   - id: "openai/gpt-5.1-codex-mini"
   - id: "openai/gpt-5.2"
+    structuredOutput: true
   - id: "openai/gpt-5.2-chat"
   - id: "openai/gpt-5.2-chat-latest"
+    structuredOutput: true
   - id: "openai/gpt-5.2-codex"
   - id: "openai/gpt-5.2-pro"
   - id: "openai/gpt-5.3-chat"
   - id: "openai/gpt-5.3-codex"
   - id: "openai/gpt-5.4"
+  - id: "openai/gpt-5.4-mini"
+  - id: "openai/gpt-5.4-nano"
   - id: "openai/gpt-5.4-pro"
   - id: "openai/gpt-audio"
   - id: "openai/gpt-audio-mini"
   - id: "openai/gpt-oss-120b"
+    structuredOutput: true
   - id: "openai/gpt-oss-120b:exacto"
   - id: "openai/gpt-oss-120b:free"
   - id: "openai/gpt-oss-20b"
+    structuredOutput: true
   - id: "openai/gpt-oss-20b:free"
   - id: "openai/gpt-oss-safeguard-20b"
   - id: "openai/o1"
+    structuredOutput: true
     reasoning: true
   - id: "openai/o1-pro"
     reasoning: true
@@ -509,8 +585,10 @@ openrouter:
   - id: "openai/o3-deep-research"
     reasoning: true
   - id: "openai/o3-mini"
+    structuredOutput: true
     reasoning: true
   - id: "openai/o3-mini-high"
+    structuredOutput: true
     reasoning: true
   - id: "openai/o3-pro"
     reasoning: true
@@ -522,8 +600,11 @@ openrouter:
     reasoning: true
   - id: "opengvlab/internvl3-78b"
   - id: "openrouter/auto"
+    structuredOutput: true
   - id: "openrouter/bodybuilder"
+  - id: "openrouter/elephant-alpha"
   - id: "openrouter/free"
+    structuredOutput: true
   - id: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"
   - id: "perplexity/sonar"
@@ -534,9 +615,11 @@ openrouter:
   - id: "perplexity/sonar-reasoning-pro"
   - id: "prime-intellect/intellect-3"
   - id: "qwen/qwen-2.5-72b-instruct"
+    structuredOutput: true
   - id: "qwen/qwen-2.5-72b-instruct:free"
   - id: "qwen/qwen-2.5-7b-instruct"
   - id: "qwen/qwen-2.5-coder-32b-instruct"
+    structuredOutput: true
   - id: "qwen/qwen-2.5-coder-32b-instruct:free"
   - id: "qwen/qwen-2.5-vl-7b-instruct"
   - id: "qwen/qwen-max"
@@ -595,9 +678,16 @@ openrouter:
   - id: "qwen/qwen3.5-9b"
   - id: "qwen/qwen3.5-flash-02-23"
   - id: "qwen/qwen3.5-plus-02-15"
+  - id: "qwen/qwen3.6-plus"
+  - id: "qwen/qwen3.6-plus-preview:free"
+  - id: "qwen/qwen3.6-plus:free"
   - id: "qwen/qwq-32b"
+    structuredOutput: true
     reasoning: true
   - id: "raifle/sorcererlm-8x22b"
+  - id: "reka/reka-edge"
+  - id: "rekaai/reka-edge"
+  - id: "rekaai/reka-flash-3"
   - id: "relace/relace-apply-3"
   - id: "relace/relace-search"
   - id: "sao10k/l3-euryale-70b"
@@ -636,10 +726,14 @@ openrouter:
   - id: "x-ai/grok-4-fast"
   - id: "x-ai/grok-4.1-fast"
   - id: "x-ai/grok-4.1-fast:free"
+  - id: "x-ai/grok-4.20"
   - id: "x-ai/grok-4.20-beta"
+  - id: "x-ai/grok-4.20-multi-agent"
   - id: "x-ai/grok-4.20-multi-agent-beta"
   - id: "x-ai/grok-code-fast-1"
   - id: "xiaomi/mimo-v2-flash"
+  - id: "xiaomi/mimo-v2-omni"
+  - id: "xiaomi/mimo-v2-pro"
   - id: "z-ai/glm-4-32b"
   - id: "z-ai/glm-4.5"
   - id: "z-ai/glm-4.5-air"
@@ -652,3 +746,5 @@ openrouter:
   - id: "z-ai/glm-4.7-flash"
   - id: "z-ai/glm-5"
   - id: "z-ai/glm-5-turbo"
+  - id: "z-ai/glm-5.1"
+  - id: "z-ai/glm-5v-turbo"

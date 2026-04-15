@@ -19,6 +19,7 @@ import { getCloudUrl } from './urls';
 import { INTEGRATION_CONFIG } from '../lib/config';
 import {
   getDefaultWorkspace,
+  getMostRecentProjectName,
   isOpikAccessible,
   DEFAULT_LOCAL_URL,
   normalizeOpikUrl,
@@ -696,11 +697,15 @@ export async function getOrAskForProjectData(options?: {
 
   // If --use-local flag is set, skip prompts and use local defaults
   if (options?.useLocal) {
+    const suggestedProject =
+      (await getMostRecentProjectName(DEFAULT_LOCAL_URL, undefined, 'default')) ??
+      'Default Project';
+
     const projectName = await abortIfCancelled(
       clack.text({
         message: 'Enter your project name (optional)',
-        placeholder: 'Default Project',
-        defaultValue: 'Default Project',
+        placeholder: suggestedProject,
+        defaultValue: suggestedProject,
       }),
       'nodejs' as Integration,
     );
@@ -720,7 +725,7 @@ export async function getOrAskForProjectData(options?: {
       host: DEFAULT_LOCAL_URL,
       projectApiKey: '',
       workspaceName: 'default',
-      projectName: projectName || 'Default Project',
+      projectName: projectName || suggestedProject,
       deploymentType: DeploymentType.LOCAL,
     };
   }
@@ -852,11 +857,15 @@ export async function getOrAskForProjectData(options?: {
     );
   }
 
+  const suggestedProject =
+    (await getMostRecentProjectName(host, projectApiKey || undefined, workspaceName)) ??
+    'Default Project';
+
   const projectName = await abortIfCancelled(
     clack.text({
       message: 'Enter your project name (optional)',
-      placeholder: 'Default Project',
-      defaultValue: 'Default Project',
+      placeholder: suggestedProject,
+      defaultValue: suggestedProject,
     }),
     'nodejs' as Integration,
   );
@@ -875,7 +884,7 @@ export async function getOrAskForProjectData(options?: {
     host,
     projectApiKey,
     workspaceName,
-    projectName: projectName || 'Default Project',
+    projectName: projectName || suggestedProject,
     deploymentType,
   };
 

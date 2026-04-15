@@ -584,12 +584,11 @@ class TestOpikClientCreateTestSuite:
             len(apply_request["evaluators"]) == 1
         )  # single LLMJudge wrapping all assertions
 
-    def test_create_test_suite__no_assertions__evaluators_not_in_request(self):
-        """Verify evaluators key is absent from the apply request when no assertions are provided."""
+    def test_create_test_suite__no_assertions__apply_changes_not_called(self):
+        """Verify apply_dataset_item_changes is not called when no assertions or policy are provided (OPIK-5815)."""
         self.opik_client_.create_test_suite(name="my-suite")
 
-        apply_request = self.mock_apply_changes.call_args[1]["request"]
-        assert "evaluators" not in apply_request
+        self.mock_apply_changes.assert_not_called()
 
     def test_create_test_suite__with_execution_policy__passes_policy_to_api(self):
         """Verify a valid execution policy is forwarded via apply_dataset_item_changes."""
