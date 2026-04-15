@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import cometApi from "@/plugins/comet/api";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import usePluginsStore from "@/store/PluginsStore";
 import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
 
 const HEALTH_POLL_INTERVAL_MS = 1000;
@@ -265,20 +264,20 @@ export default function useAssistantBackend(
 }
 
 // Shares the `assistant-compute` queryKey so the sidebar's later subscription
-// reuses the prewarmed cache instead of re-issuing the request.
+// reuses the prewarmed cache instead of re-issuing the request. Plugin-level
+// gating (OSS vs Comet) is handled by whether the AssistantPrewarmer plugin
+// component is registered in the store.
 export function usePrewarmAssistantCompute(): void {
   const workspaceName = useActiveWorkspaceName();
-  const assistantPlugin = usePluginsStore((state) => state.AssistantSidebar);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (IS_ASSISTANT_DEV) return;
-    if (!assistantPlugin) return;
     if (!workspaceName) return;
     queryClient.prefetchQuery({
       queryKey: getComputeQueryKey(workspaceName),
       queryFn: ({ signal }) => fetchAssistantCompute(workspaceName, signal),
       staleTime: Infinity,
     });
-  }, [assistantPlugin, workspaceName, queryClient]);
+  }, [workspaceName, queryClient]);
 }

@@ -7,7 +7,6 @@ import PermissionsGuard from "@/v2/layout/PermissionsGuard/PermissionsGuard";
 import WorkspaceVersionResolver from "@/shared/WorkspaceVersionResolver/WorkspaceVersionResolver";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
-import { usePrewarmAssistantCompute } from "@/plugins/comet/useAssistantBackend";
 
 const WorkspaceGuard = ({
   Layout = PageLayout,
@@ -20,9 +19,12 @@ const WorkspaceGuard = ({
   const PermissionsProviderPlugin = usePluginStore(
     (state) => state.PermissionsProvider,
   );
-  // Kick off the Ollie pod provisioning as soon as the workspace resolves,
-  // so cold-start overlaps with onboarding instead of blocking sidebar mount.
-  usePrewarmAssistantCompute();
+  // Kick off Ollie pod provisioning as soon as the workspace resolves, so
+  // cold-start overlaps with onboarding instead of blocking sidebar mount.
+  // Rendered via plugin store so OSS builds don't import plugin internals.
+  const AssistantPrewarmer = usePluginStore(
+    (state) => state.AssistantPrewarmer,
+  );
 
   if (!WorkspacePreloader) {
     return <Loader />;
@@ -38,6 +40,7 @@ const WorkspaceGuard = ({
 
   return (
     <WorkspacePreloader>
+      {AssistantPrewarmer ? <AssistantPrewarmer /> : null}
       <WorkspaceVersionResolver>
         {PermissionsProviderPlugin ? (
           <PermissionsProviderPlugin>
