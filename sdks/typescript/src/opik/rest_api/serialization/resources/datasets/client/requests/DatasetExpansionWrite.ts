@@ -19,6 +19,7 @@ export const DatasetExpansionWrite: core.serialization.Schema<
         core.serialization.string().optional(),
     ),
     customPrompt: core.serialization.property("custom_prompt", core.serialization.string().optional()),
+    maxCompletionTokens: core.serialization.property("max_completion_tokens", core.serialization.number().optional()),
 });
 
 export declare namespace DatasetExpansionWrite {
@@ -28,5 +29,6 @@ export declare namespace DatasetExpansionWrite {
         preserve_fields?: string[] | null;
         variation_instructions?: string | null;
         custom_prompt?: string | null;
+        max_completion_tokens?: number | null;
     }
 }
