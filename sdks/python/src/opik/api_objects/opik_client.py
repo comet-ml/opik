@@ -2,6 +2,7 @@ import atexit
 import contextvars
 import datetime
 import functools
+import json
 import logging
 from typing import (
     Any,
@@ -45,6 +46,7 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
 from .agent_config.base import Config
 from .agent_config.config import ConfigManager
 from .threads import threads_client
@@ -2069,17 +2071,27 @@ class Opik:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
             ApiError: If there is an error during the creation of the prompt.
         """
+        validator = ChatPromptMessagesValidator(messages)
+        validator.validate()
+        validator.raise_if_validation_failed()
+
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
-        return prompt_module.ChatPrompt(
+        messages_str = json.dumps(messages)
+        prompt_version = prompt_client_.create_prompt(
             name=name,
-            messages=messages,
+            prompt=messages_str,
             metadata=metadata,
             type=type,
+            template_structure="chat",
             id=id,
             description=description,
             change_description=change_description,
             tags=tags,
             project_name=project_name,
+        )
+        return prompt_module.ChatPrompt.from_fern_prompt_version(
+            name, prompt_version, project_name=project_name
         )
 
     def get_prompt(

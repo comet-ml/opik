@@ -4,6 +4,7 @@ import logging
 import os
 import platform
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -70,6 +71,7 @@ def build_checklist(
         "runner_type": runner_type,
         "command": " ".join(command) if command else None,
         "platform": platform.system().lower(),
+        "python_executable": sys.executable,
         "file_tree": file_tree,
         "instrumentation": {
             "tracing": any(_matches_any(line, _TRACING_PATTERNS) for line in matches),

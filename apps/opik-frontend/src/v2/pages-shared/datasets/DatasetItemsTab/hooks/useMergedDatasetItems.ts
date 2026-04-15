@@ -17,7 +17,7 @@ import {
   DatasetItemWithDraft,
 } from "@/types/datasets";
 
-export const useTestSuiteItemsWithDraft = (
+export const useDatasetItemsWithDraft = (
   params: UseDatasetItemsListParams,
   options?: QueryConfig<UseDatasetItemsListResponse>,
 ) => {

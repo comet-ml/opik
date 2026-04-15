@@ -13,25 +13,25 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-export interface UseTestSuiteDropdownProps {
+export interface UseDatasetDropdownProps {
   datasetName?: string;
   datasetId?: string;
   datasetVersionId?: string;
   disabled?: boolean;
-  isTestSuite?: boolean;
+  entityName?: string;
   projectId?: string | null;
-  isSuiteEmpty?: boolean;
+  isEmpty?: boolean;
 }
 
-function UseTestSuiteDropdown({
+function UseDatasetDropdown({
   datasetName = "",
   datasetId = "",
   datasetVersionId,
   disabled = false,
-  isTestSuite = true,
+  entityName = "dataset",
   projectId,
-  isSuiteEmpty = false,
-}: UseTestSuiteDropdownProps) {
+  isEmpty = false,
+}: UseDatasetDropdownProps) {
   const resetKeyRef = useRef(0);
   const resetDialogKeyRef = useRef(0);
   const [openExperimentDialog, setOpenExperimentDialog] = useState(false);
@@ -81,27 +81,21 @@ function UseTestSuiteDropdown({
           open={openConfirmDialog}
           setOpen={setOpenConfirmDialog}
           onConfirm={handleLoadPlayground}
-          title={`Load ${
-            isTestSuite ? "test suite" : "dataset"
-          } into playground`}
-          description={`Loading this ${
-            isTestSuite ? "test suite" : "dataset"
-          } into the Playground will replace any unsaved changes. This action cannot be undone.`}
-          confirmText={`Load ${isTestSuite ? "test suite" : "dataset"}`}
+          title={`Load ${entityName} into playground`}
+          description={`Loading this ${entityName} into the Playground will replace any unsaved changes. This action cannot be undone.`}
+          confirmText={`Load ${entityName}`}
         />
       )}
-      <TooltipWrapper
-        content={isSuiteEmpty ? "This test suite is empty" : null}
-      >
+      <TooltipWrapper content={isEmpty ? `This ${entityName} is empty` : null}>
         <div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={disabled || isSuiteEmpty}
+                disabled={disabled || isEmpty}
               >
-                {isTestSuite ? "Use test suite" : "Use dataset"}
+                Use {entityName}
                 <ChevronDown className="ml-2 size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -115,9 +109,8 @@ function UseTestSuiteDropdown({
                   <div className="comet-body-s flex flex-col">
                     <span>Open in Playground</span>
                     <span className="text-light-slate">
-                      Test prompts over your{" "}
-                      {isTestSuite ? "test suite" : "dataset"} and run
-                      evaluations interactively
+                      Test prompts over your {entityName} and run evaluations
+                      interactively
                     </span>
                   </div>
                 </DropdownMenuItem>
@@ -134,8 +127,8 @@ function UseTestSuiteDropdown({
                   <div className="comet-body-s flex flex-col">
                     <span>Run an experiment</span>
                     <span className="text-light-slate">
-                      Use this {isTestSuite ? "test suite" : "dataset"} to run
-                      an experiment using the Python SDK
+                      Use this {entityName} to run an experiment using the
+                      Python SDK
                     </span>
                   </div>
                 </DropdownMenuItem>
@@ -148,4 +141,4 @@ function UseTestSuiteDropdown({
   );
 }
 
-export default UseTestSuiteDropdown;
+export default UseDatasetDropdown;

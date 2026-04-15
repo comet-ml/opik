@@ -27,9 +27,11 @@ import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
 import { Spinner } from "@/ui/spinner";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
+import {
+  ASSISTANT_DEV_BASE_URL,
+  IS_ASSISTANT_DEV,
+} from "@/plugins/comet/constants/assistant";
 
-const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
-const IS_DEV = import.meta.env.DEV;
 const BRIDGE_PROTOCOL_VERSION = 1;
 
 const LOADER_DEFAULT_WIDTH = 400;
@@ -219,7 +221,7 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         );
         break;
       default:
-        if (IS_DEV) {
+        if (IS_ASSISTANT_DEV) {
           console.warn(
             `[AssistantBridge] Unhandled sidebar event: "${event}"`,
             data,
@@ -298,7 +300,7 @@ interface AssistantMeta {
 }
 
 function resolveManifestUrl(backendUrl: string | null): string | null {
-  if (DEV_BASE_URL) return `${DEV_BASE_URL}/manifest.json`;
+  if (ASSISTANT_DEV_BASE_URL) return `${ASSISTANT_DEV_BASE_URL}/manifest.json`;
   if (backendUrl) return `${backendUrl}/console/manifest.json`;
   return null;
 }
@@ -326,16 +328,16 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: `${manifestBase}/${manifest.shell}`,
+        shellUrl: `/assistant/${manifest.shell}`,
         version: manifest.ver,
       };
     },
-    enabled: !(IS_DEV && DEV_BASE_URL) && !!manifestUrl,
+    enabled: !IS_ASSISTANT_DEV && !!manifestUrl,
     staleTime: Infinity,
     retry: 1,
   });
 
-  if (IS_DEV && DEV_BASE_URL) return DEV_META;
+  if (IS_ASSISTANT_DEV) return DEV_META;
 
   return data ?? null;
 }

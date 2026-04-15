@@ -48,6 +48,10 @@ import { useToast } from "@/ui/use-toast";
 import { extractAssertions, packAssertions } from "@/lib/assertion-converters";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
+import {
+  ASSERTIONS_DESCRIPTION,
+  PASS_CRITERIA_TITLE,
+} from "@/constants/test-suites";
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -564,7 +568,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 className="mt-2"
               >
                 <AccordionItem value="assertions" className="border-t">
-                  <AccordionTrigger>Evaluation criteria</AccordionTrigger>
+                  <AccordionTrigger>{PASS_CRITERIA_TITLE}</AccordionTrigger>
                   <AccordionContent className="px-3">
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-1">
@@ -572,7 +576,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                           Assertions
                         </span>
                         <span className="comet-body-xs text-light-slate">
-                          Define the conditions for this evaluation to pass
+                          {ASSERTIONS_DESCRIPTION}
                         </span>
                         <AssertionsField
                           readOnlyAssertions={suiteAssertions}

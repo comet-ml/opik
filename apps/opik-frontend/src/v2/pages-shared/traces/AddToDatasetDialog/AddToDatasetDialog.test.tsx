@@ -72,9 +72,12 @@ vi.mock("@/ui/use-toast", () => ({
 }));
 
 // Mock the AddEditTestSuiteDialog component
-vi.mock("@/v2/shared/AddEditTestSuiteDialog/AddEditTestSuiteDialog", () => ({
-  default: () => <div data-testid="add-edit-test-suite-dialog" />,
-}));
+vi.mock(
+  "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog",
+  () => ({
+    default: () => <div data-testid="add-edit-test-suite-dialog" />,
+  }),
+);
 
 describe("AddToDatasetDialog", () => {
   let queryClient: QueryClient;

@@ -36,7 +36,7 @@ import { useEffectiveSuiteAssertions } from "@/hooks/useEffectiveSuiteAssertions
 import { useEffectiveExecutionPolicy } from "@/hooks/useEffectiveExecutionPolicy";
 import { useEffectiveItemAssertions } from "@/hooks/useEffectiveItemAssertions";
 import { useEffectiveItemExecutionPolicy } from "@/hooks/useEffectiveItemExecutionPolicy";
-import { useSuiteIdFromURL } from "@/v2/pages-shared/test-suites/useSuiteIdFromURL";
+import { useDatasetEntityIdFromURL } from "@/v2/hooks/useDatasetEntityIdFromURL";
 import {
   TestSuiteItemFormValues,
   toFormValues,
@@ -88,7 +88,7 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
   const { toast } = useToast();
   const editItem = useEditItem();
   const updateItemAssertions = useUpdateItemAssertions();
-  const suiteId = useSuiteIdFromURL();
+  const suiteId = useDatasetEntityIdFromURL();
 
   const description = datasetItem?.description ?? "";
   const data = (datasetItem?.data as Record<string, unknown>) ?? {};
@@ -205,7 +205,7 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
         <div className="relative size-full overflow-y-auto">
           <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
             <div className="comet-body-accented">
-              {isNewItem ? "Add suite item" : "Edit test suite item"}
+              {isNewItem ? "Add item" : "Edit item"}
             </div>
             <TagListRenderer
               tags={tags}

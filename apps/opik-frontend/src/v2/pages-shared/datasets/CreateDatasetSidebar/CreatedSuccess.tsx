@@ -3,15 +3,17 @@ import { CircleCheck } from "lucide-react";
 
 import { Button } from "@/ui/button";
 
-type SuiteCreatedSuccessProps = {
-  suiteName: string;
-  onGoToSuite: () => void;
+type CreatedSuccessProps = {
+  entityName: string;
+  name: string;
+  onGoToEntity: () => void;
   onCreateAnother: () => void;
 };
 
-const SuiteCreatedSuccess: React.FC<SuiteCreatedSuccessProps> = ({
-  suiteName,
-  onGoToSuite,
+const CreatedSuccess: React.FC<CreatedSuccessProps> = ({
+  entityName,
+  name,
+  onGoToEntity,
   onCreateAnother,
 }) => {
   return (
@@ -20,14 +22,15 @@ const SuiteCreatedSuccess: React.FC<SuiteCreatedSuccessProps> = ({
         <CircleCheck className="size-8 text-emerald-600" />
       </div>
       <div className="text-center">
-        <h3 className="comet-body-s-accented mb-1">Test suite created!</h3>
+        <h3 className="comet-body-s-accented mb-1">{entityName} created!</h3>
         <p className="comet-body-xs text-light-slate">
-          Your test suite &quot;{suiteName}&quot; has been successfully created.
+          Your {entityName.toLowerCase()} &quot;{name}&quot; has been
+          successfully created.
         </p>
       </div>
       <div className="flex w-48 flex-col gap-2">
-        <Button onClick={onGoToSuite} size="sm">
-          Go to suite
+        <Button onClick={onGoToEntity} size="sm">
+          Go to {entityName.toLowerCase()}
         </Button>
         <Button variant="outline" size="sm" onClick={onCreateAnother}>
           Create another
@@ -37,4 +40,4 @@ const SuiteCreatedSuccess: React.FC<SuiteCreatedSuccessProps> = ({
   );
 };
 
-export default SuiteCreatedSuccess;
+export default CreatedSuccess;

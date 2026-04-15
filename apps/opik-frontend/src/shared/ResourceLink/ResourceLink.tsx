@@ -48,23 +48,21 @@ export const RESOURCE_MAP = {
     color: "var(--color-green)",
   },
   [RESOURCE_TYPE.dataset]: {
-    url: "/$workspaceName/test-suites/$suiteId/items",
-    projectUrl:
-      "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
+    url: "/$workspaceName/datasets/$datasetId/items",
+    projectUrl: "/$workspaceName/projects/$projectId/datasets/$datasetId/items",
     icon: Database,
-    param: "suiteId",
-    deleted: "Deleted test suite",
-    label: "test suite",
+    param: "datasetId",
+    deleted: "Deleted dataset",
+    label: "dataset",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.datasetItem]: {
-    url: "/$workspaceName/test-suites/$suiteId/items",
-    projectUrl:
-      "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
+    url: "/$workspaceName/datasets/$datasetId/items",
+    projectUrl: "/$workspaceName/projects/$projectId/datasets/$datasetId/items",
     icon: Database,
-    param: "suiteId",
-    deleted: "Deleted test suite item",
-    label: "test suite item",
+    param: "datasetId",
+    deleted: "Deleted dataset item",
+    label: "dataset item",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.prompt]: {

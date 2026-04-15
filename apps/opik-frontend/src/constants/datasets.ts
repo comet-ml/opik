@@ -11,3 +11,9 @@ export const isLatestVersionTag = (tag: string): boolean =>
 
 export const filterOutLatestTag = (tags: string[]): string[] =>
   tags.filter((tag) => !isLatestVersionTag(tag));
+
+export const DATASET_ITEM_PREFILLED_DATA = `{
+  "input": "<user question>",
+  "expected_output": "<expected response>",
+  "<any additional fields>": "<any value>"
+}`;
