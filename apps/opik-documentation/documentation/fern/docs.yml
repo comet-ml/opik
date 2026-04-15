@@ -16,7 +16,7 @@ metadata:
   twitter:site: "@CometML"
 
 announcement:
-  message: "Join the Comet team at AI Engineer Europe, April 8-10! <a href=\"https://www.ai.engineer/europe\" rel=\"nofollow\" target=\"_blank\">Register</a>"
+  message: "Subscribe to our Luma calendar to stay updated on upcoming events! <a href=\"https://luma.com/cometml\" rel=\"nofollow\" target=\"_blank\">Subscribe here</a>"
 
 title: Opik Documentation
 favicon: img/logo.svg
@@ -493,6 +493,9 @@ navigation:
               - page: AG2
                 path: docs/tracing/integrations/ag2.mdx
                 slug: ag2
+              - page: Agent Spec
+                path: docs/tracing/integrations/agentspec.mdx
+                slug: agentspec
               - page: Agno
                 path: docs/tracing/integrations/agno.mdx
                 slug: agno
@@ -953,6 +956,12 @@ navigation:
           - page: REST API Client
             path: docs/reference/python-sdk/rest-api.mdx
             slug: rest-api
+          - section: Troubleshooting
+            slug: troubleshooting
+            contents:
+              - page: Batching and updates
+                path: docs/reference/python-sdk/troubleshooting/batching-and-updates.mdx
+                slug: batching-and-updates
       - section: Typescript SDK
         slug: typescript-sdk
         contents:
@@ -1152,6 +1161,9 @@ redirects:
   - source: "/docs/opik/tracing/integrations/aisuite"
     destination: "/docs/opik/integrations/aisuite"
     permanent: true
+  - source: "/docs/opik/tracing/integrations/agentspec"
+    destination: "/docs/opik/integrations/agentspec"
+    permanent: true
   - source: "/docs/opik/tracing/integrations/agno"
     destination: "/docs/opik/integrations/agno"
     permanent: true
@@ -1330,6 +1342,10 @@ redirects:
   - source: "/docs/opik/reference/ruby-otel-sdk/overview"
     destination: "/docs/opik/integrations/opentelemetry-ruby-sdk"
     permanent: true
+  # Batching docs redirect
+  - source: "/docs/opik/tracing/batching_and_updates"
+    destination: "/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates"
+    permanent: true
   # Cookbook redirects
   - source: "/docs/opik/cookbook/overview"
     destination: "/docs/opik/integrations/overview"
@@ -1351,6 +1367,9 @@ redirects:
     permanent: true
   - source: "/docs/opik/cookbook/anthropic"
     destination: "/docs/opik/integrations/anthropic"
+    permanent: true
+  - source: "/docs/opik/cookbook/agentspec"
+    destination: "/docs/opik/integrations/agentspec"
     permanent: true
   - source: "/docs/opik/cookbook/bedrock"
     destination: "/docs/opik/integrations/bedrock"

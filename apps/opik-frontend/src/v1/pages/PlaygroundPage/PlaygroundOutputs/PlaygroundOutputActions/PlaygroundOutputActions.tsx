@@ -325,11 +325,11 @@ const PlaygroundOutputActions = ({
       }
 
       if (isDatasetRemoved) {
-        return "Your evaluation suite has been removed. Select another one";
+        return "Your test suite has been removed. Select another one";
       }
 
       if (isDatasetEmpty) {
-        return "Selected evaluation suite is empty";
+        return "Selected test suite is empty";
       }
 
       if (!allPromptsHaveModels) {
@@ -521,7 +521,7 @@ const PlaygroundOutputActions = ({
               <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
                 <ExplainerIcon
                   {...EXPLAINERS_MAP[
-                    EXPLAINER_ID.what_does_the_evaluation_suite_do_here
+                    EXPLAINER_ID.what_does_the_test_suite_do_here
                   ]}
                 />
                 <Separator orientation="vertical" className="mx-2 h-4" />

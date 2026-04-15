@@ -59,6 +59,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -84,6 +85,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.media.multipart.ContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
+import reactor.core.publisher.Flux;
 
 import java.io.InputStream;
 import java.net.URI;
@@ -281,7 +283,7 @@ public class DatasetsResource {
 
         log.info("Finding dataset by name '{}', projectName '{}' on workspace_id '{}'", identifier.datasetName(),
                 identifier.projectName(), workspaceId);
-        Dataset dataset = service.findByName(workspaceId, identifier, visibility);
+        Dataset dataset = service.findByName(identifier, visibility);
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
                 workspaceId);
 
@@ -429,10 +431,10 @@ public class DatasetsResource {
             }), maxItems = 2000)))
     })
     public ChunkedOutput<JsonNode> streamDatasetItems(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
-        var workspaceId = requestContext.get().getWorkspaceId();
-        var userName = requestContext.get().getUserName();
-        var visibility = requestContext.get().getVisibility();
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request,
+            @Context HttpServletResponse httpResponse) {
+        var ctxSnapshot = requestContext.get();
+        var workspaceId = ctxSnapshot.getWorkspaceId();
 
         // Suppress unchecked cast warning since we already pass DatasetItemFilter reference to newFilters
         @SuppressWarnings("unchecked")
@@ -441,13 +443,34 @@ public class DatasetsResource {
 
         log.info("Streaming dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
                 request.datasetName(), request.projectName(), workspaceId);
-        var items = itemService.getItems(workspaceId, request, queryFilters, visibility)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
-        var outputStream = streamer.getOutputStream(items);
-        log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
-                request.datasetName(), request.projectName(), workspaceId);
-        return outputStream;
+
+        try {
+            service.resolveDatasetByName(DatasetIdentifier.builder()
+                    .datasetName(request.datasetName())
+                    .projectName(request.projectName())
+                    .build());
+
+            var items = itemService.getItems(request, queryFilters)
+                    .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
+
+            ChunkedOutput<JsonNode> outputStream = streamer.getOutputStream(items);
+
+            log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
+                    request.datasetName(), request.projectName(), workspaceId);
+
+            String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+            if (fallbackMessage != null) {
+                httpResponse.addHeader(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+            }
+
+            return outputStream;
+        } catch (NotFoundException ex) {
+            // The visibility check failed, return empty stream to avoid exposing existence of the dataset
+            log.info("Empty dataset items stream for dataset '{}', projectName '{}' on workspaceId '{}'",
+                    request.datasetName(), request.projectName(), workspaceId);
+
+            return streamer.getOutputStream(Flux.empty());
+        }
     }
 
     @PUT
@@ -507,7 +530,8 @@ public class DatasetsResource {
         log.info("Creating dataset items from traces for dataset '{}', trace count '{}' on workspaceId '{}'",
                 datasetId, request.traceIds().size(), workspaceId);
 
-        itemService.createFromTraces(datasetId, request.traceIds(), request.enrichmentOptions())
+        itemService.createFromTraces(datasetId, request.traceIds(), request.enrichmentOptions(),
+                request.evaluators(), request.executionPolicy())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
@@ -533,7 +557,8 @@ public class DatasetsResource {
         log.info("Creating dataset items from spans for dataset '{}', span count '{}' on workspaceId '{}'",
                 datasetId, request.spanIds().size(), workspaceId);
 
-        itemService.createFromSpans(datasetId, request.spanIds(), request.enrichmentOptions())
+        itemService.createFromSpans(datasetId, request.spanIds(), request.enrichmentOptions(),
+                request.evaluators(), request.executionPolicy())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();

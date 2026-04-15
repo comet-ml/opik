@@ -14,6 +14,7 @@ def test_create_demo_data_structure(httpserver):
 
     httpserver.expect_request("/is-alive/ping", method="GET").respond_with_data("pong", status=200)
     httpserver.expect_request("/v1/private/projects/retrieve", method="POST").respond_with_data(status=404)
+    httpserver.expect_request("/v1/private/projects", method="GET").respond_with_json({"content": [], "page": 1, "size": 0, "total": 0})
     httpserver.expect_request("/v1/private/projects", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/spans/batch", method="POST").respond_with_data(status=204)

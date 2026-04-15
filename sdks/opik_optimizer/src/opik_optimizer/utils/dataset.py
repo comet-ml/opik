@@ -24,7 +24,10 @@ except ImportError:  # pragma: no cover
 import opik
 from datasets import load_dataset
 
-from opik_optimizer.api_objects.types import DatasetSpec
+from ..api_objects.types import DatasetSpec
+from ..constants import (
+    resolve_project_name,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -176,12 +179,19 @@ def create_dataset_from_records(
     records: Sequence[dict[str, Any]],
     expected_size: int,
     test_mode: bool,
+    project_name: str | None = None,
 ) -> opik.Dataset:
     """Create or reuse an Opik dataset with the provided records and size checks."""
     full_name = dataset_name_for_mode(dataset_name, test_mode)
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(full_name)
+    client = opik.api_objects.opik_client.get_client_cached()
+    dataset = client.get_or_create_dataset(full_name, project_name=project_name)
     existing = dataset.get_items()
+    logger.info(
+        "Dataset %s has: %s items in project: %s",
+        full_name,
+        len(existing),
+        project_name,
+    )
 
     if existing:
         if len(existing) != expected_size:
@@ -565,6 +575,7 @@ def load_hf_dataset_slice(
     custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]]
     | None = None,
     filter_by: FilterBy | None = None,
+    project_name: str | None = None,
 ) -> opik.Dataset:
     """Shared helper to download an HF slice and create an Opik dataset.
 
@@ -654,6 +665,7 @@ def load_hf_dataset_slice(
         records=records,
         expected_size=expected_items,
         test_mode=test_mode,
+        project_name=project_name,
     )
 
 
@@ -681,6 +693,7 @@ class DatasetHandle:
         test_mode_count: int | None = None,
         prefer_presets: bool | None = None,
         filter_by: FilterBy | None = None,
+        project_name: str | None = None,
     ) -> opik.Dataset:
         """
         Load the dataset slice described by this spec.
@@ -702,6 +715,8 @@ class DatasetHandle:
         else:
             pref = prefer_presets
 
+        project_name = resolve_project_name(project_name)
+
         return load_hf_dataset_slice(
             base_name=self.spec.name,
             requested_split=split,
@@ -718,6 +733,7 @@ class DatasetHandle:
             records_transform=self.spec.records_transform,
             custom_loader=self.spec.custom_loader,
             filter_by=filter_by,
+            project_name=project_name,
         )
 
 

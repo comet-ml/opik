@@ -11,7 +11,7 @@ from typing import Optional
 
 import opik
 import opik.rest_api.client as rest_api_client
-from opik.api_objects.agent_config.config import AgentConfigManager
+from opik.api_objects.agent_config.config import ConfigManager
 from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 from .conftest import RunnerInfo
 
@@ -126,7 +126,7 @@ def wait_for_agent_registration(
 
 
 def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
-    """Basic: register echo agent, run job, verify job result and trace output."""
+    """Basic: register echo agent, run job, verify job result, trace output, and job logs."""
     message = f"hello-e2e-{int(time.time())}"
 
     wait_for_agent_registration(api_client, "echo", project_id)
@@ -141,6 +141,25 @@ def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
     trace = find_trace_by_input(api_client, OPIK_E2E_TESTS_PROJECT_NAME, message)
     assert f"echo: {message}" in str(trace.output)
 
+    logs_result = []
+
+    def _find_logs():
+        logs = api_client.runners.get_job_logs(job.id)
+        if logs:
+            logs_result.clear()
+            logs_result.extend(logs)
+            return True
+        return False
+
+    assert opik.synchronization.until(
+        _find_logs,
+        max_try_seconds=5,
+        allow_errors=True,
+    ), f"Expected job logs for job {job.id}, got none"
+
+    log_text = " ".join(entry.text for entry in logs_result)
+    assert message in log_text, f"Expected '{message}' in job logs, got: {log_text}"
+
 
 def test_runner_with_mask(
     opik_client, api_client, runner_process: RunnerInfo, project_id
@@ -151,15 +170,15 @@ def test_runner_with_mask(
 
     wait_for_agent_registration(api_client, "echo_config", project_id)
 
-    manager = AgentConfigManager(
+    manager = ConfigManager(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         rest_client_=opik_client.rest_client,
     )
     manager.create_blueprint(
-        parameters={"EchoConfig.greeting": "default-greeting"},
+        parameters={"greeting": "default-greeting"},
     )
     mask_id = manager.create_mask(
-        parameters={"EchoConfig.greeting": custom_greeting},
+        parameters={"greeting": custom_greeting},
     )
 
     submit_job(api_client, "echo_config", message, project_id, mask_id=mask_id)

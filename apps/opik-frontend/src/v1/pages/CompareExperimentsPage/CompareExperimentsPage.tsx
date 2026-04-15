@@ -13,7 +13,7 @@ import ExperimentInsightsTab from "@/v1/pages/CompareExperimentsPage/ExperimentI
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import CompareExperimentsDetails from "@/v1/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -42,14 +42,14 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     [experiments],
   );
 
-  const isEvalSuite = isEvalSuiteExperiment(memorizedExperiments[0]);
+  const isTestSuite = isTestSuiteExperiment(memorizedExperiments[0]);
 
   const hasAssertionScores = memorizedExperiments.some(
     (e) => (e.assertion_scores ?? []).length > 0,
   );
 
   const showScoresTab =
-    memorizedExperiments.length > 0 && (!isEvalSuite || hasAssertionScores);
+    memorizedExperiments.length > 0 && (!isTestSuite || hasAssertionScores);
 
   const renderContent = () => {
     return (
@@ -72,8 +72,8 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             </TabsTrigger>
             {showScoresTab && (
               <TabsTrigger variant="underline" value="scores">
-                {isEvalSuite ? "Assertions" : "Feedback scores"}
-                {!isEvalSuite && (
+                {isTestSuite ? "Assertions" : "Feedback scores"}
+                {!isTestSuite && (
                   <ExplainerIcon
                     className="ml-1"
                     {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
@@ -87,7 +87,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
           <ExperimentItemsTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
-            isEvalSuite={isEvalSuite}
+            isTestSuite={isTestSuite}
           />
         </TabsContent>
         <TabsContent value="insights">
@@ -102,7 +102,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
         </TabsContent>
         {showScoresTab && (
           <TabsContent value="scores">
-            {isEvalSuite ? (
+            {isTestSuite ? (
               <ExperimentAssertionsTab
                 experimentsIds={experimentsIds}
                 experiments={memorizedExperiments}

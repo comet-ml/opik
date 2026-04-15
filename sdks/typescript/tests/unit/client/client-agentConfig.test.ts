@@ -1,10 +1,11 @@
-import { z } from "zod";
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
-import { AgentConfigManager, Blueprint } from "@/agent-config";
+import { ConfigManager, Blueprint } from "@/agent-config";
 import { OpikApiError } from "@/rest_api";
 import * as OpikApi from "@/rest_api/api";
 import { trackStorage } from "@/decorators/track";
+import { Prompt } from "@/prompt/Prompt";
+import { ChatPrompt } from "@/prompt/ChatPrompt";
 import {
   mockAPIFunction,
   createMockHttpResponsePromise,
@@ -26,7 +27,7 @@ const mockBlueprintResponse: OpikApi.AgentBlueprintPublic = {
 };
 
 
-describe("AgentConfigManager", () => {
+describe("ConfigManager", () => {
   let client: Opik;
   let createAgentConfigSpy: MockInstance<
     typeof client.api.agentConfigs.createAgentConfig
@@ -102,7 +103,7 @@ describe("AgentConfigManager", () => {
 
   describe("createBlueprint", () => {
     it("should call createAgentConfig (POST) then getBlueprintById and return a Blueprint", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
 
       const blueprint = await manager.createBlueprint({
         values: [
@@ -130,7 +131,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should pass serialized values through unchanged", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.createBlueprint({
         values: [
           { key: "temperature", value: "0.8", type: "float" },
@@ -152,7 +153,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should use a client-side generated UUID in the POST body", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.createBlueprint({ values: [{ key: "key", value: "val", type: "string" }] });
 
       const createCall = createAgentConfigSpy.mock.calls[0][0];
@@ -167,7 +168,7 @@ describe("AgentConfigManager", () => {
 
   describe("updateBlueprint", () => {
     it("should call updateAgentConfig (PATCH) then getBlueprintById and return a Blueprint", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
 
       const blueprint = await manager.updateBlueprint({
         values: [
@@ -194,7 +195,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should use a client-side generated UUID in the PATCH body", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.updateBlueprint({ values: [{ key: "key", value: "val", type: "string" }] });
 
       const updateCall = updateAgentConfigSpy.mock.calls[0][0];
@@ -208,7 +209,7 @@ describe("AgentConfigManager", () => {
 
   describe("createMask", () => {
     it("should call updateAgentConfig (PATCH) with type=mask and return the mask ID", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const maskId = await manager.createMask({
         values: [{ key: "temperature", value: "0.5", type: "float" }],
         description: "A/B variant",
@@ -225,7 +226,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should pass serialized mask values through unchanged", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.createMask({
         values: [{ key: "temperature", value: "0.5", type: "float" }],
       });
@@ -241,7 +242,7 @@ describe("AgentConfigManager", () => {
 
   describe("getBlueprint", () => {
     it("should call getLatestBlueprint when no options provided", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const blueprint = await manager.getBlueprint();
 
       expect(retrieveProjectSpy).toHaveBeenCalledOnce();
@@ -253,7 +254,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should call getBlueprintById when id is provided", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const blueprint = await manager.getBlueprint({ id: "blueprint-id-1" });
 
       expect(retrieveProjectSpy).not.toHaveBeenCalled();
@@ -266,7 +267,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should call getBlueprintByEnv when env is provided", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const blueprint = await manager.getBlueprint({ env: "production" });
 
       expect(retrieveProjectSpy).toHaveBeenCalledOnce();
@@ -279,7 +280,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should pass maskId to the underlying API call", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.getBlueprint({ id: "bp-1", maskId: "mask-xyz" });
 
       expect(getBlueprintByIdSpy).toHaveBeenCalledWith(
@@ -293,7 +294,7 @@ describe("AgentConfigManager", () => {
         throw new OpikApiError({ message: "Not found", statusCode: 404 });
       });
 
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const result = await manager.getBlueprint({ id: "nonexistent" });
       expect(result).toBeNull();
     });
@@ -303,22 +304,9 @@ describe("AgentConfigManager", () => {
         throw new OpikApiError({ message: "Not found", statusCode: 404 });
       });
 
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const result = await manager.getBlueprint();
       expect(result).toBeNull();
-    });
-  });
-
-  describe("tagBlueprintWithEnv", () => {
-    it("should call createOrUpdateEnvs with correct payload", async () => {
-      const manager = new AgentConfigManager("test-project", client);
-      await manager.tagBlueprintWithEnv("blueprint-id-1", "production");
-
-      expect(retrieveProjectSpy).toHaveBeenCalledOnce();
-      expect(createOrUpdateEnvsSpy).toHaveBeenCalledWith({
-        projectId: "project-id-1",
-        envs: [{ envName: "production", blueprintId: "blueprint-id-1" }],
-      });
     });
   });
 });
@@ -380,42 +368,77 @@ describe("Blueprint value object", () => {
   });
 });
 
-describe("getAgentConfigVersion option exclusivity", () => {
-  const schema = z.object({ model: z.string() }).describe("Cfg");
+describe("Blueprint prompt class hints", () => {
+  function makePromptResponse(commit: string): OpikApi.AgentBlueprintPublic {
+    return {
+      id: "bp-prompt",
+      type: "blueprint",
+      values: [{ key: "p", value: commit, type: "prompt" }],
+    };
+  }
+
+  const chatTemplate = JSON.stringify([{ role: "user", content: "Hi" }]);
+  const textTemplate = "Hello";
+
+  function mockOpikWithPromptCommit(templateStructure: string) {
+    const template = templateStructure === "chat" ? chatTemplate : textTemplate;
+    const opik = {
+      api: {
+        prompts: {
+          getPromptByCommit: vi.fn().mockResolvedValue({
+            id: "prompt-id",
+            name: "my-prompt",
+            templateStructure,
+            requestedVersion: {
+              id: "version-id",
+              promptId: "prompt-id",
+              commit: "abc12345",
+              template,
+              type: "mustache",
+            },
+          }),
+        },
+      },
+    };
+    return opik as unknown as Parameters<typeof Blueprint.fromApiResponse>[1];
+  }
+
+  it("templateStructure=chat returns ChatPrompt", async () => {
+    const opik = mockOpikWithPromptCommit("chat");
+    const bp = await Blueprint.fromApiResponse(
+      makePromptResponse("abc12345"),
+      opik
+    );
+    expect(bp.values["p"]).toBeInstanceOf(ChatPrompt);
+  });
+
+  it("templateStructure=text returns Prompt", async () => {
+    const opik = mockOpikWithPromptCommit("text");
+    const bp = await Blueprint.fromApiResponse(
+      makePromptResponse("abc12345"),
+      opik
+    );
+    expect(bp.values["p"]).toBeInstanceOf(Prompt);
+  });
+});
+
+describe("getOrCreateConfig option exclusivity", () => {
   let client: Opik;
 
   beforeEach(() => {
     client = new Opik({ projectName: "test-project" });
   });
 
-  function callInsideTrack(opts: { fallback: { model: string }; projectName?: string; env?: string; latest?: boolean; version?: string }) {
+  function callInsideTrack(opts: { fallback?: { model: string }; projectName?: string; env?: string; version?: string }) {
     return trackStorage.run(
       { span: { update: vi.fn() }, trace: { update: vi.fn() } } as unknown as Parameters<typeof trackStorage.run>[0],
-      () => client.getAgentConfigVersion(schema, opts)
+      () => client.getOrCreateConfig(opts as Parameters<typeof client.getOrCreateConfig>[0])
     );
   }
-
-  it("should throw when both latest and version are specified", async () => {
-    await expect(
-      callInsideTrack({ fallback: { model: "gpt-4" }, latest: true, version: "v1" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
-  });
-
-  it("should throw when both latest and env are specified", async () => {
-    await expect(
-      callInsideTrack({ fallback: { model: "gpt-4" }, latest: true, env: "prod" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
-  });
 
   it("should throw when both version and env are specified", async () => {
     await expect(
       callInsideTrack({ fallback: { model: "gpt-4" }, version: "v1", env: "prod" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
-  });
-
-  it("should throw when all three are specified", async () => {
-    await expect(
-      callInsideTrack({ fallback: { model: "gpt-4" }, latest: true, version: "v1", env: "prod" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
+    ).rejects.toThrow("Only one of 'version' or 'env'");
   });
 });

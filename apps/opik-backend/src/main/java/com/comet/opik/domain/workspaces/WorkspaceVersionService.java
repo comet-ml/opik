@@ -2,6 +2,7 @@ package com.comet.opik.domain.workspaces;
 
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.WorkspaceVersion;
+import com.comet.opik.domain.AlertDAO;
 import com.comet.opik.domain.DashboardDAO;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
@@ -13,7 +14,7 @@ import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import lombok.NonNull;
-import org.apache.tika.utils.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -35,18 +36,20 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Determination Logic (priority order):</h3>
  * <ol>
+ *   <li><b>V2 workspace allowlist</b> ({@code TOGGLE_V2_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
+ *       that always receive {@code version_2}. Highest priority, all deployment modes.</li>
  *   <li><b>Feature flag override</b> ({@code TOGGLE_FORCE_WORKSPACE_VERSION}) — if set to a valid
  *       {@link OpikVersion} value ({@code "version_1"} or {@code "version_2"}), that version is returned
- *       unconditionally. Value {@code "disabled"} means no override. Highest priority, all deployment modes.</li>
+ *       unconditionally. Value {@code "disabled"} means no override.</li>
  *   <li><b>Auth one-way V2 gate</b> (authenticated mode only) — if auth metadata indicates the workspace
  *       was created post-launch ({@code version_2}), always return {@code version_2}.
- *       Prevents V2 to V1 demotion.
- *       <br><i>Not yet implemented — requires OPIK-5170 (auth response metadata).</i></li>
+ *       Prevents V2 to V1 demotion. Defensive: gracefully degrades when auth service doesn't
+ *       provide the field (returns null, falls through to entity check).</li>
  *   <li><b>Version 1 entity check</b> (primary signal, all modes) — queries the state database and
  *       analytics database for entities without {@code project_id}. If any exist, returns {@code version_1}.
  *       If none, returns {@code version_2}. Demo data is excluded from the check.</li>
  *   <li><b>Fallback on check failure</b> — if the DB queries error out:
- *       authenticated mode falls back to auth suggestion (not yet available, defaults to {@code version_1});
+ *       authenticated mode falls back to auth suggestion (defaults to {@code version_1} when unavailable);
  *       unauthenticated mode falls back to {@code version_1}.</li>
  * </ol>
  *
@@ -62,7 +65,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *   <li><b>Unauthenticated</b> ({@code authentication.enabled=false}): Uses {@link UnauthWorkspaceVersionService}.
  *       Auth steps are skipped. Determination uses entity check only, with {@code version_1} fallback on failure.</li>
  *   <li><b>Authenticated</b> ({@code authentication.enabled=true}): Uses {@link AuthWorkspaceVersionService}.
- *       Full determination logic including auth one-way gate (once OPIK-5170 is implemented).</li>
+ *       Full determination logic including auth one-way gate.</li>
  * </ul>
  *
  * <h3>Caching:</h3>
@@ -76,7 +79,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * @see WorkspaceVersion
  */
 public interface WorkspaceVersionService {
-    Mono<WorkspaceVersion> getWorkspaceVersion(String workspaceId);
+    Mono<WorkspaceVersion> getWorkspaceVersion(String workspaceId, OpikVersion authSuggestedVersion);
 }
 
 /**
@@ -115,7 +118,12 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     }
 
     @Override
-    public Mono<WorkspaceVersion> getWorkspaceVersion(@NonNull String workspaceId) {
+    public Mono<WorkspaceVersion> getWorkspaceVersion(@NonNull String workspaceId, OpikVersion authSuggestedVersion) {
+        var isWorkspaceInV2Allowlist = serviceTogglesConfig.getV2WorkspaceAllowlistIds().contains(workspaceId);
+        if (isWorkspaceInV2Allowlist) {
+            log.info("Workspace included in version_2 allowlist, workspaceId '{}'", workspaceId);
+            return Mono.just(buildResponse(OpikVersion.VERSION_2));
+        }
         var forcedVersion = getForcedVersion();
         if (forcedVersion.isPresent()) {
             log.info("Workspace version forced by feature flag, opikVersion '{}', workspaceId '{}'",
@@ -128,21 +136,20 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                         log.warn("Cache read failed, computing version, workspaceId '{}'", workspaceId, throwable);
                         return Mono.empty();
                     })
-                    .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId)
+                    .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion)
                             .flatMap(response -> cacheResult(workspaceId, response))
-                            .onErrorResume(throwable -> fallback(workspaceId, throwable))));
+                            .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
         }
-        return computeVersion(workspaceId)
-                .onErrorResume(throwable -> fallback(workspaceId, throwable));
+        return computeVersion(workspaceId, authSuggestedVersion)
+                .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
     }
 
-    protected abstract Optional<OpikVersion> getAuthSuggestedVersion(String workspaceId);
+    protected abstract OpikVersion getFallbackVersion(String workspaceId, OpikVersion authSuggestedVersion);
 
-    protected abstract OpikVersion getFallbackVersion(String workspaceId);
-
-    private Mono<WorkspaceVersion> fallback(String workspaceId, Throwable throwable) {
+    private Mono<WorkspaceVersion> fallback(String workspaceId, OpikVersion authSuggestedVersion,
+            Throwable throwable) {
         log.warn("Version 1 entity check failed, returning fallback, workspaceId '{}'", workspaceId, throwable);
-        return Mono.just(buildResponse(getFallbackVersion(workspaceId)));
+        return Mono.just(buildResponse(getFallbackVersion(workspaceId, authSuggestedVersion)));
     }
 
     private Mono<WorkspaceVersion> cacheResult(String workspaceId, WorkspaceVersion response) {
@@ -156,10 +163,9 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 });
     }
 
-    private Mono<WorkspaceVersion> computeVersion(String workspaceId) {
-        var authVersion = getAuthSuggestedVersion(workspaceId);
-        if (authVersion.isPresent() && authVersion.get() == OpikVersion.VERSION_2) {
-            log.info("Locked to version_2 via auth one-way gate, workspaceId '{}'", workspaceId);
+    private Mono<WorkspaceVersion> computeVersion(String workspaceId, OpikVersion authSuggestedVersion) {
+        if (authSuggestedVersion == OpikVersion.VERSION_2) {
+            log.info("Locked via auth one-way gate, workspaceId '{}', version '{}'", workspaceId, authSuggestedVersion);
             return Mono.just(buildResponse(OpikVersion.VERSION_2));
         }
         return Flux.concat(
@@ -213,7 +219,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 log.info("Found version_1 datasets in workspace '{}'", workspaceId);
                 return true;
             }
-            // TODO: alerts — no project_id column yet. Skipped until column is added.
+            if (handle.attach(AlertDAO.class).hasVersion1Alerts(workspaceId)) {
+                log.info("Found version_1 alerts in workspace '{}'", workspaceId);
+                return true;
+            }
             return false;
         });
     }

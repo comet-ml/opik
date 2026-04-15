@@ -1,12 +1,13 @@
 import { UserPlus } from "lucide-react";
-import { Button } from "@/ui/button";
+import { Button, type ButtonProps } from "@/ui/button";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 
 export type InviteDevButtonProps = {
   onClick?: () => void;
+  size?: ButtonProps["size"];
 };
 
-const InviteDevButton: React.FC<InviteDevButtonProps> = ({ onClick }) => {
+const InviteDevButton: React.FC<InviteDevButtonProps> = ({ onClick, size }) => {
   const inviteMembersURL = useInviteMembersURL();
 
   if (!inviteMembersURL) {
@@ -14,7 +15,13 @@ const InviteDevButton: React.FC<InviteDevButtonProps> = ({ onClick }) => {
   }
 
   return (
-    <Button className="flex-1" variant="outline" onClick={onClick} asChild>
+    <Button
+      className="flex-1"
+      variant="outline"
+      size={size}
+      onClick={onClick}
+      asChild
+    >
       <a href={inviteMembersURL} target="_blank" rel="noopener noreferrer">
         <UserPlus className="mr-2 size-4" />
         <span>Invite a developer</span>

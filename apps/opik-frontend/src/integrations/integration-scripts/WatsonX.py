@@ -6,7 +6,7 @@ from litellm.integrations.opik.opik import OpikLogger  # HIGHLIGHTED_LINE
 from opik import track  # HIGHLIGHTED_LINE
 from opik.opik_context import get_current_span_data  # HIGHLIGHTED_LINE
 
-opik.configure()  # HIGHLIGHTED_LINE
+opik.configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # Configure WatsonX environment variables
 os.environ["WATSONX_ENDPOINT_URL"] = ""  # Base URL of your WatsonX instance

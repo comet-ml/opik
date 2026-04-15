@@ -2,9 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigRemoveValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.validation.HasProjectIdentifier;
+import com.comet.opik.infrastructure.AgentConfigConfiguration;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -17,11 +21,13 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,6 +44,8 @@ public interface AgentConfigService {
     Mono<AgentBlueprint> createConfig(AgentConfigCreate request);
 
     Mono<AgentBlueprint> updateConfig(AgentConfigCreate request);
+
+    Mono<AgentBlueprint> removeConfigKeys(AgentConfigRemoveValues request);
 
     AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId);
 
@@ -57,12 +65,7 @@ public interface AgentConfigService {
 
     AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size);
 
-    Mono<List<UUID>> updateBlueprintsForNewPromptVersion(
-            String workspaceId,
-            UUID promptId,
-            String newCommit,
-            String userName,
-            Set<UUID> excludeProjectIds);
+    Mono<AgentBlueprint> createBlueprintFromMask(UUID projectId, UUID maskId);
 }
 
 @Slf4j
@@ -78,6 +81,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull ProjectService projectService;
     private final @NonNull LockService lockService;
+    private final @NonNull AgentConfigConfiguration agentConfigConfiguration;
 
     @Override
     public Mono<AgentBlueprint> createConfig(@NonNull AgentConfigCreate request) {
@@ -94,7 +98,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
         }
 
         return resolveProjectId(request, workspaceId, userName)
-                .flatMap(projectId -> lockService.executeWithLock(
+                .flatMap(projectId -> lockService.executeWithLockCustomExpire(
                         new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
                         Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
                             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
@@ -122,7 +126,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                             .build()));
 
                             return blueprint;
-                        })).subscribeOn(Schedulers.boundedElastic())));
+                        })).subscribeOn(Schedulers.boundedElastic()),
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
     }
 
     @Override
@@ -132,8 +137,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         log.info("Updating optimizer config for workspace '{}'", workspaceId);
 
-        return resolveProjectId(request, workspaceId, userName)
-                .flatMap(projectId -> lockService.executeWithLock(
+        return resolveExistingProjectId(request, workspaceId)
+                .flatMap(projectId -> lockService.executeWithLockCustomExpire(
                         new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
                         Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
                             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
@@ -149,10 +154,73 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             return createBlueprint(dao, request, existingConfig.id(), projectId, workspaceId,
                                     userName);
-                        })).subscribeOn(Schedulers.boundedElastic())));
+                        })).subscribeOn(Schedulers.boundedElastic()),
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
     }
 
-    private Mono<UUID> resolveProjectId(AgentConfigCreate request, String workspaceId, String userName) {
+    @Override
+    public Mono<AgentBlueprint> removeConfigKeys(@NonNull AgentConfigRemoveValues request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Deleting config values for workspace '{}'", workspaceId);
+
+        return resolveExistingProjectId(request, workspaceId)
+                .flatMap(projectId -> lockService.executeWithLockCustomExpire(
+                        new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
+                        Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
+                            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
+
+                            AgentConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
+                            if (existingConfig == null) {
+                                return null;
+                            }
+
+                            AgentBlueprint latest = dao.getLatestBlueprint(workspaceId, projectId,
+                                    AgentBlueprint.BlueprintType.BLUEPRINT);
+                            if (latest == null || CollectionUtils.isEmpty(latest.values())) {
+                                return null;
+                            }
+
+                            List<AgentConfigValue> remaining = latest.values().stream()
+                                    .filter(v -> !request.keys().contains(v.key()))
+                                    .toList();
+
+                            if (remaining.size() == latest.values().size()) {
+                                return null;
+                            }
+
+                            UUID blueprintId = idGenerator.generateId();
+                            String name = generateNextBlueprintName(dao, workspaceId, projectId);
+                            String description = "Deleted configuration parameters: %s"
+                                    .formatted(request.keys().stream().sorted().toList());
+
+                            dao.insertBlueprint(
+                                    blueprintId,
+                                    workspaceId,
+                                    projectId,
+                                    existingConfig.id(),
+                                    AgentBlueprint.BlueprintType.BLUEPRINT,
+                                    name,
+                                    description,
+                                    JsonUtils.writeListOrDefaultEmpty(remaining),
+                                    userName,
+                                    userName);
+
+                            return AgentBlueprint.builder()
+                                    .id(blueprintId)
+                                    .name(name)
+                                    .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                                    .description(description)
+                                    .values(remaining)
+                                    .createdBy(userName)
+                                    .lastUpdatedBy(userName)
+                                    .build();
+                        })).subscribeOn(Schedulers.boundedElastic()),
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
+    }
+
+    private Mono<UUID> resolveProjectId(HasProjectIdentifier request, String workspaceId, String userName) {
         if (request.projectId() != null) {
             return Mono.fromCallable(() -> {
                 projectService.get(request.projectId(), workspaceId);
@@ -165,6 +233,21 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return projectService.getOrCreate(projectName)
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .map(Project::id);
+    }
+
+    private Mono<UUID> resolveExistingProjectId(HasProjectIdentifier request, String workspaceId) {
+        if (request.projectId() != null) {
+            return Mono.fromCallable(() -> {
+                projectService.get(request.projectId(), workspaceId);
+                return request.projectId();
+            }).subscribeOn(Schedulers.boundedElastic());
+        }
+
+        String projectName = WorkspaceUtils.getProjectName(request.projectName());
+
+        return Mono.fromCallable(() -> projectService.findProjectIdByName(workspaceId, projectName)
+                .orElseThrow(() -> new NotFoundException("Project '%s' not found".formatted(projectName))))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private AgentBlueprint createBlueprint(
@@ -203,14 +286,6 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         log.info("Creating blueprint '{}' with name '{}' for config '{}'", blueprintId, name, configId);
 
-        if (blueprint.type() == AgentBlueprint.BlueprintType.BLUEPRINT) {
-            List<String> keys = blueprint.values().stream()
-                    .map(AgentConfigValue::key)
-                    .toList();
-
-            dao.closeValuesForKeys(workspaceId, projectId, blueprintId, keys);
-        }
-
         dao.insertBlueprint(
                 blueprintId,
                 workspaceId,
@@ -219,10 +294,9 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 blueprint.type(),
                 name,
                 blueprint.description(),
+                JsonUtils.writeListOrDefaultEmpty(blueprint.values()),
                 blueprint.createdBy(),
                 blueprint.lastUpdatedBy());
-
-        insertValues(dao, blueprint.values(), configId, projectId, blueprintId, workspaceId);
 
         return blueprintId;
     }
@@ -230,28 +304,6 @@ class AgentConfigServiceImpl implements AgentConfigService {
     private String generateNextBlueprintName(AgentConfigDAO dao, String workspaceId, UUID projectId) {
         long count = dao.countBlueprints(workspaceId, projectId);
         return "v" + (count + 1);
-    }
-
-    private void insertValues(
-            AgentConfigDAO dao,
-            List<AgentConfigValue> values,
-            UUID configId,
-            UUID projectId,
-            UUID validFromBlueprintId,
-            String workspaceId) {
-
-        if (values == null || values.isEmpty()) {
-            return;
-        }
-
-        values = values.stream()
-                .map(v -> v.toBuilder()
-                        .id(idGenerator.generateId())
-                        .validFromBlueprintId(validFromBlueprintId)
-                        .build())
-                .toList();
-
-        dao.batchInsertValues(workspaceId, projectId, configId, values);
     }
 
     @Override
@@ -265,7 +317,14 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
             requireConfig(dao, workspaceId, projectId);
 
-            return getBlueprintWithDetails(dao, projectId, workspaceId, null, maskId);
+            AgentBlueprint blueprint = dao.getLatestBlueprint(workspaceId, projectId,
+                    AgentBlueprint.BlueprintType.BLUEPRINT);
+            if (blueprint == null) {
+                throw new NotFoundException("Blueprint not found for project '%s' in workspace '%s'"
+                        .formatted(projectId, workspaceId));
+            }
+
+            return enrichBlueprint(dao, workspaceId, blueprint, maskId);
         });
     }
 
@@ -278,12 +337,12 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return transactionTemplate.inTransaction(handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            UUID projectId = dao.getProjectIdByBlueprintId(workspaceId, blueprintId);
-            if (projectId == null) {
+            AgentBlueprint blueprint = dao.getBlueprintById(workspaceId, blueprintId);
+            if (blueprint == null || blueprint.type() != AgentBlueprint.BlueprintType.BLUEPRINT) {
                 throw new NotFoundException("Blueprint '" + blueprintId + "' not found");
             }
 
-            return getBlueprintWithDetails(dao, projectId, workspaceId, blueprintId, maskId);
+            return enrichBlueprint(dao, workspaceId, blueprint, maskId);
         });
     }
 
@@ -298,7 +357,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
             AgentBlueprint blueprint = requireBlueprintByName(dao, workspaceId, projectId, name);
 
-            return getBlueprintWithDetails(dao, projectId, workspaceId, blueprint.id(), maskId);
+            return enrichBlueprint(dao, workspaceId, blueprint, maskId);
         });
     }
 
@@ -314,40 +373,28 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
             requireConfig(dao, workspaceId, projectId);
 
-            UUID blueprintId = dao.getBlueprintIdByEnvName(workspaceId, projectId, envName);
-            if (blueprintId == null) {
+            AgentBlueprint blueprint = dao.getBlueprintByEnvName(workspaceId, projectId, envName);
+            if (blueprint == null) {
                 throw new NotFoundException("No blueprint found for environment '" + envName + "'");
             }
 
-            return getBlueprintWithDetails(dao, projectId, workspaceId, blueprintId, maskId);
+            return enrichBlueprint(dao, workspaceId, blueprint, maskId);
         });
     }
 
-    private AgentBlueprint getBlueprintWithDetails(
+    private AgentBlueprint enrichBlueprint(
             AgentConfigDAO dao,
-            UUID projectId,
             String workspaceId,
-            UUID blueprintId,
+            AgentBlueprint blueprint,
             UUID maskId) {
 
-        AgentBlueprint blueprint = blueprintId != null
-                ? dao.getBlueprintByIdAndType(workspaceId, blueprintId, projectId,
-                        AgentBlueprint.BlueprintType.BLUEPRINT)
-                : dao.getLatestBlueprint(workspaceId, projectId, AgentBlueprint.BlueprintType.BLUEPRINT);
-
-        if (blueprint == null) {
-            throw new NotFoundException("Blueprint not found");
-        }
-
-        List<AgentConfigValue> values = dao.getValuesByBlueprintId(
-                workspaceId, projectId, blueprint.id());
+        List<AgentConfigValue> values = blueprint.values() != null ? blueprint.values() : List.of();
 
         if (maskId != null) {
-            values = applyMask(dao, workspaceId, projectId, maskId, values);
+            values = applyMask(dao, workspaceId, blueprint.projectId(), maskId, values);
         }
 
-        List<String> envs = dao.getEnvsByBlueprintId(
-                workspaceId, projectId, blueprint.id());
+        List<String> envs = dao.getEnvsByBlueprintId(workspaceId, blueprint.projectId(), blueprint.id());
 
         return blueprint.toBuilder()
                 .values(values)
@@ -359,7 +406,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
     public AgentBlueprint getDeltaById(@NonNull UUID blueprintId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving delta for blueprint '{}' in workspace '{}'", blueprintId, workspaceId);
+        log.info("Retrieving blueprint '{}' in workspace '{}'", blueprintId, workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
@@ -369,12 +416,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 throw new NotFoundException("Blueprint '" + blueprintId + "' not found");
             }
 
-            List<AgentConfigValue> deltaValues = dao.getValuesDeltaByBlueprintId(
-                    workspaceId, blueprint.projectId(), blueprintId);
-
-            return blueprint.toBuilder()
-                    .values(deltaValues)
-                    .build();
+            return blueprint;
         });
     }
 
@@ -576,15 +618,18 @@ class AgentConfigServiceImpl implements AgentConfigService {
             throw new NotFoundException("Mask blueprint '" + maskId + "' not found in project '" + projectId + "'");
         }
 
-        List<AgentConfigValue> maskDelta = dao.getValuesDeltaByBlueprintId(
-                workspaceId, mask.projectId(), maskId);
+        return mergeWithMask(blueprintValues, mask.values());
+    }
 
-        Map<String, AgentConfigValue> valueMap = blueprintValues.stream()
-                .collect(Collectors.toMap(
-                        AgentConfigValue::key,
-                        v -> v));
+    private List<AgentConfigValue> mergeWithMask(
+            List<AgentConfigValue> blueprintValues,
+            List<AgentConfigValue> maskValues) {
 
-        for (AgentConfigValue maskValue : maskDelta) {
+        Map<String, AgentConfigValue> valueMap = new LinkedHashMap<>();
+        for (AgentConfigValue value : blueprintValues) {
+            valueMap.put(value.key(), value);
+        }
+        for (AgentConfigValue maskValue : maskValues) {
             valueMap.put(maskValue.key(), maskValue);
         }
 
@@ -592,83 +637,43 @@ class AgentConfigServiceImpl implements AgentConfigService {
     }
 
     @Override
-    public Mono<List<UUID>> updateBlueprintsForNewPromptVersion(
-            @NonNull String workspaceId,
-            @NonNull UUID promptId,
-            @NonNull String newCommit,
-            @NonNull String userName,
-            Set<UUID> excludeProjectIds) {
+    public Mono<AgentBlueprint> createBlueprintFromMask(@NonNull UUID projectId, @NonNull UUID maskId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info(
-                "Updating blueprints for new prompt version: promptId='{}', commit='{}', workspace='{}', excludeProjects='{}'",
-                promptId, newCommit, workspaceId, excludeProjectIds);
+        log.info("Creating blueprint from mask '{}' for project '{}' in workspace '{}'", maskId, projectId,
+                workspaceId);
 
-        return lockService.executeWithLock(
-                new LockService.Lock(workspaceId, BLUEPRINT_LOCK),
-                Mono.fromCallable(() -> transactionTemplate.<List<UUID>>inTransaction(WRITE, handle -> {
-                    AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
+        AgentBlueprint blueprintFromMask = transactionTemplate.inTransaction(handle -> {
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-                    List<AgentConfigDAO.BlueprintValueReference> references = dao
-                            .findProjectsWithOutdatedPromptReferences(workspaceId, promptId, newCommit,
-                                    excludeProjectIds);
+            AgentBlueprint mask = dao.getBlueprintByIdAndType(workspaceId, maskId, projectId,
+                    AgentBlueprint.BlueprintType.MASK);
+            if (mask == null) {
+                throw new NotFoundException(
+                        "Blueprint mask '%s' not found in project '%s' in workspace '%s'"
+                                .formatted(maskId, projectId, workspaceId));
+            }
 
-                    if (references.isEmpty()) {
-                        log.info("No blueprints to update for prompt '{}' with commit '{}'", promptId, newCommit);
-                        return List.<UUID>of();
-                    }
+            AgentBlueprint latest = dao.getLatestBlueprint(workspaceId, projectId,
+                    AgentBlueprint.BlueprintType.BLUEPRINT);
+            List<AgentConfigValue> baseValues = latest != null
+                    ? Objects.requireNonNullElse(latest.values(), List.of())
+                    : List.of();
 
-                    Map<UUID, List<AgentConfigDAO.BlueprintValueReference>> referencesByProject = references.stream()
-                            .collect(Collectors.groupingBy(AgentConfigDAO.BlueprintValueReference::projectId));
+            return mask.toBuilder()
+                    .values(mergeWithMask(baseValues, mask.values()))
+                    .build();
+        });
 
-                    log.info("Found projects with outdated prompt references: '{}'", referencesByProject.size());
+        var request = AgentConfigCreate.builder()
+                .projectId(projectId)
+                .blueprint(AgentBlueprint.builder()
+                        .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                        .description(blueprintFromMask.description())
+                        .values(blueprintFromMask.values())
+                        .build())
+                .build();
 
-                    List<AgentConfigDAO.BlueprintInsertData> blueprintInserts = new ArrayList<>();
-                    List<AgentConfigDAO.ValueCloseRef> valueCloses = new ArrayList<>();
-                    List<AgentConfigDAO.ValueInsertData> valueInserts = new ArrayList<>();
-
-                    for (var entry : referencesByProject.entrySet()) {
-                        List<AgentConfigDAO.BlueprintValueReference> refs = entry.getValue();
-                        UUID configId = refs.getFirst().configId();
-                        String name = "v" + (refs.getFirst().blueprintCount() + 1);
-                        UUID blueprintId = idGenerator.generateId();
-
-                        blueprintInserts.add(AgentConfigDAO.BlueprintInsertData.builder()
-                                .id(blueprintId)
-                                .projectId(entry.getKey())
-                                .configId(configId)
-                                .type(AgentBlueprint.BlueprintType.BLUEPRINT)
-                                .name(name)
-                                .build());
-
-                        for (var ref : refs) {
-                            valueCloses.add(AgentConfigDAO.ValueCloseRef.builder()
-                                    .projectId(ref.projectId())
-                                    .validToBlueprintId(blueprintId)
-                                    .key(ref.configKey())
-                                    .build());
-
-                            valueInserts.add(AgentConfigDAO.ValueInsertData.builder()
-                                    .id(idGenerator.generateId())
-                                    .projectId(ref.projectId())
-                                    .configId(configId)
-                                    .key(ref.configKey())
-                                    .value(newCommit)
-                                    .type(AgentConfigValue.ValueType.PROMPT)
-                                    .validFromBlueprintId(blueprintId)
-                                    .build());
-                        }
-                    }
-
-                    dao.batchCloseValuesByKey(workspaceId, valueCloses);
-                    dao.batchInsertBlueprints(workspaceId, userName, userName, blueprintInserts);
-                    dao.batchInsertValuesMultiProject(workspaceId, valueInserts);
-
-                    return blueprintInserts.stream()
-                            .map(AgentConfigDAO.BlueprintInsertData::id)
-                            .toList();
-                })).subscribeOn(Schedulers.boundedElastic())
-                        .doOnSuccess(ids -> log.info(
-                                "Completed blueprint updates for prompt '{}' with commit '{}': updated {} blueprints",
-                                promptId, newCommit, ids.size())));
+        return updateConfig(request);
     }
 }

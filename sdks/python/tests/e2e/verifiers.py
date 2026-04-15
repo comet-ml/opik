@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 import opik
 from opik import Attachment, Prompt, ChatPrompt, synchronization
+from opik.api_objects import rest_helpers
 from opik.api_objects.attachment import decoder_helpers
 from opik.api_objects.dataset import dataset_item
 from opik.rest_api import ExperimentPublic, FeedbackScore, FeedbackScorePublic
@@ -196,7 +197,7 @@ def verify_dataset(
     name: str,
     description: str = mock.ANY,
     dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
-    project_name: Optional[str] = mock.ANY,
+    project_name: Optional[str] = None,
 ):
     if not synchronization.until(
         lambda: opik_client.get_dataset(name=name) is not None,
@@ -204,10 +205,11 @@ def verify_dataset(
     ):
         raise AssertionError(f"Failed to get dataset with name {name}.")
 
-    actual_dataset = opik_client.get_dataset(name=name)
+    actual_dataset = opik_client.get_dataset(name=name, project_name=project_name)
     assert actual_dataset.description == description
     assert actual_dataset.name == name
-    assert actual_dataset.project_name == project_name
+    if project_name is not None:
+        assert actual_dataset.project_name == project_name
 
     actual_dataset_items = list(
         actual_dataset.__internal_api__stream_items_as_dataclasses__()
@@ -537,6 +539,7 @@ def verify_optimization(
     dataset_name: Optional[str] = mock.ANY,  # type: ignore
     status: Optional[str] = mock.ANY,  # type: ignore
     objective_name: Optional[str] = mock.ANY,  # type: ignore
+    project_name: Optional[str] = None,
 ) -> None:
     if not synchronization.until(
         lambda: opik_client.get_optimization_by_id(optimization_id) is not None,
@@ -561,6 +564,14 @@ def verify_optimization(
     assert optimization_content.objective_name == objective_name, (
         f"{optimization_content.objective_name} != {objective_name}"
     )
+
+    if project_name is not None:
+        project_id = rest_helpers.resolve_project_id_by_name(
+            rest_client=opik_client.rest_client, project_name=project_name
+        )
+        assert optimization_content.project_id == project_id, (
+            f"{optimization_content.project_id} != {project_id}"
+        )
 
 
 def verify_thread(
@@ -790,7 +801,7 @@ def verify_threads_annotation_queue(
     testlib.assert_equal(instructions, queue.instructions)
 
 
-def verify_evaluation_suite_result(
+def verify_test_suite_result(
     opik_client: opik.Opik,
     suite_result: Any,
     items_total: int = mock.ANY,  # type: ignore
@@ -801,12 +812,12 @@ def verify_evaluation_suite_result(
     project_name: Optional[str] = None,
 ):
     """
-    Verify an EvaluationSuiteResult — both in-memory properties and persisted
+    Verify a TestSuiteResult — both in-memory properties and persisted
     experiment data from the backend.
 
     Args:
         opik_client: The Opik client instance.
-        suite_result: The EvaluationSuiteResult returned by suite.run().
+        suite_result: The TestSuiteResult returned by suite.run().
         items_total: Expected total number of dataset items in the suite.
         items_passed: Expected number of dataset items that passed.
         experiment_items_count: Expected number of experiment items (traces)
@@ -816,7 +827,7 @@ def verify_evaluation_suite_result(
             across all experiment items.
         expected_score_names: If provided, the union of all score names
             across all experiment items must equal this set.
-        project_name: The project name associated with the evaluation suite.
+        project_name: The project name associated with the test suite.
     """
     if items_total is not mock.ANY:
         assert suite_result.items_total == items_total, (

@@ -9,7 +9,7 @@ import {
   filterFunction,
 } from "./helpers";
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
-import { Span, Trace } from "@/types/traces";
+import { LOGS_SOURCE, Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import {
   LOGS_TYPE,
@@ -82,6 +82,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const hasFilter = Boolean(filters.length);
   const hasSearchOrFilter = hasSearch || hasFilter;
   const title = !hasSearchOrFilter ? "Trace" : "Results";
+  const canNavigateToSpans = !trace.source || trace.source === LOGS_SOURCE.sdk;
 
   const spansFilterForTrace = useMemo(
     () => [
@@ -229,20 +230,24 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
         <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-background pb-2 pl-6 pr-4 pt-4">
           <div className="flex h-8 items-center gap-1">
             <div className="comet-title-xs">{title} -</div>
-            <TooltipWrapper content="View all spans of this trace in table view">
-              <Link
-                to={`/$workspaceName/projects/$projectId/logs`}
-                params={{ workspaceName, projectId }}
-                search={{
-                  logsType: LOGS_TYPE.spans,
-                  spans_filters: combinedSpansFilters,
-                }}
-              >
-                <Button variant="link" className="comet-body-s px-0" asChild>
-                  <span>{filteredSpanCount} spans</span>
-                </Button>
-              </Link>
-            </TooltipWrapper>
+            {canNavigateToSpans ? (
+              <TooltipWrapper content="View all spans of this trace in table view">
+                <Link
+                  to={`/$workspaceName/projects/$projectId/logs`}
+                  params={{ workspaceName, projectId }}
+                  search={{
+                    logsType: LOGS_TYPE.spans,
+                    spans_filters: combinedSpansFilters,
+                  }}
+                >
+                  <Button variant="link" className="comet-body-s px-0" asChild>
+                    <span>{filteredSpanCount} spans</span>
+                  </Button>
+                </Link>
+              </TooltipWrapper>
+            ) : (
+              <span className="comet-body-s">{filteredSpanCount} spans</span>
+            )}
             <ExplainerIcon
               {...EXPLAINERS_MAP[
                 EXPLAINER_ID.what_are_these_elements_in_the_tree

@@ -340,12 +340,10 @@ class TestFactoryRouting:
         litellm_stub.callbacks = []
         monkeypatch.setitem(sys.modules, "litellm", litellm_stub)
 
-        from opik.evaluation.models.litellm import litellm_chat_model as lcm
-
-        monkeypatch.setattr(
-            lcm.litellm_integration,
-            "track_completion",
-            lambda **kw: (lambda f: f),
+        litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
+        litellm_integration_stub.track_completion = lambda **kw: (lambda f: f)
+        monkeypatch.setitem(
+            sys.modules, "opik.integrations.litellm", litellm_integration_stub
         )
 
         model = models_factory.get("gpt-4o", track=False)

@@ -21,7 +21,13 @@ import { calculateWorkspaceName, cn } from "@/lib/utils";
 import useWorkspaceSelectorData from "@/plugins/comet/useWorkspaceSelectorData";
 import { buildUrl } from "@/plugins/comet/utils";
 
-const SidebarWorkspaceSelector: React.FC = () => {
+interface SidebarWorkspaceSelectorProps {
+  expanded?: boolean;
+}
+
+const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
+  expanded = true,
+}) => {
   const {
     user,
     workspaceName,
@@ -51,15 +57,19 @@ const SidebarWorkspaceSelector: React.FC = () => {
   const displayName = calculateWorkspaceName(workspaceName);
 
   if (isLoading) {
-    return (
+    return expanded ? (
       <div className="flex h-8 items-center px-2">
         <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+      </div>
+    ) : (
+      <div className="flex size-7 items-center justify-center">
+        <div className="size-4 animate-pulse rounded bg-muted" />
       </div>
     );
   }
 
   if (!user?.loggedIn || !currentOrganization || !shouldShowDropdown) {
-    return (
+    return expanded ? (
       <Link
         to="/$workspaceName/home"
         params={{ workspaceName }}
@@ -67,31 +77,48 @@ const SidebarWorkspaceSelector: React.FC = () => {
       >
         {displayName}
       </Link>
-    );
+    ) : null;
   }
 
   return (
     <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
-        <button
-          className={cn(
-            "flex w-full items-center gap-1 rounded-md px-2 py-1",
-            isDropdownOpen
-              ? "bg-primary-foreground"
-              : "hover:bg-primary-foreground",
-          )}
-        >
-          <span className="comet-body-s-accented flex-1 truncate text-left text-foreground">
-            {displayName}
-          </span>
-          <span className="shrink-0 text-muted-slate">
-            {isDropdownOpen ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
+        {expanded ? (
+          <button
+            className={cn(
+              "flex w-full items-center gap-1 rounded-md px-2 py-1",
+              isDropdownOpen
+                ? "bg-primary-foreground"
+                : "hover:bg-primary-foreground",
             )}
-          </span>
-        </button>
+          >
+            <span className="comet-body-s-accented flex-1 truncate text-left text-foreground">
+              {displayName}
+            </span>
+            <span className="shrink-0 text-muted-slate">
+              {isDropdownOpen ? (
+                <ChevronUp className="size-3.5" />
+              ) : (
+                <ChevronDown className="size-3.5" />
+              )}
+            </span>
+          </button>
+        ) : (
+          <button
+            className={cn(
+              "flex size-7 items-center justify-center rounded-md",
+              isDropdownOpen
+                ? "bg-primary-foreground"
+                : "hover:bg-primary-foreground",
+            )}
+          >
+            {isDropdownOpen ? (
+              <ChevronUp className="size-3.5 text-foreground" />
+            ) : (
+              <ChevronDown className="size-3.5 text-foreground" />
+            )}
+          </button>
+        )}
       </DropdownMenuTrigger>
 
       <DropdownMenuContent

@@ -277,7 +277,9 @@ def test_success(client, data, code, expected):
     })
 
     assert response.status_code == 200
-    assert response.json['scores'] == expected
+    scores = response.json['scores']
+    assert all(s.get('category_name') is None for s in scores)
+    assert [{k: v for k, v in s.items() if k != 'category_name'} for s in scores] == expected
 
 
 def test_options_method_returns_ok(client):

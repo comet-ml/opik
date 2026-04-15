@@ -18,6 +18,7 @@ type ExportToButtonProps = {
   getData: () => Array<object> | Promise<Array<object>>;
   disabled: boolean;
   tooltipContent?: string;
+  buttonVariant?: "outline" | "ghost" | "ghostInverted";
 };
 
 const ExportToButton: React.FC<ExportToButtonProps> = ({
@@ -25,6 +26,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
   getData,
   disabled,
   tooltipContent,
+  buttonVariant = "outline",
 }) => {
   const [open, setOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -97,7 +99,11 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
   );
 
   const buttonElement = (
-    <Button variant="outline" size="icon-sm" disabled={disabled || loading}>
+    <Button
+      variant={buttonVariant}
+      size="icon-sm"
+      disabled={disabled || loading}
+    >
       {loading ? <Loader2 className="animate-spin" /> : <Download />}
     </Button>
   );

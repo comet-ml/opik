@@ -1,22 +1,132 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
   AssistantSidebarBridge,
   BridgeContext,
+  BridgeSurface,
   HostEventMap,
+  RunnerBridgeState,
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
 import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useTheme } from "@/contexts/theme-provider";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
+import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
+import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
+import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
-import useAssistantSidebarConfig from "@/api/assistant-sidebar/useAssistantSidebarConfig";
-import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
+import { Spinner } from "@/ui/spinner";
+import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
+import {
+  ASSISTANT_DEV_BASE_URL,
+  IS_ASSISTANT_DEV,
+} from "@/plugins/comet/constants/assistant";
 
 const BRIDGE_PROTOCOL_VERSION = 1;
+
+const LOADER_DEFAULT_WIDTH = 400;
+const LOADER_COLLAPSED_WIDTH = 33;
+
+function getStoredSidebarWidth(): number {
+  try {
+    const parsed = parseInt(
+      localStorage.getItem("assistant-sidebar-width") ?? "",
+      10,
+    );
+    if (parsed > 0) return parsed;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return LOADER_DEFAULT_WIDTH;
+}
+
+function getStoredSidebarOpen(): boolean {
+  try {
+    const stored = localStorage.getItem("assistant-sidebar-open");
+    return stored === null ? true : stored === "true";
+  } catch {
+    return true;
+  }
+}
+
+const PHASE_MESSAGES: Partial<
+  Record<AssistantBackendPhase | "manifest", string>
+> = {
+  compute: "Starting assistant\u2026",
+  health: "Connecting\u2026",
+  manifest: "Loading interface\u2026",
+};
+
+interface AssistantSidebarLoaderProps {
+  phase: AssistantBackendPhase | "manifest";
+  error: string | null;
+  onWidthChange: (width: number) => void;
+  onRetry?: () => void;
+  retryCount?: number;
+}
+
+const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
+  phase,
+  error,
+  onWidthChange,
+  onRetry,
+  retryCount = 0,
+}) => {
+  const [isOpen, setIsOpen] = useState(getStoredSidebarOpen);
+  const initialWidth = useRef(
+    getStoredSidebarOpen() ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+  );
+
+  useEffect(() => {
+    onWidthChange(initialWidth.current);
+  }, [onWidthChange]);
+
+  const handleToggle = useCallback(() => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem("assistant-sidebar-open", String(next));
+      onWidthChange(next ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH);
+      return next;
+    });
+  }, [onWidthChange]);
+
+  const collapsed = !isOpen;
+
+  if (error) {
+    return (
+      <AssistantErrorState
+        collapsed={collapsed}
+        onRetry={onRetry}
+        onToggle={handleToggle}
+        retryCount={retryCount}
+      />
+    );
+  }
+
+  const message = PHASE_MESSAGES[phase] ?? "Loading\u2026";
+
+  return (
+    <div className="relative size-full border-l">
+      <div className="absolute inset-0 animate-pulse bg-muted" />
+      <div className="relative flex size-full items-center justify-center">
+        <Spinner size={collapsed ? "xs" : "small"} />
+        {!collapsed && (
+          <span className="ml-2 text-sm text-light-slate">{message}</span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const stopPropagation = (e: Event) => e.stopPropagation();
 
@@ -42,18 +152,25 @@ function createHostListeners(): HostListeners {
   return {
     "context:changed": new Set(),
     "visibility:changed": new Set(),
+    "runner:state-changed": new Set(),
   };
 }
 
 interface BridgeRefs {
-  navigate: React.MutableRefObject<(path: string) => void>;
+  navigate: React.MutableRefObject<
+    (path: string, search?: Record<string, unknown>) => void
+  >;
   onWidthChange: React.MutableRefObject<(width: number) => void>;
   onNotification: React.MutableRefObject<
     (data: SidebarEventMap["notification"]) => void
   >;
   onRequestVisibility: React.MutableRefObject<(open: boolean) => void>;
+  onRequestPair: React.MutableRefObject<
+    (data: SidebarEventMap["runner:request-pair"]) => void
+  >;
   context: React.MutableRefObject<BridgeContext>;
   listeners: React.MutableRefObject<HostListeners>;
+  lastRunnerState: React.MutableRefObject<RunnerBridgeState | null>;
 }
 
 const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
@@ -65,15 +182,25 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       | undefined;
     if (!set) return () => {};
     set.add(callback);
+
+    // Replay latest runner state to late subscribers (e.g. Ollie iframe loaded after FE)
+    if (event === "runner:state-changed" && refs.lastRunnerState.current) {
+      (callback as (data: RunnerBridgeState) => void)(
+        refs.lastRunnerState.current,
+      );
+    }
+
     return () => {
       set.delete(callback);
     };
   },
   emit: (event, data) => {
     switch (event) {
-      case "navigate":
-        refs.navigate.current((data as SidebarEventMap["navigate"]).path);
+      case "navigate": {
+        const { path, search } = data as SidebarEventMap["navigate"];
+        refs.navigate.current(path, search);
         break;
+      }
       case "sidebar:resized":
         refs.onWidthChange.current(
           (data as SidebarEventMap["sidebar:resized"]).width,
@@ -87,6 +214,11 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         break;
       case "sidebar:request-close":
         refs.onRequestVisibility.current(false);
+        break;
+      case "runner:request-pair":
+        refs.onRequestPair.current(
+          data as SidebarEventMap["runner:request-pair"],
+        );
         break;
       default:
         if (IS_ASSISTANT_DEV) {
@@ -110,8 +242,12 @@ function emitHostEvent<E extends keyof HostEventMap>(
   }
 }
 
-function useBridgeContext(assistantBackendUrl: string): BridgeContext {
+function useBridgeContext(
+  assistantBackendUrl: string,
+  surface: BridgeSurface,
+): BridgeContext {
   const workspaceName = useActiveWorkspaceName();
+  const { themeMode } = useTheme();
   const workspace = useWorkspace();
 
   const { projectId } = useParams({ strict: false }) as {
@@ -126,22 +262,32 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
   const projectName = project?.name ?? null;
   const resolvedProjectId = projectId ?? null;
 
+  const organizationId = workspace?.organizationId ?? null;
+  const projectStats = useProjectOnboardingStats(resolvedProjectId);
+
   return useMemo<BridgeContext>(
     () => ({
       workspaceId,
       workspaceName,
+      organizationId,
       projectId: resolvedProjectId,
       projectName,
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
-      theme: "light",
+      theme: themeMode,
+      surface,
+      projectStats,
     }),
     [
       workspaceId,
       workspaceName,
+      organizationId,
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      themeMode,
+      surface,
+      projectStats,
     ],
   );
 }
@@ -153,20 +299,30 @@ interface AssistantMeta {
   version: string;
 }
 
-function useAssistantMeta(): AssistantMeta | null {
-  const { data: config } = useAssistantSidebarConfig();
+function resolveManifestUrl(backendUrl: string | null): string | null {
+  if (ASSISTANT_DEV_BASE_URL) return `${ASSISTANT_DEV_BASE_URL}/manifest.json`;
+  if (backendUrl) return `${backendUrl}/console/manifest.json`;
+  return null;
+}
 
-  const resolvedManifestUrl =
-    !IS_ASSISTANT_DEV && config?.manifest_url ? config.manifest_url : null;
+const DEV_META: AssistantMeta = {
+  scriptUrl: "/assistant/assistant.js",
+  cssUrl: "/assistant/assistant.css",
+  shellUrl: "/assistant/shell",
+  version: "dev",
+};
 
-  const manifestBase = resolvedManifestUrl
-    ? resolvedManifestUrl.substring(0, resolvedManifestUrl.lastIndexOf("/"))
+function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
+  const manifestUrl = resolveManifestUrl(backendUrl);
+
+  const manifestBase = manifestUrl
+    ? manifestUrl.substring(0, manifestUrl.lastIndexOf("/"))
     : null;
 
   const { data } = useQuery<AssistantMeta>({
-    queryKey: ["assistant-manifest", resolvedManifestUrl],
+    queryKey: ["assistant-manifest", manifestUrl],
     queryFn: async () => {
-      const res = await fetch(resolvedManifestUrl!);
+      const res = await fetch(manifestUrl!);
       if (!res.ok) throw new Error(`manifest ${res.status}`);
       const manifest: AssistantManifest = await res.json();
       return {
@@ -176,36 +332,35 @@ function useAssistantMeta(): AssistantMeta | null {
         version: manifest.ver,
       };
     },
-    enabled: !!resolvedManifestUrl && !!config?.enabled,
+    enabled: !IS_ASSISTANT_DEV && !!manifestUrl,
     staleTime: Infinity,
     retry: 1,
   });
 
-  if (IS_ASSISTANT_DEV) {
-    return {
-      scriptUrl: "/assistant/assistant.js",
-      cssUrl: "/assistant/assistant.css",
-      shellUrl: "/assistant/shell",
-      version: "dev",
-    };
-  }
+  if (IS_ASSISTANT_DEV) return DEV_META;
 
   return data ?? null;
 }
 
 interface AssistantSidebarProps {
+  surface?: BridgeSurface;
   onWidthChange: (width: number) => void;
 }
 
 const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
+  surface = "sidebar",
   onWidthChange,
 }) => {
-  const meta = useAssistantMeta();
-  const { data: sidebarConfig } = useAssistantSidebarConfig();
-  const { backendUrl, isReady: isBackendReady } = useAssistantBackend({
-    enabled: sidebarConfig?.enabled,
-  });
-  const context = useBridgeContext(backendUrl ?? "");
+  const {
+    backendUrl,
+    isReady: isBackendReady,
+    error,
+    phase,
+    retry,
+    retryCount,
+  } = useAssistantBackend();
+  const meta = useAssistantMeta(backendUrl);
+  const context = useBridgeContext(backendUrl ?? "", surface);
   const router = useRouter();
 
   const { toast } = useToast();
@@ -213,6 +368,17 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   const contextRef = useLatestRef(context);
   const onWidthChangeRef = useLatestRef(onWidthChange);
   const listenersRef = useRef<HostListeners>(createHostListeners());
+  const lastRunnerStateRef = useRef<RunnerBridgeState | null>(null);
+
+  const { handleRequestPair } = useRunnerBridgeSync({
+    projectId: context.projectId,
+    onStateChanged: (state) => {
+      lastRunnerStateRef.current = state;
+      emitHostEvent(listenersRef, "runner:state-changed", state);
+    },
+  });
+
+  const onRequestPairRef = useLatestRef(handleRequestPair);
 
   const onNotificationRef = useLatestRef(
     (data: SidebarEventMap["notification"]) => {
@@ -228,11 +394,21 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     emitHostEvent(listenersRef, "visibility:changed", { isOpen: open });
   });
 
-  const navigateRef = useLatestRef((path: string) => {
-    const ws = contextRef.current.workspaceName;
-    const fullPath = ws ? `/${ws}${path}` : path;
-    router.navigate({ to: fullPath });
-  });
+  /**
+   * Forwards a sidebar navigation request to TanStack Router. `search` is
+   * typed `Record<string, unknown>` because the bridge is route-agnostic and
+   * no runtime narrowing is possible here — the producer (ollie-assist) is
+   * responsible for supplying values that match the destination route's
+   * search schema. Structured values are single-stringified by the router so
+   * `use-query-params`' `JsonParam` round-trips correctly.
+   */
+  const navigateRef = useLatestRef(
+    (path: string, search?: Record<string, unknown>) => {
+      const ws = contextRef.current.workspaceName;
+      const fullPath = ws ? `/${ws}${path}` : path;
+      router.navigate({ to: fullPath, search });
+    },
+  );
 
   const bridgeRef = useRef(
     createBridge({
@@ -240,20 +416,31 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       onWidthChange: onWidthChangeRef,
       onNotification: onNotificationRef,
       onRequestVisibility: onRequestVisibilityRef,
+      onRequestPair: onRequestPairRef,
       context: contextRef,
       listeners: listenersRef,
+      lastRunnerState: lastRunnerStateRef,
     }),
   );
 
-  // Expose bridge and meta on window for iframe access
+  // Expose bridge and meta on window for iframe access.
+  // Guard the cleanup: when another AssistantSidebar instance mounts (e.g.
+  // switching between sidebar and page surface), it overwrites these globals
+  // with its own bridge/meta. A later unmount of the previous instance must
+  // NOT clobber the new values — only clear if the global still matches ours.
   useEffect(() => {
-    window.opikBridge = bridgeRef.current;
+    const bridge = bridgeRef.current;
+    window.opikBridge = bridge;
     if (meta) {
       window.__opikAssistantMeta__ = meta;
     }
     return () => {
-      delete window.opikBridge;
-      delete window.__opikAssistantMeta__;
+      if (window.opikBridge === bridge) {
+        delete window.opikBridge;
+      }
+      if (meta && window.__opikAssistantMeta__ === meta) {
+        delete window.__opikAssistantMeta__;
+      }
     };
   }, [meta]);
 
@@ -285,7 +472,41 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     }
   }, []);
 
-  if (!meta || !isBackendReady) return null;
+  // On the page surface, the iframe fills the whole main area, so clicks
+  // inside Ollie never bubble to the parent document. Detect the resulting
+  // window blur and synthesize the events Radix's DismissableLayer is
+  // waiting for, so any open popover/select/dropdown closes. Different
+  // Radix versions listen on `pointerdown` and/or `mousedown`; dispatch both.
+  useEffect(() => {
+    if (surface !== "page") return;
+    const handleBlur = () => {
+      // Only dismiss when focus actually moved INTO our iframe (skip
+      // tab/window switches).
+      if (document.activeElement !== iframeRef.current) return;
+      document.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, composed: true }),
+      );
+      document.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, composed: true }),
+      );
+    };
+    window.addEventListener("blur", handleBlur);
+    return () => window.removeEventListener("blur", handleBlur);
+  }, [surface]);
+
+  if (!meta || !isBackendReady) {
+    if (phase === "disabled") return null;
+    const effectivePhase = isBackendReady && !meta ? "manifest" : phase;
+    return (
+      <AssistantSidebarLoader
+        phase={effectivePhase}
+        error={error}
+        onWidthChange={onWidthChange}
+        onRetry={retry}
+        retryCount={retryCount}
+      />
+    );
+  }
 
   return (
     <iframe

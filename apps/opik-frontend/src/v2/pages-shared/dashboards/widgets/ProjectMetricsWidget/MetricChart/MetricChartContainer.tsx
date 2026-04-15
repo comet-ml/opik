@@ -21,6 +21,7 @@ import NoData from "@/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { COLOR_VARIANTS_MAP } from "@/constants/colorVariants";
 import { Filter } from "@/types/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
@@ -57,6 +58,12 @@ interface MetricContainerChartProps {
   getLabelAction?: (label: string) => LegendLabelAction | undefined;
   isAggregateTotal?: boolean;
   customEmptyState?: React.ReactNode;
+  customLoadingState?: React.ReactNode;
+  logsSource?: LOGS_SOURCE;
+  showLegend?: boolean;
+  colorMap?: Record<string, string>;
+  tooltipPosition?: { x?: number; y?: number };
+  targetTickCount?: number;
 }
 
 const customColorMap = {
@@ -98,6 +105,12 @@ const MetricContainerChart = ({
   getLabelAction,
   isAggregateTotal = false,
   customEmptyState,
+  customLoadingState,
+  logsSource,
+  showLegend = true,
+  colorMap,
+  tooltipPosition,
+  targetTickCount,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -110,6 +123,7 @@ const MetricContainerChart = ({
       threadFilters,
       spanFilters,
       breakdown,
+      logsSource,
     },
     {
       enabled: !!projectId,
@@ -168,10 +182,12 @@ const MetricContainerChart = ({
     if (isPending) return false;
     if (data.length === 0) return true;
 
-    return data.every((record) => lines.every((line) => isNil(record[line])));
+    return data.every((record) =>
+      lines.every((line) => isNil(record[line]) || record[line] === 0),
+    );
   }, [data, lines, isPending]);
 
-  const config = useChartConfig(lines, labelsMap, customColorMap);
+  const config = useChartConfig(lines, labelsMap, colorMap ?? customColorMap);
 
   const labelActions = useMemo(() => {
     if (!getLabelAction) return undefined;
@@ -190,26 +206,39 @@ const MetricContainerChart = ({
 
   const CHART = METRIC_CHART_TYPE[chartType];
 
-  const chartContent = noData ? (
-    customEmptyState || (
-      <NoData
-        className="h-[var(--chart-height)] min-h-32 text-light-slate"
-        message="No data to show"
+  const getChartContent = () => {
+    if (isPending && customLoadingState) return customLoadingState;
+
+    if (noData) {
+      return (
+        customEmptyState || (
+          <NoData
+            className="h-[var(--chart-height)] min-h-32 text-light-slate"
+            message="No data to show"
+          />
+        )
+      );
+    }
+
+    return (
+      <CHART
+        config={config}
+        interval={interval}
+        renderValue={renderValue}
+        customYTickFormatter={customYTickFormatter}
+        chartId={chartId}
+        isPending={isPending}
+        data={data}
+        labelActions={labelActions}
+        isAggregateTotal={isAggregateTotal}
+        showLegend={showLegend}
+        tooltipPosition={tooltipPosition}
+        targetTickCount={targetTickCount}
       />
-    )
-  ) : (
-    <CHART
-      config={config}
-      interval={interval}
-      renderValue={renderValue}
-      customYTickFormatter={customYTickFormatter}
-      chartId={chartId}
-      isPending={isPending}
-      data={data}
-      labelActions={labelActions}
-      isAggregateTotal={isAggregateTotal}
-    />
-  );
+    );
+  };
+
+  const chartContent = getChartContent();
 
   if (chartOnly) return chartContent;
 

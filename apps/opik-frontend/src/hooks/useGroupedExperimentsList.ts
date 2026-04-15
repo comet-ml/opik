@@ -417,6 +417,7 @@ export default function useGroupedExperimentsList(
   } = useDatasetsList(
     {
       workspaceName: params.workspaceName,
+      ...(projectId && { projectId }),
       page: 1,
       size: MAX_ENTITIES_FOR_SORTING,
       withExperimentsOnly: true,
@@ -546,7 +547,10 @@ export default function useGroupedExperimentsList(
         promptId: params.promptId,
         types: params.types,
         // Don't send projectId if it's an orphan project, use projectDeleted flag instead
-        projectId: isOrphanProject ? undefined : projectIdValue,
+        // Fall back to params.projectId (page context) when no project filter or group metadata
+        projectId: isOrphanProject
+          ? undefined
+          : projectIdValue ?? params.projectId,
         projectDeleted: isOrphanProject || undefined,
         page: 1,
         size: extractPageSize(id, params.groupLimit),

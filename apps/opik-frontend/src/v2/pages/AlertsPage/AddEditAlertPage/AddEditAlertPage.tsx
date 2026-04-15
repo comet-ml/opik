@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect } from "react";
 import { useParams } from "@tanstack/react-router";
 import Loader from "@/shared/Loader/Loader";
 import useAlertById from "@/api/alerts/useAlertById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import AlertForm from "./AlertForm";
-import { useProjectsSelectData } from "@/v2/pages-shared/automations/ProjectsSelectBox";
 
 const AddEditAlertPage: React.FunctionComponent = () => {
   const { alertId } = useParams({ strict: false });
@@ -17,23 +16,17 @@ const AddEditAlertPage: React.FunctionComponent = () => {
     { enabled: isEdit },
   );
 
-  const { projects, isLoading } = useProjectsSelectData({});
-
   useEffect(() => {
     if (isEdit && alert?.name) {
       setBreadcrumbParam("alertId", alertId!, alert.name);
     }
   }, [isEdit, alertId, alert?.name, setBreadcrumbParam]);
 
-  const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
-
-  if ((isEdit && isPending) || isLoading) {
+  if (isEdit && isPending) {
     return <Loader />;
   }
 
-  return (
-    <AlertForm alert={isEdit ? alert : undefined} projectsIds={projectIds} />
-  );
+  return <AlertForm alert={isEdit ? alert : undefined} />;
 };
 
 export default AddEditAlertPage;

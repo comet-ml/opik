@@ -20,6 +20,7 @@ import { Filter } from "@/types/filters";
 import { isFilterValid, createFilter } from "@/lib/filters";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
 import { LOGS_TYPE } from "@/constants/traces";
+import { LOGS_SOURCE } from "@/types/traces";
 import useAppStore from "@/store/AppStore";
 import { CHART_TYPE } from "@/constants/chart";
 import {
@@ -448,6 +449,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}
           spanFilters={validSpanFilters}
+          logsSource={LOGS_SOURCE.sdk}
           filterLineCallback={filterLineCallback}
           breakdown={effectiveBreakdown}
           getLabelAction={effectiveBreakdown ? getLabelAction : undefined}

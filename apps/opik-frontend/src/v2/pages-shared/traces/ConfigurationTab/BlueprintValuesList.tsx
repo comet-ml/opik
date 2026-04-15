@@ -1,48 +1,73 @@
-import React from "react";
+import React, { useMemo } from "react";
 
 import { BlueprintValue, BlueprintValueType } from "@/types/agent-configs";
 import { formatBlueprintValue } from "@/utils/agent-configurations";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "./BlueprintTypeIcon";
-import BlueprintValuePrompt from "./BlueprintValuePrompt";
+import BlueprintValuePromptCompact from "@/v2/pages-shared/agent-configuration/fields/BlueprintValuePromptCompact";
+import FieldSection from "@/v2/pages-shared/agent-configuration/fields/FieldSection";
+import CollapsibleBlock from "@/v2/pages-shared/agent-configuration/fields/CollapsibleBlock";
+import {
+  collectMultiLineKeys,
+  isMultiLineField,
+} from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
+import {
+  FieldsCollapseController,
+  useFieldsCollapse,
+} from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 
-const renderValue = (v: BlueprintValue) => {
-  if (v.type === BlueprintValueType.PROMPT) {
-    return <BlueprintValuePrompt key={v.value} value={v} />;
-  }
-
-  return (
-    <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
-      {formatBlueprintValue(v)}
-    </div>
-  );
-};
+const renderScalarValue = (v: BlueprintValue) => (
+  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+    {formatBlueprintValue(v)}
+  </div>
+);
 
 type BlueprintValuesListProps = {
   values: BlueprintValue[];
+  controller?: FieldsCollapseController;
 };
 
 const BlueprintValuesList: React.FC<BlueprintValuesListProps> = ({
   values,
-}) => (
-  <div className="flex flex-col divide-y">
-    {values.map((v) => (
-      <div key={v.key} className="flex flex-col gap-2 py-4">
-        <div className="flex items-center gap-2">
-          <BlueprintTypeIcon type={v.type} />
-          <span className="comet-body-s-accented text-foreground">{v.key}</span>
-        </div>
-        {v.description && (
-          <TooltipWrapper content={v.description}>
-            <span className="comet-body-xs w-fit max-w-full truncate text-light-slate">
-              {v.description}
-            </span>
-          </TooltipWrapper>
-        )}
-        <div className="overflow-hidden">{renderValue(v)}</div>
-      </div>
-    ))}
-  </div>
-);
+  controller: externalController,
+}) => {
+  const collapsibleKeys = useMemo(() => collectMultiLineKeys(values), [values]);
+  const internalController = useFieldsCollapse({ collapsibleKeys });
+  const controller = externalController ?? internalController;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {values.map((v) => {
+        const isPrompt = v.type === BlueprintValueType.PROMPT;
+        const collapsible = !isPrompt && isMultiLineField(v);
+        return (
+          <FieldSection
+            key={v.key}
+            label={v.key}
+            description={v.description}
+            icon={<BlueprintTypeIcon type={v.type} />}
+            testId={`field-section-${v.key}`}
+          >
+            {isPrompt ? (
+              <BlueprintValuePromptCompact
+                key={v.value}
+                value={v}
+                controller={controller}
+              />
+            ) : (
+              <CollapsibleBlock
+                collapsible={collapsible}
+                expanded={controller.isExpanded(v.key)}
+                onToggle={() => controller.toggle(v.key)}
+                testId={`field-block-${v.key}`}
+              >
+                {renderScalarValue(v)}
+              </CollapsibleBlock>
+            )}
+          </FieldSection>
+        );
+      })}
+    </div>
+  );
+};
 
 export default BlueprintValuesList;

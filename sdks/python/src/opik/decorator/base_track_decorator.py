@@ -551,7 +551,7 @@ class BaseTrackDecorator(abc.ABC):
         else:
             end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
 
-        client = opik_client.get_client_cached()
+        client = opik_client.get_global_client()
 
         if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
@@ -654,6 +654,8 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
         "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
     )
 
+    context_storage.release_context_project_name_if_owner(span_data_to_end.id)
+
     trace_data_to_end = pop_end_candidate_trace_data()
     return span_data_to_end, trace_data_to_end
 
@@ -680,11 +682,33 @@ def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
         and possible_trace_data_to_end is not None
         and possible_trace_data_to_end.id in TRACES_CREATED_BY_DECORATOR
     ):
-        trace_data_to_end = context_storage.pop_trace_data()
+        trace_data_to_end = context_storage.pop_trace_data(
+            ensure_id=possible_trace_data_to_end.id
+        )
         TRACES_CREATED_BY_DECORATOR.discard(possible_trace_data_to_end.id)
+        context_storage.release_context_project_name_if_owner(
+            possible_trace_data_to_end.id
+        )
         return trace_data_to_end
 
     return None
+
+
+def _try_acquire_project_name(
+    span_creation_result: span_creation_handler.SpanCreationResult,
+) -> None:
+    if span_creation_result.should_process_span_data:
+        span_data = span_creation_result.span_data
+        if span_data.project_name is not None:
+            context_storage.try_acquire_context_project_name(
+                span_data.project_name, span_data.id
+            )
+    elif span_creation_result.trace_data is not None:
+        trace_data = span_creation_result.trace_data
+        if trace_data.project_name is not None:
+            context_storage.try_acquire_context_project_name(
+                trace_data.project_name, trace_data.id
+            )
 
 
 def add_start_candidates(
@@ -730,7 +754,7 @@ def add_start_candidates(
         context_storage.add_span_data(span_creation_result.span_data)
 
         if tracing_active:
-            client = opik_client.get_client_cached()
+            client = opik_client.get_global_client()
 
             if client.config.log_start_trace_span:
                 client.__internal_api__span__(
@@ -749,6 +773,8 @@ def add_start_candidates(
             opik_args_data=opik_args_data,
             tracing_active=tracing_active,
         )
+
+    _try_acquire_project_name(span_creation_result)
 
     return span_creation_result
 
@@ -784,7 +810,7 @@ def add_start_trace_candidate(
     if not tracing_active:
         return
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     if client.config.log_start_trace_span:
         client.__internal_api__trace__(**trace_data.as_start_parameters)
 

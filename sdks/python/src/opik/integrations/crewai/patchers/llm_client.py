@@ -6,7 +6,7 @@ Each provider has its own patching function that handles missing dependencies gr
 """
 
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING, Protocol
 
 import crewai
 
@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     import crewai.llms.providers.bedrock.completion as bedrock_completion
 
 LOGGER = logging.getLogger(__name__)
+
+
+class LLMPatcher(Protocol):
+    def __call__(self, client: Any, /, project_name: Optional[str] = None) -> Any: ...
 
 
 def patch_llm_client(crew: crewai.Crew, project_name: Optional[str]) -> None:
@@ -140,8 +144,10 @@ def _patch_openai_client(
     try:
         import opik.integrations.openai
 
-        llm.client = opik.integrations.openai.track_openai(
-            llm.client, project_name=project_name
+        _patch_client_attribute(
+            llm=llm,
+            project_name=project_name,
+            patcher=opik.integrations.openai.track_openai,
         )
     except Exception:
         LOGGER.warning("Failed to track OpenAI client for LLM", exc_info=True)
@@ -160,8 +166,10 @@ def _patch_anthropic_client(
     try:
         import opik.integrations.anthropic
 
-        llm.client = opik.integrations.anthropic.track_anthropic(
-            llm.client, project_name=project_name
+        _patch_client_attribute(
+            llm=llm,
+            project_name=project_name,
+            patcher=opik.integrations.anthropic.track_anthropic,
         )
     except Exception:
         LOGGER.warning("Failed to track Anthropic client for LLM", exc_info=True)
@@ -180,8 +188,10 @@ def _patch_gemini_client(
     try:
         import opik.integrations.genai
 
-        llm.client = opik.integrations.genai.track_genai(
-            llm.client, project_name=project_name
+        _patch_client_attribute(
+            llm=llm,
+            project_name=project_name,
+            patcher=opik.integrations.genai.track_genai,
         )
     except Exception:
         LOGGER.warning("Failed to track Gemini client for LLM", exc_info=True)
@@ -200,8 +210,26 @@ def _patch_bedrock_client(
     try:
         import opik.integrations.bedrock
 
-        llm.client = opik.integrations.bedrock.track_bedrock(
-            llm.client, project_name=project_name
+        _patch_client_attribute(
+            llm=llm,
+            project_name=project_name,
+            patcher=opik.integrations.bedrock.track_bedrock,
         )
     except Exception:
         LOGGER.warning("Failed to track Bedrock client for LLM", exc_info=True)
+
+
+def _get_client_attribute_name(llm: Any) -> str:
+    # CrewAI >= 1.13.0 converted LLM classes to Pydantic BaseModel,
+    # moving the SDK client from a public `client` attribute to a
+    # Pydantic PrivateAttr `_client`.
+    return "_client" if hasattr(llm, "_client") else "client"
+
+
+def _patch_client_attribute(
+    llm: Any, project_name: Optional[str], patcher: LLMPatcher
+) -> None:
+    client_attribute = _get_client_attribute_name(llm)
+    client = getattr(llm, client_attribute)
+    patched_client = patcher(client, project_name=project_name)
+    setattr(llm, client_attribute, patched_client)

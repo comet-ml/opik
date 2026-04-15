@@ -14,6 +14,13 @@ export const ProjectMetricResponsePublicMetricType = {
     SpanCount: "SPAN_COUNT",
     SpanDuration: "SPAN_DURATION",
     SpanTokenUsage: "SPAN_TOKEN_USAGE",
+    TraceAverageDuration: "TRACE_AVERAGE_DURATION",
+    TraceErrorRate: "TRACE_ERROR_RATE",
+    SpanAverageDuration: "SPAN_AVERAGE_DURATION",
+    SpanCost: "SPAN_COST",
+    SpanErrorRate: "SPAN_ERROR_RATE",
+    ThreadAverageDuration: "THREAD_AVERAGE_DURATION",
+    ThreadCost: "THREAD_COST",
 } as const;
 export type ProjectMetricResponsePublicMetricType =
     (typeof ProjectMetricResponsePublicMetricType)[keyof typeof ProjectMetricResponsePublicMetricType];

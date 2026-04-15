@@ -38,6 +38,7 @@ from ..types.trace_update_source import TraceUpdateSource
 from ..types.trace_write import TraceWrite
 from ..types.trace_write_source import TraceWriteSource
 from ..types.value_entry import ValueEntry
+from .types.trace_search_stream_request_public_exclude_item import TraceSearchStreamRequestPublicExcludeItem
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -1833,6 +1834,7 @@ class RawTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        exclude: typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]] = OMIT,
         from_time: typing.Optional[dt.datetime] = OMIT,
         to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1858,6 +1860,9 @@ class RawTracesClient:
 
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        exclude : typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]]
+            Fields to exclude from the response
 
         from_time : typing.Optional[dt.datetime]
             Filter traces created from this time (ISO-8601 format).
@@ -1886,6 +1891,7 @@ class RawTracesClient:
                 "limit": limit,
                 "truncate": truncate,
                 "strip_attachments": strip_attachments,
+                "exclude": exclude,
                 "from_time": from_time,
                 "to_time": to_time,
             },
@@ -3937,6 +3943,7 @@ class AsyncRawTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        exclude: typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]] = OMIT,
         from_time: typing.Optional[dt.datetime] = OMIT,
         to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3962,6 +3969,9 @@ class AsyncRawTracesClient:
 
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        exclude : typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]]
+            Fields to exclude from the response
 
         from_time : typing.Optional[dt.datetime]
             Filter traces created from this time (ISO-8601 format).
@@ -3990,6 +4000,7 @@ class AsyncRawTracesClient:
                 "limit": limit,
                 "truncate": truncate,
                 "strip_attachments": strip_attachments,
+                "exclude": exclude,
                 "from_time": from_time,
                 "to_time": to_time,
             },

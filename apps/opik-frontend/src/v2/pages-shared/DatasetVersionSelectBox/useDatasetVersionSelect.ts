@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import { Dataset, DatasetVersion } from "@/types/datasets";
 import toLower from "lodash/toLower";
@@ -9,7 +9,7 @@ export const DEFAULT_LOADED_DATASETS = 1000;
 const MAX_LOADED_DATASETS = 10000;
 
 interface UseDatasetVersionSelectParams {
-  workspaceName: string;
+  projectId?: string | null;
   search: string;
   openDatasetId: string | null;
 }
@@ -26,21 +26,23 @@ export interface UseDatasetVersionSelectReturn {
 }
 
 export default function useDatasetVersionSelect({
-  workspaceName,
+  projectId,
   search,
   openDatasetId,
 }: UseDatasetVersionSelectParams): UseDatasetVersionSelectReturn {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
-  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
-    {
-      workspaceName,
-      page: 1,
-      size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
+  const { data: datasetsData, isLoading: isLoadingDatasets } =
+    useProjectDatasetsList(
+      {
+        projectId: projectId!,
+        page: 1,
+        size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
+      },
+      {
+        placeholderData: keepPreviousData,
+        enabled: !!projectId,
+      },
+    );
 
   const datasets = useMemo(
     () => datasetsData?.content || [],

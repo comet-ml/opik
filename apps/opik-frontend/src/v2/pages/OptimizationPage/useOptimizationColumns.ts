@@ -26,7 +26,7 @@ type UseOptimizationColumnsParams = {
   sortableBy: string[];
   bestCandidateId?: string;
   baselineCandidate?: AggregatedCandidate;
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
   isInProgress?: boolean;
   inProgressInfo?: {
     candidateId: string;
@@ -43,7 +43,7 @@ export const useOptimizationColumns = ({
   sortableBy,
   bestCandidateId,
   baselineCandidate,
-  isEvaluationSuite,
+  isTestSuite,
   isInProgress,
   inProgressInfo,
   objectiveName,
@@ -72,14 +72,14 @@ export const useOptimizationColumns = ({
       },
       {
         id: "objective_name",
-        label: getObjectiveLabel(isEvaluationSuite, objectiveName),
+        label: getObjectiveLabel(isTestSuite, objectiveName),
         type: COLUMN_TYPE.numberDictionary,
         size: 160,
         accessorFn: (row) => row.score,
         cell: TrialAccuracyCell as never,
         customMeta: {
           baselineCandidate,
-          isEvaluationSuite,
+          isTestSuite,
         },
       },
       {
@@ -121,7 +121,7 @@ export const useOptimizationColumns = ({
         customMeta: {
           candidates,
           bestCandidateId,
-          isEvaluationSuite,
+          isTestSuite,
           isInProgress,
           inProgressInfo,
         },
@@ -140,7 +140,7 @@ export const useOptimizationColumns = ({
     candidates,
     bestCandidateId,
     baselineCandidate,
-    isEvaluationSuite,
+    isTestSuite,
     isInProgress,
     inProgressInfo,
     objectiveName,

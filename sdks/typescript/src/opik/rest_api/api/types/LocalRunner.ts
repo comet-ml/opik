@@ -9,4 +9,7 @@ export interface LocalRunner {
     status?: OpikApi.LocalRunnerStatus;
     connectedAt?: Date;
     agents?: OpikApi.Agent[];
+    capabilities?: string[];
+    checklist?: OpikApi.JsonNode;
+    type?: OpikApi.LocalRunnerType;
 }

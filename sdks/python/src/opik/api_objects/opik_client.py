@@ -1,4 +1,5 @@
 import atexit
+import contextvars
 import datetime
 import functools
 import logging
@@ -11,6 +12,7 @@ from typing import (
     Union,
     Literal,
     cast,
+    overload,
 )
 
 import httpx
@@ -35,7 +37,7 @@ from .annotation_queue import rest_operations as annotation_queue_rest_operation
 from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
-from .dataset import evaluation_suite
+from .dataset import test_suite
 from .dataset import execution_policy as dataset_execution_policy
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import experiments_client
@@ -43,8 +45,8 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
-from .agent_config.base import AgentConfig
-from .agent_config.config import AgentConfigManager
+from .agent_config.base import Config
+from .agent_config.config import ConfigManager
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
 from .. import config as opik_config
@@ -70,7 +72,6 @@ from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
-    dataset_public,
     project_public,
     span_public,
     trace_public,
@@ -86,12 +87,13 @@ from ..types import (
     SpanType,
     TraceSource,
 )
+from .. import context_storage
 from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-_AgentConfigT = TypeVar("_AgentConfigT", bound=AgentConfig)
+_ConfigT = TypeVar("_ConfigT", bound=Config)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
 
@@ -102,6 +104,7 @@ class Opik:
         workspace: Optional[str] = None,
         host: Optional[str] = None,
         api_key: Optional[str] = None,
+        batching: bool = True,
         _use_batching: bool = False,
         _show_misconfiguration_message: bool = True,
     ) -> None:
@@ -109,12 +112,16 @@ class Opik:
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
 
         Args:
-            project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
             api_key: The API key for Opik. This parameter is ignored for local installations.
-            _use_batching: intended for internal usage in specific conditions only.
-                Enabling it is unsafe and can lead to data loss.
+            batching: If True (default), enables request batching for higher throughput.
+                When enabled, update operations (``update_span``, ``update_trace``,
+                ``Span.update``, ``Trace.update``) may cause data loss if the update
+                arrives at the server before the batched create request is flushed.
+            _use_batching: Deprecated. Use ``batching`` instead.
             _show_misconfiguration_message: intended for internal usage in specific conditions only.
                 Print a warning message if the Opik server is not configured properly.
         Returns:
@@ -137,10 +144,10 @@ class Opik:
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
         self._project_name_most_recent_trace: Optional[str] = None
-        self._use_batching = _use_batching
+        self._use_batching = batching or _use_batching
 
         self._initialize_streamer(
-            use_batching=_use_batching,
+            use_batching=self._use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
@@ -308,8 +315,8 @@ class Opik:
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
             feedback_scores: The list of feedback score dicts associated with the trace. Dicts don't require to have an `id` value.
-            project_name: The name of the project. If not set, the project name which was configured when Opik instance
-                was created will be used.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the client's default.
             error_info: The dictionary with error information (typically used when the trace function has failed).
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
@@ -359,8 +366,7 @@ class Opik:
         )
         last_updated_at = datetime_helpers.local_timestamp()
 
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
@@ -406,6 +412,7 @@ class Opik:
             project_name=project_name,
             url_override=self._config.url_override,
             source=source,
+            config=self._config,
         )
 
     def copy_traces(
@@ -436,7 +443,7 @@ class Opik:
 
         if not self._use_batching:
             raise exceptions.OpikException(
-                "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
+                "In order to use this method, you must enable batching using opik.Opik(batching=True)."
             )
 
         traces_public = self.search_traces(project_name=project_name)
@@ -513,8 +520,8 @@ class Opik:
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require having an `id` value.
-            project_name: The name of the project. If not set, the project name which was configured when the Opik instance
-                was created will be used.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the client's default.
             usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
                 the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens, and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
@@ -581,8 +588,7 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         if trace_id is None:
             trace_id = id_helpers.generate_id()
@@ -635,6 +641,7 @@ class Opik:
             total_cost=total_cost,
             attachments=attachments,
             source=source,
+            config=self._config,
         )
 
     def update_span(
@@ -698,6 +705,12 @@ class Opik:
         Returns:
             None
         """
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_span()",
+        )
+
         span_module.span_client.update_span(
             id=id,
             trace_id=trace_id,
@@ -762,6 +775,12 @@ class Opik:
         Returns:
             None
         """
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_trace()",
+        )
+
         if not trace_id or not project_name:
             raise ValueError(
                 "trace_id and project_name must be provided and can not be None or empty, "
@@ -791,8 +810,8 @@ class Opik:
         Args:
             scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the spans are logged. If not set, the project name
-                which was configured when the Opik instance was created will be used.
+            project_name: The name of the project in which the spans are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
                 Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
@@ -810,7 +829,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self.project_name,
+            project_name=self._resolve_project_name(project_name),
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -840,8 +859,8 @@ class Opik:
         Args:
             scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the traces are logged. If not set, the project name
-                which was configured when the Opik instance was created will be used.
+            project_name: The name of the project in which the traces are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
                 Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
@@ -859,7 +878,7 @@ class Opik:
         """
         score_messages = helpers.parse_feedback_score_messages(
             scores=scores,
-            project_name=project_name or self.project_name,
+            project_name=self._resolve_project_name(project_name),
             parsed_item_class=messages.FeedbackScoreMessage,
             logger=LOGGER,
         )
@@ -890,8 +909,8 @@ class Opik:
         Args:
             scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a thread id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the threads are logged. If not set, the project name
-                which was configured when the Opik instance was created will be used.
+            project_name: The name of the project in which the threads are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
                 Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
@@ -921,8 +940,8 @@ class Opik:
         """Search for threads in a given project based on specific criteria.
 
         Args:
-            project_name: The name of the project to search the threads for. If not provided,
-                the project name configured when the Client was created will be used.
+            project_name: The name of the project to search the threads for. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: `"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"`
 
@@ -1010,29 +1029,22 @@ class Opik:
 
         Args:
             name: The name of the dataset
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: dataset object associated with the name passed.
         """
         project_name = self._resolve_project_name(project_name)
-        dataset_fern: dataset_public.DatasetPublic = (
-            self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=name, project_name=project_name
-            )
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name, project_name=project_name
         )
 
-        dataset_ = dataset.Dataset(
-            name=name,
-            description=dataset_fern.description,
+        return dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
-            dataset_items_count=dataset_fern.dataset_items_count,
+            client=self,
         )
-
-        dataset_.__internal_api__sync_hashes__()
-
-        return dataset_
 
     def get_datasets(
         self,
@@ -1044,7 +1056,7 @@ class Opik:
         Returns all datasets up to the specified limit.
 
         Args:
-            project_name: The name of the project to which the datasets belong. If None, uses the default project name.
+            project_name: The name of the project to which the datasets belong. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: The maximum number of datasets to return.
             sync_items: Whether to sync the hashes of the dataset items. This is used to deduplicate items when fetching the dataset but it can be an expensive operation.
 
@@ -1072,7 +1084,7 @@ class Opik:
         Args:
             dataset_name: The name of the dataset
             max_results: The maximum number of experiments to return.
-            project_name: The name of the project to which the datasets belong. If None, uses the default project name.
+            project_name: The name of the project to which the datasets belong. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             List[experiment.Experiment]: A list of experiment objects.
@@ -1099,7 +1111,7 @@ class Opik:
 
         Args:
             name: The name of the dataset
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
         """
         project_name = self._resolve_project_name(project_name)
         self._rest_client.datasets.delete_dataset_by_name(
@@ -1118,7 +1130,7 @@ class Opik:
         Args:
             name: The name of the dataset.
             description: An optional description of the dataset.
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: The created dataset object.
@@ -1136,6 +1148,7 @@ class Opik:
             project_name=project_name,
             rest_client=self._rest_client,
             dataset_items_count=0,
+            client=self,
         )
 
         self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
@@ -1154,7 +1167,7 @@ class Opik:
         Args:
             name: The name of the dataset.
             description: An optional description of the dataset.
-            project_name: The name of the project to which the dataset belongs. If None, uses the default project name.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: The dataset object.
@@ -1168,69 +1181,72 @@ class Opik:
                 )
             raise
 
-    def create_evaluation_suite(
+    def create_test_suite(
         self,
         name: str,
         description: Optional[str] = None,
-        assertions: Optional[List[str]] = None,
-        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        global_assertions: Optional[List[str]] = None,
+        global_execution_policy: Optional[
+            dataset_execution_policy.ExecutionPolicy
+        ] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-    ) -> evaluation_suite.EvaluationSuite:
+    ) -> test_suite.TestSuite:
         """
-        Create a new evaluation suite for regression testing.
+        Create a new test suite for regression testing.
 
-        Evaluation suites are pre-configured test suites that let you validate
+        Test suites are pre-configured test suites that let you validate
         that prompt changes, model updates, or code modifications don't break
         existing functionality.
 
         Args:
-            name: The name of the evaluation suite.
+            name: The name of the test suite.
             description: Optional description of what this suite tests.
-            assertions: Suite-level assertions. Each string describes an
-                expected behavior that will be checked by an LLM.
-            execution_policy: Suite-level execution policy.
+            global_assertions: Suite-level assertions applied to all items.
+                Each string describes an expected behavior that will be
+                checked by an LLM.
+            global_execution_policy: Suite-level execution policy.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
             tags: Optional list of tags for the suite.
             project_name: Optional name of the project to associate the suite with.
 
         Returns:
-            EvaluationSuite: The created evaluation suite object.
+            TestSuite: The created test suite object.
 
         Example:
-            >>> suite = client.create_evaluation_suite(
+            >>> suite = client.create_test_suite(
             ...     name="Refund Policy Tests",
             ...     description="Regression tests for refund scenarios",
             ...     project_name="custom-project",
-            ...     assertions=[
+            ...     global_assertions=[
             ...         "No hallucinated information",
             ...         "Response is helpful",
             ...     ],
             ... )
             >>>
-            >>> suite.add_item(
-            ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
-            ... )
+            >>> suite.insert([
+            ...     {"data": {"user_input": "How do I get a refund?", "user_tier": "premium"}},
+            ... ])
             >>>
             >>> results = suite.run(task=my_llm_function)
         """
         from .dataset import validators, rest_operations
 
-        if execution_policy is not None:
-            validators.validate_execution_policy(execution_policy)
+        if global_execution_policy is not None:
+            validators.validate_execution_policy(global_execution_policy)
 
         evaluators = validators.resolve_evaluators(
-            assertions, None, "suite-level assertions"
+            global_assertions, None, "suite-level assertions"
         )
 
         project_name = self._resolve_project_name(project_name)
-        rest_operations.create_evaluation_suite_dataset(
+        rest_operations.create_test_suite_dataset(
             rest_client=self._rest_client,
             dataset_name=name,
             project_name=project_name,
             description=description,
             evaluators=evaluators,
-            exec_policy=execution_policy,
+            exec_policy=global_execution_policy,
             tags=tags,
         )
         suite_dataset = dataset.Dataset(
@@ -1239,113 +1255,168 @@ class Opik:
             project_name=project_name,
             rest_client=self._rest_client,
             dataset_items_count=0,
+            client=self,
         )
 
-        return evaluation_suite.EvaluationSuite(
+        return test_suite.TestSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
-    def get_evaluation_suite(
+    def get_test_suite(
         self, name: str, project_name: Optional[str] = None
-    ) -> evaluation_suite.EvaluationSuite:
+    ) -> test_suite.TestSuite:
         """
-        Get an existing evaluation suite by name.
+        Get an existing test suite by name.
 
         Retrieves the dataset and its version-level assertions and execution
-        policy from the backend, returning a fully configured EvaluationSuite.
+        policy from the backend, returning a fully configured TestSuite.
 
         Args:
-            name: The name of the evaluation suite.
+            name: The name of the test suite.
             project_name: Optional name of the project the suite is associated with.
 
         Returns:
-            EvaluationSuite: The evaluation suite object.
+            TestSuite: The test suite object.
 
         Raises:
             ApiError: If no dataset with the given name exists (404).
         """
         project_name = self._resolve_project_name(project_name)
-        dataset_fern: dataset_public.DatasetPublic = (
-            self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=name,
-                project_name=project_name,
-            )
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name,
+            project_name=project_name,
         )
 
-        suite_dataset = dataset.Dataset(
-            name=name,
-            description=dataset_fern.description,
+        suite_dataset = dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
-            dataset_items_count=dataset_fern.dataset_items_count,
+            client=self,
         )
 
-        suite_dataset.__internal_api__sync_hashes__()
-
-        return evaluation_suite.EvaluationSuite(
+        return test_suite.TestSuite(
             name=name,
             dataset_=suite_dataset,
+            client=self,
         )
 
-    def get_or_create_evaluation_suite(
+    def get_or_create_test_suite(
         self,
         name: str,
         description: Optional[str] = None,
-        assertions: Optional[List[str]] = None,
-        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        global_assertions: Optional[List[str]] = None,
+        global_execution_policy: Optional[
+            dataset_execution_policy.ExecutionPolicy
+        ] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-    ) -> evaluation_suite.EvaluationSuite:
+    ) -> test_suite.TestSuite:
         """
-        Get an existing evaluation suite by name or create a new one if it does not exist.
+        Get an existing test suite by name or create a new one if it does not exist.
 
-        If the suite already exists and ``assertions``, ``execution_policy``,
-        or ``tags`` are provided, the suite is updated accordingly
-        (unspecified parameters retain their current values).
+        If the suite already exists it is returned as-is — the
+        ``global_assertions``, ``global_execution_policy``, ``description``,
+        and ``tags`` parameters are only used when creating a new suite.
+        To modify an existing suite, use :meth:`TestSuite.update` instead.
 
         Args:
-            name: The name of the evaluation suite.
+            name: The name of the test suite.
             description: Optional description (used only when creating).
-            assertions: Suite-level assertions. Each string describes an
-                expected behavior that will be checked by an LLM.
-            execution_policy: Execution policy for the suite.
-            tags: Optional list of tags for the suite.
+            global_assertions: Suite-level assertions (used only when creating).
+            global_execution_policy: Execution policy (used only when creating).
+            tags: Optional list of tags (used only when creating).
             project_name: Optional name of the project the suite is associated with.
 
         Returns:
-            EvaluationSuite: The evaluation suite object.
+            TestSuite: The test suite object.
         """
-        from .dataset import validators
-
-        if execution_policy is not None:
-            validators.validate_execution_policy(execution_policy)
-
         try:
-            suite = self.get_evaluation_suite(name, project_name=project_name)
+            return self.get_test_suite(name, project_name=project_name)
         except ApiError as e:
             if e.status_code == 404:
-                return self.create_evaluation_suite(
+                return self.create_test_suite(
                     name=name,
                     description=description,
-                    execution_policy=execution_policy,
-                    assertions=assertions,
+                    global_execution_policy=global_execution_policy,
+                    global_assertions=global_assertions,
                     tags=tags,
                     project_name=project_name,
                 )
             raise
 
-        has_updates = (
-            assertions is not None or execution_policy is not None or tags is not None
-        )
-        if has_updates:
-            suite.update(
-                assertions=assertions,
-                execution_policy=execution_policy,
-                tags=tags,
-            )
+    def delete_test_suite(self, name: str, project_name: Optional[str] = None) -> None:
+        """
+        Delete a test suite by name.
 
-        return suite
+        Args:
+            name: The name of the test suite.
+            project_name: The name of the project the suite belongs to.
+        """
+        project_name = self._resolve_project_name(project_name)
+        self._rest_client.datasets.delete_dataset_by_name(
+            dataset_name=name, project_name=project_name
+        )
+
+    def get_test_suites(
+        self,
+        max_results: int = 100,
+        project_name: Optional[str] = None,
+    ) -> List[test_suite.TestSuite]:
+        """
+        Returns all test suites up to the specified limit.
+
+        Only returns test suites, not regular datasets.
+
+        Args:
+            max_results: The maximum number of test suites to return.
+            project_name: The name of the project the suites belong to.
+
+        Returns:
+            List[TestSuite]: A list of test suite objects.
+        """
+        from .dataset import rest_operations
+
+        return rest_operations.get_test_suites(
+            project_name=self._resolve_project_name(project_name),
+            rest_client=self._rest_client,
+            max_results=max_results,
+            client=self,
+        )
+
+    def get_test_suite_experiments(
+        self,
+        name: str,
+        max_results: int = 100,
+        project_name: Optional[str] = None,
+    ) -> List[experiment.Experiment]:
+        """
+        Returns all experiments for a test suite.
+
+        Args:
+            name: The name of the test suite.
+            max_results: The maximum number of experiments to return.
+            project_name: The name of the project the suite belongs to.
+
+        Returns:
+            List[Experiment]: A list of experiment objects.
+        """
+        from .dataset import rest_operations as dataset_rest_operations
+
+        project_name = self._resolve_project_name(project_name)
+        dataset_id = dataset_rest_operations.get_dataset_id(
+            self._rest_client, dataset_name=name, project_name=project_name
+        )
+
+        experiments_client = self.get_experiments_client()
+        return dataset_rest_operations.get_dataset_experiments(
+            rest_client=self._rest_client,
+            dataset_id=dataset_id,
+            max_results=max_results,
+            streamer=self._streamer,
+            experiments_client=experiments_client,
+        )
 
     def create_experiment(
         self,
@@ -1466,7 +1537,7 @@ class Opik:
 
         Args:
             name: The name of the experiment.
-            project_name: The name of the project the experiment belongs to. If None, uses the default project name.
+            project_name: The name of the project the experiment belongs to. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             experiment.Experiment: the API object for an existing experiment.
@@ -1593,6 +1664,7 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[trace_public.TracePublic]:
@@ -1602,7 +1674,7 @@ class Opik:
         within the specified timeout, an exception will be raised.
 
         Args:
-            project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
+            project_name: The name of the project to search traces in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -1642,6 +1714,7 @@ class Opik:
                 If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: Fields to exclude from the response. For example, ["feedback_scores"]
             wait_for_at_least: The minimum number of traces to wait for before returning.
             wait_for_timeout: The timeout for waiting for traces.
 
@@ -1663,6 +1736,7 @@ class Opik:
             filters=filters_,
             max_results=max_results,
             truncate=truncate,
+            exclude=exclude,
         )
 
         if wait_for_at_least is None:
@@ -1689,6 +1763,7 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[span_public.SpanPublic]:
@@ -1699,7 +1774,7 @@ class Opik:
         within the specified timeout, an exception will be raised.
 
         Args:
-            project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
+            project_name: The name of the project to search spans in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
@@ -1740,6 +1815,7 @@ class Opik:
                 If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: List of fields to exclude from the response (e.g., ["feedback_scores", "input", "output"])
             wait_for_at_least: The minimum number of spans to wait for before returning.
             wait_for_timeout: The timeout for waiting for spans.
 
@@ -1761,6 +1837,7 @@ class Opik:
             filters=filters,
             max_results=max_results,
             truncate=truncate,
+            exclude=exclude,
         )
 
         if wait_for_at_least is None:
@@ -1833,7 +1910,7 @@ class Opik:
                 self._rest_client.check.get_workspace_name().workspace_name
             )
 
-        project_name = project_name or self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         return url_helpers.get_project_url_by_workspace(
             workspace=dereferenced_workspace, project_name=project_name
@@ -1868,6 +1945,45 @@ class Opik:
             rest_httpx_client=self._httpx_client,
         )
 
+    def queue_attachment_upload(
+        self,
+        entity_type: Literal["trace", "span"],
+        entity_id: str,
+        project_name: str,
+        file_path: str,
+        file_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> None:
+        """Queue a local file for background upload as an attachment via the streamer.
+
+        This method is non-blocking: the upload is handled by the background streamer
+        which provides parallelization, automatic retries, and monitoring. Call
+        :meth:`flush` to wait for all queued uploads to complete.
+
+        Parameters:
+            entity_type: The type of entity to attach the file to (``"trace"`` or ``"span"``).
+            entity_id: The ID of the trace or span to attach the file to.
+            project_name: The name of the project containing the entity.
+            file_path: Path to the local file to upload.
+            file_name: Name to assign the attachment. Defaults to the file's basename.
+            mime_type: MIME type of the file. Auto-detected from the file name if not provided.
+        """
+        attachment_data = Attachment(
+            data=file_path,
+            file_name=file_name,
+            content_type=mime_type,
+            create_temp_copy=False,
+        )
+        self._streamer.put(
+            attachment_converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                project_name=project_name,
+                url_override=self._config.url_override,
+            )
+        )
+
     def create_prompt(
         self,
         name: str,
@@ -1893,7 +2009,7 @@ class Opik:
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
-            project_name: Optional project name to associate with the prompt. If not provided, the default project will be used.
+            project_name: Optional project name to associate with the prompt. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -1980,7 +2096,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
-            project_name: The name of the project to retrieve the prompt from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
@@ -2018,7 +2134,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
-            project_name: The name of the project to retrieve the prompt from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
@@ -2055,7 +2171,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -2147,7 +2263,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -2235,7 +2351,7 @@ class Opik:
 
         Parameters:
             name: The name of the prompt.
-            project_name: The name of the project to retrieve the prompt history from. If not provided, the default project will be used.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             List[prompt_module.Prompt]: A list of Prompt instances for the given name.
@@ -2252,7 +2368,7 @@ class Opik:
         Retrieve the latest prompt versions (both string and chat prompts) for the given search parameters.
 
         Parameters:
-            project_name: The name of the project to search in. If not provided, the default project will be used.
+            project_name: The name of the project to search in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
                 The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
 
@@ -2322,8 +2438,11 @@ class Opik:
         name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         optimization_id: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> optimization.Optimization:
         id = optimization_id or id_helpers.generate_id()
+
+        project_name = self._resolve_project_name(project_name)
 
         self._rest_client.optimizations.create_optimization(
             id=id,
@@ -2332,10 +2451,11 @@ class Opik:
             objective_name=objective_name,
             status="running",
             metadata=metadata,
+            project_name=project_name,
         )
 
         optimization_client = optimization.Optimization(
-            id=id, rest_client=self._rest_client
+            id=id, rest_client=self._rest_client, project_name=project_name
         )
         return optimization_client
 
@@ -2343,7 +2463,19 @@ class Opik:
         self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
 
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
-        _ = self._rest_client.optimizations.get_optimization_by_id(id)
+        result = self._rest_client.optimizations.get_optimization_by_id(id)
+        try:
+            project = self.get_project(result.project_id)
+            return optimization.Optimization(
+                id=result.id,
+                rest_client=self._rest_client,
+                project_name=project.name,
+            )
+        except Exception as e:
+            LOGGER.warning(
+                f"Failed to get project for optimization with ID: {id}, reason: {e}"
+            )
+
         return optimization.Optimization(id=id, rest_client=self._rest_client)
 
     def get_experiments_client(self) -> experiments_client.ExperimentsClient:
@@ -2384,8 +2516,7 @@ class Opik:
         feedback_definition_names: Optional[List[str]],
     ) -> QueueT:
         """Helper method to create an annotation queue with the specified scope."""
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
 
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, project_name
@@ -2433,7 +2564,7 @@ class Opik:
 
         Args:
             name: The name of the annotation queue.
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             description: An optional description of the queue.
             instructions: Optional instructions for reviewers.
             comments_enabled: Whether to enable comments on items.
@@ -2466,7 +2597,7 @@ class Opik:
 
         Args:
             name: The name of the annotation queue.
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             description: An optional description of the queue.
             instructions: Optional instructions for reviewers.
             comments_enabled: Whether to enable comments on items.
@@ -2530,14 +2661,14 @@ class Opik:
         Get all traces annotation queues for a project.
 
         Args:
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: Maximum number of queues to return. Defaults to 1000.
 
         Returns:
             List[TracesAnnotationQueue]: A list of traces annotation queue objects.
         """
         project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name or self._project_name
+            self._rest_client, self._resolve_project_name(project_name)
         )
 
         return annotation_queue_rest_operations.get_traces_annotation_queues(
@@ -2555,14 +2686,14 @@ class Opik:
         Get all threads annotation queues for a project.
 
         Args:
-            project_name: The name of the project. If not provided, uses the client's default project.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: Maximum number of queues to return. Defaults to 1000.
 
         Returns:
             List[ThreadsAnnotationQueue]: A list of threads annotation queue objects.
         """
         project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name or self._project_name
+            self._rest_client, self._resolve_project_name(project_name)
         )
 
         return annotation_queue_rest_operations.get_threads_annotation_queues(
@@ -2582,112 +2713,257 @@ class Opik:
             ids=[queue_id]
         )
 
-    def create_agent_config_version(
-        self,
-        config: AgentConfig,
-        project_name: Optional[str] = None,
-        description: Optional[str] = None,
-    ) -> str:
-        """Write a config version to the backend. No-op if nothing changed.
-
-        Args:
-            config: An instance of a user-defined ``AgentConfig`` subclass.
-            project_name: Opik project name. Defaults to the client's default.
-            description: Optional description stored with the version.
-
-        Returns:
-            The version name — either the newly created version or the
-            existing version when values already match.
-        """
-        if not isinstance(config, AgentConfig) or type(config) is AgentConfig:
-            raise TypeError(
-                "config must be an instance of an AgentConfig subclass, "
-                f"got {type(config).__name__}"
-            )
-
-        manager = AgentConfigManager(
-            project_name=project_name or self._project_name,
-            rest_client_=self._rest_client,
-        )
-        return config._create_version(manager, description)
-
-    def get_agent_config(
+    @overload
+    def get_or_create_config(
         self,
         *,
-        fallback: _AgentConfigT,
+        fallback: _ConfigT,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> _ConfigT: ...
+
+    @overload
+    def get_or_create_config(
+        self,
+        *,
+        fallback: None = ...,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> Config: ...
+
+    def get_or_create_config(
+        self,
+        *,
+        fallback: Optional[Config] = None,
         project_name: Optional[str] = None,
         env: Optional[str] = None,
-        latest: bool = False,
         version: Optional[str] = None,
         timeout_in_seconds: Optional[int] = 5,
-    ) -> _AgentConfigT:
-        """Fetch an agent config from the backend.
+    ) -> Config:
+        """Fetch a config from the backend, optionally auto-creating from a fallback.
 
-        Exactly one selector must be used to specify which version to fetch
-        (passing more than one raises ``ValueError``):
+        Must be called from inside a function decorated with ``@opik.track``.
 
-        * ``env`` — fetch the version deployed to an environment (e.g. ``"prod"``).
-          This is the default when no selector is provided.
-        * ``latest=True`` — fetch the most recently published version.
-        * ``version`` — fetch a specific version by name, as returned by
-          ``create_agent_config_version``.
+        At most one of ``env`` or ``version`` may be provided.
+
+        * ``env`` — fetch the version deployed to an environment (e.g. ``"staging"``).
+        * ``version`` — fetch a specific version by name. The special value
+          ``"latest"`` fetches the latest version in the project; when no config
+          exists at all and ``fallback`` is provided, auto-creates one from it.
+        * Neither — equivalent to ``env="prod"``. If no config exists at all in
+          the project and ``fallback`` is provided, auto-creates one from it
+          (the backend tags the first version as ``"prod"``).
+
+        Failure modes depend on whether ``fallback`` is provided:
+
+        * **With fallback**: Backend errors (timeouts, network failures) return
+          the fallback instance with ``is_fallback=True``. If an explicit
+          ``env``/``version`` is requested but missing, raises
+          :class:`~opik.exceptions.ConfigNotFound`. If no config exists at all,
+          auto-creates from the fallback. The return value is an instance of
+          ``type(fallback)``.
+        * **Without fallback**: Backend errors are re-raised. If no config
+          exists at all, raises :class:`~opik.exceptions.ConfigNotFound`
+          instead of auto-creating. The return value is a generic ``Config``
+          instance — typed field access is only available when a fallback
+          supplies the subclass.
+
+        If the backend blueprint is missing any field declared on the
+        fallback's class, raises :class:`~opik.exceptions.ConfigMismatch`.
 
         Args:
-            fallback: An instance of a user-defined ``AgentConfig`` subclass.
-                Used as the return value when the backend has no config, and
-                its type determines the return type.
-            project_name: Opik project name. Defaults to the client's default.
-            env: Environment tag to fetch. Defaults to ``"prod"`` when no other
-                selector is provided.
-            latest: If ``True``, fetch the latest version regardless of env tags.
-            version: Fetch a specific version by its name.
+            fallback: An instance of a user-defined ``Config`` subclass. When
+                provided, used as the return value if the backend is
+                unreachable and as the initial values when auto-creating.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            env: Environment tag to fetch (e.g. ``"prod"``, ``"staging"``).
+            version: Fetch a specific version by its name. Use ``"latest"`` to
+                fetch the latest version.
             timeout_in_seconds: Maximum seconds to wait for the backend
-                response. If the request takes longer, ``fallback`` is returned
-                and the cache continues refreshing in the background. Pass
-                ``None`` to wait indefinitely.
+                response. With a fallback, a timeout returns the fallback and
+                the cache continues refreshing in the background; without one,
+                the timeout is raised. Pass ``None`` to wait indefinitely.
         """
-        if not isinstance(fallback, AgentConfig) or type(fallback) is AgentConfig:
+        if fallback is not None and (
+            not isinstance(fallback, Config) or type(fallback) is Config
+        ):
             raise TypeError(
-                "fallback must be an instance of an AgentConfig subclass, "
+                "fallback must be an instance of a Config subclass, "
                 f"got {type(fallback).__name__}"
             )
 
-        selectors = sum([env is not None, latest, version is not None])
-        if selectors > 1:
+        if env is not None and version is not None:
             raise ValueError(
-                "Specify exactly one of 'env' (fetch by environment tag), "
-                "'latest=True' (fetch the newest version), "
+                "Specify at most one of 'env' (fetch by environment tag) "
                 "or 'version' (fetch by version name)."
             )
-        if selectors == 0:
-            env = "prod"
 
-        resolved_project = project_name or self._project_name
-        manager = AgentConfigManager(
+        # Resolve selectors:
+        # - version="latest" → fetch latest blueprint; auto-create if empty.
+        # - explicit env or named version → fetch by selector; no auto-create.
+        # - neither → fetch env="prod"; auto-create if no config exists at all.
+        if version == "latest":
+            env = None
+            version = None
+            auto_create_if_empty = True
+        elif env is None and version is None:
+            env = "prod"
+            auto_create_if_empty = True
+        else:
+            auto_create_if_empty = False
+
+        resolved_project = self._resolve_project_name(project_name)
+        manager = ConfigManager(
             project_name=resolved_project,
             rest_client_=self._rest_client,
         )
-        return cast(
-            _AgentConfigT,
-            type(fallback)._resolve_from_backend(
-                fallback,
-                manager,
-                resolved_project,
-                env=env,
-                latest=latest,
-                version=version,
-                timeout_in_seconds=timeout_in_seconds,
-            ),
+        resolved_cls = type(fallback) if fallback is not None else Config
+        return resolved_cls._get_or_create_from_backend(
+            manager,
+            resolved_project,
+            fallback=fallback,
+            env=env,
+            version=version,
+            auto_create_if_empty=auto_create_if_empty,
+            timeout_in_seconds=timeout_in_seconds,
         )
 
-    def _resolve_project_name(self, project_name: Optional[str]) -> str:
-        if project_name is None:
-            return self._project_name
-        return project_name
+    def create_config(
+        self,
+        config: Config,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> str:
+        """Write a config version to the backend unconditionally.
+
+        Unlike :meth:`get_or_create_config`, this does not require a
+        ``@opik.track`` context and always performs a write — the new version's
+        values overwrite the latest blueprint's values.
+
+        Args:
+            config: An instance of a user-defined ``Config`` subclass.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            description: Optional description stored with the version.
+
+        Returns:
+            The version name of the newly written blueprint.
+        """
+        if not isinstance(config, Config) or type(config) is Config:
+            raise TypeError(
+                "config must be an instance of a Config subclass, "
+                f"got {type(config).__name__}"
+            )
+
+        manager = ConfigManager(
+            project_name=self._resolve_project_name(project_name),
+            rest_client_=self._rest_client,
+        )
+        return config._create_from_instance(manager, description)
+
+    def set_config_env(
+        self,
+        *,
+        project_name: Optional[str] = None,
+        version: str,
+        env: str,
+    ) -> None:
+        """Tag a specific config version with an environment name.
+
+        After tagging, ``get_or_create_config(env=env)`` for the project will
+        return this version.
+
+        Args:
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            version: Version name of the blueprint to tag.
+            env: Environment name (e.g. ``"prod"``, ``"staging"``).
+        """
+        resolved_project = self._resolve_project_name(project_name)
+        manager = ConfigManager(
+            project_name=resolved_project,
+            rest_client_=self._rest_client,
+        )
+        manager.set_env(version=version, env=env)
+
+    def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
+        return helpers.resolve_project_name(
+            explicitly_passed_value=explicitly_passed_value,
+            value_from_config=self._project_name,
+            value_from_context=context_storage.get_context_project_name(),
+        )
 
 
-@functools.lru_cache()
+_context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.ContextVar(
+    "_context_client_var", default=None
+)
+_global_singleton: Optional[Opik] = None
+
+
+def get_current_client_raw() -> Optional[Opik]:
+    """Return the active Opik client without auto-creating one.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. ``None`` if no client has been set
+    """
+    client = _context_client_var.get()
+    if client is not None:
+        return client
+
+    return _global_singleton
+
+
+def get_global_client() -> Opik:
+    """Get the active Opik client, creating one if needed.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. Auto-created default client (created on first call)
+    """
+    client = get_current_client_raw()
+    if client is not None:
+        return client
+
+    global _global_singleton
+    _global_singleton = Opik()
+    return _global_singleton
+
+
+def set_global_client(client: Opik, context_wise: bool = False) -> None:
+    """Set the active Opik client.
+
+    Args:
+        client: The Opik client instance to use.
+        context_wise: If True, sets the client for the current context only
+            (thread-safe, async-safe). If False, replaces the global singleton.
+    """
+    if context_wise:
+        _context_client_var.set(client)
+    else:
+        global _global_singleton
+        _global_singleton = client
+
+
+def reset_global_client(end_client: bool = True) -> None:
+    """Clear the active Opik client.
+
+    Args:
+        end_client: If True (default), calls ``.end()`` on the global singleton
+            before clearing it. Set to False when the caller manages the client
+            lifecycle independently.
+    """
+    global _global_singleton
+    if _global_singleton is not None:
+        if end_client:
+            _global_singleton.end()
+        _global_singleton = None
+    _context_client_var.set(None)
+
+
 def get_client_cached() -> Opik:
-    client = Opik(_use_batching=True)
-
-    return client
+    return get_global_client()

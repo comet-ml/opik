@@ -1,16 +1,16 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/ui/checkbox";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import SideDialog from "@/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/v2/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/v2/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
+import useProjectById from "@/api/projects/useProjectById";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
@@ -263,18 +263,22 @@ const DEFAULT_LOADED_DATASET_ITEMS = 25;
 type AddOptimizationDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  projectId?: string | null;
 };
 
 const AddOptimizationDialog: React.FunctionComponent<
   AddOptimizationDialogProps
-> = ({ open, setOpen }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
+> = ({ open, setOpen, projectId }) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
   const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(
     OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
   );
+  const { data: projectData } = useProjectById(
+    { projectId: projectId! },
+    { enabled: !!projectId },
+  );
+  const projectName = projectData?.name;
 
   const {
     permissions: { canViewDatasets },
@@ -288,15 +292,15 @@ const AddOptimizationDialog: React.FunctionComponent<
     datasetName || "your-dataset-name",
   );
 
-  const { data, isLoading } = useDatasetsList(
+  const { data, isLoading } = useProjectDatasetsList(
     {
-      workspaceName,
+      projectId: projectId!,
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: canViewDatasets,
+      enabled: canViewDatasets && !!projectId,
     },
   );
 
@@ -356,8 +360,8 @@ const AddOptimizationDialog: React.FunctionComponent<
         <div className="pb-8">
           <SheetTitle>Start an optimization run</SheetTitle>
           <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select an evaluation suite, choose the optimizer you would like to
-            use, and we will improve your prompt for you
+            Select a test suite, choose the optimizer you would like to use, and
+            we will improve your prompt for you
           </div>
         </div>
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
@@ -367,7 +371,7 @@ const AddOptimizationDialog: React.FunctionComponent<
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
-              1. Select evaluation suite
+              1. Select test suite
             </div>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -375,7 +379,7 @@ const AddOptimizationDialog: React.FunctionComponent<
                   <LoadableSelectBox
                     options={options}
                     value={datasetName}
-                    placeholder="Select an evaluation suite"
+                    placeholder="Select a test suite"
                     onChange={setDatasetName}
                     onLoadMore={
                       total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
@@ -401,7 +405,10 @@ const AddOptimizationDialog: React.FunctionComponent<
             <div className="comet-body-s mt-4 text-foreground-secondary">
               3. Create an Optimization run
             </div>
-            <ConfiguredCodeHighlighter code={section3} />
+            <ConfiguredCodeHighlighter
+              code={section3}
+              projectName={projectName}
+            />
           </div>
 
           <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">

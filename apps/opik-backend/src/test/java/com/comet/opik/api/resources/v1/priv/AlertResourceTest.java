@@ -2839,7 +2839,11 @@ class AlertResourceTest {
     }
 
     private Alert generateAlert() {
-        var alert = factory.manufacturePojo(Alert.class);
+        return generateAlert(factory);
+    }
+
+    static Alert generateAlert(PodamFactory podamFactory) {
+        var alert = podamFactory.manufacturePojo(Alert.class);
 
         var webhook = alert.webhook().toBuilder()
                 .createdBy(null)
@@ -2851,7 +2855,7 @@ class AlertResourceTest {
                 .map(trigger -> {
                     var configs = Optional.ofNullable(trigger.triggerConfigs())
                             .map(list -> list.stream()
-                                    .map(this::sanitizeTriggerConfig)
+                                    .map(AlertResourceTest::sanitizeTriggerConfig)
                                     .toList())
                             .orElse(null);
                     // Replace TRACE_COST and TRACE_LATENCY with TRACE_ERRORS for test assertion purposes
@@ -2877,7 +2881,7 @@ class AlertResourceTest {
                 .build();
     }
 
-    private AlertTriggerConfig sanitizeTriggerConfig(AlertTriggerConfig config) {
+    private static AlertTriggerConfig sanitizeTriggerConfig(AlertTriggerConfig config) {
         var builder = config.toBuilder()
                 .createdBy(null)
                 .createdAt(null);
@@ -2887,14 +2891,18 @@ class AlertResourceTest {
             var fixedConfigValue = new HashMap<>(config.configValue());
             fixedConfigValue.put(
                     AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY,
-                    JsonUtils.writeValueAsString(List.of(factory.manufacturePojo(UUID.class))));
+                    JsonUtils.writeValueAsString(List.of(UUID.randomUUID())));
             builder.configValue(fixedConfigValue);
         }
         return builder.build();
     }
 
     private Alert generateAlertForProject(UUID projectId) {
-        var base = generateAlert();
+        return generateAlertForProject(factory, projectId);
+    }
+
+    static Alert generateAlertForProject(PodamFactory podamFactory, UUID projectId) {
+        var base = generateAlert(podamFactory);
         var filteredTriggers = base.triggers().stream()
                 .map(t -> t.toBuilder()
                         .triggerConfigs(t.triggerConfigs().stream()

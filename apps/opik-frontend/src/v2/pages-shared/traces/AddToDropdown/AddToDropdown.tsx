@@ -18,10 +18,16 @@ export type AddToDropdownProps = {
   selectedRows: Array<Trace | Span | Thread>;
   disabled?: boolean;
   dataType?: "traces" | "spans" | "threads";
+  buttonVariant?: "outline" | "ghost" | "ghostInverted";
 };
 
 const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
-  const { selectedRows, disabled = false, dataType = "traces" } = props;
+  const {
+    selectedRows,
+    disabled = false,
+    dataType = "traces",
+    buttonVariant = "outline",
+  } = props;
   // getDataForExport is accepted for backwards compatibility but no longer used
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
@@ -60,7 +66,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="outline"
+            variant={buttonVariant}
             size="sm"
             disabled={disabled}
             className="font-normal"
@@ -79,7 +85,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
               disabled={disabled}
             >
               <Database className="mr-2 size-4" />
-              Evaluation suite
+              Test suite
             </DropdownMenuItem>
           )}
           {showAddToQueue && (

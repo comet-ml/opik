@@ -1,3 +1,4 @@
+import logging
 from typing import (
     Optional,
     NamedTuple,
@@ -9,6 +10,8 @@ from opik.api_objects import helpers, span, trace
 from opik.types import DistributedTraceHeadersDict, TraceSource
 
 from . import arguments_helpers
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SpanCreationResult(NamedTuple):
@@ -46,6 +49,20 @@ def create_span_respecting_context(
 
     if opik_context_storage is None:
         opik_context_storage = context_storage.get_current_context_instance()
+
+    context_project = context_storage.get_context_project_name()
+    if context_project is not None:
+        if (
+            start_span_arguments.project_name is not None
+            and start_span_arguments.project_name != context_project
+        ):
+            LOGGER.warning(
+                'Nested @track requested project "%s", but the enclosing '
+                'trace already uses "%s". The outer project name will be used.',
+                start_span_arguments.project_name,
+                context_project,
+            )
+        start_span_arguments.project_name = context_project
 
     if distributed_trace_headers:
         span_data = arguments_helpers.create_span_data(

@@ -5,6 +5,7 @@ import {
 } from "@/decorators/track";
 import { getAll } from "@/runner/registry";
 import { getPresetTraceId, runWithJobContext } from "@/runner/context";
+import { logger } from "@/utils/logger";
 import { MockInstance } from "vitest";
 import { mockAPIFunction } from "@tests/mockUtils";
 
@@ -108,7 +109,7 @@ describe("track with entrypoint", () => {
     const entry = getAll().get("explicit-params-agent");
     expect(entry!.params).toEqual([
       { name: "query", type: "string" },
-      { name: "limit", type: "number" },
+      { name: "limit", type: "float" },
     ]);
   });
 
@@ -120,6 +121,32 @@ describe("track with entrypoint", () => {
 
     const entry = getAll().get("fallback-params-agent");
     expect(entry!.params).toEqual([{ name: "userId", type: "string" }]);
+  });
+
+  it("warns when explicit params use unsupported types", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation((() => undefined) as any);
+
+    track(
+      {
+        entrypoint: true,
+        name: "unsupported-types-agent",
+        params: [
+          { name: "query", type: "string" },
+          { name: "first_custom", type: "object" },
+          { name: "second_custom", type: "MyClass" },
+        ],
+      },
+      async (a: string) => a
+    );
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const warning = warnSpy.mock.calls[0][0] as string;
+    expect(warning).toContain("first_custom");
+    expect(warning).toContain("second_custom");
+    expect(warning).not.toContain("query");
+
+    warnSpy.mockRestore();
   });
 
   it("does not register when entrypoint is not set", () => {

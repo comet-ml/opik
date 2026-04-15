@@ -44,4 +44,21 @@ public class RetentionUtils {
     public static int compareUUID(UUID a, UUID b) {
         return Long.compareUnsigned(a.getMostSignificantBits(), b.getMostSignificantBits());
     }
+
+    /**
+     * Check if an exception chain contains a ClickHouse TOO_MANY_ROWS error (Code 158).
+     * Used when estimation queries hit the max_rows_to_read profile limit.
+     */
+    public static boolean isTooManyRowsException(Throwable t) {
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null && msg.contains("Code: " + CH_TOO_MANY_ROWS)) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
+    }
+
+    private static final int CH_TOO_MANY_ROWS = 158;
 }

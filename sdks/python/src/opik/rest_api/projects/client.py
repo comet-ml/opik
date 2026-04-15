@@ -653,8 +653,8 @@ class ProjectsClient:
         *,
         entity_type: KpiCardRequestEntityType,
         interval_start: dt.datetime,
-        interval_end: dt.datetime,
         filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> KpiCardResponse:
         """
@@ -668,9 +668,9 @@ class ProjectsClient:
 
         interval_start : dt.datetime
 
-        interval_end : dt.datetime
-
         filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -685,14 +685,14 @@ class ProjectsClient:
         from Opik import OpikApi
         import datetime
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.projects.get_project_kpi_cards(id='id', entity_type="traces", interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        client.projects.get_project_kpi_cards(id='id', entity_type="traces", interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
         """
         _response = self._raw_client.get_project_kpi_cards(
             id,
             entity_type=entity_type,
             interval_start=interval_start,
-            interval_end=interval_end,
             filters=filters,
+            interval_end=interval_end,
             request_options=request_options,
         )
         return _response.data
@@ -768,6 +768,7 @@ class ProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsSummary:
@@ -781,6 +782,8 @@ class ProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -799,7 +802,7 @@ class ProjectsClient:
         client.projects.get_project_stats()
         """
         _response = self._raw_client.get_project_stats(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page, size=size, name=name, filters=filters, sorting=sorting, request_options=request_options
         )
         return _response.data
 
@@ -1494,8 +1497,8 @@ class AsyncProjectsClient:
         *,
         entity_type: KpiCardRequestEntityType,
         interval_start: dt.datetime,
-        interval_end: dt.datetime,
         filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> KpiCardResponse:
         """
@@ -1509,9 +1512,9 @@ class AsyncProjectsClient:
 
         interval_start : dt.datetime
 
-        interval_end : dt.datetime
-
         filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1528,15 +1531,15 @@ class AsyncProjectsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.projects.get_project_kpi_cards(id='id', entity_type="traces", interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+            await client.projects.get_project_kpi_cards(id='id', entity_type="traces", interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.get_project_kpi_cards(
             id,
             entity_type=entity_type,
             interval_start=interval_start,
-            interval_end=interval_end,
             filters=filters,
+            interval_end=interval_end,
             request_options=request_options,
         )
         return _response.data
@@ -1615,6 +1618,7 @@ class AsyncProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsSummary:
@@ -1628,6 +1632,8 @@ class AsyncProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -1649,7 +1655,7 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_project_stats(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page, size=size, name=name, filters=filters, sorting=sorting, request_options=request_options
         )
         return _response.data
 

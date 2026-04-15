@@ -3,7 +3,6 @@
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
-import { AssistantSidebarsClient } from "./api/resources/assistantSidebars/client/Client.js";
 import { AttachmentsClient } from "./api/resources/attachments/client/Client.js";
 import { AutomationRuleEvaluatorsClient } from "./api/resources/automationRuleEvaluators/client/Client.js";
 import { ChatCompletionsClient } from "./api/resources/chatCompletions/client/Client.js";
@@ -21,6 +20,7 @@ import { OllamaClient } from "./api/resources/ollama/client/Client.js";
 import { OllieStateClient } from "./api/resources/ollieState/client/Client.js";
 import { OpenTelemetryIngestionClient } from "./api/resources/openTelemetryIngestion/client/Client.js";
 import { OptimizationsClient } from "./api/resources/optimizations/client/Client.js";
+import { PairingClient } from "./api/resources/pairing/client/Client.js";
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
 import { PromptsClient } from "./api/resources/prompts/client/Client.js";
 import { RedirectClient } from "./api/resources/redirect/client/Client.js";
@@ -53,7 +53,6 @@ export class OpikApiClient {
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _alerts: AlertsClient | undefined;
     protected _annotationQueues: AnnotationQueuesClient | undefined;
-    protected _assistantSidebars: AssistantSidebarsClient | undefined;
     protected _attachments: AttachmentsClient | undefined;
     protected _check: CheckClient | undefined;
     protected _automationRuleEvaluators: AutomationRuleEvaluatorsClient | undefined;
@@ -72,6 +71,7 @@ export class OpikApiClient {
     protected _ollieState: OllieStateClient | undefined;
     protected _openTelemetryIngestion: OpenTelemetryIngestionClient | undefined;
     protected _optimizations: OptimizationsClient | undefined;
+    protected _pairing: PairingClient | undefined;
     protected _projects: ProjectsClient | undefined;
     protected _prompts: PromptsClient | undefined;
     protected _retentionRules: RetentionRulesClient | undefined;
@@ -101,10 +101,6 @@ export class OpikApiClient {
 
     public get annotationQueues(): AnnotationQueuesClient {
         return (this._annotationQueues ??= new AnnotationQueuesClient(this._options));
-    }
-
-    public get assistantSidebars(): AssistantSidebarsClient {
-        return (this._assistantSidebars ??= new AssistantSidebarsClient(this._options));
     }
 
     public get attachments(): AttachmentsClient {
@@ -177,6 +173,10 @@ export class OpikApiClient {
 
     public get optimizations(): OptimizationsClient {
         return (this._optimizations ??= new OptimizationsClient(this._options));
+    }
+
+    public get pairing(): PairingClient {
+        return (this._pairing ??= new PairingClient(this._options));
     }
 
     public get projects(): ProjectsClient {

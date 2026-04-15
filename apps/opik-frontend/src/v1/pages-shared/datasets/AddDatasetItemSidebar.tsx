@@ -9,7 +9,7 @@ import { useDatasetItemData } from "./DatasetItemEditor/hooks/useDatasetItemData
 import { useDatasetItemFormState } from "./DatasetItemEditor/hooks/useDatasetItemFormState";
 import { prepareFormDataForSave } from "./DatasetItemEditor/hooks/useDatasetItemFormHelpers";
 import DatasetItemEditorForm from "./DatasetItemEditor/DatasetItemEditorForm";
-import { useAddItem } from "@/store/EvaluationSuiteDraftStore";
+import { useAddItem } from "@/store/TestSuiteDraftStore";
 
 interface AddDatasetItemSidebarProps {
   open: boolean;

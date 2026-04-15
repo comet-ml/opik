@@ -7,6 +7,10 @@ import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.RetentionConfig.CatchUpConfig;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -31,6 +35,7 @@ import static com.comet.opik.domain.retention.RetentionUtils.compareUUID;
 import static com.comet.opik.domain.retention.RetentionUtils.extractInstant;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
  * Progressive catch-up service for historical data deletion.
@@ -45,11 +50,19 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Singleton
 public class RetentionCatchUpService {
 
+    private static final String TIER_SMALL = "small";
+    private static final String TIER_MEDIUM = "medium";
+    private static final String TIER_LARGE = "large";
+
     private final TransactionTemplate template;
     private final TraceDAO traceDAO;
     private final SpanDAO spanDAO;
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
+
+    private final LongCounter rulesProcessed;
+    private final LongCounter rulesCompleted;
+    private final LongCounter rowsToDelete;
 
     @Inject
     public RetentionCatchUpService(
@@ -63,6 +76,24 @@ public class RetentionCatchUpService {
         this.spanDAO = spanDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.retention");
+
+        this.rulesProcessed = meter
+                .counterBuilder("opik.retention.catch_up.rules_processed")
+                .setDescription("Number of catch-up rules processed per cycle")
+                .build();
+
+        this.rulesCompleted = meter
+                .counterBuilder("opik.retention.catch_up.rules_completed")
+                .setDescription("Number of catch-up rules that finished all historical deletion")
+                .build();
+
+        this.rowsToDelete = meter
+                .counterBuilder("opik.retention.catch_up.rows_to_delete")
+                .setDescription(
+                        "Lightweight pre-delete row count (upper-bound ceiling, >99% precision, excludes experiment exclusion)")
+                .build();
     }
 
     /**
@@ -97,6 +128,8 @@ public class RetentionCatchUpService {
                         return Mono.empty();
                     }
                     log.info("Catch-up: processing '{}' small workspaces", rules.size());
+                    rulesProcessed.add(rules.size(),
+                            Attributes.of(stringKey("tier"), TIER_SMALL));
                     return deleteSmallBatch(rules, now);
                 });
     }
@@ -118,6 +151,8 @@ public class RetentionCatchUpService {
                         return Mono.empty();
                     }
                     log.info("Catch-up: processing '{}' medium workspaces", rules.size());
+                    rulesProcessed.add(rules.size(),
+                            Attributes.of(stringKey("tier"), TIER_MEDIUM));
                     return deleteChunked(rules, catchUpConfig.getMediumChunkDays(), now);
                 });
     }
@@ -137,6 +172,8 @@ public class RetentionCatchUpService {
                     }
                     var rule = optRule.get();
                     log.info("Catch-up: processing large workspace '{}'", rule.workspaceId());
+                    rulesProcessed.add(1,
+                            Attributes.of(stringKey("tier"), TIER_LARGE));
                     return deleteChunked(List.of(rule), catchUpConfig.getLargeChunkDays(), now);
                 });
     }
@@ -176,9 +213,25 @@ public class RetentionCatchUpService {
                     log.info("Catch-up small batch: '{}' workspaces, period='{}'",
                             workspaceMinIds.size(), period);
 
+                    var batchWsIds = List.copyOf(workspaceMinIds.keySet());
+                    var finalGlobalLowerBound = globalLowerBound;
+
+                    // Lightweight pre-delete count for observability (upper-bound ceiling, >99% precision).
+                    // Runs sequentially before deletes to avoid overloading ClickHouse; cost is minimal
+                    // via primary key index. Collected metrics help assess query cost over time.
                     return Flux.concat(
-                            spanDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, globalLowerBound),
-                            traceDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, globalLowerBound));
+                            traceDAO.countForRetention(batchWsIds, cutoffId, finalGlobalLowerBound)
+                                    .doOnNext(c -> {
+                                        rowsToDelete.add(c, Attributes.of(
+                                                stringKey("table"), "traces"));
+                                    }).then(Mono.empty()),
+                            spanDAO.countForRetention(batchWsIds, cutoffId, finalGlobalLowerBound)
+                                    .doOnNext(c -> {
+                                        rowsToDelete.add(c, Attributes.of(
+                                                stringKey("table"), "spans"));
+                                    }).then(Mono.empty()),
+                            spanDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, finalGlobalLowerBound),
+                            traceDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, finalGlobalLowerBound));
                 })
                 .reduce(0L, Long::sum)
                 .flatMap(totalDeleted -> markBatchDoneAsync(rules)
@@ -228,7 +281,18 @@ public class RetentionCatchUpService {
 
         var workspaceIds = List.of(rule.workspaceId());
 
+        // Lightweight pre-delete count for observability (upper-bound ceiling, >99% precision).
+        // Runs sequentially before deletes to avoid overloading ClickHouse; cost is minimal
+        // via primary key index. Collected metrics help assess query cost over time.
         return Flux.concat(
+                traceDAO.countForRetention(workspaceIds, chunkEnd, cursor)
+                        .doOnNext(c -> rowsToDelete.add(c, Attributes.of(
+                                stringKey("table"), "traces")))
+                        .then(Mono.empty()),
+                spanDAO.countForRetention(workspaceIds, chunkEnd, cursor)
+                        .doOnNext(c -> rowsToDelete.add(c, Attributes.of(
+                                stringKey("table"), "spans")))
+                        .then(Mono.empty()),
                 spanDAO.deleteForRetention(workspaceIds, chunkEnd, cursor),
                 traceDAO.deleteForRetention(workspaceIds, chunkEnd, cursor))
                 .reduce(0L, Long::sum)
@@ -256,19 +320,25 @@ public class RetentionCatchUpService {
     }
 
     private Mono<Void> markDoneAsync(UUID ruleId) {
-        return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
-            handle.attach(RetentionRuleDAO.class).markCatchUpDone(ruleId);
-            return null;
-        })).subscribeOn(Schedulers.boundedElastic()).then();
+        return Mono.fromRunnable(() -> {
+            template.inTransaction(WRITE, handle -> {
+                handle.attach(RetentionRuleDAO.class).markCatchUpDone(ruleId);
+                return null;
+            });
+            rulesCompleted.add(1);
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     private Mono<Void> markBatchDoneAsync(List<RetentionRule> rules) {
         if (rules.isEmpty()) return Mono.empty();
         var ids = rules.stream().map(RetentionRule::id).toList();
-        return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
-            handle.attach(RetentionRuleDAO.class).markCatchUpDoneBatch(ids);
-            return null;
-        })).subscribeOn(Schedulers.boundedElastic()).then();
+        return Mono.fromRunnable(() -> {
+            template.inTransaction(WRITE, handle -> {
+                handle.attach(RetentionRuleDAO.class).markCatchUpDoneBatch(ids);
+                return null;
+            });
+            rulesCompleted.add(ids.size());
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     private Mono<Void> updateCursorAsync(UUID ruleId, UUID newCursor) {

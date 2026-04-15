@@ -9,6 +9,7 @@ import {
 } from "@/types/providers";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { SPAN_TYPE } from "@/types/traces";
+import { EVALUATION_METHOD } from "@/types/datasets";
 
 export interface PromptLibraryMetadata {
   name: string;
@@ -30,6 +31,7 @@ export interface PlaygroundPromptType {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
+  skipInitialPromptLoad?: boolean;
 }
 
 export interface ChatCompletionMessageChoiceType {
@@ -84,6 +86,7 @@ export interface LogTrace {
   input: { messages: ProviderMessageType[] };
   output: { output: string | null };
   metadata?: Record<string, unknown>;
+  source?: string;
 }
 
 export interface LogSpan {
@@ -95,6 +98,7 @@ export interface LogSpan {
   startTime: string;
   endTime: string;
   input: { messages: ProviderMessageType[] };
+  source?: string;
   output:
     | { choices: ChatCompletionMessageChoiceType[] }
     | { output: string | null };
@@ -119,6 +123,7 @@ export interface LogExperiment {
   datasetVersionId?: string;
   name?: string;
   metadata?: object;
+  evaluationMethod?: EVALUATION_METHOD;
   prompt_versions?: LogExperimentPromptVersion[];
 }
 

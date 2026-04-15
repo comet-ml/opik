@@ -17,6 +17,7 @@ from opik.types import (
     SpanType,
     TraceSource,
 )
+from opik import config as opik_config
 from .. import constants, validation_helpers, helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class Span:
         url_override: str,
         source: TraceSource,
         parent_span_id: Optional[str] = None,
+        config: Optional[opik_config.OpikConfig] = None,
     ):
         """
         A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Opik.span`) or another Span (:meth:`opik.Span.span`).
@@ -43,6 +45,7 @@ class Span:
         self._project_name = project_name
         self._url_override = url_override
         self.source = source
+        self._config = config
 
     def end(
         self,
@@ -62,6 +65,11 @@ class Span:
 
         This method is similar to the `update` method, but it automatically computes
         the end time if not provided.
+
+        Note: with batching enabled, calling this shortly after span creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.span()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates
 
         Args:
             end_time: The end time of the span. If not provided, the current time will be used.
@@ -87,7 +95,15 @@ class Span:
             end_time if end_time is not None else datetime_helpers.local_timestamp()
         )
 
-        self.update(
+        helpers.warn_if_batching_update(
+            use_batching=self._streamer.use_batching,
+            suppress_warning=bool(
+                self._config and self._config.suppress_batching_update_warning
+            ),
+            method_name="Span.end()",
+        )
+
+        self._update(
             end_time=end_time,
             metadata=metadata,
             input=input,
@@ -116,6 +132,11 @@ class Span:
         """
         Update the span attributes.
 
+        Note: with batching enabled, calling this shortly after span creation may
+        cause data loss. An alternative is to re-send a full payload via
+        ``client.span()`` with the same ID — the backend will overwrite the
+        previous value. See https://www.comet.com/docs/opik/reference/python-sdk/troubleshooting/batching-and-updates
+
         Args:
             end_time: The end time of the span.
             metadata: Additional metadata to be associated with the span.
@@ -136,6 +157,40 @@ class Span:
         Returns:
             None
         """
+        helpers.warn_if_batching_update(
+            use_batching=self._streamer.use_batching,
+            suppress_warning=bool(
+                self._config and self._config.suppress_batching_update_warning
+            ),
+            method_name="Span.update()",
+        )
+
+        self._update(
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+        )
+
+    def _update(
+        self,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[LLMProvider, str]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+    ) -> None:
         update_span(
             id=self.id,
             trace_id=self.trace_id,
@@ -224,6 +279,7 @@ class Span:
             total_cost=total_cost,
             attachments=attachments,
             source=self.source,
+            config=self._config,
         )
 
     def log_feedback_score(
@@ -291,6 +347,7 @@ def create_span(
     total_cost: Optional[float] = None,
     attachments: Optional[List[attachment.Attachment]] = None,
     source: TraceSource = "sdk",
+    config: Optional[opik_config.OpikConfig] = None,
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -348,6 +405,7 @@ def create_span(
         project_name=project_name,
         url_override=url_override,
         source=source,
+        config=config,
     )
 
 

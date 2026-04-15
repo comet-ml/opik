@@ -42,7 +42,7 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
         )}
         <div
           className={cn(
-            "comet-body-s flex-1 min-w-0 text-pretty break-words",
+            "flex-1 min-w-0 text-pretty break-words",
             isSmall && "truncate text-nowrap",
           )}
         >
@@ -57,7 +57,7 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
       {!isLocalComments && (
         <UserCommentAvatarList className="mt-0.5" commentsList={commentsList} />
       )}
-      <div className="comet-body-s truncate">{commentsCount} comments</div>
+      <div className="truncate">{commentsCount} comments</div>
     </div>
   );
 };

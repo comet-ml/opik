@@ -379,51 +379,7 @@ public class ExperimentDAO {
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY experiment_id
-            ), feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                <if(has_target_projects)>
-                AND project_id IN :target_project_ids
-                <endif>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                UNION ALL
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    value,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                <if(has_target_projects)>
-                AND project_id IN :target_project_ids
-                <endif>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ), feedback_scores_combined AS (
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -431,8 +387,40 @@ public class ExperimentDAO {
                        value,
                        last_updated_at,
                        author
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>
+                    AND project_id IN :target_project_ids
+                    <endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>
+                    AND project_id IN :target_project_ids
+                    <endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -441,7 +429,7 @@ public class ExperimentDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined fc
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
             feedback_scores_agg AS (
@@ -478,15 +466,9 @@ public class ExperimentDAO {
                     if(count() = 1, any(toFloat64(passed = 'passed')), avg(toFloat64(passed = 'passed'))) AS value
                 FROM (
                     SELECT
-                        workspace_id,
-                        project_id,
                         entity_id,
                         name,
-                        passed,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
+                        passed
                     FROM assertion_results
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -494,8 +476,9 @@ public class ExperimentDAO {
                     AND project_id IN :target_project_ids
                     <endif>
                     AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author
                 )
-                WHERE rn = 1
                 GROUP BY entity_id, name
             ),
             assertion_scores_agg AS (
@@ -601,13 +584,14 @@ public class ExperimentDAO {
             pass_rate_agg AS (
                 SELECT
                     experiment_id,
-                    toNullable(sum(item_passed)) AS passed_count,
-                    toNullable(count(*)) AS total_count,
-                    if(count(*) = 0, NULL, toNullable(toDecimal64(sum(item_passed) / count(*), 9))) AS pass_rate
+                    toNullable(sumIf(item_passed, has_assertions)) AS passed_count,
+                    toNullable(countIf(has_assertions)) AS total_count,
+                    if(countIf(has_assertions) = 0, NULL, toNullable(toDecimal64(ifNull(sumIf(item_passed, has_assertions) / nullIf(toFloat64(countIf(has_assertions)), 0), 0), 9))) AS pass_rate
                 FROM (
                     SELECT
                         experiment_id,
                         dataset_item_id,
+                        max(has_assertions) AS has_assertions,
                         if(sum(run_passed) >=
                            if(item_pass_threshold > 0, item_pass_threshold,
                               if(suite_pass_threshold > 0, suite_pass_threshold, 1)),
@@ -619,9 +603,10 @@ public class ExperimentDAO {
                             ei.trace_id AS trace_id,
                             JSONExtractUInt(ei.execution_policy, 'pass_threshold') AS item_pass_threshold,
                             JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold,
+                            countIf(ar.name != '') > 0 AS has_assertions,
                             if(
                                 countIf(ar.name != '') = 0,
-                                1,
+                                0,
                                 if(minIf(ar.value, ar.name != '') >= 1.0, 1, 0)
                             ) AS run_passed
                         FROM experiment_items_final ei
@@ -845,51 +830,7 @@ public class ExperimentDAO {
                 WHERE workspace_id = :workspace_id
                 <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>
                 AND experiment_id IN (SELECT id FROM experiments_final)
-            ), feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                <if(has_target_projects)>
-                AND project_id IN :target_project_ids
-                <endif>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                UNION ALL
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    value,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                <if(has_target_projects)>
-                AND project_id IN :target_project_ids
-                <endif>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ), feedback_scores_combined AS (
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -897,8 +838,40 @@ public class ExperimentDAO {
                        value,
                        last_updated_at,
                        author
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>
+                    AND project_id IN :target_project_ids
+                    <endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>
+                    AND project_id IN :target_project_ids
+                    <endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -907,7 +880,7 @@ public class ExperimentDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             )
             <if(feedback_scores_empty_filters)>
@@ -1310,51 +1283,7 @@ public class ExperimentDAO {
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY experiment_id
-            ), feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                <if(has_target_projects)>
-                AND project_id IN :target_project_ids
-                <endif>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                UNION ALL
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    value,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                <if(has_target_projects)>
-                AND project_id IN :target_project_ids
-                <endif>
-                AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ), feedback_scores_combined AS (
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1362,8 +1291,40 @@ public class ExperimentDAO {
                        value,
                        last_updated_at,
                        author
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>
+                    AND project_id IN :target_project_ids
+                    <endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>
+                    AND project_id IN :target_project_ids
+                    <endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_final AS (
                 SELECT
                     fsc.workspace_id,
@@ -1371,7 +1332,7 @@ public class ExperimentDAO {
                     fsc.entity_id,
                     fsc.name,
                     if(count() = 1, any(fsc.value), toDecimal64(avg(fsc.value), 9)) AS value
-                FROM feedback_scores_combined fsc
+                FROM feedback_scores_deduped fsc
                 GROUP BY fsc.workspace_id, fsc.project_id, fsc.entity_id, fsc.name
             ),
             feedback_scores_agg AS (
@@ -1408,15 +1369,9 @@ public class ExperimentDAO {
                     if(count() = 1, any(toFloat64(passed = 'passed')), avg(toFloat64(passed = 'passed'))) AS value
                 FROM (
                     SELECT
-                        workspace_id,
-                        project_id,
                         entity_id,
                         name,
-                        passed,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
+                        passed
                     FROM assertion_results
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -1424,8 +1379,9 @@ public class ExperimentDAO {
                     AND project_id IN :target_project_ids
                     <endif>
                     AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author
                 )
-                WHERE rn = 1
                 GROUP BY entity_id, name
             ),
             assertion_scores_agg AS (
@@ -1469,13 +1425,14 @@ public class ExperimentDAO {
             pass_rate_agg AS (
                 SELECT
                     experiment_id,
-                    toNullable(sum(item_passed)) AS passed_count,
-                    toNullable(count(*)) AS total_count,
-                    if(count(*) = 0, NULL, toNullable(toDecimal64(sum(item_passed) / count(*), 9))) AS pass_rate
+                    toNullable(sumIf(item_passed, has_assertions)) AS passed_count,
+                    toNullable(countIf(has_assertions)) AS total_count,
+                    if(countIf(has_assertions) = 0, NULL, toNullable(toDecimal64(ifNull(sumIf(item_passed, has_assertions) / nullIf(toFloat64(countIf(has_assertions)), 0), 0), 9))) AS pass_rate
                 FROM (
                     SELECT
                         experiment_id,
                         dataset_item_id,
+                        max(has_assertions) AS has_assertions,
                         if(sum(run_passed) >=
                            if(item_pass_threshold > 0, item_pass_threshold,
                               if(suite_pass_threshold > 0, suite_pass_threshold, 1)),
@@ -1487,9 +1444,10 @@ public class ExperimentDAO {
                             ei.trace_id AS trace_id,
                             JSONExtractUInt(ei.execution_policy, 'pass_threshold') AS item_pass_threshold,
                             JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold,
+                            countIf(ar.name != '') > 0 AS has_assertions,
                             if(
                                 countIf(ar.name != '') = 0,
-                                1,
+                                0,
                                 if(minIf(ar.value, ar.name != '') >= 1.0, 1, 0)
                             ) AS run_passed
                         FROM experiment_items_final ei
@@ -1740,7 +1698,7 @@ public class ExperimentDAO {
     public Mono<Boolean> hasVersion1Experiments(@NonNull String workspaceId,
             @NonNull List<String> demoExperimentNames) {
         var template = getSTWithLogComment(HAS_VERSION1_EXPERIMENTS,
-                "has_version1_experiments", workspaceId, demoExperimentNames);
+                "has_version1_experiments", workspaceId, "", demoExperimentNames);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
@@ -1839,7 +1797,8 @@ public class ExperimentDAO {
 
                     return Mono.from(connectionFactory.create())
                             .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                                var template = getSTWithLogComment(FIND, "get_experiment_by_id", workspaceId, "");
+                                var template = getSTWithLogComment(FIND, "get_experiment_by_id", workspaceId, userName,
+                                        "");
                                 template.add("id", id.toString());
                                 template.add("limit", limit);
                                 template.add("has_aggregated", hasAggregated);
@@ -1870,6 +1829,7 @@ public class ExperimentDAO {
                     return Mono.from(connectionFactory.create())
                             .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                                 var template = getSTWithLogComment(FIND, "get_experiments_by_ids", workspaceId,
+                                        userName,
                                         ids.size());
                                 template.add("ids_list", ids);
                                 template.add("has_aggregated", hasAggregated);
@@ -1888,7 +1848,7 @@ public class ExperimentDAO {
         log.info("Getting experiment by '{}'", request);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(FIND, "get_experiments_stream", workspaceId, "");
+                    var template = getSTWithLogComment(FIND, "get_experiments_stream", workspaceId, userName, "");
                     template.add("name", request.name());
                     if (request.lastRetrievedId() != null) {
                         template.add("lastRetrievedId", request.lastRetrievedId());
@@ -2175,7 +2135,7 @@ public class ExperimentDAO {
     }
 
     private ST newFindTemplate(String query, ExperimentSearchCriteria criteria, String queryName, String workspaceId) {
-        var template = getSTWithLogComment(query, queryName, workspaceId, "");
+        var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -2269,7 +2229,7 @@ public class ExperimentDAO {
     private Publisher<? extends Result> findByName(String name, UUID projectId, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Finding experiment by name '{}'", name);
-            var template = getSTWithLogComment(FIND_BY_NAME, "find_experiments_by_name", workspaceId, "");
+            var template = getSTWithLogComment(FIND_BY_NAME, "find_experiments_by_name", workspaceId, userName, "");
             if (projectId != null) {
                 template.add("project_id", true);
             }
@@ -2388,7 +2348,7 @@ public class ExperimentDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS,
-                            "get_experiments_dataset_info", workspaceId, ids.size());
+                            "get_experiments_dataset_info", workspaceId, userName, ids.size());
                     template.add("experiment_ids", ids);
                     var statement = connection.createStatement(template.render())
                             .bind("experiment_ids", ids.toArray(UUID[]::new))
@@ -2404,7 +2364,7 @@ public class ExperimentDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS,
-                            "find_all_dataset_ids", workspaceId, "");
+                            "find_all_dataset_ids", workspaceId, userName, "");
 
                     bindFindAllDatasetIdsTemplateParams(criteria, template);
 
@@ -2515,7 +2475,7 @@ public class ExperimentDAO {
     }
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String queryName, String workspaceId) {
-        var template = getSTWithLogComment(query, queryName, workspaceId, "");
+        var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
 
         ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
@@ -2691,7 +2651,7 @@ public class ExperimentDAO {
 
     private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, boolean mergeTags, String queryName,
             String workspaceId) {
-        var template = getSTWithLogComment(UPDATE, queryName, workspaceId, "");
+        var template = getSTWithLogComment(UPDATE, queryName, workspaceId, "", "");
 
         if (StringUtils.isNotBlank(experimentUpdate.name())) {
             template.add("name", experimentUpdate.name());

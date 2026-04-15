@@ -7,7 +7,7 @@ from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
-from . import type_helpers
+from .. import type_helpers
 
 
 def _resolve_prompt_from_commit(
@@ -15,7 +15,10 @@ def _resolve_prompt_from_commit(
 ) -> typing.Any:
     prompt_detail = rest_client_.prompts.get_prompt_by_commit(commit)
     version_detail = prompt_detail.requested_version
-    if version_detail.template_structure == "chat":
+    if (
+        prompt_detail.template_structure == "chat"
+        or version_detail.template_structure == "chat"
+    ):
         return ChatPrompt.from_fern_prompt_version(
             name=prompt_detail.name, prompt_version=version_detail
         )
@@ -44,7 +47,7 @@ def _convert_primitives(
 
         if py_type is not None:
             values[param.key] = type_helpers.backend_value_to_python_value(
-                param.value, param.type, py_type
+                param.value, py_type
             )
         else:
             values[param.key] = param.value
@@ -112,6 +115,9 @@ class Blueprint:
     ) -> None:
         self._raw = raw_blueprint
         self._values = _resolve_values(raw_blueprint, field_types, rest_client_)
+        self._descriptions: typing.Dict[str, typing.Optional[str]] = {
+            param.key: param.description for param in raw_blueprint.values
+        }
 
     @property
     def id(self) -> typing.Optional[str]:
@@ -153,3 +159,6 @@ class Blueprint:
 
     def keys(self) -> typing.KeysView[str]:
         return self._values.keys()
+
+    def get_field_description(self, key: str) -> typing.Optional[str]:
+        return self._descriptions.get(key)

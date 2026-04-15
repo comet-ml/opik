@@ -4,6 +4,7 @@ import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
 import { TraceFilterPublic } from "../../../../types/TraceFilterPublic.js";
+import { TraceSearchStreamRequestPublicExcludeItem } from "../../types/TraceSearchStreamRequestPublicExcludeItem.js";
 
 export const TraceSearchStreamRequestPublic: core.serialization.Schema<
     serializers.TraceSearchStreamRequestPublic.Raw,
@@ -16,6 +17,7 @@ export const TraceSearchStreamRequestPublic: core.serialization.Schema<
     limit: core.serialization.number().optional(),
     truncate: core.serialization.boolean().optional(),
     stripAttachments: core.serialization.property("strip_attachments", core.serialization.boolean().optional()),
+    exclude: core.serialization.list(TraceSearchStreamRequestPublicExcludeItem).optional(),
     fromTime: core.serialization.property("from_time", core.serialization.date().optional()),
     toTime: core.serialization.property("to_time", core.serialization.date().optional()),
 });
@@ -29,6 +31,7 @@ export declare namespace TraceSearchStreamRequestPublic {
         limit?: number | null;
         truncate?: boolean | null;
         strip_attachments?: boolean | null;
+        exclude?: TraceSearchStreamRequestPublicExcludeItem.Raw[] | null;
         from_time?: string | null;
         to_time?: string | null;
     }

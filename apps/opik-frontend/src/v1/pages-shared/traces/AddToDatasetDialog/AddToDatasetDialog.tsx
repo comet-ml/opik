@@ -33,11 +33,9 @@ import { Label } from "@/ui/label";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/ui/use-toast";
-import AddEditEvaluationSuiteDialog from "@/v1/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
+import AddEditTestSuiteDialog from "@/v1/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { ToastAction } from "@/ui/toast";
-import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_SIZE = 100;
@@ -70,7 +68,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [fetching, setFetching] = useState<boolean>(false);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const { toast } = useToast();
-  const { navigate } = useNavigateToExperiment();
   const {
     permissions: { canCreateDatasets },
   } = usePermissions();
@@ -131,30 +128,14 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       }
 
       const explainer =
-        EXPLAINERS_MAP[
-          EXPLAINER_ID.i_added_traces_to_an_evaluation_suite_now_what
-        ];
+        EXPLAINERS_MAP[EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what];
 
       toast({
-        title: `${itemType} added to evaluation suite`,
+        title: `${itemType} added to test suite`,
         description: explainer.description,
-        actions: [
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="px-0"
-            altText="Run an experiment"
-            key="Run an experiment"
-            onClick={() =>
-              navigate({ newExperiment: true, datasetName: dataset.name })
-            }
-          >
-            Run an experiment
-          </ToastAction>,
-        ],
       });
     },
-    [navigate, toast],
+    [toast],
   );
 
   const addToDatasetHandler = useCallback(
@@ -237,7 +218,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     if (datasets.length === 0) {
       const text = search
         ? "No search results"
-        : "There are no evaluation suites yet";
+        : "There are no test suites yet";
 
       return (
         <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
@@ -293,8 +274,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const renderAlert = () => {
     const text = noValidRows
-      ? "There are no rows that can be added as evaluation suite items. The input field is missing."
-      : "Only rows with input fields will be added as evaluation suite items.";
+      ? "There are no rows that can be added as test suite items. The input field is missing."
+      : "Only rows with input fields will be added as test suite items.";
 
     if (noValidRows || partialValid) {
       return (
@@ -392,20 +373,19 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Add to evaluation suite</DialogTitle>
+            <DialogTitle>Add to test suite</DialogTitle>
           </DialogHeader>
           <DialogAutoScrollBody>
             <ExplainerDescription
               className="mb-4"
               {...EXPLAINERS_MAP[
-                EXPLAINER_ID
-                  .why_would_i_want_to_add_traces_to_an_evaluation_suite
+                EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite
               ]}
             />
             {hasOnlyTraces && renderMetadataConfiguration("trace", true)}
             {hasOnlySpans && renderMetadataConfiguration("span")}
             <div className="my-2 flex items-center justify-between">
-              <h3 className="comet-title-xs">Select an evaluation suite</h3>
+              <h3 className="comet-title-xs">Select a test suite</h3>
               {canCreateDatasets && (
                 <Button
                   variant="ghost"
@@ -416,7 +396,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                   disabled={noValidRows}
                 >
                   <Plus className="mr-2 size-4" />
-                  Create new evaluation suite
+                  Create new test suite
                 </Button>
               )}
             </div>
@@ -457,12 +437,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               }}
               disabled={!selectedDataset || noValidRows || fetching}
             >
-              Add to evaluation suite
+              Add to test suite
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AddEditEvaluationSuiteDialog
+      <AddEditTestSuiteDialog
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={(dataset) => {

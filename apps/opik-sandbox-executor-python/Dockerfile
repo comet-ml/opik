@@ -1,5 +1,5 @@
 # Multi-stage build: Build stage
-FROM python:3.12.12-slim AS builder
+FROM python:3.12.13-slim AS builder
 
 WORKDIR /build
 
@@ -38,7 +38,7 @@ RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
 
 #######################################################################
 # Multi-stage build: Runtime stage
-FROM python:3.12.12-slim AS runtime
+FROM python:3.12.13-slim AS runtime
 
 WORKDIR /opt/opik-sandbox-executor-python
 
@@ -51,6 +51,12 @@ COPY --from=builder /runtime-python /usr/local/lib/python3.12/site-packages/
 # Copy optimized .pyc file for fastest execution (legacy layout with -b flag)
 COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc
 COPY --from=builder /prewarm.pyc /tmp/prewarm.pyc
+
+# Prevent litellm from calling load_dotenv() at import time, which uses frame
+# inspection that fails in a .pyc-only context (after .py files are deleted).
+# litellm calls load_dotenv() when LITELLM_MODE == "DEV" (the default), so
+# setting it to any other value suppresses the call.
+ENV LITELLM_MODE=PRODUCTION
 
 # Runtime pre-warming for additional performance boost
 RUN python /tmp/prewarm.pyc

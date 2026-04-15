@@ -2,6 +2,7 @@ import React from "react";
 import { Outlet } from "@tanstack/react-router";
 import Logo from "@/shared/Logo/Logo";
 import SettingsMenu from "@/v1/layout/SettingsMenu/SettingsMenu";
+import LayoutDialogs from "@/v1/layout/LayoutDialogs";
 
 export const SMEPageLayout = ({
   children = <Outlet />,
@@ -22,6 +23,8 @@ export const SMEPageLayout = ({
           {children}
         </section>
       </main>
+
+      <LayoutDialogs />
     </section>
   );
 };

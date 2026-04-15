@@ -1,10 +1,16 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import isUndefined from "lodash/isUndefined";
 import { Database, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Span, Trace } from "@/types/traces";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
   Dialog,
   DialogAutoScrollBody,
@@ -19,25 +25,32 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/ui/accordion";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import Loader from "@/shared/Loader/Loader";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import useAddTracesToDatasetMutation from "@/api/datasets/useAddTracesToDatasetMutation";
 import useAddSpansToDatasetMutation from "@/api/datasets/useAddSpansToDatasetMutation";
-import { Dataset } from "@/types/datasets";
+import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
+import {
+  DEFAULT_EXECUTION_POLICY,
+  MAX_RUNS_PER_ITEM,
+} from "@/types/test-suites";
 import { Alert, AlertDescription } from "@/ui/alert";
 import { Button } from "@/ui/button";
 import { Checkbox } from "@/ui/checkbox";
+import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/ui/use-toast";
-import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
+import { extractAssertions, packAssertions } from "@/lib/assertion-converters";
+import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
+import AssertionsField from "@/shared/AssertionField/AssertionsField";
+import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { ToastAction } from "@/ui/toast";
-import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_SIZE = 100;
@@ -63,14 +76,15 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   setOpen,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [fetching, setFetching] = useState<boolean>(false);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
+  const configSectionRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { navigate } = useNavigateToExperiment();
   const {
     permissions: { canCreateDatasets },
   } = usePermissions();
@@ -85,18 +99,58 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     includeMetadata: true,
   });
 
+  // Assertions state
+  const [assertions, setAssertions] = useState<string[]>([]);
+  const [runsPerItem, setRunsPerItem] = useState(
+    DEFAULT_EXECUTION_POLICY.runs_per_item,
+  );
+  const [passThreshold, setPassThreshold] = useState(
+    DEFAULT_EXECUTION_POLICY.pass_threshold,
+  );
+
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
   const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
 
-  const { data, isPending } = useDatasetsList(
+  // Fetch the latest version of the selected dataset to get suite-level assertions
+  const { data: versionsData } = useDatasetVersionsList(
     {
-      workspaceName,
+      datasetId: selectedDataset?.id ?? "",
+      page: 1,
+      size: 1,
+    },
+    {
+      enabled: Boolean(selectedDataset?.id),
+    },
+  );
+
+  const suiteAssertions = useMemo(() => {
+    const evaluators = versionsData?.content?.[0]?.evaluators ?? [];
+    return extractAssertions(evaluators);
+  }, [versionsData]);
+
+  const suiteExecutionPolicy = useMemo(() => {
+    return (
+      versionsData?.content?.[0]?.execution_policy ?? DEFAULT_EXECUTION_POLICY
+    );
+  }, [versionsData]);
+
+  // Sync form state with suite defaults when selected dataset changes or version data loads
+  useEffect(() => {
+    if (!selectedDataset?.id) return;
+    setRunsPerItem(suiteExecutionPolicy.runs_per_item);
+    setPassThreshold(suiteExecutionPolicy.pass_threshold);
+  }, [selectedDataset?.id, suiteExecutionPolicy]);
+
+  const { data, isPending } = useProjectDatasetsList(
+    {
+      projectId: activeProjectId!,
       search,
       page,
       size,
     },
     {
       placeholderData: keepPreviousData,
+      enabled: !!activeProjectId,
     },
   );
 
@@ -131,36 +185,72 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       }
 
       const explainer =
-        EXPLAINERS_MAP[
-          EXPLAINER_ID.i_added_traces_to_an_evaluation_suite_now_what
-        ];
+        EXPLAINERS_MAP[EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what];
 
       toast({
-        title: `${itemType} added to evaluation suite`,
+        title: `${itemType} added to test suite`,
         description: explainer.description,
-        actions: [
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="px-0"
-            altText="Run an experiment"
-            key="Run an experiment"
-            onClick={() =>
-              navigate({ newExperiment: true, datasetName: dataset.name })
-            }
-          >
-            Run an experiment
-          </ToastAction>,
-        ],
       });
     },
-    [navigate, toast],
+    [toast],
   );
+
+  const handleAssertionChange = useCallback((index: number, value: string) => {
+    setAssertions((prev) => prev.map((a, i) => (i === index ? value : a)));
+  }, []);
+
+  const handleAssertionRemove = useCallback((index: number) => {
+    setAssertions((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleAssertionAdd = useCallback(() => {
+    setAssertions((prev) => [...prev, ""]);
+  }, []);
+
+  const runsInput = useClampedIntegerInput({
+    value: runsPerItem,
+    min: 1,
+    max: MAX_RUNS_PER_ITEM,
+    onCommit: (v) => {
+      setRunsPerItem(v);
+      if (passThreshold > v) setPassThreshold(v);
+    },
+  });
+
+  const thresholdInput = useClampedIntegerInput({
+    value: passThreshold,
+    min: 1,
+    max: runsPerItem,
+    onCommit: setPassThreshold,
+  });
+
+  const buildEvaluatorParams = useCallback(() => {
+    const nonEmptyAssertions = assertions.map((a) => a.trim()).filter(Boolean);
+    const hasCustomPolicy =
+      runsPerItem !== suiteExecutionPolicy.runs_per_item ||
+      passThreshold !== suiteExecutionPolicy.pass_threshold;
+
+    if (nonEmptyAssertions.length === 0 && !hasCustomPolicy) return {};
+
+    return {
+      ...(nonEmptyAssertions.length > 0 && {
+        evaluators: [packAssertions(nonEmptyAssertions)],
+      }),
+      ...(hasCustomPolicy && {
+        executionPolicy: {
+          runs_per_item: runsPerItem,
+          pass_threshold: passThreshold,
+        },
+      }),
+    };
+  }, [assertions, runsPerItem, passThreshold, suiteExecutionPolicy]);
 
   const addToDatasetHandler = useCallback(
     (dataset: Dataset) => {
       setFetching(true);
       setOpen(false);
+
+      const evalParams = buildEvaluatorParams();
 
       // If we have only traces, use the enriched endpoint for traces
       if (hasOnlyTraces) {
@@ -177,6 +267,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               include_usage: enrichmentOptions.includeUsage,
               include_metadata: enrichmentOptions.includeMetadata,
             },
+            ...evalParams,
           },
           {
             onSuccess: () => {
@@ -202,6 +293,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               include_usage: enrichmentOptions.includeUsage,
               include_metadata: enrichmentOptions.includeMetadata,
             },
+            ...evalParams,
           },
           {
             onSuccess: () => {
@@ -222,6 +314,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       workspaceName,
       onItemsAdded,
       enrichmentOptions,
+      buildEvaluatorParams,
       hasOnlyTraces,
       hasOnlySpans,
       validTraces,
@@ -237,7 +330,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     if (datasets.length === 0) {
       const text = search
         ? "No search results"
-        : "There are no evaluation suites yet";
+        : "There are no test suites yet";
 
       return (
         <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
@@ -258,7 +351,19 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               : "cursor-pointer hover:bg-primary-foreground",
             isSelected && "bg-muted",
           )}
-          onClick={() => !noValidRows && setSelectedDataset(d)}
+          onClick={() => {
+            if (noValidRows || d.id === selectedDataset?.id) return;
+            setSelectedDataset(d);
+            setAssertions([]);
+            setRunsPerItem(DEFAULT_EXECUTION_POLICY.runs_per_item);
+            setPassThreshold(DEFAULT_EXECUTION_POLICY.pass_threshold);
+            setTimeout(() => {
+              configSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+              });
+            }, 0);
+          }}
         >
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-2">
@@ -293,8 +398,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const renderAlert = () => {
     const text = noValidRows
-      ? "There are no rows that can be added as evaluation suite items. The input field is missing."
-      : "Only rows with input fields will be added as evaluation suite items.";
+      ? "There are no rows that can be added as test suite items. The input field is missing."
+      : "Only rows with input fields will be added as test suite items.";
 
     if (noValidRows || partialValid) {
       return (
@@ -335,7 +440,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     type: "trace" | "span",
     includeNestedSpans: boolean = false,
   ) => (
-    <Accordion type="single" collapsible defaultValue="" className="mb-4">
+    <Accordion
+      type="single"
+      collapsible
+      defaultValue="metadata"
+      className="mb-4"
+    >
       <AccordionItem value="metadata" className="border-t">
         <AccordionTrigger>
           {type === "trace"
@@ -392,31 +502,30 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Add to evaluation suite</DialogTitle>
+            <DialogTitle>Add to test suite</DialogTitle>
           </DialogHeader>
           <DialogAutoScrollBody>
-            <ExplainerDescription
-              className="mb-4"
-              {...EXPLAINERS_MAP[
-                EXPLAINER_ID
-                  .why_would_i_want_to_add_traces_to_an_evaluation_suite
-              ]}
-            />
-            {hasOnlyTraces && renderMetadataConfiguration("trace", true)}
-            {hasOnlySpans && renderMetadataConfiguration("span")}
+            {!selectedDataset && (
+              <ExplainerDescription
+                className="mb-4"
+                {...EXPLAINERS_MAP[
+                  EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite
+                ]}
+              />
+            )}
             <div className="my-2 flex items-center justify-between">
-              <h3 className="comet-title-xs">Select an evaluation suite</h3>
+              <h3 className="comet-title-xs">Select a test suite</h3>
               {canCreateDatasets && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   onClick={() => {
                     setOpenDialog(true);
                   }}
                   disabled={noValidRows}
                 >
-                  <Plus className="mr-2 size-4" />
-                  Create new evaluation suite
+                  <Plus className="mr-1 size-4" />
+                  Create new test suite
                 </Button>
               )}
             </div>
@@ -426,7 +535,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               className="w-full"
             />
             {renderAlert()}
-            <div className="my-4 flex max-h-[300px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto sm:max-h-[400px]">
+            <div className="my-4 flex max-h-[225px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderListItems()}
             </div>
             {total > DEFAULT_SIZE && (
@@ -439,6 +548,86 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                   total={total}
                 ></DataTablePagination>
               </div>
+            )}
+            {selectedDataset?.type === DATASET_TYPE.DATASET && (
+              <div ref={configSectionRef}>
+                {hasOnlyTraces && renderMetadataConfiguration("trace", true)}
+                {hasOnlySpans && renderMetadataConfiguration("span")}
+              </div>
+            )}
+            {selectedDataset?.type === DATASET_TYPE.TEST_SUITE && (
+              <Accordion
+                ref={configSectionRef}
+                type="single"
+                collapsible
+                defaultValue="assertions"
+                className="mt-2"
+              >
+                <AccordionItem value="assertions" className="border-t">
+                  <AccordionTrigger>Evaluation criteria</AccordionTrigger>
+                  <AccordionContent className="px-3">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="comet-body-s-accented">
+                          Assertions
+                        </span>
+                        <span className="comet-body-xs text-light-slate">
+                          Define the conditions for this evaluation to pass
+                        </span>
+                        <AssertionsField
+                          readOnlyAssertions={suiteAssertions}
+                          editableAssertions={assertions}
+                          onChangeEditable={handleAssertionChange}
+                          onRemoveEditable={handleAssertionRemove}
+                          onAdd={handleAssertionAdd}
+                        />
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="flex flex-1 flex-col gap-1">
+                          <Label className="comet-body-xs-accented">
+                            Runs per item
+                          </Label>
+                          <Input
+                            dimension="sm"
+                            className="[&::-webkit-inner-spin-button]:appearance-none"
+                            type="number"
+                            min={1}
+                            max={MAX_RUNS_PER_ITEM}
+                            value={runsInput.displayValue}
+                            onChange={runsInput.onChange}
+                            onFocus={runsInput.onFocus}
+                            onBlur={runsInput.onBlur}
+                            onKeyDown={runsInput.onKeyDown}
+                          />
+                          <span className="comet-body-xs text-light-slate">
+                            Suite default: {suiteExecutionPolicy.runs_per_item}
+                          </span>
+                        </div>
+                        <div className="flex flex-1 flex-col gap-1">
+                          <Label className="comet-body-xs-accented">
+                            Pass threshold
+                          </Label>
+                          <Input
+                            dimension="sm"
+                            className="[&::-webkit-inner-spin-button]:appearance-none"
+                            type="number"
+                            min={1}
+                            max={runsPerItem}
+                            value={thresholdInput.displayValue}
+                            onChange={thresholdInput.onChange}
+                            onFocus={thresholdInput.onFocus}
+                            onBlur={thresholdInput.onBlur}
+                            onKeyDown={thresholdInput.onKeyDown}
+                          />
+                          <span className="comet-body-xs text-light-slate">
+                            Suite default: {suiteExecutionPolicy.pass_threshold}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             )}
           </DialogAutoScrollBody>
           <DialogFooter>
@@ -457,12 +646,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               }}
               disabled={!selectedDataset || noValidRows || fetching}
             >
-              Add to evaluation suite
+              Add to test suite
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AddEditEvaluationSuiteDialog
+      <AddEditTestSuiteDialog
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={(dataset) => {

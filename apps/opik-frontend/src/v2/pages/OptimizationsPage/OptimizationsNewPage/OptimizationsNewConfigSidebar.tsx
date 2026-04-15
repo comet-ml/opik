@@ -28,6 +28,7 @@ import DatasetSamplePreview from "./DatasetSamplePreview";
 
 type OptimizationsNewConfigSidebarProps = {
   form: UseFormReturn<OptimizationConfigFormType>;
+  projectId?: string | null;
   optimizerType: OPTIMIZER_TYPE;
   metricType: METRIC_TYPE;
   datasetSample: Record<string, unknown> | null;
@@ -44,6 +45,7 @@ const OptimizationsNewConfigSidebar: React.FC<
   OptimizationsNewConfigSidebarProps
 > = ({
   form,
+  projectId,
   optimizerType,
   metricType,
   datasetSample,
@@ -105,17 +107,16 @@ const OptimizationsNewConfigSidebar: React.FC<
           render={({ field }) => (
             <FormItem>
               <FormLabel className="comet-body-s-accented flex items-center gap-1">
-                Evaluation suite
+                Test suite
                 <ExplainerIcon
-                  {...EXPLAINERS_MAP[
-                    EXPLAINER_ID.whats_the_evaluation_suite_section
-                  ]}
+                  {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_section]}
                 />
               </FormLabel>
               <FormControl>
                 <DatasetSelectBox
                   value={field.value}
                   onValueChange={(id) => onDatasetChange(id)}
+                  projectId={projectId}
                   className="h-10 w-full"
                 />
               </FormControl>

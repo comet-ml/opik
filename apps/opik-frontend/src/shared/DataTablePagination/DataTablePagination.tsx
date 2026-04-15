@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import {
+  ChevronDown,
   ChevronFirst,
   ChevronLast,
   ChevronLeft,
@@ -96,12 +97,53 @@ const DataTablePagination = ({
 
   return (
     <div
-      className={`flex flex-row justify-end ${isMinimal ? "gap-1" : "gap-4"} ${
+      className={`flex h-8 flex-row items-center justify-between ${
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
     >
-      {showWarning && <TruncationDisabledWarning />}
-      <div className={`flex flex-row ${isMinimal ? "gap-0.5" : "gap-2"}`}>
+      <div className="flex flex-row items-center gap-1">
+        {!isMinimal && <span className="comet-body-s">Rows per page: </span>}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`min-w-4 px-2 ${
+                isMinimal
+                  ? "h-6 px-0 leading-none focus-visible:ring-0"
+                  : "ml-1"
+              }`}
+              disabled={disabledSizeChange}
+            >
+              {size}
+              <ChevronDown className="ml-1 size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {itemsPerPage.map((count) => {
+              const isDisabled =
+                disabledSizeChange ||
+                (maxSize !== undefined && count > maxSize);
+              return (
+                <DropdownMenuCheckboxItem
+                  key={count}
+                  onSelect={() => !isDisabled && sizeChange(count)}
+                  checked={count === size}
+                  disabled={isDisabled}
+                >
+                  {count}
+                </DropdownMenuCheckboxItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div
+        className={`flex flex-row items-center ${
+          isMinimal ? "gap-1" : "gap-2"
+        }`}
+      >
+        {showWarning && <TruncationDisabledWarning />}
         <Button
           variant={navButtonVariant}
           size={buttonSize}
@@ -120,40 +162,10 @@ const DataTablePagination = ({
         >
           <ChevronLeft />
         </Button>
-        <div className="flex flex-row items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`min-w-4 px-4 ${
-                  isMinimal ? "h-6 px-0 leading-none focus-visible:ring-0" : ""
-                }`}
-                disabled={disabledSizeChange}
-              >
-                {textPrefix}
-                {totalDisplay}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {itemsPerPage.map((count) => {
-                const isDisabled =
-                  disabledSizeChange ||
-                  (maxSize !== undefined && count > maxSize);
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={count}
-                    onSelect={() => !isDisabled && sizeChange(count)}
-                    checked={count === size}
-                    disabled={isDisabled}
-                  >
-                    {count}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <span className="comet-body-s">
+          {textPrefix}
+          {totalDisplay}
+        </span>
         <Button
           variant={navButtonVariant}
           size={buttonSize}

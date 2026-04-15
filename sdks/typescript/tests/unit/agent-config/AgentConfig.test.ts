@@ -1,35 +1,24 @@
-import { z } from "zod";
 import { trackStorage } from "@/decorators/track";
-import { createTypedAgentConfig } from "@/agent-config/AgentConfig";
-import { extractFieldMetadata } from "@/agent-config/typeHelpers";
+import { createTypedConfig } from "@/agent-config/Config";
+import { inferBackendType } from "@/typeHelpers";
 import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 
-const schema = z
-  .object({
-    temperature: z.number().describe("Sampling temperature"),
-    model: z.string(),
-  })
-  .describe("Cfg");
+const fieldNames = new Set(["temperature", "model"]);
 
-const fieldMeta = extractFieldMetadata(schema, "Cfg");
-
-function makeConfig(overrides?: Partial<Parameters<typeof createTypedAgentConfig>[0]>) {
-  return createTypedAgentConfig({
-    schema,
+function makeConfig(overrides?: Partial<Parameters<typeof createTypedConfig>[0]>) {
+  return createTypedConfig({
     values: { temperature: 0.5, model: "gpt-4" },
-    fieldMeta,
+    fieldNames,
     blueprintId: "bp-123",
     blueprintVersion: "v2",
-    envs: ["prod"],
     isFallback: false,
     maskId: undefined,
-    deployTo: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   });
 }
 
-describe("AgentConfig", () => {
+describe("Config", () => {
   it("exposes typed values", () => {
     const cfg = makeConfig();
     expect(cfg.temperature).toBe(0.5);
@@ -40,15 +29,7 @@ describe("AgentConfig", () => {
     const cfg = makeConfig();
     expect(cfg.blueprintId).toBe("bp-123");
     expect(cfg.blueprintVersion).toBe("v2");
-    expect(cfg.envs).toEqual(["prod"]);
     expect(cfg.isFallback).toBe(false);
-  });
-
-  it("delegates deployTo", async () => {
-    const deployTo = vi.fn().mockResolvedValue(undefined);
-    const cfg = makeConfig({ deployTo });
-    await cfg.deployTo("staging");
-    expect(deployTo).toHaveBeenCalledWith("staging");
   });
 
   it("injects trace metadata on field access inside track()", () => {
@@ -127,7 +108,7 @@ describe("AgentConfig", () => {
   });
 });
 
-describe("AgentConfig — prompt field serialisation in metadata", () => {
+describe("Config — prompt field serialisation in metadata", () => {
   function makePromptLike(commit: string): BasePrompt {
     const obj = Object.create(BasePrompt.prototype);
     obj.commit = commit;
@@ -147,100 +128,78 @@ describe("AgentConfig — prompt field serialisation in metadata", () => {
   }
 
   it("serialises a prompt field to its commit string in metadata values", () => {
-    const promptSchema = z
-      .object({
-        system_prompt: z.instanceof(BasePrompt).describe("System prompt"),
-      })
-      .describe("Cfg");
     const prompt = makePromptLike("commit-abc");
-    const meta = extractFieldMetadata(promptSchema, "Cfg");
+    const names = new Set(["system_prompt"]);
 
     const updateSpy = vi.fn();
     const mockCtx = { span: { update: updateSpy }, trace: { update: updateSpy } };
 
     trackStorage.run(mockCtx as unknown as Parameters<typeof trackStorage.run>[0], () => {
-      const cfg = createTypedAgentConfig({
-        schema: promptSchema,
+      const cfg = createTypedConfig({
         values: { system_prompt: prompt },
-        fieldMeta: meta,
+        fieldNames: names,
         blueprintId: "bp-1",
         blueprintVersion: "v1",
-        envs: undefined,
         isFallback: false,
         maskId: undefined,
-        deployTo: vi.fn(),
       });
       void cfg.system_prompt;
     });
 
     const call = updateSpy.mock.calls[0][0];
-    const fieldEntry = call.metadata.agent_configuration.values["Cfg.system_prompt"];
+    const fieldEntry = call.metadata.agent_configuration.values["system_prompt"];
     expect(fieldEntry.type).toBe("prompt");
     expect(fieldEntry.value).toBe("commit-abc");
-    expect(fieldEntry.description).toBe("System prompt");
   });
 
   it("serialises a prompt_commit (PromptVersion) field to its commit string in metadata values", () => {
-    const pvSchema = z
-      .object({
-        pv: z.instanceof(PromptVersion),
-      })
-      .describe("Cfg");
     const pv = makePromptVersion("commit-xyz");
-    const meta = extractFieldMetadata(pvSchema, "Cfg");
+    const names = new Set(["pv"]);
 
     const updateSpy = vi.fn();
     const mockCtx = { span: { update: updateSpy }, trace: { update: updateSpy } };
 
     trackStorage.run(mockCtx as unknown as Parameters<typeof trackStorage.run>[0], () => {
-      const cfg = createTypedAgentConfig({
-        schema: pvSchema,
+      const cfg = createTypedConfig({
         values: { pv },
-        fieldMeta: meta,
+        fieldNames: names,
         blueprintId: "bp-1",
         blueprintVersion: "v1",
-        envs: undefined,
         isFallback: false,
         maskId: undefined,
-        deployTo: vi.fn(),
       });
       void cfg.pv;
     });
 
     const call = updateSpy.mock.calls[0][0];
-    const fieldEntry = call.metadata.agent_configuration.values["Cfg.pv"];
+    const fieldEntry = call.metadata.agent_configuration.values["pv"];
     expect(fieldEntry.type).toBe("prompt_commit");
     expect(fieldEntry.value).toBe("commit-xyz");
   });
 
-  it("sets value to undefined in metadata when prompt field is null/undefined", () => {
-    const promptSchema = z
-      .object({
-        system_prompt: z.instanceof(BasePrompt).optional(),
-      })
-      .describe("Cfg");
-    const meta = extractFieldMetadata(promptSchema, "Cfg");
+  it("sets value to undefined in metadata when prompt field is undefined", () => {
+    const names = new Set(["system_prompt"]);
 
     const updateSpy = vi.fn();
     const mockCtx = { span: { update: updateSpy }, trace: { update: updateSpy } };
 
     trackStorage.run(mockCtx as unknown as Parameters<typeof trackStorage.run>[0], () => {
-      const cfg = createTypedAgentConfig({
-        schema: promptSchema,
+      const cfg = createTypedConfig({
         values: { system_prompt: undefined },
-        fieldMeta: meta,
+        fieldNames: names,
         blueprintId: "bp-1",
         blueprintVersion: "v1",
-        envs: undefined,
         isFallback: false,
         maskId: undefined,
-        deployTo: vi.fn(),
       });
       void cfg.system_prompt;
     });
 
     const call = updateSpy.mock.calls[0][0];
-    const fieldEntry = call.metadata.agent_configuration.values["Cfg.system_prompt"];
-    expect(fieldEntry.value).toBeUndefined();
+    // undefined values are skipped entirely
+    expect(call.metadata.agent_configuration.values["system_prompt"]).toBeUndefined();
   });
 });
+
+// Keep inferBackendType in scope to avoid unused import warning
+void inferBackendType;

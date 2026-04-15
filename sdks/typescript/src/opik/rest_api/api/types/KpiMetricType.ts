@@ -4,6 +4,6 @@ export const KpiMetricType = {
     Count: "count",
     Errors: "errors",
     AvgDuration: "avg_duration",
-    AvgCost: "avg_cost",
+    TotalCost: "total_cost",
 } as const;
 export type KpiMetricType = (typeof KpiMetricType)[keyof typeof KpiMetricType];

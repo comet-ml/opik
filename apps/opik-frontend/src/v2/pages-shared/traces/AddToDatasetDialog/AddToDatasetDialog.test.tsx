@@ -12,7 +12,7 @@ const mockAddTracesToDataset = vi.fn();
 const mockAddSpansToDataset = vi.fn();
 
 // Mock the API hooks
-vi.mock("@/api/datasets/useDatasetsList", () => ({
+vi.mock("@/api/datasets/useProjectDatasetsList", () => ({
   default: vi.fn(() => ({
     data: {
       content: [
@@ -20,16 +20,24 @@ vi.mock("@/api/datasets/useDatasetsList", () => ({
           id: "dataset-1",
           name: "Test Dataset 1",
           description: "First test dataset",
+          type: "dataset",
         },
         {
           id: "dataset-2",
           name: "Test Dataset 2",
           description: "Second test dataset",
+          type: "test_suite",
         },
       ],
       total: 2,
     },
     isPending: false,
+  })),
+}));
+
+vi.mock("@/api/datasets/useDatasetVersionsList", () => ({
+  default: vi.fn(() => ({
+    data: { content: [], total: 0 },
   })),
 }));
 
@@ -63,20 +71,10 @@ vi.mock("@/ui/use-toast", () => ({
   }),
 }));
 
-// Mock the navigate hook
-vi.mock("@/v2/pages-shared/experiments/useNavigateToExperiment", () => ({
-  useNavigateToExperiment: () => ({
-    navigate: vi.fn(),
-  }),
+// Mock the AddEditTestSuiteDialog component
+vi.mock("@/v2/shared/AddEditTestSuiteDialog/AddEditTestSuiteDialog", () => ({
+  default: () => <div data-testid="add-edit-test-suite-dialog" />,
 }));
-
-// Mock the AddEditEvaluationSuiteDialog component
-vi.mock(
-  "@/v2/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog",
-  () => ({
-    default: () => <div data-testid="add-edit-evaluation-suite-dialog" />,
-  }),
-);
 
 describe("AddToDatasetDialog", () => {
   let queryClient: QueryClient;
@@ -145,17 +143,17 @@ describe("AddToDatasetDialog", () => {
   it("should render the dialog when open", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("Select an evaluation suite")).toBeInTheDocument();
+    expect(screen.getByText("Select a test suite")).toBeInTheDocument();
     expect(screen.getByText("Test Dataset 1")).toBeInTheDocument();
   });
 
-  it("should display enrichment checkboxes when only traces are selected", () => {
+  it("should display enrichment checkboxes when selecting a legacy dataset with traces", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Trace metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset (type: "dataset")
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
+    // Metadata config should be visible and expanded by default
     expect(screen.getByLabelText("Nested spans")).toBeInTheDocument();
     expect(screen.getByLabelText("Tags")).toBeInTheDocument();
     expect(screen.getByLabelText("Feedback scores")).toBeInTheDocument();
@@ -167,9 +165,8 @@ describe("AddToDatasetDialog", () => {
   it("should have all enrichment checkboxes checked by default", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Trace metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
     expect(screen.getByLabelText("Nested spans")).toBeChecked();
     expect(screen.getByLabelText("Tags")).toBeChecked();
@@ -182,9 +179,8 @@ describe("AddToDatasetDialog", () => {
   it("should allow unchecking enrichment options", async () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Trace metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset first
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
     const spansCheckbox = screen.getByLabelText("Nested spans");
     const tagsCheckbox = screen.getByLabelText("Tags");
@@ -199,7 +195,7 @@ describe("AddToDatasetDialog", () => {
     expect(screen.getByLabelText("Feedback scores")).toBeChecked();
   });
 
-  it("should display span enrichment checkboxes when only spans are selected", () => {
+  it("should display span enrichment checkboxes when selecting a legacy dataset with spans", () => {
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
@@ -207,9 +203,8 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Span metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
     // Spans don't have "Nested spans" option
     expect(screen.queryByLabelText("Nested spans")).not.toBeInTheDocument();
@@ -229,11 +224,9 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Span metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
-    // Spans don't have "Nested spans" option, but all others should be checked
     expect(screen.getByLabelText("Tags")).toBeChecked();
     expect(screen.getByLabelText("Feedback scores")).toBeChecked();
     expect(screen.getByLabelText("Comments")).toBeChecked();
@@ -249,9 +242,8 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Span metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset first
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
     const tagsCheckbox = screen.getByLabelText("Tags");
     const usageCheckbox = screen.getByLabelText("Usage metrics");
@@ -282,10 +274,10 @@ describe("AddToDatasetDialog", () => {
     expect(searchInput).toBeInTheDocument();
   });
 
-  it("should display create new evaluation suite button", () => {
+  it("should display create new test suite button", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("Create new evaluation suite")).toBeInTheDocument();
+    expect(screen.getByText("Create new test suite")).toBeInTheDocument();
   });
 
   it("should show alert when no valid rows are present", () => {
@@ -298,7 +290,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "There are no rows that can be added as evaluation suite items. The input field is missing.",
+        "There are no rows that can be added as test suite items. The input field is missing.",
       ),
     ).toBeInTheDocument();
   });
@@ -316,12 +308,12 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "Only rows with input fields will be added as evaluation suite items.",
+        "Only rows with input fields will be added as test suite items.",
       ),
     ).toBeInTheDocument();
   });
 
-  it("should disable create new evaluation suite button when no valid rows", () => {
+  it("should disable create new test suite button when no valid rows", () => {
     const propsWithInvalidRows = {
       ...defaultProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
@@ -329,7 +321,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
 
-    const createButton = screen.getByText("Create new evaluation suite");
+    const createButton = screen.getByText("Create new test suite");
     expect(createButton).toBeDisabled();
   });
 
@@ -340,8 +332,8 @@ describe("AddToDatasetDialog", () => {
     const dataset = screen.getByText("Test Dataset 1");
     fireEvent.click(dataset);
 
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1]; // Get the button, not the dialog title
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1]; // Get the button, not the dialog title
     fireEvent.click(addButton);
 
     await waitFor(() => {
@@ -376,8 +368,8 @@ describe("AddToDatasetDialog", () => {
     const dataset = screen.getByText("Test Dataset 1");
     fireEvent.click(dataset);
 
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1]; // Get the button, not the dialog title
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1]; // Get the button, not the dialog title
     fireEvent.click(addButton);
 
     await waitFor(() => {
@@ -402,21 +394,16 @@ describe("AddToDatasetDialog", () => {
   it("should respect unchecked enrichment options when adding traces", async () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Trace metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset first to show metadata config
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
     // Uncheck some options
     fireEvent.click(screen.getByLabelText("Nested spans"));
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Usage metrics"));
 
-    // Select the dataset
-    const dataset = screen.getByText("Test Dataset 1");
-    fireEvent.click(dataset);
-
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1]; // Get the button, not the dialog title
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1];
     fireEvent.click(addButton);
 
     await waitFor(() => {
@@ -444,21 +431,16 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
-    // Expand the accordion first
-    const accordionButton = screen.getByText("Span metadata configuration");
-    fireEvent.click(accordionButton);
+    // Select the legacy dataset first to show metadata config
+    fireEvent.click(screen.getByText("Test Dataset 1"));
 
     // Uncheck some options
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Comments"));
     fireEvent.click(screen.getByLabelText("Metadata"));
 
-    // Select the dataset
-    const dataset = screen.getByText("Test Dataset 1");
-    fireEvent.click(dataset);
-
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1]; // Get the button, not the dialog title
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1];
     fireEvent.click(addButton);
 
     await waitFor(() => {

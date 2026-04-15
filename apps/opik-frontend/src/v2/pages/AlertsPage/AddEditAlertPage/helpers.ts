@@ -98,30 +98,6 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   },
 };
 
-const getProjectIdsFromTriggerConfigs = (
-  triggerConfigs?: AlertTriggerConfig[],
-): string[] => {
-  const projectConfig = triggerConfigs?.find(
-    (config) => config.type === ALERT_TRIGGER_CONFIG_TYPE["scope:project"],
-  );
-
-  if (projectConfig) {
-    const projectIds = projectConfig.config_value?.project_ids;
-    if (!projectIds || projectIds.trim() === "") {
-      return [];
-    }
-    try {
-      // Parse JSON array format
-      return JSON.parse(projectIds);
-    } catch {
-      // Fallback to comma-separated format for backwards compatibility
-      return projectIds.split(",");
-    }
-  }
-
-  return [];
-};
-
 const getThresholdFromTriggerConfigs = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   triggerConfigs?: AlertTriggerConfig[],
@@ -168,21 +144,6 @@ const getAllThresholdConditionsFromTriggerConfigs = (
   return conditions;
 };
 
-const createProjectScopeTriggerConfig = (
-  projectIds: string[],
-): AlertTriggerConfig[] => {
-  if (projectIds.length === 0) return [];
-
-  return [
-    {
-      type: ALERT_TRIGGER_CONFIG_TYPE["scope:project"],
-      config_value: {
-        project_ids: JSON.stringify(projectIds),
-      },
-    },
-  ];
-};
-
 const createThresholdTriggerConfig = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   threshold?: string,
@@ -215,15 +176,10 @@ const createThresholdTriggerConfig = (
 
 export const alertTriggersToFormTriggers = (
   triggers: AlertTrigger[],
-  allProjectIds: string[],
 ): TriggerFormType[] => {
   if (!triggers || triggers.length === 0) return [];
 
   return triggers.map((trigger) => {
-    const triggerProjectIds = getProjectIdsFromTriggerConfigs(
-      trigger.trigger_configs,
-    );
-
     // Extract threshold and window for cost/latency/errors triggers
     let thresholdData = {};
     if (trigger.event_type === ALERT_EVENT_TYPE.trace_cost) {
@@ -257,8 +213,6 @@ export const alertTriggersToFormTriggers = (
 
     return {
       eventType: trigger.event_type,
-      projectIds:
-        triggerProjectIds.length > 0 ? triggerProjectIds : allProjectIds,
       ...thresholdData,
       ...(conditions.length > 0 ? { conditions } : {}),
     };
@@ -267,15 +221,9 @@ export const alertTriggersToFormTriggers = (
 
 export const formTriggersToAlertTriggers = (
   triggers: TriggerFormType[],
-  allProjectIds: string[],
 ): AlertTrigger[] => {
   return triggers.map((trigger) => {
     const configs: AlertTriggerConfig[] = [];
-
-    // Add project scope config if needed
-    if (trigger.projectIds.length !== allProjectIds.length) {
-      configs.push(...createProjectScopeTriggerConfig(trigger.projectIds));
-    }
 
     // Add threshold config for cost/latency/errors triggers
     if (trigger.eventType === ALERT_EVENT_TYPE.trace_cost) {

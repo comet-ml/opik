@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.infrastructure.db.DatasetTypeMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -35,6 +36,8 @@ import java.util.UUID;
 @RegisterConstructorMapper(BiInformationResponse.BiInformation.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
+@RegisterArgumentFactory(DatasetTypeMapper.class)
+@RegisterColumnMapper(DatasetTypeMapper.class)
 public interface DatasetDAO {
 
     @SqlQuery("""

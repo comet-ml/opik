@@ -24,7 +24,7 @@ import { Separator } from "@/ui/separator";
 import { Spinner } from "@/ui/spinner";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import AddEditEvaluationSuiteDialog from "@/v2/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
+import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import useDatasetVersionSelect, {
   DEFAULT_LOADED_DATASETS,
 } from "./useDatasetVersionSelect";
@@ -46,7 +46,7 @@ interface DatasetVersionSelectBoxProps {
   value: string | null; // "datasetId::versionId" format
   versionName?: string;
   onChange: (value: string | null) => void;
-  workspaceName: string;
+  projectId?: string | null;
   disabled?: boolean;
   showClearButton?: boolean;
   buttonClassName?: string;
@@ -56,10 +56,10 @@ function DatasetEmptyState() {
   return (
     <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
       <div className="comet-body-s-accented pb-1 text-foreground">
-        No evaluation suites available
+        No test suites available
       </div>
       <div className="comet-body-s text-muted-slate">
-        Create an evaluation suite with examples to evaluate your prompt on.
+        Create a test suite with examples to evaluate your prompt on.
       </div>
     </div>
   );
@@ -69,7 +69,7 @@ function DatasetVersionSelectBox({
   value,
   versionName,
   onChange,
-  workspaceName,
+  projectId,
   disabled = false,
   showClearButton = true,
   buttonClassName,
@@ -101,7 +101,7 @@ function DatasetVersionSelectBox({
     loadMore,
     hasMore,
   } = useDatasetVersionSelect({
-    workspaceName,
+    projectId,
     search,
     openDatasetId,
   });
@@ -184,7 +184,7 @@ function DatasetVersionSelectBox({
 
           {isEmpty ? (
             <div className="relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3">
-              <TooltipWrapper content="This evaluation suite is empty">
+              <TooltipWrapper content="This test suite is empty">
                 <Info className="size-3.5 text-light-slate" />
               </TooltipWrapper>
             </div>
@@ -258,7 +258,7 @@ function DatasetVersionSelectBox({
     }
 
     return (
-      <div className="max-h-[40vh] space-y-[3px] overflow-y-auto overflow-x-hidden">
+      <div className="max-h-[30vh] space-y-[3px] overflow-y-auto overflow-x-hidden">
         {renderNestedList()}
         {hasMore && (
           <>
@@ -305,12 +305,10 @@ function DatasetVersionSelectBox({
           open={isSelectOpen}
           disabled={disabled}
         >
-          <TooltipWrapper
-            content={displayValue ?? "Select an evaluation suite"}
-          >
+          <TooltipWrapper content={displayValue ?? "Select a test suite"}>
             <SelectTrigger
               className={cn(
-                "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0",
+                "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0 [&>span]:min-w-0 [&>span]:flex-1",
                 {
                   "rounded-r-none": !!value && showClearButton,
                 },
@@ -320,22 +318,23 @@ function DatasetVersionSelectBox({
               <SelectValue
                 placeholder={
                   <div className="flex w-full items-center text-light-slate">
-                    <Database className="mr-2 size-4" />
+                    <Database className="mr-2 size-4 text-[#b8e54a]" />
                     <span className="truncate font-normal">
-                      Select an evaluation suite
+                      Select a test suite
                     </span>
                   </div>
                 }
               >
-                <div className="flex w-full items-center gap-2 text-foreground">
-                  <Database className="size-4 shrink-0" />
-
-                  <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
+                <div className="flex w-full items-center justify-between gap-2 text-foreground">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Database className="size-4 shrink-0 text-[#b8e54a]" />
                     <span className="min-w-0 truncate">
                       {selectedDataset?.name}
                     </span>
-                    <GitCommitVertical className="size-3.5 shrink-0 text-muted-slate" />
-                    <span className="shrink-0">{versionName ?? ""}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center text-muted-slate">
+                    <GitCommitVertical className="size-4" />
+                    <span>{versionName ?? ""}</span>
                   </div>
                 </div>
               </SelectValue>
@@ -352,7 +351,7 @@ function DatasetVersionSelectBox({
                 <Input
                   ref={inputRef}
                   className="outline-0"
-                  placeholder="Search evaluation suites"
+                  placeholder="Search test suites"
                   value={search}
                   variant="ghost"
                   onChange={(e) => setSearch(e.target.value)}
@@ -390,7 +389,7 @@ function DatasetVersionSelectBox({
           </Button>
         )}
       </div>
-      <AddEditEvaluationSuiteDialog
+      <AddEditTestSuiteDialog
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
         setOpen={setIsDialogOpen}

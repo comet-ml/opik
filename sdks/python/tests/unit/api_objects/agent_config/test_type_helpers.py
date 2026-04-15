@@ -1,11 +1,10 @@
-import dataclasses
 import json
-from typing import Annotated, List, Dict, Callable, Optional
+from typing import List, Dict, Callable, Optional
 from unittest import mock
 
 import pytest
 
-from opik.api_objects.agent_config import type_helpers
+from opik.api_objects import type_helpers
 from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
@@ -276,17 +275,20 @@ class TestPythonValueToBackendValue:
 
 class TestBackendValueToPythonValue:
     @pytest.mark.parametrize(
-        "value, backend_type, py_type, expected",
+        "value, py_type, expected",
         [
-            ("hello", "string", str, "hello"),
-            ("42", "integer", int, 42),
-            ("42.0", "integer", int, 42),
-            (42, "integer", int, 42),
-            ("0.6", "float", float, 0.6),
-            (0.6, "float", float, 0.6),
-            ("true", "boolean", bool, True),
-            ("false", "boolean", bool, False),
-            (True, "boolean", bool, True),
+            ("hello", str, "hello"),
+            ("42", int, 42),
+            ("42.0", int, 42),
+            (42, int, 42),
+            ("0.6", float, 0.6),
+            (0.6, float, 0.6),
+            ("true", bool, True),
+            ("1", bool, True),
+            ("yes", bool, True),
+            ("false", bool, False),
+            ("0", bool, False),
+            (True, bool, True),
         ],
         ids=[
             "str",
@@ -296,17 +298,15 @@ class TestBackendValueToPythonValue:
             "float_from_str",
             "float_native",
             "bool_true_str",
+            "bool_one_str",
+            "bool_yes_str",
             "bool_false_str",
+            "bool_zero_str",
             "bool_native",
         ],
     )
-    def test_primitives__deserialized_correctly(
-        self, value, backend_type, py_type, expected
-    ):
-        assert (
-            type_helpers.backend_value_to_python_value(value, backend_type, py_type)
-            == expected
-        )
+    def test_primitives__deserialized_correctly(self, value, py_type, expected):
+        assert type_helpers.backend_value_to_python_value(value, py_type) == expected
 
     @pytest.mark.parametrize(
         "value, py_type, expected",
@@ -319,13 +319,10 @@ class TestBackendValueToPythonValue:
         ids=["list_from_json", "list_native", "dict_from_json", "dict_native"],
     )
     def test_collections__deserialized_correctly(self, value, py_type, expected):
-        assert (
-            type_helpers.backend_value_to_python_value(value, "string", py_type)
-            == expected
-        )
+        assert type_helpers.backend_value_to_python_value(value, py_type) == expected
 
     def test_none__returns_none(self):
-        assert type_helpers.backend_value_to_python_value(None, "string", str) is None
+        assert type_helpers.backend_value_to_python_value(None, str) is None
 
     @pytest.mark.parametrize(
         "py_type",
@@ -333,9 +330,7 @@ class TestBackendValueToPythonValue:
         ids=["Prompt", "ChatPrompt", "BasePrompt"],
     )
     def test_prompt_type__returns_raw_version_id_string(self, py_type):
-        result = type_helpers.backend_value_to_python_value(
-            "ver-xyz", "prompt", py_type
-        )
+        result = type_helpers.backend_value_to_python_value("ver-xyz", py_type)
         assert result == "ver-xyz"
 
     @pytest.mark.parametrize(
@@ -344,21 +339,17 @@ class TestBackendValueToPythonValue:
         ids=["Prompt", "ChatPrompt", "BasePrompt"],
     )
     def test_prompt_type__none_value__returns_none(self, py_type):
-        assert (
-            type_helpers.backend_value_to_python_value(None, "prompt", py_type) is None
-        )
+        assert type_helpers.backend_value_to_python_value(None, py_type) is None
 
     def test_prompt_version_type__returns_raw_version_id_string(self):
         result = type_helpers.backend_value_to_python_value(
-            "ver-pv-xyz", "prompt_version", PromptVersionDetail
+            "ver-pv-xyz", PromptVersionDetail
         )
         assert result == "ver-pv-xyz"
 
     def test_prompt_version_type__none_value__returns_none(self):
         assert (
-            type_helpers.backend_value_to_python_value(
-                None, "prompt_version", PromptVersionDetail
-            )
+            type_helpers.backend_value_to_python_value(None, PromptVersionDetail)
             is None
         )
 
@@ -386,169 +377,10 @@ class TestRoundTrip:
         ],
     )
     def test_serialize_then_deserialize__recovers_original(self, value, py_type):
-        backend_type = type_helpers.python_type_to_backend_type(py_type)
         backend_value = type_helpers.python_value_to_backend_value(value, py_type)
-        restored = type_helpers.backend_value_to_python_value(
-            backend_value, backend_type, py_type
-        )
+        restored = type_helpers.backend_value_to_python_value(backend_value, py_type)
         assert restored == value
         assert isinstance(restored, py_type)
-
-
-class TestExtractDataclassFields:
-    def test_basic_dataclass__all_supported_fields_extracted(self):
-        @dataclasses.dataclass
-        class MyConfig:
-            temp: float = 0.8
-            name: str = "agent"
-            count: int = 10
-            flag: bool = True
-
-        fields = type_helpers.extract_dataclass_fields(MyConfig)
-        names = [f[0] for f in fields]
-        assert set(names) == {"temp", "name", "count", "flag"}
-
-    def test_mixed_types__unsupported_fields_filtered_out(self):
-        @dataclasses.dataclass
-        class MixedConfig:
-            temp: float = 0.8
-            callback: Callable = lambda: None  # type: ignore
-
-        fields = type_helpers.extract_dataclass_fields(MixedConfig)
-        assert len(fields) == 1
-        assert fields[0][0] == "temp"
-
-    def test_inherited_dataclass__parent_fields_included(self):
-        @dataclasses.dataclass
-        class Base:
-            base_field: str = "base"
-
-        @dataclasses.dataclass
-        class Child(Base):
-            child_field: int = 42
-
-        fields = type_helpers.extract_dataclass_fields(Child)
-        names = [f[0] for f in fields]
-        assert "base_field" in names
-        assert "child_field" in names
-
-    def test_non_dataclass__raises_type_error(self):
-        class NotADataclass:
-            pass
-
-        with pytest.raises(TypeError):
-            type_helpers.extract_dataclass_fields(NotADataclass)
-
-    def test_fields_with_defaults__names_and_types_extracted(self):
-        @dataclasses.dataclass
-        class WithDefaults:
-            temp: float = 0.8
-            name: str = "default"
-
-        fields = type_helpers.extract_dataclass_fields(WithDefaults)
-        by_name = {f[0]: f[1] for f in fields}
-        assert by_name["temp"] is float
-        assert by_name["name"] is str
-
-    def test_field_without_default__included_in_results(self):
-        @dataclasses.dataclass
-        class NoDefault:
-            temp: float
-
-        fields = type_helpers.extract_dataclass_fields(NoDefault)
-        assert fields[0][0] == "temp"
-
-    def test_prompt_field__included_in_extracted_fields(self):
-        @dataclasses.dataclass
-        class WithPrompt:
-            temp: float = 0.7
-            system_prompt: Prompt = dataclasses.field(default=None)
-
-        fields = type_helpers.extract_dataclass_fields(WithPrompt)
-        names = [f[0] for f in fields]
-        assert "system_prompt" in names
-        assert "temp" in names
-
-    def test_base_prompt_field__included_in_extracted_fields(self):
-        @dataclasses.dataclass
-        class WithBase:
-            p: BasePrompt = dataclasses.field(default=None)
-
-        fields = type_helpers.extract_dataclass_fields(WithBase)
-        assert fields[0][0] == "p"
-
-
-class TestExtractDataclassFieldsAnnotated:
-    def test_annotated_str__description_extracted(self):
-        @dataclasses.dataclass
-        class Cfg:
-            model: Annotated[str, "The LLM model name"] = "gpt-4o"
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        assert len(fields) == 1
-        name, py_type, desc = fields[0]
-        assert name == "model"
-        assert py_type is str
-        assert desc == "The LLM model name"
-
-    def test_annotated_float__description_extracted(self):
-        @dataclasses.dataclass
-        class Cfg:
-            temperature: Annotated[float, "Sampling temperature"] = 0.7
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        name, py_type, desc = fields[0]
-        assert py_type is float
-        assert desc == "Sampling temperature"
-
-    def test_annotated_multiple_metadata__first_str_used(self):
-        @dataclasses.dataclass
-        class Cfg:
-            tokens: Annotated[int, 42, "Max tokens to generate"] = 512
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        _, _, desc = fields[0]
-        assert desc == "Max tokens to generate"
-
-    def test_annotated_no_str_metadata__description_is_none(self):
-        @dataclasses.dataclass
-        class Cfg:
-            tokens: Annotated[int, 42] = 512
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        _, _, desc = fields[0]
-        assert desc is None
-
-    def test_plain_type__description_is_none(self):
-        @dataclasses.dataclass
-        class Cfg:
-            tokens: int = 512
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        _, _, desc = fields[0]
-        assert desc is None
-
-    def test_mixed_annotated_and_plain__descriptions_per_field(self):
-        @dataclasses.dataclass
-        class Cfg:
-            model: Annotated[str, "Model name"] = "gpt-4o"
-            temperature: float = 0.7
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        by_name = {f[0]: f[2] for f in fields}
-        assert by_name["model"] == "Model name"
-        assert by_name["temperature"] is None
-
-    def test_annotated_unsupported_base_type__field_filtered_out(self):
-        @dataclasses.dataclass
-        class Cfg:
-            model: Annotated[str, "valid"] = "gpt-4o"
-            callback: Annotated[object, "not supported"] = None  # type: ignore
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        names = [f[0] for f in fields]
-        assert "model" in names
-        assert "callback" not in names
 
 
 class TestUnwrapOptional:
@@ -611,37 +443,3 @@ class TestPythonTypeToBackendTypeOptional:
     )
     def test_optional_primitives__returns_inner_backend_type(self, py_type, expected):
         assert type_helpers.python_type_to_backend_type(py_type) == expected
-
-
-class TestExtractDataclassFieldsOptional:
-    def test_optional_field__included_with_unwrapped_type(self):
-        @dataclasses.dataclass
-        class Cfg:
-            name: Optional[str] = None
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        assert len(fields) == 1
-        _, py_type, _ = fields[0]
-        assert py_type is str
-
-    def test_optional_and_plain_field__both_included(self):
-        @dataclasses.dataclass
-        class Cfg:
-            temp: float = 0.7
-            name: Optional[str] = None
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        by_name = {f[0]: f[1] for f in fields}
-        assert by_name["temp"] is float
-        assert by_name["name"] is str
-
-    def test_optional_unsupported__field_filtered_out(self):
-        @dataclasses.dataclass
-        class Cfg:
-            temp: float = 0.7
-            callback: Optional[object] = None  # type: ignore
-
-        fields = type_helpers.extract_dataclass_fields(Cfg)
-        names = [f[0] for f in fields]
-        assert "temp" in names
-        assert "callback" not in names

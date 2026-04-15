@@ -15,6 +15,7 @@ This workflow will:
 - Check for pending changes and remote branch status
 - Run quality checks to ensure code quality
 - Pre-fill PR template with extracted information
+- Validate PR title and description against pr-lint rules before submission
 - Create GitHub draft PR using GitHub CLI (fallback to GitHub MCP only when CLI is unavailable)
 - Update Jira ticket status to "In Review" (for OPIK branches)
 - Document progress directly in Jira for OPIK branches using the same analysis logic as `share-progress-in-jira`
@@ -108,7 +109,7 @@ This workflow will:
 - **Search existing PRs**: Use GitHub CLI when available (for example `gh pr list --head <branch> --state open`); if CLI is unavailable, use GitHub MCP fallback.
 - **If PR exists**: Show existing PR and ask:
   > "PR already exists for this branch: <PR_URL>. Do you want to update the PR description and continue with the flow (quality checks, Jira status, progress comment)? (y/n)"
-  - **If yes**: Update PR description using the pre-filled template (Step 7 output), then continue with Steps 5–10 as usual
+  - **If yes**: Update PR description using the pre-filled template (Step 7 output), then continue with Steps 5–11 as usual
   - **If no**: Stop the flow
 - **If no PR exists**: Continue to PR creation
 
@@ -176,7 +177,42 @@ This workflow will:
 
 ---
 
-### 8. Create GitHub PR
+### 8. Validate PR Title & Description (pr-lint)
+
+Before creating the PR, validate the generated title and body against the same rules enforced by `.github/workflows/pr-lint.yml`. This prevents PRs from failing the PR Linter CI check on first submission.
+
+- **Read pr-lint rules at runtime**: Parse `.github/workflows/pr-lint.yml` as source of truth for the title regex and required sections. Fall back to the rules below only if the workflow file cannot be read.
+
+- **Title validation**: Verify the PR title matches the regex:
+  ```
+  ^\[(OPIK-\d+|DND-\d+|DEV-\d+|CUST-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI|HELM)\])*\s*.+$
+  ```
+  - Reject titles missing a ticket prefix (e.g., `[OPIK-1234]`) or using invalid component tags
+
+- **Required sections validation**: Verify the PR body contains all required `##` headings:
+  - `## Details`
+  - `## Change checklist`
+  - `## Issues`
+  - `## Testing`
+  - `## Documentation`
+
+- **Details section non-empty**: Extract content between `## Details` and the next `##` heading. Verify it is not empty after trimming whitespace (matching CI's `getSectionContent` which only calls `.trim()`). Note: HTML comment placeholders are handled separately in the template placeholder cleanup step below — do not strip them during this validation check.
+
+- **Issues section ticket reference**: Extract content of `## Issues`. Unless the PR title starts with `[NA]`, verify it references at least one ticket matching: `#\d+`, `OPIK-\d+`, `DND-\d+`, `DEV-\d+`, or `CUST-\d+`.
+
+- **Template placeholder cleanup**: Scan the entire body for leftover HTML comment placeholders from the PR template (e.g., `<!-- REPLACE ME`, `<!-- REPLACE ME WITH:`). If any remain, strip them before submission.
+
+- **On validation failure**:
+  - Show the specific errors to the user
+  - Auto-fix the issues (adjust title format, fill missing sections, strip placeholders)
+  - Re-validate after fixes
+  - If validation still fails after auto-fix, show remaining errors and ask the user whether to continue or stop
+
+- **On validation success**: Continue to PR creation
+
+---
+
+### 9. Create GitHub PR
 
 - **Use GitHub CLI (preferred)**: Create a draft PR in `comet-ml/opik` with pre-filled template (`gh pr create --draft`).
 - **Fallback**: If CLI is unavailable and GitHub MCP is available, create the PR with MCP and mark as draft when supported.
@@ -185,7 +221,7 @@ This workflow will:
 
 ---
 
-### 9. Update Jira Status
+### 10. Update Jira Status
 
 - **Fetch Jira ticket**: For `OPIK-<number>` branches, use Jira MCP to get ticket details
 - **Transition status**: If branch key is `OPIK-<number>`, change ticket status to "In Review"
@@ -198,7 +234,7 @@ This workflow will:
 
 ---
 
-### 10. Completion Summary & Validation
+### 11. Completion Summary & Validation
 
 - **Confirm all steps completed**:
   - ✅ Feature branch validated with Opik naming convention
@@ -206,6 +242,7 @@ This workflow will:
   - ✅ No existing PRs found
   - ✅ Quality checks passed
   - ✅ PR template pre-filled
+  - ✅ PR title and description pass pr-lint validation
   - ✅ GitHub PR created successfully
   - ✅ Jira ticket status updated to "In Review" (for OPIK branches)
   - ✅ Progress documented in Jira (for OPIK branches)
@@ -241,6 +278,15 @@ This workflow will:
 - Type errors: Show errors and ask user preference
 - User choice to stop: Respect user decision
 
+### **PR Lint Validation Failures**
+
+- Title format invalid: Auto-fix by adjusting to match required regex pattern
+- Missing required sections: Auto-add missing `##` sections with "N/A" content
+- Empty Details section: Flag to user — requires meaningful content
+- Missing Issues reference: Auto-fill from branch ticket key if available
+- Leftover template placeholders: Auto-strip HTML comments
+- Auto-fix fails: Show remaining errors and ask user whether to continue or stop
+
 ### **PR Creation Failures**
 
 - GitHub CLI issues: Check `gh auth status` and repository permissions for `comet-ml/opik`
@@ -273,10 +319,11 @@ The command is successful when:
 6. ✅ No existing PRs found for the branch
 7. ✅ Quality checks pass (linter, type checking, or Maven)
 8. ✅ PR template is pre-filled with meaningful content
-9. ✅ GitHub PR is created successfully
-10. ✅ Jira ticket status is updated to "In Review" (for OPIK branches)
-11. ✅ Progress is documented in Jira (via direct MCP call, for OPIK branches)
-12. ✅ All operations complete with clear feedback
+9. ✅ PR title and description pass pr-lint validation before submission
+10. ✅ GitHub PR is created successfully
+11. ✅ Jira ticket status is updated to "In Review" (for OPIK branches)
+12. ✅ Progress is documented in Jira (via direct MCP call, for OPIK branches)
+13. ✅ All operations complete with clear feedback
 
 ---
 

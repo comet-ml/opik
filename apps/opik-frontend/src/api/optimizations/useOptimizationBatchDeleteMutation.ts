@@ -32,6 +32,7 @@ const useOptimizationBatchDeleteMutation = () => {
       });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       queryClient.invalidateQueries({ queryKey: ["datasets"] });
       return queryClient.invalidateQueries({
         queryKey: [OPTIMIZATIONS_KEY],

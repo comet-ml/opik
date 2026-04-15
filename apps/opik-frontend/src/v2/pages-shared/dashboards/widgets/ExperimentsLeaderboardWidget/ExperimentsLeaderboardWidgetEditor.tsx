@@ -70,6 +70,7 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
     ) as DashboardWidget & ExperimentsLeaderboardWidgetType;
     const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
     const runtimeConfig = useDashboardStore(selectRuntimeConfig);
+    const runtimeProjectId = runtimeConfig?.projectIds?.[0] ?? null;
 
     const { config } = widgetData;
 
@@ -282,6 +283,7 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
                 filtersFieldName="filters"
                 filters={widgetFilters}
                 onFiltersChange={handleFiltersChange}
+                projectId={runtimeProjectId}
               />
               <FormField
                 control={form.control}
