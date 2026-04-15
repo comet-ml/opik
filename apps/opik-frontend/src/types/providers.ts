@@ -426,6 +426,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENGVLAB_INTERNVL3_78B = "opengvlab/internvl3-78b",
   OPENROUTER_AUTO = "openrouter/auto",
   OPENROUTER_BODYBUILDER = "openrouter/bodybuilder",
+  OPENROUTER_ELEPHANT_ALPHA = "openrouter/elephant-alpha",
   OPENROUTER_FREE = "openrouter/free",
   OPENROUTER_HEALER_ALPHA = "openrouter/healer-alpha",
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
