@@ -318,7 +318,8 @@ suite = client.get_or_create_test_suite(name="${suiteName}")
 
 ${evaluationTaskCode}
 
-result = suite.run(
+result = opik.run_tests(
+  test_suite=suite,
   task=evaluation_task,
   experiment_name="my_evaluation"
 )`;

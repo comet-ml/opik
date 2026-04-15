@@ -200,6 +200,15 @@ usageLimit:
   # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
   errorMessage: "You have exceeded the usage limit for this operation."
 
+# Configuration for product analytics events
+analytics:
+  # Default: false
+  # Description: Whether or not to send product analytics events
+  enabled: false
+  # Default: empty
+  # Description: Environment name included in every analytics event (e.g. "staging", "production")
+  environment:
+
 # Configuration for anonymous usage reporting
 usageReport:
   # Default: false

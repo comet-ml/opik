@@ -36,6 +36,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -111,8 +112,8 @@ class RetentionPolicyServiceTest {
     private IdGenerator idGenerator;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, RetentionPolicyService retentionPolicyService,
-            RetentionCatchUpService catchUpService, RetentionEstimationService estimationService,
+    void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
+            @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
             TransactionTemplateAsync templateAsync, IdGenerator idGenerator) {
         this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);

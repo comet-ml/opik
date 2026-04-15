@@ -22,12 +22,7 @@ import { Alert, AlertTitle } from "@/ui/alert";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-
-const DATA_PREFILLED_CONTENT = `{
-  "input": "<user question>",
-  "expected_output": "<expected response>",
-  "<any additional fields>": "<any value>"
-}`;
+import { DATASET_ITEM_PREFILLED_DATA } from "@/constants/datasets";
 
 type AddDatasetItemDialogProps = {
   datasetId: string;
@@ -45,7 +40,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
     editable: true,
   });
   const datasetItemBatchMutation = useDatasetItemBatchMutation();
-  const [data, setData] = useState<string>(DATA_PREFILLED_CONTENT);
+  const [data, setData] = useState<string>(DATASET_ITEM_PREFILLED_DATA);
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
 
   const isValid = Boolean(data.length);
