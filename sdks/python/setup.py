@@ -60,6 +60,28 @@ setup(
         "uuid6",
         "jinja2",
         "watchfiles>=1.0.0,<2.0.0",
+        # tree-sitter is used for JS/TS syntax checking in bridge handlers.
+        # Pre-built wheels are missing for musllinux_aarch64 (Alpine on ARM64),
+        # and PEP 508 has no marker to distinguish musl from glibc, so we
+        # exclude all Linux aarch64 to avoid a source-build failure on Alpine.
+        # Affected glibc aarch64 users can manually:
+        #   pip install tree-sitter tree-sitter-javascript \
+        #     tree-sitter-typescript
+        (
+            "tree-sitter>=0.23,<1.0;"
+            " platform_machine != 'aarch64'"
+            " or sys_platform != 'linux'"
+        ),
+        (
+            "tree-sitter-javascript>=0.23,<1.0;"
+            " platform_machine != 'aarch64'"
+            " or sys_platform != 'linux'"
+        ),
+        (
+            "tree-sitter-typescript>=0.23,<1.0;"
+            " platform_machine != 'aarch64'"
+            " or sys_platform != 'linux'"
+        ),
     ],
     extras_require={
         "proxy": [
