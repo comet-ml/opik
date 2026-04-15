@@ -7,7 +7,7 @@ files are not checked and check_syntax returns None for those extensions.
 
 import ast
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def _ensure_tree_sitter() -> bool:
 
 
 def _find_tree_sitter_errors(
-    root_node: object,
+    root_node: Any,
 ) -> list[tuple[int, int, str]]:
     """Walk the tree-sitter AST and collect ERROR / MISSING nodes."""
     errors: list[tuple[int, int, str]] = []
