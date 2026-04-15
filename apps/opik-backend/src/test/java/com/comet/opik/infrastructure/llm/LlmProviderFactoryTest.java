@@ -72,7 +72,11 @@ class LlmProviderFactoryTest {
         EncryptionUtils.setConfig(config);
         llmProviderClientConfig = config.getLlmProviderClient();
         opikConfiguration = config;
-        registryService = new LlmModelRegistryService(config.getLlmModelRegistry());
+        // Use a curated test registry so tests are not coupled to the
+        // auto-synced llm-models-default.yaml (whose entries can flip over time).
+        var registryConfig = config.getLlmModelRegistry();
+        registryConfig.setDefaultResource("llm-models-test.yaml");
+        registryService = new LlmModelRegistryService(registryConfig);
     }
 
     private OpikConfiguration createMockConfigWithFreeModel(boolean enabled, String actualModel,
@@ -450,7 +454,7 @@ class LlmProviderFactoryTest {
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
         var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
-        // claude-sonnet-4-6 has no structuredOutput (defaults to false) in the default YAML
+        // Model from test file with no structuredOutput (defaults to false)
         var strategy = llmProviderFactory.getStructuredOutputStrategy("claude-sonnet-4-6");
 
         assertThat(strategy).isInstanceOf(
