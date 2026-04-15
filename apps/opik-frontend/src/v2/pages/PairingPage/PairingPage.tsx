@@ -180,9 +180,8 @@ const PairingPage: React.FC = () => {
     }
   }, [fragment]);
 
-  const workspaceName = useMemo(
-    () => new URLSearchParams(window.location.search).get("workspace"),
-    [],
+  const workspaceName = new URLSearchParams(window.location.search).get(
+    "workspace",
   );
 
   const versionQuery = useQuery({
@@ -251,6 +250,10 @@ const PairingPage: React.FC = () => {
   }
 
   function getDisplay(): { status: Status; message: string } {
+    // Fragment-level errors surface first: a bad link is invalid regardless
+    // of workspace state, and we shouldn't block on the version query to
+    // tell the user.
+    if (parseError) return { status: "error", message: parseError };
     if (workspacePhase === "missing") {
       return { status: "error", message: "This pairing link is invalid." };
     }
@@ -264,7 +267,6 @@ const PairingPage: React.FC = () => {
     if (workspacePhase === "checking") {
       return { status: "loading", message: "Connecting…" };
     }
-    if (parseError) return { status: "error", message: parseError };
     if (activationIsError) {
       return {
         status: "error",
