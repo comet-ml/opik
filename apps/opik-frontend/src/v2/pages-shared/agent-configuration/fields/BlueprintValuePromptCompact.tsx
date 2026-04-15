@@ -13,6 +13,7 @@ import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import usePromptByCommit from "@/api/prompts/usePromptByCommit";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import Loader from "@/shared/Loader/Loader";
+import { cn } from "@/lib/utils";
 import {
   generateDefaultLLMPromptMessage,
   parseChatTemplateToLLMMessages,
@@ -20,8 +21,6 @@ import {
 import { BlueprintValuePromptHandle } from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuePrompt";
 import AutoResizeTextarea from "./AutoResizeTextarea";
 import BlueprintChatMessages from "./BlueprintChatMessages";
-import CollapsibleBlock from "./CollapsibleBlock";
-import { FieldsCollapseController } from "./useFieldsCollapse";
 
 type BlueprintValuePromptCompactProps = {
   value: BlueprintValue;
@@ -29,7 +28,7 @@ type BlueprintValuePromptCompactProps = {
   isEditing?: boolean;
   onDirtyChange?: (isDirty: boolean) => void;
   tone?: "muted" | "white";
-  controller?: FieldsCollapseController;
+  expanded: boolean;
 };
 
 const messagesToTemplate = (messages: LLMMessage[]): string =>
@@ -44,14 +43,11 @@ const BlueprintValuePromptCompact = forwardRef<
   BlueprintValuePromptCompactProps
 >(
   (
-    { value, projectId, isEditing = false, onDirtyChange, tone, controller },
+    { value, projectId, isEditing = false, onDirtyChange, tone, expanded },
     ref,
   ) => {
     const [draftTemplate, setDraftTemplate] = useState("");
     const [draftMessages, setDraftMessages] = useState<LLMMessage[]>([]);
-    const [expandedMessageIndexes, setExpandedMessageIndexes] = useState<
-      Set<number>
-    >(new Set());
     const initialTemplate = useRef("");
 
     const { data: prompt, isPending } = usePromptByCommit(
@@ -153,23 +149,6 @@ const BlueprintValuePromptCompact = forwardRef<
       ];
     }, [promptVersion, isChatPrompt]);
 
-    const messageCount = isChatPrompt
-      ? (isEditing ? draftMessages : messagesForRead).length
-      : 1;
-    const broadcastVersion = controller?.broadcast.version ?? 0;
-    const broadcastAction = controller?.broadcast.action ?? null;
-
-    useEffect(() => {
-      if (broadcastAction === "expand") {
-        setExpandedMessageIndexes(
-          new Set(Array.from({ length: messageCount }, (_, i) => i)),
-        );
-      } else if (broadcastAction === "collapse") {
-        setExpandedMessageIndexes(new Set());
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [broadcastVersion]);
-
     useImperativeHandle(
       ref,
       () => ({
@@ -226,21 +205,12 @@ const BlueprintValuePromptCompact = forwardRef<
 
     if (isPending) return <Loader />;
 
-    const toggleMessage = (index: number) =>
-      setExpandedMessageIndexes((prev) => {
-        const next = new Set(prev);
-        if (next.has(index)) next.delete(index);
-        else next.add(index);
-        return next;
-      });
-
     if (isChatPrompt) {
       return (
         <BlueprintChatMessages
           messages={isEditing ? draftMessages : messagesForRead}
-          isExpanded={(i) => expandedMessageIndexes.has(i)}
-          onToggle={toggleMessage}
           editable={isEditing}
+          expanded={expanded}
           onChangeMessage={handleChangeMessage}
           onChangeRole={isEditing ? handleChangeRole : undefined}
           onAddMessage={isEditing ? handleAddMessage : undefined}
@@ -252,26 +222,34 @@ const BlueprintValuePromptCompact = forwardRef<
       );
     }
 
-    // Text prompt — single collapsible
+    const currentText = draftTemplate || promptVersion?.template || "";
+
     return (
-      <CollapsibleBlock
-        collapsible
-        expanded={expandedMessageIndexes.has(0)}
-        onToggle={() => toggleMessage(0)}
-        label="Prompt"
-        tone={tone}
+      <div
+        className={cn(
+          "rounded-md border px-3 py-2",
+          tone === "white" ? "bg-background" : "bg-primary-foreground",
+        )}
       >
-        {isEditing ? (
-          <AutoResizeTextarea
-            value={draftTemplate}
-            onChange={setDraftTemplate}
-          />
+        {expanded ? (
+          isEditing ? (
+            <AutoResizeTextarea
+              value={draftTemplate}
+              onChange={setDraftTemplate}
+            />
+          ) : (
+            <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+              {currentText}
+            </div>
+          )
         ) : (
-          <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-            {draftTemplate || promptVersion?.template}
+          <div className="comet-body-s truncate text-foreground">
+            {currentText.replace(/\s+/g, " ").trim() || (
+              <span className="text-muted-slate">Empty prompt</span>
+            )}
           </div>
         )}
-      </CollapsibleBlock>
+      </div>
     );
   },
 );

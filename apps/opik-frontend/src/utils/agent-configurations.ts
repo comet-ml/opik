@@ -35,7 +35,7 @@ export const formatBlueprintValue = (v: BlueprintValue): string => {
       return v.value;
     }
     case BlueprintValueType.BOOLEAN:
-      return v.value === "true" ? "true" : "false";
+      return v.value === "true" ? "True" : "False";
     default:
       return v.value;
   }

@@ -5,7 +5,6 @@ import { formatBlueprintValue } from "@/utils/agent-configurations";
 import BlueprintTypeIcon from "./BlueprintTypeIcon";
 import BlueprintValuePromptCompact from "@/v2/pages-shared/agent-configuration/fields/BlueprintValuePromptCompact";
 import FieldSection from "@/v2/pages-shared/agent-configuration/fields/FieldSection";
-import CollapsibleBlock from "@/v2/pages-shared/agent-configuration/fields/CollapsibleBlock";
 import {
   collectMultiLineKeys,
   isMultiLineField,
@@ -15,8 +14,14 @@ import {
   useFieldsCollapse,
 } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 
-const renderScalarValue = (v: BlueprintValue) => (
-  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+const renderScalarValue = (v: BlueprintValue, truncate: boolean) => (
+  <div
+    className={
+      truncate
+        ? "comet-body-s truncate text-foreground"
+        : "comet-body-s whitespace-pre-wrap break-words text-foreground"
+    }
+  >
     {formatBlueprintValue(v)}
   </div>
 );
@@ -38,30 +43,33 @@ const BlueprintValuesList: React.FC<BlueprintValuesListProps> = ({
     <div className="flex flex-col gap-4">
       {values.map((v) => {
         const isPrompt = v.type === BlueprintValueType.PROMPT;
-        const collapsible = !isPrompt && isMultiLineField(v);
+        const fieldExpandable = isMultiLineField(v);
+        const fieldExpanded = fieldExpandable
+          ? controller.isExpanded(v.key)
+          : undefined;
         return (
           <FieldSection
             key={v.key}
             label={v.key}
             description={v.description}
             icon={<BlueprintTypeIcon type={v.type} />}
+            expandable={fieldExpandable}
+            expanded={fieldExpanded}
+            onToggle={
+              fieldExpandable ? () => controller.toggle(v.key) : undefined
+            }
             testId={`field-section-${v.key}`}
           >
             {isPrompt ? (
               <BlueprintValuePromptCompact
                 key={v.value}
                 value={v}
-                controller={controller}
+                expanded={!!fieldExpanded}
               />
             ) : (
-              <CollapsibleBlock
-                collapsible={collapsible}
-                expanded={controller.isExpanded(v.key)}
-                onToggle={() => controller.toggle(v.key)}
-                testId={`field-block-${v.key}`}
-              >
-                {renderScalarValue(v)}
-              </CollapsibleBlock>
+              <div className="rounded-md border bg-primary-foreground px-3 py-2">
+                {renderScalarValue(v, fieldExpandable && !fieldExpanded)}
+              </div>
             )}
           </FieldSection>
         );
