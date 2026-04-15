@@ -1,7 +1,7 @@
 # Lazy-loaded metric classes (PEP 562).
 # All imports are deferred until first access via __getattr__.
 from .base_metric import BaseMetric
-from . import score_result
+from . import score_result as score_result  # noqa: F401 — re-exported for public use
 
 _LAZY_IMPORTS: dict = {
     # aggregated
