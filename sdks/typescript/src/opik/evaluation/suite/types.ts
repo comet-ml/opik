@@ -42,6 +42,8 @@ export interface UpdateTestSuiteItem {
 export type ItemResult = {
   datasetItemId: string;
   passed: boolean;
+  /** Whether this item had at least one assertion evaluated across any of its runs. */
+  hasAssertions: boolean;
   runsPassed: number;
   runsTotal: number;
   passThreshold: number;
