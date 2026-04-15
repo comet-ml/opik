@@ -22,6 +22,7 @@ import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import FieldSection from "./fields/FieldSection";
 import {
   collectMultiLineKeys,
+  collectNonPromptMultiLineKeys,
   hasAnyExpandableField,
   isMultiLineField,
 } from "./fields/blueprintFieldLayout";
@@ -46,6 +47,7 @@ export type AgentConfigurationEditViewState = {
   isSaving: boolean;
   hasErrors: boolean;
   collapsibleKeys: string[];
+  initiallyExpandedKeys: string[];
   hasExpandableFields: boolean;
 };
 
@@ -161,8 +163,15 @@ const AgentConfigurationEditView = React.forwardRef<
       () => collectMultiLineKeys(agentConfig?.values ?? []),
       [agentConfig],
     );
+    const initiallyExpandedKeys = useMemo(
+      () => collectNonPromptMultiLineKeys(agentConfig?.values ?? []),
+      [agentConfig],
+    );
 
-    const internalController = useFieldsCollapse({ collapsibleKeys });
+    const internalController = useFieldsCollapse({
+      collapsibleKeys,
+      initiallyExpandedKeys,
+    });
     const controller = externalController ?? internalController;
 
     const currentValues = useMemo<BlueprintValue[]>(() => {
@@ -198,6 +207,7 @@ const AgentConfigurationEditView = React.forwardRef<
         isSaving,
         hasErrors,
         collapsibleKeys,
+        initiallyExpandedKeys,
         hasExpandableFields,
       });
     }, [
@@ -205,6 +215,7 @@ const AgentConfigurationEditView = React.forwardRef<
       isSaving,
       hasErrors,
       collapsibleKeys,
+      initiallyExpandedKeys,
       hasExpandableFields,
       onStateChange,
     ]);
@@ -329,6 +340,7 @@ const AgentConfigurationEditView = React.forwardRef<
                 ) : (
                   (() => {
                     if (isBoolean) return null;
+                    if (fieldExpandable && !fieldExpanded) return null;
 
                     const inputMode =
                       v.type === BlueprintValueType.INT
@@ -342,28 +354,19 @@ const AgentConfigurationEditView = React.forwardRef<
                         {errors[v.key]}
                       </span>
                     ) : null;
-                    const showPreview = fieldExpandable && !fieldExpanded;
 
                     return (
                       <div className="flex flex-col gap-1">
                         <div className="rounded-md border bg-background px-3 py-2">
-                          {showPreview ? (
-                            <div className="comet-body-s truncate text-foreground">
-                              {currentValue || (
-                                <span className="text-muted-slate">—</span>
-                              )}
-                            </div>
-                          ) : (
-                            <Input
-                              variant="ghost"
-                              className="h-auto p-0"
-                              inputMode={inputMode}
-                              value={currentValue}
-                              onChange={(e) =>
-                                handleFieldChange(v.key, e.target.value)
-                              }
-                            />
-                          )}
+                          <Input
+                            variant="ghost"
+                            className="h-auto p-0"
+                            inputMode={inputMode}
+                            value={currentValue}
+                            onChange={(e) =>
+                              handleFieldChange(v.key, e.target.value)
+                            }
+                          />
                         </div>
                         {errorLine}
                       </div>

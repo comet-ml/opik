@@ -24,6 +24,7 @@ import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/Expand
 import { useFieldsCollapse } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 import {
   collectMultiLineKeys,
+  collectNonPromptMultiLineKeys,
   hasAnyExpandableField,
 } from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
 
@@ -85,11 +86,18 @@ const AgentConfigurationDetailView: React.FC<
     () => collectMultiLineKeys(agentConfig?.values ?? []),
     [agentConfig],
   );
+  const initiallyExpandedKeys = useMemo(
+    () => collectNonPromptMultiLineKeys(agentConfig?.values ?? []),
+    [agentConfig],
+  );
   const hasExpandableFields = useMemo(
     () => hasAnyExpandableField(agentConfig?.values ?? []),
     [agentConfig],
   );
-  const collapseController = useFieldsCollapse({ collapsibleKeys });
+  const collapseController = useFieldsCollapse({
+    collapsibleKeys,
+    initiallyExpandedKeys,
+  });
 
   return (
     <>
@@ -186,7 +194,7 @@ const AgentConfigurationDetailView: React.FC<
           )}
         </div>
 
-        <Separator className="mb-2 mt-4" />
+        <Separator className="my-4" />
 
         {isPending ? (
           <Loader />

@@ -32,11 +32,13 @@ const AgentConfigurationEditPanel: React.FC<
     isSaving: false,
     hasErrors: false,
     collapsibleKeys: [],
+    initiallyExpandedKeys: [],
     hasExpandableFields: false,
   });
 
   const controller = useFieldsCollapse({
     collapsibleKeys: state.collapsibleKeys,
+    initiallyExpandedKeys: state.initiallyExpandedKeys,
   });
 
   const handleSavedInternal = (savedName?: string) => {

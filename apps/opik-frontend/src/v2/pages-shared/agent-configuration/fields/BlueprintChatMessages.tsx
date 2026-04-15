@@ -62,7 +62,6 @@ type SortableMessageProps = {
   index: number;
   messages: LLMMessage[];
   editable: boolean;
-  expanded: boolean;
   onChangeMessage?: (index: number, content: string) => void;
   onChangeRole?: (index: number, role: LLM_MESSAGE_ROLE) => void;
   onDeleteMessage?: (index: number) => void;
@@ -75,7 +74,6 @@ const SortableMessage: React.FC<SortableMessageProps> = ({
   index,
   messages,
   editable,
-  expanded,
   onChangeMessage,
   onChangeRole,
   onDeleteMessage,
@@ -171,22 +169,14 @@ const SortableMessage: React.FC<SortableMessageProps> = ({
           )}
         </div>
         <div className="border-t px-3 py-2">
-          {expanded ? (
-            editable ? (
-              <AutoResizeTextarea
-                value={text}
-                onChange={(v) => onChangeMessage?.(index, v)}
-              />
-            ) : (
-              <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-                {text}
-              </div>
-            )
+          {editable ? (
+            <AutoResizeTextarea
+              value={text}
+              onChange={(v) => onChangeMessage?.(index, v)}
+            />
           ) : (
-            <div className="comet-body-s truncate text-foreground">
-              {text.replace(/\s+/g, " ").trim() || (
-                <span className="text-muted-slate">Empty message</span>
-              )}
+            <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+              {text}
             </div>
           )}
         </div>
@@ -198,7 +188,6 @@ const SortableMessage: React.FC<SortableMessageProps> = ({
 type BlueprintChatMessagesProps = {
   messages: LLMMessage[];
   editable?: boolean;
-  expanded: boolean;
   onChangeMessage?: (index: number, content: string) => void;
   onChangeRole?: (index: number, role: LLM_MESSAGE_ROLE) => void;
   onAddMessage?: () => void;
@@ -211,7 +200,6 @@ type BlueprintChatMessagesProps = {
 const BlueprintChatMessages: React.FC<BlueprintChatMessagesProps> = ({
   messages,
   editable = false,
-  expanded,
   onChangeMessage,
   onChangeRole,
   onAddMessage,
@@ -247,7 +235,6 @@ const BlueprintChatMessages: React.FC<BlueprintChatMessagesProps> = ({
           index={index}
           messages={messages}
           editable={editable}
-          expanded={expanded}
           onChangeMessage={onChangeMessage}
           onChangeRole={onChangeRole}
           onDeleteMessage={onDeleteMessage}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type CollapseBroadcast = {
   action: "expand" | "collapse" | null;
@@ -17,19 +17,34 @@ export type FieldsCollapseController = {
 type UseFieldsCollapseOptions = {
   collapsibleKeys: string[];
   defaultExpanded?: boolean;
+  initiallyExpandedKeys?: string[];
 };
 
 export const useFieldsCollapse = ({
   collapsibleKeys,
   defaultExpanded = false,
+  initiallyExpandedKeys,
 }: UseFieldsCollapseOptions): FieldsCollapseController => {
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() =>
-    defaultExpanded ? new Set(collapsibleKeys) : new Set(),
-  );
+  const computeInitial = (): Set<string> => {
+    if (initiallyExpandedKeys !== undefined)
+      return new Set(initiallyExpandedKeys);
+    return defaultExpanded ? new Set(collapsibleKeys) : new Set();
+  };
+
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(computeInitial);
   const [broadcast, setBroadcast] = useState<CollapseBroadcast>({
     action: defaultExpanded ? "expand" : null,
     version: 0,
   });
+
+  const initialized = useRef(collapsibleKeys.length > 0);
+  useEffect(() => {
+    if (initialized.current) return;
+    if (collapsibleKeys.length === 0) return;
+    initialized.current = true;
+    setExpandedKeys(computeInitial());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapsibleKeys]);
 
   const isExpanded = useCallback(
     (key: string) => expandedKeys.has(key),

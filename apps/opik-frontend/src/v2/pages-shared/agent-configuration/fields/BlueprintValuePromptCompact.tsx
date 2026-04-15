@@ -204,13 +204,13 @@ const BlueprintValuePromptCompact = forwardRef<
     );
 
     if (isPending) return <Loader />;
+    if (!expanded) return null;
 
     if (isChatPrompt) {
       return (
         <BlueprintChatMessages
           messages={isEditing ? draftMessages : messagesForRead}
           editable={isEditing}
-          expanded={expanded}
           onChangeMessage={handleChangeMessage}
           onChangeRole={isEditing ? handleChangeRole : undefined}
           onAddMessage={isEditing ? handleAddMessage : undefined}
@@ -222,8 +222,6 @@ const BlueprintValuePromptCompact = forwardRef<
       );
     }
 
-    const currentText = draftTemplate || promptVersion?.template || "";
-
     return (
       <div
         className={cn(
@@ -231,22 +229,14 @@ const BlueprintValuePromptCompact = forwardRef<
           tone === "white" ? "bg-background" : "bg-primary-foreground",
         )}
       >
-        {expanded ? (
-          isEditing ? (
-            <AutoResizeTextarea
-              value={draftTemplate}
-              onChange={setDraftTemplate}
-            />
-          ) : (
-            <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-              {currentText}
-            </div>
-          )
+        {isEditing ? (
+          <AutoResizeTextarea
+            value={draftTemplate}
+            onChange={setDraftTemplate}
+          />
         ) : (
-          <div className="comet-body-s truncate text-foreground">
-            {currentText.replace(/\s+/g, " ").trim() || (
-              <span className="text-muted-slate">Empty prompt</span>
-            )}
+          <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+            {draftTemplate || promptVersion?.template}
           </div>
         )}
       </div>

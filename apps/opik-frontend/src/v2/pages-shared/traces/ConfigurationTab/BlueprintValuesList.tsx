@@ -7,6 +7,7 @@ import BlueprintValuePromptCompact from "@/v2/pages-shared/agent-configuration/f
 import FieldSection from "@/v2/pages-shared/agent-configuration/fields/FieldSection";
 import {
   collectMultiLineKeys,
+  collectNonPromptMultiLineKeys,
   isMultiLineField,
 } from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
 import {
@@ -14,14 +15,8 @@ import {
   useFieldsCollapse,
 } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 
-const renderScalarValue = (v: BlueprintValue, truncate: boolean) => (
-  <div
-    className={
-      truncate
-        ? "comet-body-s truncate text-foreground"
-        : "comet-body-s whitespace-pre-wrap break-words text-foreground"
-    }
-  >
+const renderScalarValue = (v: BlueprintValue) => (
+  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
     {formatBlueprintValue(v)}
   </div>
 );
@@ -36,7 +31,14 @@ const BlueprintValuesList: React.FC<BlueprintValuesListProps> = ({
   controller: externalController,
 }) => {
   const collapsibleKeys = useMemo(() => collectMultiLineKeys(values), [values]);
-  const internalController = useFieldsCollapse({ collapsibleKeys });
+  const initiallyExpandedKeys = useMemo(
+    () => collectNonPromptMultiLineKeys(values),
+    [values],
+  );
+  const internalController = useFieldsCollapse({
+    collapsibleKeys,
+    initiallyExpandedKeys,
+  });
   const controller = externalController ?? internalController;
 
   return (
@@ -66,9 +68,9 @@ const BlueprintValuesList: React.FC<BlueprintValuesListProps> = ({
                 value={v}
                 expanded={!!fieldExpanded}
               />
-            ) : (
+            ) : fieldExpandable && !fieldExpanded ? null : (
               <div className="rounded-md border bg-primary-foreground px-3 py-2">
-                {renderScalarValue(v, fieldExpandable && !fieldExpanded)}
+                {renderScalarValue(v)}
               </div>
             )}
           </FieldSection>
