@@ -105,6 +105,10 @@ spec:
                 sleep 5;
               done;
               echo "MySQL is available at {{ $value.waitForMysql.mysql.host }}:{{ $value.waitForMysql.mysql.port }}";
+          {{- with $value.waitForMysql.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
       {{- end }}
       {{- if and (eq $key "backend") $value.waitForClickhouse }}
         - name: wait-for-clickhouse-service
@@ -120,6 +124,10 @@ spec:
                 sleep 5;
                 echo "Clickhouse is not available. Waiting for the Clickhouse...";
               done
+          {{- with $value.waitForClickhouse.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
       {{- end }}
       {{- if and (eq $key "backend") $value.run_migration }}
         - name: backend-migrations
@@ -139,6 +147,10 @@ spec:
               mountPath: /etc/pki/ca-trust/extracted/java/cacerts
           {{- end }}
           {{- with $value.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $value.run_migration_resources }}
+          resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       {{- end}}
