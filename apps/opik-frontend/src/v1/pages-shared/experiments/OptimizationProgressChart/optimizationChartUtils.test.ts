@@ -51,7 +51,7 @@ describe("computeCandidateStatuses", () => {
     });
   });
 
-  describe("non-evaluation-suite", () => {
+  describe("non-test-suite", () => {
     it("should mark all scored candidates as passed", () => {
       const candidates = [
         makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
@@ -67,7 +67,7 @@ describe("computeCandidateStatuses", () => {
     });
   });
 
-  describe("in-progress evaluation suite", () => {
+  describe("in-progress test suite", () => {
     it("should mark best candidate as passed", () => {
       const candidates = [
         makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
@@ -243,7 +243,7 @@ describe("computeCandidateStatuses", () => {
     });
   });
 
-  describe("completed evaluation suite", () => {
+  describe("completed test suite", () => {
     it("should mark candidate with descendants as passed", () => {
       const candidates = [
         makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),

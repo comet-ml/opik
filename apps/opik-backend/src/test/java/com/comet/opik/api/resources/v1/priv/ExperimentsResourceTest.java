@@ -7885,8 +7885,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when test_suite has items but no scores, then all runs pass and pass_rate=1.0")
-        void findTestSuiteExperiment__itemsNoScores__thenAllPass() {
+        @DisplayName("when test_suite has items but no scores, then all items are skipped and pass_rate=null")
+        void findTestSuiteExperiment__itemsNoScores__thenPassRateIsNull() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -7922,9 +7922,66 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .duration(actual.duration())
                     .projectId(projectId)
-                    .passedCount(2L)
+                    .passedCount(0L)
+                    .totalCount(0L)
+                    .build();
+            getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when test_suite has mix of scored and unscored items, then skipped items are excluded from pass_rate")
+        void findTestSuiteExperiment__someSkipped__thenExcludedFromPassRate() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .optimizationId(null)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // 4 traces: trace1=passed, trace2=skipped (no scores), trace3=failed, trace4=skipped (no scores)
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace4 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3, trace4), apiKey, workspaceName);
+
+            var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace1.id()).build();
+            var item2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace2.id()).build();
+            var item3 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace3.id()).build();
+            var item4 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace4.id()).build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(item1, item2, item3, item4)), apiKey, workspaceName);
+
+            // Only score trace1 (pass) and trace3 (fail); trace2 and trace4 have no assertions
+            var scoreName = UUID.randomUUID().toString();
+            var scores = List.of(
+                    score(trace1, scoreName, BigDecimal.ONE),
+                    score(trace3, scoreName, BigDecimal.ZERO));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            // pass_rate = 1 passed / (1 passed + 1 failed) = 0.5; skipped items excluded
+            var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .projectId(projectId)
+                    .passedCount(1L)
                     .totalCount(2L)
-                    .passRate(BigDecimal.ONE)
+                    .passRate(BigDecimal.valueOf(0.5))
                     .build();
             getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
         }

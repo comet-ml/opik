@@ -4,18 +4,15 @@ import AgentOnboardingOverlay from "./AgentOnboarding/AgentOnboardingOverlay";
 import {
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
-  TRACES_OLDEST_FIRST_SORTING,
 } from "./AgentOnboarding/AgentOnboardingContext";
 import useLocalStorageState from "use-local-storage-state";
 import useAppStore from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
-import { LOGS_TYPE } from "@/constants/traces";
 
 const NewQuickstart: React.FunctionComponent = () => {
   const [agentOnboardingState] = useLocalStorageState<{
     step: unknown;
     agentName?: string;
-    traceId?: string;
   }>(AGENT_ONBOARDING_KEY);
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -39,19 +36,10 @@ const NewQuickstart: React.FunctionComponent = () => {
   }
 
   if (project?.id) {
-    const traceId = agentOnboardingState?.traceId;
-
     return (
       <Navigate
-        to="/$workspaceName/projects/$projectId/logs"
+        to="/$workspaceName/projects/$projectId/home"
         params={{ workspaceName, projectId: project.id }}
-        search={{
-          logsType: LOGS_TYPE.traces,
-          ...(traceId && {
-            trace: traceId,
-            traces_sorting: TRACES_OLDEST_FIRST_SORTING,
-          }),
-        }}
       />
     );
   }

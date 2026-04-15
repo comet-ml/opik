@@ -8,7 +8,7 @@ const DatasetsPageGuard = () => {
 
   return (
     <NoAccessPageGuard
-      resourceName="evaluation suites"
+      resourceName="test suites"
       canViewPage={canViewDatasets}
     />
   );

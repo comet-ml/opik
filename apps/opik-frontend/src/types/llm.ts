@@ -1,4 +1,5 @@
 import { DropdownOption } from "@/types/shared";
+import type { BlueprintPromptRef } from "@/types/agent-configs";
 
 export enum LLM_MESSAGE_ROLE {
   system = "system",
@@ -36,6 +37,7 @@ export interface LLMMessage {
   promptId?: string;
   promptVersionId?: string;
   autoImprove?: boolean;
+  blueprintRef?: BlueprintPromptRef;
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id"> & {

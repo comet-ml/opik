@@ -1,3 +1,9 @@
+export interface BlueprintPromptRef {
+  blueprintId: string;
+  key: string;
+  commitId: string;
+}
+
 export enum BlueprintValueType {
   STRING = "string",
   INT = "integer",

@@ -5,7 +5,7 @@ from strands import Agent
 from strands.models.bedrock import BedrockModel
 from strands.telemetry.config import StrandsTelemetry
 
-opik.configure()  # HIGHLIGHTED_LINE
+opik.configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # Configure Opik
 opik_config = opik.config.get_from_user_inputs()  # HIGHLIGHTED_LINE

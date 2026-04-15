@@ -2,7 +2,7 @@ from crewai import Agent, Crew, Process, Task
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.crewai import track_crewai  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # Track CrewAI runs with Opik
 track_crewai(project_name="crewai-integration-demo")  # HIGHLIGHTED_LINE

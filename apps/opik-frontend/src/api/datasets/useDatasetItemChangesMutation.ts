@@ -3,7 +3,7 @@ import { AxiosError } from "axios";
 
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem, Evaluator } from "@/types/datasets";
-import { ExecutionPolicy } from "@/types/evaluation-suites";
+import { ExecutionPolicy } from "@/types/test-suites";
 import { useToast } from "@/ui/use-toast";
 import { extractErrorMessage } from "@/lib/tags";
 

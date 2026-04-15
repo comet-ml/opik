@@ -40,6 +40,7 @@ type FeedbackScoresEditorFooterProps = {
 type FeedbackScoresEditorHeaderProps = {
   isTrace?: boolean;
   isThread?: boolean;
+  title?: string;
 };
 
 const getTitleOfScores = ({
@@ -61,8 +62,9 @@ const getTitleOfScores = ({
 const FeedbackScoresEditorHeader: React.FC<FeedbackScoresEditorHeaderProps> = ({
   isTrace = false,
   isThread = false,
+  title: customTitle,
 }) => {
-  const title = getTitleOfScores({ isThread, isTrace });
+  const title = customTitle ?? getTitleOfScores({ isThread, isTrace });
   return (
     <div className="flex items-center gap-1 pb-2">
       <span className="comet-body-s-accented truncate">{title}</span>

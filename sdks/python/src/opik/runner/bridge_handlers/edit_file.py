@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from . import BaseHandler, CommandError, FileLockRegistry
 from . import common
+from .syntax_check import check_syntax
 
 
 class EditEntry(BaseModel):
@@ -261,8 +262,13 @@ class EditFileHandler(BaseHandler):
                     f"File is not writable: {parsed.path}",
                 )
 
-        return {
+        syntax_result = check_syntax(parsed.path, new_content)
+
+        response: Dict[str, Any] = {
             "diff": diff,
             "edits_applied": len(parsed.edits),
             "fuzzy_match_used": fuzzy_used,
         }
+        if syntax_result is not None:
+            response["syntax_check"] = syntax_result
+        return response

@@ -111,6 +111,11 @@ describe("evaluateTestSuite", () => {
       .spyOn(opikClient.api.experiments, "createExperiment")
       .mockImplementation(mockAPIFunction);
 
+    vi.spyOn(
+      opikClient.api.experiments,
+      "createExperimentItems"
+    ).mockImplementation(mockAPIFunction);
+
     streamDatasetItemsSpy = vi
       .spyOn(opikClient.api.datasets, "streamDatasetItems")
       .mockImplementation(() =>
@@ -167,6 +172,7 @@ describe("evaluateTestSuite", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -183,6 +189,7 @@ describe("evaluateTestSuite", () => {
         name: "suite-experiment",
         datasetName: "test-dataset",
         datasetVersionId: "version-1",
+        // TODO: OPIK-5795 - migrate DB value from 'evaluation_suite' to 'test_suite'
         evaluationMethod: "evaluation_suite",
       })
     );

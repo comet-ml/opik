@@ -76,7 +76,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const plainDatasetId =
     parseDatasetVersionKey(versionedDatasetId)?.datasetId || versionedDatasetId;
 
-  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
+  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
 
   const activeProjectId = useActiveProjectId();
 
@@ -94,7 +94,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
   };
 
   const hasOutput =
-    value !== null || isLoading || (isEvaluationSuite && !!experimentId);
+    value !== null || isLoading || (isTestSuite && !!experimentId);
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -137,7 +137,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </TooltipWrapper>
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
-            {isEvaluationSuite ? (
+            {isTestSuite ? (
               <PlaygroundOutputAssertionStatus
                 experimentId={experimentId}
                 datasetItemId={originalRow.dataItemId}
@@ -152,7 +152,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
               />
             )}
           </div>
-          {!isEvaluationSuite && (
+          {!isTestSuite && (
             <div className="flex-1 overflow-y-auto">{renderContent()}</div>
           )}
         </div>

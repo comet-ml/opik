@@ -44,6 +44,9 @@ public class OpikConfiguration extends JobConfiguration {
     private UsageReportConfig usageReport = new UsageReportConfig();
 
     @Valid @NotNull @JsonProperty
+    private AnalyticsConfig analytics = new AnalyticsConfig();
+
+    @Valid @NotNull @JsonProperty
     private CorsConfig cors = new CorsConfig();
 
     @Valid @NotNull @JsonProperty

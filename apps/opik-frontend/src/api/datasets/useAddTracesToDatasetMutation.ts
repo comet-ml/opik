@@ -4,7 +4,7 @@ import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
 import { Evaluator } from "@/types/datasets";
-import { ExecutionPolicy } from "@/types/evaluation-suites";
+import { ExecutionPolicy } from "@/types/test-suites";
 
 export type TraceEnrichmentOptions = {
   include_spans: boolean;

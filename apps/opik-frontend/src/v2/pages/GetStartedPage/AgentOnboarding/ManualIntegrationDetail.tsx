@@ -70,7 +70,7 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
           </div>
           <div className="overflow-hidden rounded-md border">
             <CodeHighlighter
-              data={`import opik\n\nopik.configure(use_local=False)`}
+              data={`import opik\n\nopik.configure(use_local=False, project_name="${agentName}")`}
             />
           </div>
         </div>

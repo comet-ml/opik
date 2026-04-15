@@ -40,7 +40,7 @@ const OptimizationPage: React.FC = () => {
     baselineExperiment,
     inProgressInfo,
     isRunningMiniBatches,
-    isEvaluationSuite,
+    isTestSuite,
     isOptimizationPending,
     isExperimentsPending,
     isExperimentsPlaceholderData,
@@ -118,7 +118,7 @@ const OptimizationPage: React.FC = () => {
     sortableBy,
     bestCandidateId: bestCandidate?.candidateId,
     baselineCandidate,
-    isEvaluationSuite,
+    isTestSuite,
     isInProgress,
     inProgressInfo,
     objectiveName: optimization?.objective_name,
@@ -170,7 +170,7 @@ const OptimizationPage: React.FC = () => {
               experiments={experiments}
               baselineCandidate={baselineCandidate}
               bestCandidate={bestCandidate}
-              isEvaluationSuite={isEvaluationSuite}
+              isTestSuite={isTestSuite}
               objectiveName={optimization?.objective_name}
               optimizationCreatedAt={optimization?.created_at}
               isInProgress={
@@ -187,7 +187,7 @@ const OptimizationPage: React.FC = () => {
               objectiveName={optimization?.objective_name}
               status={optimization?.status}
               onTrialClick={handleTrialClick}
-              isEvaluationSuite={isEvaluationSuite}
+              isTestSuite={isTestSuite}
               inProgressInfo={inProgressInfo}
               isRunningMiniBatches={isRunningMiniBatches}
               selectedTrialId={selectedTrialId}

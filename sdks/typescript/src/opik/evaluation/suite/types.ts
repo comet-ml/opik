@@ -13,10 +13,24 @@ export const DEFAULT_EXECUTION_POLICY: Required<ExecutionPolicy> = {
 };
 
 /**
- * A single item to be added to a test suite via `addItems()`.
+ * A single item to be inserted into a test suite via `insert()`.
  */
 export interface TestSuiteItem {
   data: Record<string, unknown>;
+  assertions?: string[];
+  description?: string;
+  executionPolicy?: ExecutionPolicy;
+}
+
+/**
+ * A single item to be updated in a test suite via `updateItems()`.
+ * Requires an ID to identify the item to update.
+ * All provided fields are merged with the existing item data - only the fields
+ * you specify will be updated, preserving all other existing values.
+ */
+export interface UpdateTestSuiteItem {
+  id: string;
+  data?: Record<string, unknown>;
   assertions?: string[];
   description?: string;
   executionPolicy?: ExecutionPolicy;
@@ -28,6 +42,8 @@ export interface TestSuiteItem {
 export type ItemResult = {
   datasetItemId: string;
   passed: boolean;
+  /** Whether this item had at least one assertion evaluated across any of its runs. */
+  hasAssertions: boolean;
   runsPassed: number;
   runsTotal: number;
   passThreshold: number;

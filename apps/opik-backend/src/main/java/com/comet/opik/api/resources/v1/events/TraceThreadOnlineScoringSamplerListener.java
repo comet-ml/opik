@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
@@ -8,7 +9,6 @@ import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
-import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.TraceThreadFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -55,7 +55,6 @@ public class TraceThreadOnlineScoringSamplerListener {
     private final TraceThreadFilterEvaluationService filterEvaluationService;
     private final Logger userFacingLogger;
     private final TraceThreadService traceThreadService;
-    private final TraceService traceService;
 
     /**
      * Initializes a SecureRandom instance for trace thread processing.
@@ -65,12 +64,10 @@ public class TraceThreadOnlineScoringSamplerListener {
     public TraceThreadOnlineScoringSamplerListener(
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull TraceThreadFilterEvaluationService filterEvaluationService,
-            @NonNull TraceThreadService traceThreadService,
-            @NonNull TraceService traceService) {
+            @NonNull TraceThreadService traceThreadService) {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.traceThreadService = traceThreadService;
-        this.traceService = traceService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(TraceThreadOnlineScoringSamplerListener.class);
         try {
             this.secureRandom = SecureRandom.getInstanceStrong();
@@ -90,7 +87,13 @@ public class TraceThreadOnlineScoringSamplerListener {
     public void onTraceThreadOnlineScoringSampled(@NonNull TraceThreadsCreated event) {
 
         UUID projectId = event.projectId();
+
+        // Only score threads originating from SDK logging source. Non-SDK threads (playground,
+        // experiment, optimization) are skipped from online evaluation.
+        // Source is null for pre-existing threads whose ClickHouse
+        // DEFAULT 'unknown' maps to null via, so treated as SDK for backward compatibility.
         Map<UUID, TraceThreadModel> traceThreadModelMap = event.traceThreadModels().stream()
+                .filter(thread -> Source.isLoggingSource(thread.source()))
                 .collect(toMap(TraceThreadModel::id, Function.identity()));
 
         String workspaceId = event.workspaceId();
@@ -218,7 +221,7 @@ public class TraceThreadOnlineScoringSamplerListener {
         // Filter to only TraceFilter instances since TraceFilterEvaluationService expects TraceFilter
         List<TraceFilter> traceFilters = (List<TraceFilter>) evaluator.getFilters();
         if (traceFilters.isEmpty()) {
-            return true; // No filters means all threads should be sampled
+            return true; // No filters mean all threads should be sampled
         }
 
         // Convert TraceFilter to TraceThreadFilter

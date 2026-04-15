@@ -44,8 +44,8 @@ const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
     text: string | undefined,
     side: DiffSide,
   ) => {
-    if (!value) return <EmptyDiffCell />;
-    return <DiffCellBox text={text!} changed={changed ?? false} side={side} />;
+    if (!value || text === undefined) return <EmptyDiffCell />;
+    return <DiffCellBox text={text} changed={changed ?? false} side={side} />;
   };
 
   return (
@@ -63,10 +63,14 @@ const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
           <p className="comet-body-xs mt-1 text-light-slate">{description}</p>
         )}
       </TableCell>
-      {isPrompt && baseValue?.value && diffValue?.value ? (
+      {isPrompt &&
+      (baseValue?.value ||
+        diffValue?.value ||
+        basePromptTemplate ||
+        diffPromptTemplate) ? (
         <PromptDiffPair
-          baseCommit={baseValue.value}
-          diffCommit={diffValue.value}
+          baseCommit={baseValue?.value ?? ""}
+          diffCommit={diffValue?.value ?? ""}
           baseTemplate={basePromptTemplate}
           diffTemplate={diffPromptTemplate}
         />

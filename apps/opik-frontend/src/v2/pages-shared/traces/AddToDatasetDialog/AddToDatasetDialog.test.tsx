@@ -26,7 +26,7 @@ vi.mock("@/api/datasets/useProjectDatasetsList", () => ({
           id: "dataset-2",
           name: "Test Dataset 2",
           description: "Second test dataset",
-          type: "evaluation_suite",
+          type: "test_suite",
         },
       ],
       total: 2,
@@ -71,11 +71,11 @@ vi.mock("@/ui/use-toast", () => ({
   }),
 }));
 
-// Mock the AddEditEvaluationSuiteDialog component
+// Mock the AddEditTestSuiteDialog component
 vi.mock(
-  "@/v2/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog",
+  "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog",
   () => ({
-    default: () => <div data-testid="add-edit-evaluation-suite-dialog" />,
+    default: () => <div data-testid="add-edit-test-suite-dialog" />,
   }),
 );
 
@@ -146,7 +146,7 @@ describe("AddToDatasetDialog", () => {
   it("should render the dialog when open", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("Select an evaluation suite")).toBeInTheDocument();
+    expect(screen.getByText("Select a test suite")).toBeInTheDocument();
     expect(screen.getByText("Test Dataset 1")).toBeInTheDocument();
   });
 
@@ -277,10 +277,10 @@ describe("AddToDatasetDialog", () => {
     expect(searchInput).toBeInTheDocument();
   });
 
-  it("should display create new evaluation suite button", () => {
+  it("should display create new test suite button", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("Create evaluation suite")).toBeInTheDocument();
+    expect(screen.getByText("Create new test suite")).toBeInTheDocument();
   });
 
   it("should show alert when no valid rows are present", () => {
@@ -293,7 +293,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "There are no rows that can be added as evaluation suite items. The input field is missing.",
+        "There are no rows that can be added as test suite items. The input field is missing.",
       ),
     ).toBeInTheDocument();
   });
@@ -311,12 +311,12 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "Only rows with input fields will be added as evaluation suite items.",
+        "Only rows with input fields will be added as test suite items.",
       ),
     ).toBeInTheDocument();
   });
 
-  it("should disable create new evaluation suite button when no valid rows", () => {
+  it("should disable create new test suite button when no valid rows", () => {
     const propsWithInvalidRows = {
       ...defaultProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
@@ -324,7 +324,7 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
 
-    const createButton = screen.getByText("Create evaluation suite");
+    const createButton = screen.getByText("Create new test suite");
     expect(createButton).toBeDisabled();
   });
 
@@ -335,8 +335,8 @@ describe("AddToDatasetDialog", () => {
     const dataset = screen.getByText("Test Dataset 1");
     fireEvent.click(dataset);
 
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1]; // Get the button, not the dialog title
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1]; // Get the button, not the dialog title
     fireEvent.click(addButton);
 
     await waitFor(() => {
@@ -371,8 +371,8 @@ describe("AddToDatasetDialog", () => {
     const dataset = screen.getByText("Test Dataset 1");
     fireEvent.click(dataset);
 
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1]; // Get the button, not the dialog title
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1]; // Get the button, not the dialog title
     fireEvent.click(addButton);
 
     await waitFor(() => {
@@ -405,8 +405,8 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Usage metrics"));
 
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1];
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1];
     fireEvent.click(addButton);
 
     await waitFor(() => {
@@ -442,8 +442,8 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Comments"));
     fireEvent.click(screen.getByLabelText("Metadata"));
 
-    // Click the "Add to evaluation suite" button
-    const addButton = screen.getAllByText("Add to evaluation suite")[1];
+    // Click the "Add to test suite" button
+    const addButton = screen.getAllByText("Add to test suite")[1];
     fireEvent.click(addButton);
 
     await waitFor(() => {

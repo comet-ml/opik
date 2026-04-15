@@ -20,6 +20,7 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import { BlueprintPromptRef } from "@/types/playground";
 
 interface NamedPromptContent {
   name: string;
@@ -30,6 +31,7 @@ interface LoadPlaygroundOptions {
   promptContent?: MessageContent;
   promptId?: string;
   promptVersionId?: string;
+  blueprintRef?: BlueprintPromptRef;
   autoImprove?: boolean;
   datasetId?: string;
   datasetVersionId?: string;
@@ -83,6 +85,7 @@ function useLoadPlayground() {
       options: {
         promptId?: string;
         promptVersionId?: string;
+        blueprintRef?: BlueprintPromptRef;
         autoImprove?: boolean;
         templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
         initPrompt?: Partial<ReturnType<typeof generateDefaultPrompt>>;
@@ -91,6 +94,7 @@ function useLoadPlayground() {
       const {
         promptId,
         promptVersionId,
+        blueprintRef,
         autoImprove = false,
         templateStructure,
         initPrompt,
@@ -103,6 +107,10 @@ function useLoadPlayground() {
         providerResolver: calculateModelProvider,
         modelResolver: calculateDefaultModel,
       });
+
+      if (blueprintRef) {
+        newPrompt.loadedBlueprintRef = blueprintRef;
+      }
 
       if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
         if (promptId) {
@@ -167,6 +175,7 @@ function useLoadPlayground() {
         promptContent = "",
         promptId,
         promptVersionId,
+        blueprintRef,
         autoImprove = false,
         datasetId,
         datasetVersionId,
@@ -190,6 +199,7 @@ function useLoadPlayground() {
         const newPrompt = createPromptFromContent(promptContent, {
           promptId,
           promptVersionId,
+          blueprintRef,
           autoImprove,
           templateStructure,
         });

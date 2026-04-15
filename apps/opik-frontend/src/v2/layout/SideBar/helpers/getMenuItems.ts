@@ -3,7 +3,7 @@ import {
   Blocks,
   Bot,
   ChartLine,
-  FileTerminal,
+  Database,
   FlaskConical,
   LayoutDashboard,
   ListChecks,
@@ -81,11 +81,19 @@ const getMenuItems = ({
         ...(canViewDatasets
           ? [
               {
-                id: "evaluation_suites",
-                path: projectPath("/evaluation-suites"),
+                id: "datasets",
+                path: projectPath("/datasets"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Database,
+                label: "Datasets",
+                disabled: !projectPrefix,
+              },
+              {
+                id: "test_suites",
+                path: projectPath("/test-suites"),
                 type: MENU_ITEM_TYPE.router as const,
                 icon: ListChecks,
-                label: "Evaluation suites",
+                label: "Test suites",
                 disabled: !projectPrefix,
               },
             ]
@@ -104,14 +112,6 @@ const getMenuItems = ({
       id: "prompt_engineering",
       label: "Prompt engineering",
       items: [
-        {
-          id: "prompts",
-          path: projectPath("/prompts"),
-          type: MENU_ITEM_TYPE.router,
-          icon: FileTerminal,
-          label: "Prompt library",
-          disabled: !projectPrefix,
-        },
         ...(canUsePlayground
           ? [
               {

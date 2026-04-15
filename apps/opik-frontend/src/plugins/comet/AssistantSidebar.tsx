@@ -16,6 +16,7 @@ import {
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
 import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useTheme } from "@/contexts/theme-provider";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
@@ -26,13 +27,23 @@ import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
 import { Spinner } from "@/ui/spinner";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
+import {
+  ASSISTANT_DEV_BASE_URL,
+  IS_ASSISTANT_DEV,
+} from "@/plugins/comet/constants/assistant";
 
-const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
-const IS_DEV = import.meta.env.DEV;
 const BRIDGE_PROTOCOL_VERSION = 1;
 
 const LOADER_DEFAULT_WIDTH = 400;
 const LOADER_COLLAPSED_WIDTH = 33;
+
+// Pod may serve /console/manifest.json before /health/ready flips — retry
+// with backoff so transient 404/503 during warmup don't permanently fail.
+// Budget (~140s) exceeds the 2 min health-poll timeout so manifest doesn't
+// give up before health polling does.
+const MANIFEST_RETRY_COUNT = 30;
+const MANIFEST_RETRY_BASE_DELAY_MS = 500;
+const MANIFEST_RETRY_MAX_DELAY_MS = 5000;
 
 function getStoredSidebarWidth(): number {
   try {
@@ -218,7 +229,7 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         );
         break;
       default:
-        if (IS_DEV) {
+        if (IS_ASSISTANT_DEV) {
           console.warn(
             `[AssistantBridge] Unhandled sidebar event: "${event}"`,
             data,
@@ -244,6 +255,7 @@ function useBridgeContext(
   surface: BridgeSurface,
 ): BridgeContext {
   const workspaceName = useActiveWorkspaceName();
+  const { themeMode } = useTheme();
   const workspace = useWorkspace();
 
   const { projectId } = useParams({ strict: false }) as {
@@ -270,7 +282,7 @@ function useBridgeContext(
       projectName,
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
-      theme: "light",
+      theme: themeMode,
       surface,
       projectStats,
     }),
@@ -281,6 +293,7 @@ function useBridgeContext(
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      themeMode,
       surface,
       projectStats,
     ],
@@ -295,7 +308,7 @@ interface AssistantMeta {
 }
 
 function resolveManifestUrl(backendUrl: string | null): string | null {
-  if (DEV_BASE_URL) return `${DEV_BASE_URL}/manifest.json`;
+  if (ASSISTANT_DEV_BASE_URL) return `${ASSISTANT_DEV_BASE_URL}/manifest.json`;
   if (backendUrl) return `${backendUrl}/console/manifest.json`;
   return null;
 }
@@ -323,16 +336,21 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: `${manifestBase}/${manifest.shell}`,
+        shellUrl: `/assistant/${manifest.shell}`,
         version: manifest.ver,
       };
     },
-    enabled: !(IS_DEV && DEV_BASE_URL) && !!manifestUrl,
+    enabled: !IS_ASSISTANT_DEV && !!manifestUrl,
     staleTime: Infinity,
-    retry: 1,
+    retry: MANIFEST_RETRY_COUNT,
+    retryDelay: (attempt) =>
+      Math.min(
+        MANIFEST_RETRY_BASE_DELAY_MS * 2 ** attempt,
+        MANIFEST_RETRY_MAX_DELAY_MS,
+      ),
   });
 
-  if (IS_DEV && DEV_BASE_URL) return DEV_META;
+  if (IS_ASSISTANT_DEV) return DEV_META;
 
   return data ?? null;
 }
@@ -348,17 +366,34 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
 }) => {
   const {
     backendUrl,
+    probeUrl,
     isReady: isBackendReady,
     error,
     phase,
     retry,
     retryCount,
   } = useAssistantBackend();
-  const meta = useAssistantMeta(backendUrl);
+  const meta = useAssistantMeta(probeUrl);
   const context = useBridgeContext(backendUrl ?? "", surface);
   const router = useRouter();
 
   const { toast } = useToast();
+
+  // Warm DNS/TCP/TLS to the pod origin while health polling is in flight.
+  // Attributes must be set BEFORE appendChild — browsers evaluate the hint at
+  // insertion time, and late crossorigin changes may not upgrade the handshake.
+  useEffect(() => {
+    if (!probeUrl || IS_ASSISTANT_DEV) return;
+    const origin = new URL(probeUrl).origin;
+    const link = document.createElement("link");
+    link.rel = "preconnect";
+    link.href = origin;
+    link.setAttribute("crossorigin", "use-credentials");
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, [probeUrl]);
 
   const contextRef = useLatestRef(context);
   const onWidthChangeRef = useLatestRef(onWidthChange);

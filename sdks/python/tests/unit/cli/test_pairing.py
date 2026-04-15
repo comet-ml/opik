@@ -204,6 +204,7 @@ class TestRunPairing:
             runner_name="test-runner",
             runner_type=RunnerType.CONNECT,
             base_url="http://localhost:5173/api/",
+            ttl_seconds=1,
         )
 
         assert isinstance(result, PairingResult)
@@ -224,6 +225,7 @@ class TestRunPairing:
             runner_type=RunnerType.CONNECT,
             base_url="http://localhost:5173/api/",
             tui=tui,
+            ttl_seconds=1,
         )
 
         tui.pairing_started.assert_called_once()
@@ -243,7 +245,7 @@ class TestRunPairing:
             runner_name="test-runner",
             runner_type=RunnerType.ENDPOINT,
             base_url="http://localhost:5173/api/",
-            ttl_seconds=300,
+            ttl_seconds=1,
         )
         assert result.runner_id == self.RUNNER_ID
         assert api.runners.get_runner.call_count == 3
@@ -301,6 +303,7 @@ class TestRunPairing:
                 runner_type=RunnerType.CONNECT,
                 base_url="http://localhost:5173/api/",
                 tui=tui,
+                ttl_seconds=1,
             )
 
         tui.pairing_failed.assert_called_once_with("interrupted")
@@ -321,6 +324,7 @@ class TestRunPairing:
                 runner_name="test-runner",
                 runner_type=RunnerType.CONNECT,
                 base_url="http://localhost:5173/api/",
+                ttl_seconds=1,
             )
         assert exc_info.value.status_code == 429
 

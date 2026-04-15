@@ -18,6 +18,7 @@ import {
 } from "@/client/OpikApiClientTemp";
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
+import type { TestSuite, CreateTestSuiteOptions } from "@/evaluation/suite";
 import { Experiment } from "@/experiment/Experiment";
 import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
@@ -365,7 +366,125 @@ export class OpikClient {
     }
   };
 
+  /**
+   * Creates a new test suite with the given options.
+   *
+   * @param options - The options for creating the test suite
+   * @returns The created TestSuite object
+   */
+  public createTestSuite = async (
+    options: CreateTestSuiteOptions
+  ): Promise<TestSuite> => {
+    logger.debug(`Creating test suite with name "${options.name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
+    return TestSuite.create(this, options);
+  };
 
+  /**
+   * Retrieves an existing test suite by name.
+   *
+   * @param name The name of the test suite to retrieve
+   * @param projectName Optional project name to scope the lookup. If not provided, uses the client's configured project.
+   * @returns A TestSuite object
+   * @throws DatasetNotFoundError if the test suite doesn't exist
+   */
+  public getTestSuite = async (
+    name: string,
+    projectName?: string
+  ): Promise<TestSuite> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Getting test suite with name "${name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
+    return TestSuite.get(this, name, resolvedProjectName);
+  };
+
+  /**
+   * Retrieves an existing test suite by name or creates a new one if it doesn't exist.
+   *
+   * @param options - The options for creating the test suite if it doesn't exist
+   * @returns A TestSuite object (existing or newly created)
+   */
+  public getOrCreateTestSuite = async (
+    options: CreateTestSuiteOptions
+  ): Promise<TestSuite> => {
+    logger.debug(
+      `Attempting to retrieve or create test suite with name: "${options.name}"`
+    );
+    const { TestSuite } = await import("@/evaluation/suite");
+    return TestSuite.getOrCreate(this, options);
+  };
+
+  /**
+   * Deletes a test suite by name.
+   *
+   * @param name The name of the test suite to delete
+   * @param projectName Optional project name to scope the lookup. If not provided, uses the client's configured project.
+   */
+  public deleteTestSuite = async (
+    name: string,
+    projectName?: string
+  ): Promise<void> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Deleting test suite with name "${name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
+    await TestSuite.delete(this, name, resolvedProjectName);
+  };
+
+  /**
+   * Returns all test suites up to the specified limit.
+   *
+   * @param maxResults Maximum number of test suites to return (default: 100)
+   * @param projectName Optional project name to filter by. If not provided, uses the client's configured project.
+   * @returns List of TestSuite objects
+   */
+  public getTestSuites = async (
+    maxResults: number = 1000,
+    projectName?: string
+  ): Promise<TestSuite[]> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Getting all test suites (limit: ${maxResults})`);
+
+    try {
+      await this.datasetBatchQueue.flush();
+
+      const projectId = await this.resolveProjectId(resolvedProjectName);
+      const { TestSuite } = await import("@/evaluation/suite");
+
+      const suites: TestSuite[] = [];
+      let page = 1;
+      const pageSize = 100;
+
+      while (suites.length < maxResults) {
+        const response = await this.api.datasets.findDatasets({
+          page,
+          size: pageSize,
+          ...(projectId && { projectId }),
+        });
+
+        const content = response.content ?? [];
+        if (content.length === 0) break;
+
+        for (const datasetData of content) {
+          if (suites.length >= maxResults) break;
+          if (datasetData.type !== OpikApi.DatasetPublicType.EvaluationSuite) continue;
+          suites.push(
+            new TestSuite(
+              new Dataset({ ...datasetData, projectName: resolvedProjectName }, this),
+              this
+            )
+          );
+        }
+
+        page++;
+      }
+
+      logger.info(`Retrieved ${suites.length} test suites`);
+      return suites;
+    } catch (error) {
+      logger.error("Failed to retrieve test suites", { error });
+      throw new Error("Failed to retrieve test suites");
+    }
+  };
 
   private async getProjectIdByName(projectName: string): Promise<string> {
     const project = await this.api.projects.retrieveProject({
@@ -376,6 +495,18 @@ export class OpikClient {
       throw new Error(`Project "${projectName}" not found`);
     }
     return project.id;
+  }
+
+  /**
+   * Resolves a project name to its ID.
+   * Returns undefined if projectName is undefined (no API call made).
+   * Errors from the API are propagated — matching Python's resolve_project_id_by_name_optional().
+   */
+  private async resolveProjectId(projectName: string | undefined): Promise<string | undefined> {
+    if (projectName === undefined) {
+      return undefined;
+    }
+    return this.getProjectIdByName(projectName);
   }
 
   private async createAnnotationQueueInternal<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
