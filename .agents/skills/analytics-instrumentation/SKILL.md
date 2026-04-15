@@ -14,9 +14,9 @@ Examples: `opik_onboarding_agent_name_submitted`, `opik_eval_suite_created`, `op
 ## Frontend Events
 
 ### Files
-- **Tracking utility**: `apps/opik-frontend/src/plugins/comet/analytics/tracking.ts`
-- **Segment init**: `apps/opik-frontend/src/plugins/comet/analytics/index.ts`
-- **Plugin init**: `apps/opik-frontend/src/plugins/comet/init.tsx`
+- **Tracking utility**: `apps/opik-frontend/src/lib/analytics/tracking.ts` (mode-agnostic; safe to import from any project code)
+- **Segment init**: `apps/opik-frontend/src/plugins/comet/analytics/index.ts` (comet-only)
+- **Plugin init**: `apps/opik-frontend/src/plugins/comet/init.tsx` (comet-only)
 
 ### Adding a new event
 
@@ -29,7 +29,7 @@ export const OpikEvent = {
 
 2. Call `trackEvent` from the component or hook where the action happens:
 ```typescript
-import { trackEvent, OpikEvent } from "@/plugins/comet/analytics/tracking";
+import { trackEvent, OpikEvent } from "@/lib/analytics/tracking";
 
 trackEvent(OpikEvent.ONBOARDING_AGENT_NAME_SUBMITTED, {
   agent_name: agentName,
