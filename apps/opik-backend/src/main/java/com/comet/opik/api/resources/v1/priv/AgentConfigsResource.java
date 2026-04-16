@@ -372,35 +372,31 @@ public class AgentConfigsResource {
     }
 
     private void trackAgentConfigDeployed(AgentConfigEnvUpdate request) {
-        try {
-            var envNames = request.envs().stream()
-                    .map(env -> env.envName())
-                    .collect(Collectors.joining(","));
-            var blueprintId = request.envs().stream()
-                    .findFirst()
-                    .map(env -> env.blueprintId().toString())
-                    .orElse("");
-            var deployedToProd = request.envs().stream()
-                    .anyMatch(env -> "prod".equalsIgnoreCase(env.envName()));
+        var envNames = request.envs().stream()
+                .map(env -> env.envName())
+                .collect(Collectors.joining(","));
+        var blueprintIds = request.envs().stream()
+                .map(env -> env.blueprintId().toString())
+                .distinct()
+                .collect(Collectors.joining(","));
+        var deployedToProd = request.envs().stream()
+                .anyMatch(env -> "prod".equalsIgnoreCase(env.envName()));
 
-            analyticsService.trackEvent("agent_config_deployed", Map.of(
-                    "project_id", request.projectId().toString(),
-                    "blueprint_id", blueprintId,
-                    "environments", envNames,
-                    "deployed_to_prod", String.valueOf(deployedToProd)));
-        } catch (Exception e) {
-            log.warn("Failed to track agent_config_deployed analytics event for project '{}'",
-                    request.projectId(), e);
-        }
+        trackAgentConfigDeployedEvent(request.projectId(), envNames, blueprintIds, deployedToProd);
     }
 
     private void trackAgentConfigDeployedByName(UUID projectId, String envName, String blueprintName) {
+        trackAgentConfigDeployedEvent(projectId, envName, blueprintName,
+                "prod".equalsIgnoreCase(envName));
+    }
+
+    private void trackAgentConfigDeployedEvent(UUID projectId, String environments,
+            String blueprintIdentifier, boolean deployedToProd) {
         try {
-            var deployedToProd = "prod".equalsIgnoreCase(envName);
             analyticsService.trackEvent("agent_config_deployed", Map.of(
                     "project_id", projectId.toString(),
-                    "blueprint_name", blueprintName,
-                    "environments", envName,
+                    "blueprint_id", blueprintIdentifier,
+                    "environments", environments,
                     "deployed_to_prod", String.valueOf(deployedToProd)));
         } catch (Exception e) {
             log.warn("Failed to track agent_config_deployed analytics event for project '{}'",
