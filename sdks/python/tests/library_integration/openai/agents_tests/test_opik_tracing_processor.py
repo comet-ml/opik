@@ -54,12 +54,12 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
             "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
+            # Task span appeared in openai-agents 0.14.0
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
-                name="Assistant",
+                name="Task",
                 metadata=ANY_DICT,
-                output={"output": "str"},
                 type="general",
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
@@ -67,23 +67,49 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
                     SpanModel(
                         id=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={
-                            "input": [
-                                {
-                                    "content": "Write a haiku about recursion in programming.",
-                                    "role": "user",
-                                }
-                            ]
-                        },
-                        output={"output": ANY_LIST},
+                        name="Assistant",
                         metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                        output={"output": "str"},
+                        type="general",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
+                        spans=[
+                            # Turn span appeared in openai-agents 0.14.0
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={
+                                            "input": [
+                                                {
+                                                    "content": "Write a haiku about recursion in programming.",
+                                                    "role": "user",
+                                                }
+                                            ]
+                                        },
+                                        output={"output": ANY_LIST},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    )
+                                ],
+                                source="sdk",
+                            )
+                        ],
                         source="sdk",
                     )
                 ],
@@ -140,12 +166,12 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
         },
         thread_id=thread_id,
         spans=[
+            # Task span appeared in openai-agents 0.14.0
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
-                name="Assistant",
+                name="Task",
                 metadata=ANY_DICT,
-                output={"output": "str"},
                 type="general",
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
@@ -153,23 +179,49 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
                     SpanModel(
                         id=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={
-                            "input": [
-                                {
-                                    "content": "Write a haiku about recursion in programming.",
-                                    "role": "user",
-                                }
-                            ]
-                        },
-                        output={"output": ANY_LIST},
+                        name="Assistant",
                         metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                        output={"output": "str"},
+                        type="general",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
+                        spans=[
+                            # Turn span appeared in openai-agents 0.14.0
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={
+                                            "input": [
+                                                {
+                                                    "content": "Write a haiku about recursion in programming.",
+                                                    "role": "user",
+                                                }
+                                            ]
+                                        },
+                                        output={"output": ANY_LIST},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    )
+                                ],
+                                source="sdk",
+                            )
+                        ],
                         source="sdk",
                     )
                 ],
@@ -229,12 +281,12 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
             "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
+            # Task span appeared in openai-agents 0.14.0
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
-                name="Triage agent",
+                name="Task",
                 metadata=ANY_DICT,
-                output={"output": "str"},
                 type="general",
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
@@ -242,66 +294,112 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                     SpanModel(
                         id=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={"input": [{"content": input_message, "role": "user"}]},
-                        output={"output": ANY_BUT_NONE},
+                        name="Triage agent",
                         metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
-                        source="sdk",
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="Handoff",
-                        metadata={
-                            "type": "handoff",
-                            "from_agent": "Triage agent",
-                            "to_agent": "Spanish agent",
-                        },
+                        output={"output": "str"},
                         type="general",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
+                        spans=[
+                            # Turn span appeared in openai-agents 0.14.0
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={
+                                            "input": [
+                                                {
+                                                    "content": input_message,
+                                                    "role": "user",
+                                                }
+                                            ]
+                                        },
+                                        output={"output": ANY_BUT_NONE},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    ),
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Handoff",
+                                        metadata={
+                                            "type": "handoff",
+                                            "from_agent": "Triage agent",
+                                            "to_agent": "Spanish agent",
+                                        },
+                                        type="general",
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        source="sdk",
+                                    ),
+                                ],
+                                source="sdk",
+                            ),
+                        ],
                         source="sdk",
                     ),
-                ],
-                source="sdk",
-            ),
-            SpanModel(
-                id=ANY_BUT_NONE,
-                start_time=ANY_BUT_NONE,
-                name="Spanish agent",
-                metadata={
-                    "type": "agent",
-                    "name": "Spanish agent",
-                    "handoffs": [],
-                    "tools": [],
-                    "output_type": "str",
-                },
-                output={"output": "str"},
-                type="general",
-                end_time=ANY_BUT_NONE,
-                project_name=project_name,
-                spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={"input": ANY_LIST},
-                        output={"output": ANY_BUT_NONE},
-                        metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                        name="Spanish agent",
+                        metadata={
+                            "type": "agent",
+                            "name": "Spanish agent",
+                            "handoffs": [],
+                            "tools": [],
+                            "output_type": "str",
+                        },
+                        output={"output": "str"},
+                        type="general",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
+                        spans=[
+                            # Turn span appeared in openai-agents 0.14.0
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={"input": ANY_LIST},
+                                        output={"output": ANY_BUT_NONE},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    )
+                                ],
+                                source="sdk",
+                            ),
+                        ],
                         source="sdk",
-                    )
+                    ),
                 ],
                 source="sdk",
             ),
@@ -351,18 +449,12 @@ async def test_opik_tracing_processor__functions(fake_backend):
             "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
+            # Task span appeared in openai-agents 0.14.0
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
-                name="Hello world",
-                metadata={
-                    "type": "agent",
-                    "name": "Hello world",
-                    "handoffs": [],
-                    "tools": ["get_weather"],
-                    "output_type": "str",
-                },
-                output={"output": "str"},
+                name="Task",
+                metadata=ANY_DICT,
                 type="general",
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
@@ -370,49 +462,104 @@ async def test_opik_tracing_processor__functions(fake_backend):
                     SpanModel(
                         id=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={"input": [{"content": input_message, "role": "user"}]},
-                        output={"output": ANY_BUT_NONE},
-                        metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
-                        source="sdk",
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="get_weather",
-                        input={"input": '{"city":"Tokyo"}'},
-                        output={"output": "The weather in Tokyo is sunny."},
+                        name="Hello world",
                         metadata={
-                            "type": "function",
-                            "name": "get_weather",
-                            "mcp_data": None,
+                            "type": "agent",
+                            "name": "Hello world",
+                            "handoffs": [],
+                            "tools": ["get_weather"],
+                            "output_type": "str",
                         },
-                        type="tool",
+                        output={"output": "str"},
+                        type="general",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
+                        spans=[
+                            # Turn 1: LLM call + function execution
+                            # Turn span appeared in openai-agents 0.14.0
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={
+                                            "input": [
+                                                {
+                                                    "content": input_message,
+                                                    "role": "user",
+                                                }
+                                            ]
+                                        },
+                                        output={"output": ANY_BUT_NONE},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    ),
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="get_weather",
+                                        input={"input": '{"city":"Tokyo"}'},
+                                        output={
+                                            "output": "The weather in Tokyo is sunny."
+                                        },
+                                        metadata={
+                                            "type": "function",
+                                            "name": "get_weather",
+                                            "mcp_data": None,
+                                        },
+                                        type="tool",
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        source="sdk",
+                                    ),
+                                ],
+                                source="sdk",
+                            ),
+                            # Turn 2: final LLM response with function result
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={"input": ANY_BUT_NONE},
+                                        output={"output": ANY_BUT_NONE},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    ),
+                                ],
+                                source="sdk",
+                            ),
+                        ],
                         source="sdk",
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={"input": ANY_BUT_NONE},
-                        output={"output": ANY_BUT_NONE},
-                        metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
-                        source="sdk",
-                    ),
+                    )
                 ],
                 source="sdk",
             )
@@ -471,18 +618,12 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
             "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
+            # Task span appeared in openai-agents 0.14.0
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
-                name="Hello world",
-                metadata={
-                    "type": "agent",
-                    "name": "Hello world",
-                    "handoffs": [],
-                    "tools": ["get_weather"],
-                    "output_type": "str",
-                },
-                output={"output": "str"},
+                name="Task",
+                metadata=ANY_DICT,
                 type="general",
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
@@ -490,61 +631,116 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                     SpanModel(
                         id=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={"input": [{"content": input_message, "role": "user"}]},
-                        output={"output": ANY_BUT_NONE},
-                        metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
-                        source="sdk",
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="get_weather",
-                        input={"input": '{"city":"Tokyo"}'},
-                        output={"output": "The weather in Tokyo is sunny."},
+                        name="Hello world",
                         metadata={
-                            "type": "function",
-                            "name": "get_weather",
-                            "mcp_data": None,
+                            "type": "agent",
+                            "name": "Hello world",
+                            "handoffs": [],
+                            "tools": ["get_weather"],
+                            "output_type": "str",
                         },
-                        type="tool",
+                        output={"output": "str"},
+                        type="general",
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
                         spans=[
+                            # Turn 1: LLM call + function execution
+                            # Turn span appeared in openai-agents 0.14.0
                             SpanModel(
                                 id=ANY_BUT_NONE,
                                 start_time=ANY_BUT_NONE,
-                                name="is_known_city",
-                                input={"city": ANY_STRING},
-                                output={"output": ANY_BUT_NONE},
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={
+                                            "input": [
+                                                {
+                                                    "content": input_message,
+                                                    "role": "user",
+                                                }
+                                            ]
+                                        },
+                                        output={"output": ANY_BUT_NONE},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    ),
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="get_weather",
+                                        input={"input": '{"city":"Tokyo"}'},
+                                        output={
+                                            "output": "The weather in Tokyo is sunny."
+                                        },
+                                        metadata={
+                                            "type": "function",
+                                            "name": "get_weather",
+                                            "mcp_data": None,
+                                        },
+                                        type="tool",
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        spans=[
+                                            SpanModel(
+                                                id=ANY_BUT_NONE,
+                                                start_time=ANY_BUT_NONE,
+                                                name="is_known_city",
+                                                input={"city": ANY_STRING},
+                                                output={"output": ANY_BUT_NONE},
+                                                end_time=ANY_BUT_NONE,
+                                                project_name=project_name,
+                                                source="sdk",
+                                            )
+                                        ],
+                                        source="sdk",
+                                    ),
+                                ],
                                 source="sdk",
-                            )
+                            ),
+                            # Turn 2: final LLM response with function result
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="Turn",
+                                metadata=ANY_DICT,
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="Response",
+                                        input={"input": ANY_BUT_NONE},
+                                        output={"output": ANY_BUT_NONE},
+                                        metadata=ANY_DICT,
+                                        type="llm",
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                                        provider=LLMProvider.OPENAI,
+                                        source="sdk",
+                                    ),
+                                ],
+                                source="sdk",
+                            ),
                         ],
                         source="sdk",
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="Response",
-                        input={"input": ANY_BUT_NONE},
-                        output={"output": ANY_BUT_NONE},
-                        metadata=ANY_DICT,
-                        type="llm",
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider=LLMProvider.OPENAI,
-                        source="sdk",
-                    ),
+                    )
                 ],
                 source="sdk",
             )
@@ -554,8 +750,6 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
 
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
-
-    print(trace_tree)
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
 
@@ -620,35 +814,63 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                         end_time=ANY_BUT_NONE,
                         project_name=parent_decorator_project_name,
                         spans=[
+                            # Task span appeared in openai-agents 0.14.0
                             SpanModel(
                                 id=ANY_BUT_NONE,
                                 start_time=ANY_BUT_NONE,
-                                name="Assistant",
+                                name="Task",
                                 metadata=ANY_DICT,
-                                output={"output": "str"},
+                                type="general",
                                 end_time=ANY_BUT_NONE,
                                 project_name=parent_decorator_project_name,
                                 spans=[
                                     SpanModel(
                                         id=ANY_BUT_NONE,
                                         start_time=ANY_BUT_NONE,
-                                        name="Response",
-                                        input={
-                                            "input": [
-                                                {
-                                                    "content": "Write a haiku about recursion in programming.",
-                                                    "role": "user",
-                                                }
-                                            ]
-                                        },
-                                        output={"output": ANY_LIST},
+                                        name="Assistant",
                                         metadata=ANY_DICT,
-                                        type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        output={"output": "str"},
                                         end_time=ANY_BUT_NONE,
                                         project_name=parent_decorator_project_name,
-                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                                        provider=LLMProvider.OPENAI,
+                                        spans=[
+                                            # Turn span appeared in openai-agents 0.14.0
+                                            SpanModel(
+                                                id=ANY_BUT_NONE,
+                                                start_time=ANY_BUT_NONE,
+                                                name="Turn",
+                                                metadata=ANY_DICT,
+                                                type="general",
+                                                end_time=ANY_BUT_NONE,
+                                                project_name=parent_decorator_project_name,
+                                                spans=[
+                                                    SpanModel(
+                                                        id=ANY_BUT_NONE,
+                                                        start_time=ANY_BUT_NONE,
+                                                        name="Response",
+                                                        input={
+                                                            "input": [
+                                                                {
+                                                                    "content": "Write a haiku about recursion in programming.",
+                                                                    "role": "user",
+                                                                }
+                                                            ]
+                                                        },
+                                                        output={"output": ANY_LIST},
+                                                        metadata=ANY_DICT,
+                                                        type="llm",
+                                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                                        end_time=ANY_BUT_NONE,
+                                                        project_name=parent_decorator_project_name,
+                                                        model=ANY_STRING.starting_with(
+                                                            MODEL_FOR_TESTS
+                                                        ),
+                                                        provider=LLMProvider.OPENAI,
+                                                        source="sdk",
+                                                    )
+                                                ],
+                                                source="sdk",
+                                            )
+                                        ],
                                         source="sdk",
                                     )
                                 ],
