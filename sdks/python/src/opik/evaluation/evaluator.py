@@ -437,7 +437,6 @@ def run_tests(
     *,
     experiment_name: Optional[str] = None,
     experiment_name_prefix: Optional[str] = None,
-    project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     prompts: Optional[List[base_prompt.BasePrompt]] = None,
     experiment_tags: Optional[List[str]] = None,
@@ -463,7 +462,6 @@ def run_tests(
         task: A callable that takes a dict and returns a result.
         experiment_name: Optional explicit name for the experiment.
         experiment_name_prefix: Optional prefix for auto-generated name.
-        project_name: Optional project name for tracking.
         experiment_config: Optional configuration dict for the experiment.
         prompts: Optional list of Prompt objects to associate.
         experiment_tags: Optional list of tags for the experiment.
@@ -498,7 +496,7 @@ def run_tests(
         client=client,
         experiment_name_prefix=experiment_name_prefix,
         experiment_name=experiment_name,
-        project_name=project_name or test_suite.project_name,
+        project_name=test_suite.project_name,
         experiment_config=experiment_config,
         prompts=prompts,
         experiment_tags=experiment_tags,
