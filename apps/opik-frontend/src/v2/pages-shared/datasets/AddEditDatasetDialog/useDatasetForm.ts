@@ -254,7 +254,7 @@ const useDatasetForm = ({
         ? () => onCreateSuccess(newDataset, navigateToDataset)
         : navigateToDataset;
 
-      if (hasValidCsvFile) {
+      if (hasValidCsvFile && !isCsvUploadEnabled) {
         setIsOverlayShown(true);
       }
 
@@ -271,6 +271,7 @@ const useDatasetForm = ({
       applyEvaluationCriteria,
       uploadItems,
       hasValidCsvFile,
+      isCsvUploadEnabled,
       onDatasetCreated,
       onCreateSuccess,
       setOpen,
