@@ -786,41 +786,9 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial updateTestSettings with tags only (calls updateDataset, not applyDatasetItemChanges)", async () => {
-      const updateDatasetSpy = vi
-        .spyOn(opikClient.api.datasets, "updateDataset")
-        .mockImplementation(
-          () =>
-            ({
-              then: (cb: (v: unknown) => unknown) =>
-                Promise.resolve(cb(undefined)),
-              [Symbol.toStringTag]: "HttpResponsePromise",
-            }) as never
-        );
-
-      const applyChangesSpy = vi
-        .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
-        .mockImplementation(
-          () =>
-            ({
-              then: (cb: (v: unknown) => unknown) =>
-                Promise.resolve(cb(undefined)),
-              [Symbol.toStringTag]: "HttpResponsePromise",
-            }) as never
-        );
-
-      await suite.updateTestSettings({ tags: ["ci", "nightly"] });
-
-      expect(updateDatasetSpy).toHaveBeenCalledWith("suite-ds-id", {
-        name: "test-suite",
-        tags: ["ci", "nightly"],
-      });
-      expect(applyChangesSpy).not.toHaveBeenCalled();
-    });
-
-    it("should throw when none of globalAssertions, globalExecutionPolicy, or tags are provided", async () => {
+    it("should throw when none of globalAssertions or globalExecutionPolicy are provided", async () => {
       await expect(suite.updateTestSettings({})).rejects.toThrow(
-        "At least one of 'globalAssertions', 'globalExecutionPolicy', or 'tags' must be provided."
+        "At least one of 'globalAssertions' or 'globalExecutionPolicy' must be provided."
       );
     });
 

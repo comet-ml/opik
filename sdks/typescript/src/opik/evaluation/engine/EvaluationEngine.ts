@@ -138,7 +138,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       let nextIdx = 0;
       const concurrency = this.taskThreads;
 
-      await new Promise<void>((resolve, reject) => {
+      await new Promise<void>((resolve) => {
         const launchNext = () => {
           while (running < concurrency && nextIdx < runQueue.length) {
             const { item, metrics, runIndex } = runQueue[nextIdx++];
@@ -178,6 +178,9 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
         launchNext();
       });
+
+      // Flush remaining scores and spans that were enqueued during scoring
+      await this.client.flush();
 
       const elapsedSeconds = (performance.now() - startTime) / 1000;
       progress.complete(elapsedSeconds);

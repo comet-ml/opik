@@ -419,6 +419,7 @@ describe("evaluateTestSuite", () => {
     expect(result).toEqual({
       experimentId: expect.any(String),
       experimentName: "suite-experiment",
+      resultUrl: expect.any(String),
       testResults: [
         expect.objectContaining({
           testCase: expect.objectContaining({
