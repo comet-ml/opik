@@ -202,7 +202,7 @@ public class DatasetsResource {
                 savedDataset.id(), workspaceId);
 
         if (savedDataset.type() == DatasetType.TEST_SUITE) {
-            analyticsService.trackEvent("eval_suite_created", Map.of(
+            analyticsService.trackEvent("opik_eval_suite_created", Map.of(
                     "eval_suite_id", savedDataset.id().toString(),
                     "eval_suite_name", savedDataset.name(),
                     "project_id", String.valueOf(savedDataset.projectId())));
