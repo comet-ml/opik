@@ -30,7 +30,7 @@ type DatasetOrVersion<T extends DatasetItemData> =
   | DatasetVersion<T>;
 
 interface ProgressTracker {
-  update(completedRuns: number, itemIndex: number): void;
+  update(completedRuns: number): void;
   complete(elapsedSeconds: number): void;
   recordFailure(): void;
   reportErrors(errors: EvaluationError[]): void;
@@ -162,7 +162,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
               .finally(() => {
                 running--;
                 completedRuns++;
-                progress.update(completedRuns, completedRuns);
+                progress.update(completedRuns);
                 if (completedRuns === runQueue.length) {
                   resolve();
                 } else {
@@ -245,10 +245,10 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const failSuffix = () => (failedRuns > 0 ? `, ${failedRuns} failed` : "");
 
     return {
-      update: (completedRuns: number, itemIndex: number) => {
+      update: (completedRuns: number) => {
         spinner.text = this.suiteMode
           ? `Evaluating dataset (${completedRuns}/${totalRuns} runs across ${totalItems} items, ${Math.round((completedRuns / totalRuns) * 100)}%${failSuffix()})`
-          : `Evaluating dataset (${itemIndex + 1}/${totalItems} items, ${Math.round(((itemIndex + 1) / totalItems) * 100)}%${failSuffix()})`;
+          : `Evaluating dataset (${completedRuns}/${totalItems} items, ${Math.round((completedRuns / totalItems) * 100)}%${failSuffix()})`;
       },
       complete: (elapsedSeconds: number) => {
         const message = this.suiteMode
