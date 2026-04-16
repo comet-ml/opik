@@ -25,6 +25,8 @@ export interface RunTestsOptions {
   model?: string;
   /** Number of concurrent task executions (default: 16, matching Python SDK) */
   taskThreads?: number;
+  /** Limit the number of dataset items to evaluate. If not set, all items are evaluated. */
+  nbSamples?: number;
 }
 
 /**
