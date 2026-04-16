@@ -27,7 +27,22 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   }, []);
 
   useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
     resize();
+
+    // Re-resize when the element becomes visible (e.g. hidden tab with forceMount)
+    let lastWidth = el.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      const currentWidth = el.offsetWidth;
+      if (currentWidth !== lastWidth) {
+        lastWidth = currentWidth;
+        resize();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [value, resize]);
 
   const handleChange = useCallback(
