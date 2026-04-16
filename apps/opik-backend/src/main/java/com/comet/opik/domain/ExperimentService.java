@@ -694,15 +694,15 @@ public class ExperimentService {
         log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
                 partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
 
-        trackEvalSuiteRunIfApplicable(partialExperiment, workspaceId);
+        trackEvalSuiteRunIfApplicable(partialExperiment, workspaceId, userName);
     }
 
-    private void trackEvalSuiteRunIfApplicable(Experiment experiment, String workspaceId) {
+    private void trackEvalSuiteRunIfApplicable(Experiment experiment, String workspaceId, String userName) {
         Schedulers.boundedElastic().schedule(() -> {
             try {
                 datasetService.getById(experiment.datasetId(), workspaceId)
                         .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
-                        .ifPresent(dataset -> analyticsService.trackEvent("opik_eval_suite_run", Map.of(
+                        .ifPresent(dataset -> analyticsService.trackEvent(userName, "opik_eval_suite_run", Map.of(
                                 "eval_suite_id", dataset.id().toString(),
                                 "experiment_id", experiment.id().toString(),
                                 "project_id", String.valueOf(experiment.projectId()))));
