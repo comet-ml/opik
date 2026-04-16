@@ -103,9 +103,7 @@ class RunnerTUI:
             self._pairing_url = url
 
         if not self._is_tty:
-            self._console.print(
-                f"Open this link to pair:  \U0001f517 {url}\nOr copy this URL into your browser:\n{url}"
-            )
+            self._console.print(f"Open this link to pair:\n{url}", soft_wrap=True)
 
     def pairing_completed(self, project_url: Optional[str] = None) -> None:
         with self._lock:

@@ -96,7 +96,7 @@ def _parse_pairing_url(output_lines, timeout):
     )
 
     while time.monotonic() < deadline:
-        joined = "\n".join(list(output_lines))
+        joined = "".join(list(output_lines))
         match = url_pattern.search(joined)
         if match:
             url = match.group(1)
