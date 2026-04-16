@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.11.2](https://img.shields.io/badge/Version-1.11.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.11.2](https://img.shields.io/badge/AppVersion-1.11.2-informational?style=flat-square)
+![Version: 1.11.8](https://img.shields.io/badge/Version-1.11.8-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.11.8](https://img.shields.io/badge/AppVersion-1.11.8-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -266,6 +266,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.replicaCount | int | `1` |  |
 | component.backend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.backend.run_migration | bool | `true` |  |
+| component.backend.run_migration_resources | object | `{}` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
 | component.backend.service.ports[0].port | int | `8080` |  |
 | component.backend.service.ports[0].protocol | string | `"TCP"` |  |
@@ -283,12 +284,14 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
 | component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
+| component.backend.waitForClickhouse.resources | object | `{}` |  |
 | component.backend.waitForMysql.enabled | bool | `false` |  |
 | component.backend.waitForMysql.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForMysql.image.repository | string | `"busybox"` |  |
 | component.backend.waitForMysql.image.tag | float | `1.36` |  |
 | component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
 | component.backend.waitForMysql.mysql.port | int | `3306` |  |
+| component.backend.waitForMysql.resources | object | `{}` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |

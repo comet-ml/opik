@@ -107,6 +107,9 @@ component:
     backendConfigMap:
       enabled: true
     run_migration: true
+    # Resource requests/limits for the `backend-migrations` init container.
+    # Empty ({}) by default — no resources set.
+    run_migration_resources: {}
     waitForClickhouse:
       clickhouse:
         host: clickhouse-opik-clickhouse
@@ -116,6 +119,9 @@ component:
         registry: docker.io
         repository: curlimages/curl
         tag: 8.12.1
+      # Resource requests/limits for the `wait-for-clickhouse-service` init container.
+      # Empty ({}) by default — no resources set.
+      resources: {}
     waitForMysql:
       enabled: false
       mysql:
@@ -125,6 +131,9 @@ component:
         registry: docker.io
         repository: busybox
         tag: 1.36
+      # Resource requests/limits for the `wait-for-mysql-service` init container.
+      # Empty ({}) by default — no resources set.
+      resources: {}
     resources:
       requests:
         ephemeral-storage: 10Gi
