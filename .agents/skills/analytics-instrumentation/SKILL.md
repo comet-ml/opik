@@ -59,7 +59,7 @@ private final @NonNull AnalyticsService analyticsService;
 
 2. Call `trackEvent`:
 ```java
-analyticsService.trackEvent("onboarding_first_trace",
+analyticsService.trackEvent("opik_onboarding_first_trace",
     Map.of("trace_id", traceId, "project_id", projectId));
 ```
 
@@ -88,6 +88,12 @@ Frontend custom events:  Browser → Segment → PostHog
 Backend events:          Java → comet-stats → Segment → PostHog
 PostHog native:          Browser → posthog-js → PostHog (pageviews, feature flags, identification)
 ```
+
+## Event Property Conventions
+
+- **`_id` suffix → UUIDs only**: Properties ending in `_id` (e.g. `project_id`, `blueprint_id`) must contain UUID strings. Never pass a human-readable name into an `_id` field.
+- **`_name` suffix → human-readable text**: Properties ending in `_name` (e.g. `agent_name`, `blueprint_name`) hold display names.
+- **Don't mix identifiers**: If a code path has a name but not a UUID (or vice versa), use separate properties with the correct suffix and leave the unavailable one as an empty string. Don't reuse a single property for both.
 
 ## Deciding Frontend vs Backend
 

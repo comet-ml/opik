@@ -361,12 +361,12 @@ public class AgentConfigsResource {
 
     private void trackAgentConfigSaved(AgentBlueprint blueprint) {
         try {
-            analyticsService.trackEvent("agent_config_saved", Map.of(
+            analyticsService.trackEvent("opik_agent_config_saved", Map.of(
                     "project_id", String.valueOf(blueprint.projectId()),
                     "blueprint_id", blueprint.id().toString(),
                     "blueprint_name", String.valueOf(blueprint.name())));
         } catch (Exception e) {
-            log.warn("Failed to track agent_config_saved analytics event for blueprint '{}'",
+            log.warn("Failed to track opik_agent_config_saved analytics event for blueprint '{}'",
                     blueprint.id(), e);
         }
     }
@@ -382,24 +382,26 @@ public class AgentConfigsResource {
         var deployedToProd = request.envs().stream()
                 .anyMatch(env -> "prod".equalsIgnoreCase(env.envName()));
 
-        trackAgentConfigDeployedEvent(request.projectId(), envNames, blueprintIds, deployedToProd);
+        trackAgentConfigDeployedEvent(request.projectId(), envNames, blueprintIds, "",
+                deployedToProd);
     }
 
     private void trackAgentConfigDeployedByName(UUID projectId, String envName, String blueprintName) {
-        trackAgentConfigDeployedEvent(projectId, envName, blueprintName,
+        trackAgentConfigDeployedEvent(projectId, envName, "", blueprintName,
                 "prod".equalsIgnoreCase(envName));
     }
 
     private void trackAgentConfigDeployedEvent(UUID projectId, String environments,
-            String blueprintIdentifier, boolean deployedToProd) {
+            String blueprintIds, String blueprintName, boolean deployedToProd) {
         try {
-            analyticsService.trackEvent("agent_config_deployed", Map.of(
+            analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
                     "project_id", projectId.toString(),
-                    "blueprint_id", blueprintIdentifier,
+                    "blueprint_id", blueprintIds,
+                    "blueprint_name", blueprintName,
                     "environments", environments,
                     "deployed_to_prod", String.valueOf(deployedToProd)));
         } catch (Exception e) {
-            log.warn("Failed to track agent_config_deployed analytics event for project '{}'",
+            log.warn("Failed to track opik_agent_config_deployed analytics event for project '{}'",
                     projectId, e);
         }
     }

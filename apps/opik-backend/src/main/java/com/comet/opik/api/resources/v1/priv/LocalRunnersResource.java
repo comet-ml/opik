@@ -185,12 +185,12 @@ public class LocalRunnersResource {
         UUID jobId = endpointJobService.createJob(workspaceId, userName, request);
 
         try {
-            analyticsService.trackEvent("sandbox_job_created", Map.of(
+            analyticsService.trackEvent("opik_sandbox_job_created", Map.of(
                     "project_id", request.projectId().toString(),
                     "job_id", jobId.toString(),
                     "agent_name", request.agentName()));
         } catch (Exception e) {
-            log.warn("Failed to track sandbox_job_created analytics event for job '{}'", jobId, e);
+            log.warn("Failed to track opik_sandbox_job_created analytics event for job '{}'", jobId, e);
         }
 
         var uri = uriInfo.getAbsolutePathBuilder().path("/{jobId}").build(jobId);
