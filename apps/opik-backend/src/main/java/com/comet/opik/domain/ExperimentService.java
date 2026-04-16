@@ -698,17 +698,19 @@ public class ExperimentService {
     }
 
     private void trackEvalSuiteRunIfApplicable(Experiment experiment, String workspaceId) {
-        try {
-            datasetService.getById(experiment.datasetId(), workspaceId)
-                    .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
-                    .ifPresent(dataset -> analyticsService.trackEvent("opik_eval_suite_run", Map.of(
-                            "eval_suite_id", dataset.id().toString(),
-                            "experiment_id", experiment.id().toString(),
-                            "project_id", String.valueOf(experiment.projectId()))));
-        } catch (Exception e) {
-            log.warn("Failed to track eval_suite_run analytics event for experiment '{}'",
-                    experiment.id(), e);
-        }
+        Schedulers.boundedElastic().schedule(() -> {
+            try {
+                datasetService.getById(experiment.datasetId(), workspaceId)
+                        .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
+                        .ifPresent(dataset -> analyticsService.trackEvent("opik_eval_suite_run", Map.of(
+                                "eval_suite_id", dataset.id().toString(),
+                                "experiment_id", experiment.id().toString(),
+                                "project_id", String.valueOf(experiment.projectId()))));
+            } catch (Exception e) {
+                log.warn("Failed to track eval_suite_run analytics event for experiment '{}'",
+                        experiment.id(), e);
+            }
+        });
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {
