@@ -209,7 +209,7 @@ function DatasetItemsTab({
   const resetDialogKeyRef = useRef(0);
 
   const [isCompactToolbar, setIsCompactToolbar] = useState(false);
-  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(Boolean(search));
   const isCollapsingRef = useRef(false);
   const handleToolbarResize = useCallback((node: HTMLDivElement) => {
     setIsCompactToolbar(node.clientWidth < COMPACT_TOOLBAR_BREAKPOINT);
