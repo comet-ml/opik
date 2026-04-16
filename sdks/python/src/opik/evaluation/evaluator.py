@@ -50,6 +50,26 @@ MODALITY_SUPPORT_DOC_URL = (
 EVALUATION_STREAM_DATASET_BATCH_SIZE = 200
 
 
+def _merge_blueprint_into_config(
+    client: "opik_client.Opik",
+    blueprint_id: str,
+    experiment_config: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Add blueprint reference to experiment_config under ``agent_configuration``."""
+    experiment_config = dict(experiment_config) if experiment_config else {}
+    agent_config: Dict[str, str] = {"_blueprint_id": blueprint_id}
+    try:
+        blueprint = client._rest_client.agent_configs.get_blueprint_by_id(
+            blueprint_id=blueprint_id,
+        )
+        if blueprint.name:
+            agent_config["blueprint_version"] = blueprint.name
+    except Exception:
+        LOGGER.debug("Failed to fetch blueprint %s", blueprint_id, exc_info=True)
+    experiment_config["agent_configuration"] = agent_config
+    return experiment_config
+
+
 def _calculate_total_items(
     dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
     nb_samples: Optional[int],
@@ -170,6 +190,7 @@ def evaluate(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
+    blueprint_id: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -271,6 +292,13 @@ def evaluate(
 
     client = opik_client.get_global_client()
 
+    if blueprint_id:
+        experiment_config = _merge_blueprint_into_config(
+            client,
+            blueprint_id,
+            experiment_config,
+        )
+
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
         experiment_name_prefix=experiment_name_prefix,
@@ -333,6 +361,7 @@ def __internal_api__run_test_suite__(
     experiment_type: Optional[str] = None,
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
+    blueprint_id: Optional[str] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Internal function that runs the full test suite evaluation pipeline:
@@ -351,6 +380,13 @@ def __internal_api__run_test_suite__(
 
     if client is None:
         client = opik_client.get_global_client()
+
+    if blueprint_id:
+        experiment_config = _merge_blueprint_into_config(
+            client,
+            blueprint_id,
+            experiment_config,
+        )
 
     @functools.wraps(task)
     def _validated_task(data: Dict[str, Any]) -> Any:
@@ -445,6 +481,7 @@ def run_tests(
     model: Optional[str] = None,
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
+    blueprint_id: Optional[str] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Run a test suite against a task function.
@@ -505,6 +542,7 @@ def run_tests(
         evaluator_model=model,
         generate_report=generate_report,
         report_output_path=report_output_path,
+        blueprint_id=blueprint_id,
     )
 
 
