@@ -407,17 +407,8 @@ class Dataset(DatasetExportOperations):
         If the count is not cached locally, it will be fetched from the backend.
         """
         if self._dataset_items_count is None:
-            dataset_info = self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=self._name, project_name=self._project_name
-            )
+            dataset_info = self._rest_client.datasets.get_dataset_by_id(id=self.id)
             self._dataset_items_count = dataset_info.dataset_items_count
-
-        # Fallback to version info when dataset_items_count is not populated
-        # (e.g. for test suite datasets where the backend returns null)
-        if self._dataset_items_count is None:
-            version_info = self.get_version_info()
-            if version_info is not None:
-                self._dataset_items_count = version_info.items_total
 
         return self._dataset_items_count
 
