@@ -37,7 +37,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -116,13 +115,12 @@ public class PairingResource {
                     .build(runnerId);
             return Response.created(location).build();
         } catch (Exception e) {
-            Map<String, String> props = new HashMap<>();
-            props.put("session_id", sessionId.toString());
-            props.put("workspace_id", workspaceId);
-            props.put("user_name", userName);
-            props.put("error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
-            props.put("date", Instant.now().toString());
-            analyticsService.trackEvent("opik_connect_failed", props);
+            analyticsService.trackEvent("opik_connect_failed", Map.of(
+                    "session_id", sessionId.toString(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName,
+                    "error", e.getClass().getSimpleName(),
+                    "date", Instant.now().toString()));
             throw e;
         }
     }
