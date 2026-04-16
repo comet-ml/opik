@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 from opik.api_objects.dataset.dataset import Dataset
 from opik.rest_api.types.dataset_public import DatasetPublic
+from opik.rest_api.types.dataset_version_public import DatasetVersionPublic
 
 
 def test_dataset_items_count__cached_value__returns_cached_count():
@@ -203,14 +204,20 @@ def test_insert__invalidates_cached_count():
     )
 
 
-def test_backend_returns_none_count__property_returns_none():
-    """Test that if backend returns None for count, property returns None."""
+def test_backend_returns_none_count__falls_back_to_version_info():
+    """Test that if backend returns None for count, falls back to version info."""
     mock_rest_client = Mock()
 
     # Mock the backend response with None count
     mock_dataset_public = DatasetPublic(name="test_dataset", dataset_items_count=None)
     mock_rest_client.datasets.get_dataset_by_identifier.return_value = (
         mock_dataset_public
+    )
+
+    # Mock version info with items_total
+    mock_version = DatasetVersionPublic(items_total=42)
+    mock_rest_client.datasets.list_dataset_versions.return_value = Mock(
+        content=[mock_version]
     )
 
     # Create dataset without initial count
@@ -222,11 +229,67 @@ def test_backend_returns_none_count__property_returns_none():
         dataset_items_count=None,
     )
 
-    # Access the count
     count = dataset.dataset_items_count
 
-    # Should return None
-    assert count is None
-    mock_rest_client.datasets.get_dataset_by_identifier.assert_called_once_with(
-        dataset_name="test_dataset", project_name="Test project"
+    assert count == 42
+    mock_rest_client.datasets.list_dataset_versions.assert_called_once()
+
+
+def test_backend_returns_none_count__no_version_info__returns_none():
+    """Test that if both backend count and version info are unavailable, returns None."""
+    mock_rest_client = Mock()
+
+    # Mock the backend response with None count
+    mock_dataset_public = DatasetPublic(name="test_dataset", dataset_items_count=None)
+    mock_rest_client.datasets.get_dataset_by_identifier.return_value = (
+        mock_dataset_public
     )
+
+    # Mock no version info
+    mock_rest_client.datasets.list_dataset_versions.return_value = Mock(content=[])
+
+    # Create dataset without initial count
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=None,
+    )
+
+    count = dataset.dataset_items_count
+
+    assert count is None
+
+
+def test_backend_returns_none_count__version_fallback_cached():
+    """Test that the version info fallback value is cached for subsequent calls."""
+    mock_rest_client = Mock()
+
+    # Mock the backend response with None count
+    mock_dataset_public = DatasetPublic(name="test_dataset", dataset_items_count=None)
+    mock_rest_client.datasets.get_dataset_by_identifier.return_value = (
+        mock_dataset_public
+    )
+
+    # Mock version info with items_total
+    mock_version = DatasetVersionPublic(items_total=15)
+    mock_rest_client.datasets.list_dataset_versions.return_value = Mock(
+        content=[mock_version]
+    )
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=None,
+    )
+
+    count1 = dataset.dataset_items_count
+    count2 = dataset.dataset_items_count
+
+    assert count1 == 15
+    assert count2 == 15
+    # Version info called only once, then cached
+    mock_rest_client.datasets.list_dataset_versions.assert_called_once()

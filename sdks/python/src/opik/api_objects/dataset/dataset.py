@@ -411,6 +411,14 @@ class Dataset(DatasetExportOperations):
                 dataset_name=self._name, project_name=self._project_name
             )
             self._dataset_items_count = dataset_info.dataset_items_count
+
+        # Fallback to version info when dataset_items_count is not populated
+        # (e.g. for test suite datasets where the backend returns null)
+        if self._dataset_items_count is None:
+            version_info = self.get_version_info()
+            if version_info is not None:
+                self._dataset_items_count = version_info.items_total
+
         return self._dataset_items_count
 
     def get_current_version_name(self) -> Optional[str]:
