@@ -52,6 +52,8 @@ export type EvaluationEngineOptions<T = Record<string, unknown>> =
     itemMetricsMap?: Map<string, BaseMetric[]>;
     /** Per-item execution policy map. Key is dataset item ID, value is the resolved policy. */
     itemPolicyMap?: Map<string, Required<ExecutionPolicy>>;
+    /** How often (in ms) to flush traces/spans to the backend during evaluation (default: 500). */
+    flushIntervalMs?: number;
   };
 
 /**
@@ -82,6 +84,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private readonly itemMetricsMap?: Map<string, BaseMetric[]>;
   private readonly itemPolicyMap?: Map<string, Required<ExecutionPolicy>>;
   private readonly taskThreads: number;
+  private readonly flushIntervalMs: number;
 
   constructor(
     options: EvaluationEngineOptions<T>,
@@ -102,6 +105,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     this.itemMetricsMap = options.itemMetricsMap;
     this.itemPolicyMap = options.itemPolicyMap;
     this.taskThreads = options.taskThreads ?? 16;
+    this.flushIntervalMs = options.flushIntervalMs ?? 500;
   }
 
   /**
@@ -117,6 +121,12 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const totalRuns = this.calculateTotalRuns(items);
     const progress = this.createProgressTracker(items.length, totalRuns);
     const startTime = performance.now();
+
+    // Periodically flush traces/spans so the UI shows progress during evaluation
+    // instead of flushing after every single item run.
+    const flushInterval = setInterval(() => {
+      this.client.flush({ silent: true }).catch(() => {});
+    }, this.flushIntervalMs);
 
     try {
       const testResults: EvaluationTestResult[] = [];
@@ -193,6 +203,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         errors
       );
     } finally {
+      clearInterval(flushInterval);
       progress.restoreLogLevel();
     }
   }
@@ -300,9 +311,14 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         endTime: new Date(),
       });
 
-      // Commit experiment item to DB immediately so the UI shows progress
-      // before potentially slow LLM judge scoring begins.
-      await this.commitExperimentItem(trace, datasetItem.id);
+      // Commit experiment item to DB.
+      await this.experiment.insert([
+        new ExperimentItemReferences({
+          datasetItemId: datasetItem.id,
+          traceId: trace.data.id,
+          projectName: trace.data.projectName,
+        }),
+      ]);
 
       const testResult = await this.scoreTestCase(testCase, metrics, trace);
 
@@ -329,21 +345,6 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
       throw error;
     }
-  }
-
-  /**
-   * Flush the trace to the DB and insert the experiment item reference
-   * so the UI can display results immediately after the task completes.
-   */
-  private async commitExperimentItem(trace: Trace, datasetItemId: string): Promise<void> {
-    await this.client.flush();
-    await this.experiment.insert([
-      new ExperimentItemReferences({
-        datasetItemId,
-        traceId: trace.data.id,
-        projectName: trace.data.projectName,
-      }),
-    ]);
   }
 
   private async runTask(
