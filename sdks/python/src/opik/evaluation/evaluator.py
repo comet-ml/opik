@@ -57,7 +57,7 @@ def _merge_blueprint_into_config(
 ) -> Dict[str, Any]:
     """Add blueprint reference to experiment_config under ``agent_configuration``."""
     experiment_config = dict(experiment_config) if experiment_config else {}
-    agent_config: Dict[str, Any] = {"_blueprint_id": blueprint_id}
+    agent_config: Dict[str, str] = {"_blueprint_id": blueprint_id}
     try:
         blueprint = client._rest_client.agent_configs.get_blueprint_by_id(
             blueprint_id=blueprint_id,

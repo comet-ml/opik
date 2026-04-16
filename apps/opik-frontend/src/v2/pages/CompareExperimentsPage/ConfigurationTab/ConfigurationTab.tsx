@@ -17,6 +17,7 @@ import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/Co
 import CompareExperimentsConfigCell, {
   CompareConfig,
   CompareFiledValue,
+  AgentConfigLinkData,
 } from "@/v2/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -75,8 +76,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   });
 
   const agentConfigLinkData = useMemo(() => {
-    const result: Record<string, { projectId: string; blueprintId: string }> =
-      {};
+    const result: Record<string, AgentConfigLinkData> = {};
     for (const exp of experiments) {
       const meta = exp.metadata as Record<string, unknown> | undefined;
       const config = meta?.[AGENT_CONFIGURATION_METADATA_KEY];
