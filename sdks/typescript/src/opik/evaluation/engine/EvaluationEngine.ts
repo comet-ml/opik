@@ -81,6 +81,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private readonly prefetchedItems?: (DatasetItemData & T & { id: string })[];
   private readonly itemMetricsMap?: Map<string, BaseMetric[]>;
   private readonly itemPolicyMap?: Map<string, Required<ExecutionPolicy>>;
+  private readonly taskThreads: number;
 
   constructor(
     options: EvaluationEngineOptions<T>,
@@ -100,6 +101,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     this.prefetchedItems = options.prefetchedItems;
     this.itemMetricsMap = options.itemMetricsMap;
     this.itemPolicyMap = options.itemPolicyMap;
+    this.taskThreads = options.taskThreads ?? 16;
   }
 
   /**
@@ -119,42 +121,63 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     try {
       const testResults: EvaluationTestResult[] = [];
       const errors: EvaluationError[] = [];
-      const experimentRefs: ExperimentItemReferences[] = [];
       let completedRuns = 0;
 
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
+      // Build flat list of all (item, runIndex) pairs
+      const runQueue: { item: (typeof items)[number]; metrics: BaseMetric[] | undefined; runIndex: number }[] = [];
+      for (const item of items) {
         const runsPerItem = this.getRunsPerItem(item);
         const metrics = this.getItemMetrics(item);
-
         for (let runIndex = 0; runIndex < runsPerItem; runIndex++) {
-          try {
-            const testResult = await this.executeItemRun(
-              item,
-              metrics,
-              runIndex,
-              experimentRefs
-            );
-            testResults.push(testResult);
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            errors.push({
-              datasetItemId: item.id,
-              runIndex,
-              message: errorMessage,
-              ...(error instanceof Error && { error }),
-            });
-            progress.recordFailure();
-          }
-          completedRuns++;
+          runQueue.push({ item, metrics, runIndex });
         }
-
-        progress.update(completedRuns, i);
       }
 
-      this.experiment.insert(experimentRefs);
-      await this.client.flush();
+      // Concurrency semaphore
+      let running = 0;
+      let nextIdx = 0;
+      const concurrency = this.taskThreads;
+
+      await new Promise<void>((resolve, reject) => {
+        const launchNext = () => {
+          while (running < concurrency && nextIdx < runQueue.length) {
+            const { item, metrics, runIndex } = runQueue[nextIdx++];
+            running++;
+
+            this.executeItemRun(item, metrics, runIndex)
+              .then((testResult) => {
+                testResults.push(testResult);
+              })
+              .catch((error) => {
+                const errorMessage =
+                  error instanceof Error ? error.message : String(error);
+                errors.push({
+                  datasetItemId: item.id,
+                  runIndex,
+                  message: errorMessage,
+                  ...(error instanceof Error && { error }),
+                });
+                progress.recordFailure();
+              })
+              .finally(() => {
+                running--;
+                completedRuns++;
+                progress.update(completedRuns, completedRuns);
+                if (completedRuns === runQueue.length) {
+                  resolve();
+                } else {
+                  launchNext();
+                }
+              });
+          }
+
+          if (runQueue.length === 0) {
+            resolve();
+          }
+        };
+
+        launchNext();
+      });
 
       const elapsedSeconds = (performance.now() - startTime) / 1000;
       progress.complete(elapsedSeconds);
@@ -255,8 +278,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private async executeItemRun(
     datasetItem: DatasetItemData & T & { id: string },
     metrics: BaseMetric[] | undefined,
-    runIndex: number,
-    experimentRefs: ExperimentItemReferences[]
+    runIndex: number
   ): Promise<EvaluationTestResult> {
     const trace = this.client.trace({
       projectName: this.projectName,
@@ -268,7 +290,18 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     trackStorage.enterWith({ trace });
 
     try {
-      const testResult = await this.executeTask(datasetItem, metrics, trace);
+      const { testCase, taskOutput } = await this.runTask(datasetItem, trace);
+
+      trace.update({
+        output: taskOutput,
+        endTime: new Date(),
+      });
+
+      // Commit experiment item to DB immediately so the UI shows progress
+      // before potentially slow LLM judge scoring begins.
+      await this.commitExperimentItem(trace, datasetItem.id);
+
+      const testResult = await this.scoreTestCase(testCase, metrics, trace);
 
       if (this.suiteMode) {
         testResult.trialId = runIndex;
@@ -277,11 +310,6 @@ export class EvaluationEngine<T = Record<string, unknown>> {
           testResult.resolvedExecutionPolicy = itemPolicy;
         }
       }
-
-      trace.update({
-        output: testResult.testCase.taskOutput,
-        endTime: new Date(),
-      });
 
       return testResult;
     } catch (error) {
@@ -297,27 +325,30 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       }
 
       throw error;
-    } finally {
-      experimentRefs.push(
-        new ExperimentItemReferences({
-          datasetItemId: datasetItem.id,
-          traceId: trace.data.id,
-          projectName: trace.data.projectName,
-        })
-      );
     }
   }
 
-  private async executeTask(
-    datasetItem: DatasetItemData & T & { id: string },
-    metrics: BaseMetric[] | undefined,
-    trace: Trace
-  ): Promise<EvaluationTestResult> {
-    let taskOutput: Record<string, unknown> = {};
-    const scoreResults: EvaluationScoreResult[] = [];
+  /**
+   * Flush the trace to the DB and insert the experiment item reference
+   * so the UI can display results immediately after the task completes.
+   */
+  private async commitExperimentItem(trace: Trace, datasetItemId: string): Promise<void> {
+    await this.client.flush();
+    await this.experiment.insert([
+      new ExperimentItemReferences({
+        datasetItemId,
+        traceId: trace.data.id,
+        projectName: trace.data.projectName,
+      }),
+    ]);
+  }
 
+  private async runTask(
+    datasetItem: DatasetItemData & T & { id: string },
+    trace: Trace
+  ): Promise<{ testCase: EvaluationTestCase; taskOutput: Record<string, unknown> }> {
     logger.debug(`Starting evaluation task on dataset item ${datasetItem.id}`);
-    taskOutput = await track(
+    const taskOutput = await track(
       { name: "llm_task", type: SpanType.General },
       this.task
     )(datasetItem);
@@ -332,6 +363,14 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       taskOutput,
     };
 
+    return { testCase, taskOutput };
+  }
+
+  private async scoreTestCase(
+    testCase: EvaluationTestCase,
+    metrics: BaseMetric[] | undefined,
+    trace: Trace
+  ): Promise<EvaluationTestResult> {
     const effectiveMetrics = metrics ?? this.scoringMetrics;
 
     if (effectiveMetrics.length > 0) {
@@ -340,7 +379,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
     return {
       testCase,
-      scoreResults,
+      scoreResults: [],
     };
   }
 

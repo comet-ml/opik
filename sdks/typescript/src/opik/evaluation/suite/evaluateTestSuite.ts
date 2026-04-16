@@ -43,6 +43,9 @@ export interface EvaluateTestSuiteOptions<T = Record<string, unknown>> {
 
   /** Optional list of tags to associate with the experiment */
   tags?: string[];
+
+  /** Number of concurrent task executions (default: 16, matching Python SDK) */
+  taskThreads?: number;
 }
 
 /**
@@ -126,6 +129,7 @@ export async function evaluateTestSuite<T = Record<string, unknown>>(
       prefetchedItems,
       itemMetricsMap,
       itemPolicyMap,
+      taskThreads: options.taskThreads,
     };
 
     const engine = new EvaluationEngine<T>(engineOptions, client, experiment);
