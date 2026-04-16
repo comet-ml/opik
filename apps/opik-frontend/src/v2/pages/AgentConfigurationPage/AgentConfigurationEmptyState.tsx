@@ -7,10 +7,9 @@ import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
+import { INSTALL_OPIK_SKILLS_COMMAND } from "@/constants/shared";
 import emptyAgentConfigLightUrl from "/images/empty-agent-configuration-light.svg";
 import emptyAgentConfigDarkUrl from "/images/empty-agent-configuration-dark.svg";
-
-const INSTALL_COMMAND = "npx skills add comet-ml/opik-skills -g";
 
 const AGENT_PROMPT = `Add Opik agent configuration to my project. Define a config schema with my agent's key parameters (such as model, temperature or prompts), and publish the first version`;
 
@@ -32,7 +31,10 @@ const AgentConfigurationEmptyState: React.FC = () => {
               <h4 className="comet-body-s-accented">
                 Install the Opik skills package
               </h4>
-              <CodeSnippet title="Terminal" code={INSTALL_COMMAND} />
+              <CodeSnippet
+                title="Terminal"
+                code={INSTALL_OPIK_SKILLS_COMMAND}
+              />
             </div>
           </TimelineStep>
 
