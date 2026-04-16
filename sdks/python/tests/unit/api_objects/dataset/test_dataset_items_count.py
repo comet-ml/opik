@@ -155,3 +155,24 @@ def test_insert__invalidates_cached_count():
 
     assert count == 7
     mock_rest_client.datasets.get_dataset_by_id.assert_called_once()
+
+
+def test_backend_returns_none_count__property_returns_none():
+    """Test that if backend returns None for count, property returns None."""
+    mock_rest_client = Mock()
+
+    mock_dataset_public = DatasetPublic(name="test_dataset", dataset_items_count=None)
+    mock_rest_client.datasets.get_dataset_by_id.return_value = mock_dataset_public
+
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+        dataset_items_count=None,
+    )
+
+    count = dataset.dataset_items_count
+
+    assert count is None
+    mock_rest_client.datasets.get_dataset_by_id.assert_called_once()
