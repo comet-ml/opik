@@ -19,9 +19,13 @@ from .pairing import (
 )
 
 
-def _capture_cli_error(exception: Exception, error_type: str, **details: object) -> None:
+def _capture_cli_error(
+    exception: Exception, error_type: str, **details: object
+) -> None:
     sentry_sdk.set_tag("error_type", error_type)
-    sentry_sdk.set_context("cli_error", {k: v for k, v in details.items() if v is not None})
+    sentry_sdk.set_context(
+        "cli_error", {k: v for k, v in details.items() if v is not None}
+    )
     sentry_sdk.capture_exception(exception)
 
 
