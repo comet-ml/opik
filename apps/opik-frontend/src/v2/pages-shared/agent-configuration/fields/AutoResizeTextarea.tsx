@@ -20,8 +20,9 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   const resize = useCallback(() => {
     const el = textareaRef.current;
     if (el) {
-      el.style.height = "auto";
-      el.style.height = el.scrollHeight + "px";
+      el.style.height = "0";
+      const border = el.offsetHeight - el.clientHeight;
+      el.style.height = el.scrollHeight + border + "px";
     }
   }, []);
 
@@ -39,6 +40,7 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   return (
     <textarea
       ref={textareaRef}
+      rows={1}
       className={cn(
         "comet-body-s w-full resize-none overflow-hidden bg-transparent text-foreground outline-none",
         className,
