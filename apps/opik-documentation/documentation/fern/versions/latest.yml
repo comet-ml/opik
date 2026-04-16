@@ -7,14 +7,14 @@ tabs:
     display-name: Integrations
     icon: fa-regular fa-plug
     slug: /integrations
-  agent-optimization:
-    display-name: Agent Optimization
-    icon: fa-regular fa-robot
-    slug: /agent_optimization
   self-host:
     display-name: Self-hosting Opik
     icon: fa-regular fa-server
     slug: /self-host
+  self-improving-agents:
+    display-name: Building Self-Improving Agents
+    icon: fa-regular fa-arrows-rotate
+    slug: /self-improving-agents
   reference:
     display-name: SDK & API reference
     icon: fa-regular fa-square-terminal
@@ -33,10 +33,10 @@ navigation:
             path: ../docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
-          - page: Roadmap
-            path: ../docs/roadmap.mdx
-            slug: roadmap
-            icon: fa-regular fa-map
+          - page: Ollie Agent
+            path: ../docs-v2/ollie.mdx
+            slug: ollie
+            icon: fa-regular fa-sparkles
           - page: FAQ
             path: ../docs/faq.mdx
             slug: faq
@@ -60,9 +60,6 @@ navigation:
           - page: Debugging agents with Ollie
             path: ../docs-v2/observability/debug_agents.mdx
             slug: debug-agents
-          - page: Agent sandbox
-            path: ../docs-v2/observability/agent_sandbox.mdx
-            slug: agent-sandbox
           - section: Advanced
             slug: /advanced
             contents:
@@ -96,6 +93,204 @@ navigation:
               - page: Offline fallback and message replay
                 path: ../docs/tracing/offline_fallback.mdx
                 slug: offline_fallback
+          - section: Dashboards
+            slug: /dashboards
+            contents:
+              - page: Dashboards
+                path: ../docs/production/dashboards.mdx
+                slug: dashboards
+              - page: Production monitoring
+                path: ../docs/production/production_monitoring.mdx
+                slug: production_monitoring
+      - section: Development
+        slug: /development
+        contents:
+          - page: Overview
+            path: ../docs-v2/development/overview.mdx
+            slug: overview
+          - page: Agent sandbox
+            path: ../docs-v2/observability/agent_sandbox.mdx
+            slug: agent-sandbox
+          - page: Prompt playground
+            path: ../docs-v2/prompt_engineering/advanced/playground.mdx
+            slug: playground
+          - section: Agent configuration
+            slug: /agent-configuration
+            contents:
+              - page: Overview
+                path: ../docs-v2/prompt_engineering/overview.mdx
+                slug: overview
+              - page: Getting started
+                path: ../docs-v2/prompt_engineering/getting-started.mdx
+                slug: getting-started
+              - page: Concepts
+                path: ../docs-v2/prompt_engineering/concepts.mdx
+                slug: concepts
+              - page: Version control
+                path: ../docs-v2/prompt_engineering/advanced/version_control.mdx
+                slug: version-control
+              - page: Guaranteed availability
+                path: ../docs-v2/prompt_engineering/advanced/guaranted_availability.mdx
+                slug: guaranteed-availability
+          - section: Optimization runs
+            slug: /optimization-runs
+            contents:
+              - page: Opik Agent Optimizer
+                icon: fa-regular fa-house
+                path: ../docs/agent_optimization/overview.mdx
+                slug: overview
+              - page: Optimization Studio
+                icon: fa-regular fa-window-maximize
+                path: ../docs/agent_optimization/optimization/optimization_studio.mdx
+                slug: optimization_studio
+              - page: Quickstart
+                icon: fa-regular fa-bolt
+                path: ../docs/agent_optimization/getting_started/quickstart.mdx
+                slug: quickstart
+              - page: Quickstart notebook
+                icon: fa-regular fa-play
+                path: ../docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
+                slug: quickstart_notebook
+              - page: FAQ
+                icon: fa-regular fa-question
+                path: ../docs/agent_optimization/opik_optimizer/faq.mdx
+                slug: faq
+              - page: Changelog
+                icon: fa-regular fa-calendar
+                path: ../docs/agent_optimization/getting_started/changelog.mdx
+                slug: changelog
+              - page: Known Issues
+                icon: fa-regular fa-triangle-exclamation
+                path: ../docs/agent_optimization/known_issues.mdx
+                slug: known_issues
+              - section: Optimization
+                slug: /optimization
+                contents:
+                  - page: Concepts
+                    icon: fa-regular fa-lightbulb
+                    path: ../docs/agent_optimization/opik_optimizer/concepts.mdx
+                    slug: concepts
+                  - page: Configure LLM Providers
+                    icon: fa-regular fa-gear
+                    path: ../docs/agent_optimization/opik_optimizer/configure_models.mdx
+                    slug: configure_models
+                  - page: Define datasets
+                    icon: fa-regular fa-database
+                    path: ../docs/agent_optimization/optimization/define_datasets.mdx
+                    slug: define_datasets
+                  - page: Define metrics
+                    icon: fa-regular fa-chart-line
+                    path: ../docs/agent_optimization/optimization/define_metrics.mdx
+                    slug: define_metrics
+                  - page: Optimize prompts
+                    icon: fa-regular fa-wand-magic-sparkles
+                    path: ../docs/agent_optimization/optimization/optimize_prompts.mdx
+                    slug: optimize_prompts
+                  - page: Optimize tools (MCP)
+                    icon: fa-regular fa-wand-magic-sparkles
+                    path: ../docs/agent_optimization/optimization/optimize_tools.mdx
+                    slug: optimize_tools
+                  - page: Optimize agents
+                    icon: fa-regular fa-diagram-project
+                    path: ../docs/agent_optimization/optimization/optimize_agents/overview.mdx
+                    slug: optimize_agents
+                  - page: Optimize multimodal
+                    icon: fa-regular fa-image
+                    path: ../docs/agent_optimization/optimization/optimize_multimodal.mdx
+                    slug: optimize_multimodal
+                  - page: Dashboard results
+                    icon: fa-regular fa-chart-simple
+                    path: ../docs/agent_optimization/optimization/dashboard_results.mdx
+                    slug: dashboard_results
+              - section: Optimization Algorithms
+                slug: /algorithms
+                contents:
+                  - page: Overview
+                    icon: fa-regular fa-list
+                    path: ../docs/agent_optimization/algorithms/overview.mdx
+                    slug: overview
+                  - page: Benchmarks
+                    icon: fa-regular fa-chart-line
+                    path: ../docs/agent_optimization/algorithms/benchmarks.mdx
+                    slug: benchmarks
+                  - page: MetaPrompt
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+                    slug: metaprompt_optimizer
+                  - page: HRPO
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
+                    slug: hierarchical_adaptive_optimizer
+                  - page: Few-Shot Bayesian
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+                    slug: fewshot_bayesian_optimizer
+                  - page: Evolutionary
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
+                    slug: evolutionary_optimizer
+                  - page: GEPA
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/gepa_optimizer.mdx
+                    slug: gepa_optimizer
+                  - page: Parameter
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/parameter_optimizer.mdx
+                    slug: parameter_optimizer
+                  - page: Tool Optimization
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/tool_optimization.mdx
+                    slug: tool_optimization
+              - section: Cookbooks & Tutorials
+                slug: /cookbooks
+                contents:
+                  - page: Optimizer introduction
+                    icon: fa-regular fa-book
+                    path: ../docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
+                    slug: optimizer_introduction_cookbook
+                  - page: Synthetic data optimizer
+                    icon: fa-regular fa-book
+                    path: ../docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
+                    slug: synthetic_data_optimizer_cookbook
+                  - page: ARC-AGI tutorial
+                    icon: fa-regular fa-book
+                    path: ../docs/agent_optimization/cookbook/arc_agi_optimizer_cookbook.mdx
+                    slug: arc_agi_optimizer_cookbook
+                  - page: Multimodal agent tutorial
+                    icon: fa-regular fa-book
+                    path: ../docs/agent_optimization/cookbook/multimodal_agent_optimizer_cookbook.mdx
+                    slug: multimodal_agent_optimizer_cookbook
+              - section: Advanced Topics
+                slug: /advanced
+                contents:
+                  - page: Extending optimizers
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs/agent_optimization/algorithms/extending_optimizers.mdx
+                    slug: extending_optimizers
+                  - page: Custom metrics
+                    icon: fa-regular fa-sliders
+                    path: ../docs/agent_optimization/advanced/custom_metrics.mdx
+                    slug: custom_metrics
+                  - page: Custom optimizer prompts
+                    icon: fa-regular fa-pen-to-square
+                    path: ../docs/agent_optimization/advanced/prompt_customization.mdx
+                    slug: prompt_customization
+                  - page: Sampling controls
+                    icon: fa-regular fa-scale-balanced
+                    path: ../docs/agent_optimization/advanced/n_samples.mdx
+                    slug: n_samples
+                  - page: Multiple completions (n)
+                    icon: fa-regular fa-code-fork
+                    path: ../docs/agent_optimization/advanced/multiple_completions.mdx
+                    slug: multiple_completions
+                  - page: Chaining optimizers
+                    icon: fa-regular fa-objects-align-bottom
+                    path: ../docs/agent_optimization/advanced/chaining_optimizers.mdx
+                    slug: chaining_optimizers
+                  - page: API Reference
+                    icon: fa-regular fa-square-terminal
+                    path: ../docs/agent_optimization/opik_optimizer/reference.mdx
+                    slug: api_reference
       - section: Evaluation
         slug: /evaluation
         contents:
@@ -111,9 +306,9 @@ navigation:
           - section: Advanced
             slug: /advanced
             contents:
-              - page: Building Evaluation Suites
+              - page: Building Test Suites
                 path: ../docs-v2/evaluation/building_evaluation_suites.mdx
-                slug: building-evaluation-suites
+                slug: building-test-suites
               - page: Datasets & Experiments
                 path: ../docs/evaluation/evaluate_your_llm.mdx
                 slug: evaluate_your_llm
@@ -226,54 +421,33 @@ navigation:
               - page: Cookbook - Evaluate moderation metric
                 path: ../docs/cookbook/evaluate_moderation_metric.mdx
                 slug: evaluate_moderation_metric
-      - section: Prompt engineering
-        slug: /prompt_engineering
-        contents:
-          - page: Overview
-            path: ../docs-v2/prompt_engineering/overview.mdx
-            slug: overview
-          - page: Getting started
-            path: ../docs-v2/prompt_engineering/getting-started.mdx
-            slug: getting-started
-          - page: Concepts
-            path: ../docs-v2/prompt_engineering/concepts.mdx
-            slug: concepts
-          - section: Advanced
-            slug: /advanced
-            contents:
-              - page: Version control
-                path: ../docs-v2/prompt_engineering/advanced/version_control.mdx
-                slug: version-control
-              - page: Guaranteed availability
-                path: ../docs-v2/prompt_engineering/advanced/guaranted_availability.mdx
-                slug: guaranteed-availability
-              - page: Playground
-                path: ../docs-v2/prompt_engineering/advanced/playground.mdx
-                slug: playground
       - section: Production
         slug: /production
         contents:
-          - page: Production monitoring
-            path: ../docs/production/production_monitoring.mdx
-            slug: /production_monitoring
-          - page: Online Evaluation rules
-            path: ../docs/production/rules.mdx
-            slug: rules
-          - page: Gateway
-            path: ../docs/production/gateway.mdx
-            slug: gateway
-          - page: Guardrails
-            path: ../docs/production/guardrails.mdx
-            slug: guardrails
-          - page: Anonymizers
-            path: ../docs/production/anonymizers.mdx
-            slug: anonymizers
-          - page: Alerts
-            path: ../docs/production/alerts.mdx
-            slug: alerts
-          - page: Dashboards
-            path: ../docs/production/dashboards.mdx
-            slug: dashboards
+          - section: Online evaluation
+            slug: /online-evaluation
+            contents:
+              - page: Online Evaluation rules
+                path: ../docs/production/rules.mdx
+                slug: rules
+          - section: Gateway & Guardrails
+            slug: /gateway-guardrails
+            contents:
+              - page: Gateway
+                path: ../docs/production/gateway.mdx
+                slug: gateway
+              - page: Guardrails
+                path: ../docs/production/guardrails.mdx
+                slug: guardrails
+              - page: Anonymizers
+                path: ../docs/production/anonymizers.mdx
+                slug: anonymizers
+          - section: Alerts
+            slug: /alerts
+            contents:
+              - page: Alerts
+                path: ../docs/production/alerts.mdx
+                slug: alerts
       - section: Administration
         slug: /administration
         contents:
@@ -679,167 +853,14 @@ navigation:
           - page: OpenTelemetry
             path: ../docs/tracing/opentelemetry/overview.mdx
             slug: opentelemetry
-  - tab: agent-optimization
+  - tab: self-improving-agents
     layout:
-      - section: Getting Started
-        skip-slug: true
-        contents:
-          - page: Opik Agent Optimizer
-            icon: fa-regular fa-house
-            path: ../docs/agent_optimization/overview.mdx
-            slug: overview
-          - page: Optimization Studio
-            icon: fa-regular fa-window-maximize
-            path: ../docs/agent_optimization/optimization/optimization_studio.mdx
-            slug: optimization_studio
-          - page: Quickstart
-            icon: fa-regular fa-bolt
-            path: ../docs/agent_optimization/getting_started/quickstart.mdx
-            slug: quickstart
-          - page: Quickstart notebook
-            icon: fa-regular fa-play
-            path: ../docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
-            slug: quickstart_notebook
-          - page: FAQ
-            icon: fa-regular fa-question
-            path: ../docs/agent_optimization/opik_optimizer/faq.mdx
-            slug: faq
-          - page: Changelog
-            icon: fa-regular fa-calendar
-            path: ../docs/agent_optimization/getting_started/changelog.mdx
-            slug: changelog
-          - page: Known Issues
-            icon: fa-regular fa-triangle-exclamation
-            path: ../docs/agent_optimization/known_issues.mdx
-            slug: known_issues
-      - section: Optimization
-        slug: /optimization
-        contents:
-          - page: Concepts
-            icon: fa-regular fa-lightbulb
-            path: ../docs/agent_optimization/opik_optimizer/concepts.mdx
-            slug: concepts
-          - page: Configure LLM Providers
-            icon: fa-regular fa-gear
-            path: ../docs/agent_optimization/opik_optimizer/configure_models.mdx
-            slug: configure_models
-          - page: Define datasets
-            icon: fa-regular fa-database
-            path: ../docs/agent_optimization/optimization/define_datasets.mdx
-            slug: define_datasets
-          - page: Define metrics
-            icon: fa-regular fa-chart-line
-            path: ../docs/agent_optimization/optimization/define_metrics.mdx
-            slug: define_metrics
-          - page: Optimize prompts
-            icon: fa-regular fa-wand-magic-sparkles
-            path: ../docs/agent_optimization/optimization/optimize_prompts.mdx
-            slug: optimize_prompts
-          - page: Optimize tools (MCP)
-            icon: fa-regular fa-wand-magic-sparkles
-            path: ../docs/agent_optimization/optimization/optimize_tools.mdx
-            slug: optimize_tools
-          - page: Optimize agents
-            icon: fa-regular fa-diagram-project
-            path: ../docs/agent_optimization/optimization/optimize_agents/overview.mdx
-            slug: optimize_agents
-          - page: Optimize multimodal
-            icon: fa-regular fa-image
-            path: ../docs/agent_optimization/optimization/optimize_multimodal.mdx
-            slug: optimize_multimodal
-          - page: Dashboard results
-            icon: fa-regular fa-chart-simple
-            path: ../docs/agent_optimization/optimization/dashboard_results.mdx
-            slug: dashboard_results
-      - section: Optimization Algorithms
-        slug: /algorithms
-        contents:
-          - page: Overview
-            icon: fa-regular fa-list
-            path: ../docs/agent_optimization/algorithms/overview.mdx
-            slug: overview
-          - page: Benchmarks
-            icon: fa-regular fa-chart-line
-            path: ../docs/agent_optimization/algorithms/benchmarks.mdx
-            slug: benchmarks
-          - page: MetaPrompt
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: HRPO
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
-            slug: hierarchical_adaptive_optimizer
-          - page: Few-Shot Bayesian
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
-            slug: fewshot_bayesian_optimizer
-          - page: Evolutionary
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
-            slug: evolutionary_optimizer
-          - page: GEPA
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/gepa_optimizer.mdx
-            slug: gepa_optimizer
-          - page: Parameter
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/parameter_optimizer.mdx
-            slug: parameter_optimizer
-          - page: Tool Optimization
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/tool_optimization.mdx
-            slug: tool_optimization
-      - section: Cookbooks & Tutorials
-        slug: /cookbooks
-        contents:
-          - page: Optimizer introduction
-            icon: fa-regular fa-book
-            path: ../docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
-            slug: optimizer_introduction_cookbook
-          - page: Synthetic data optimizer
-            icon: fa-regular fa-book
-            path: ../docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
-            slug: synthetic_data_optimizer_cookbook
-          - page: ARC-AGI tutorial
-            icon: fa-regular fa-book
-            path: ../docs/agent_optimization/cookbook/arc_agi_optimizer_cookbook.mdx
-            slug: arc_agi_optimizer_cookbook
-          - page: Multimodal agent tutorial
-            icon: fa-regular fa-book
-            path: ../docs/agent_optimization/cookbook/multimodal_agent_optimizer_cookbook.mdx
-            slug: multimodal_agent_optimizer_cookbook
-      - section: Advanced Topics
-        slug: /advanced
-        contents:
-          - page: Extending optimizers
-            icon: fa-regular fa-puzzle-piece
-            path: ../docs/agent_optimization/algorithms/extending_optimizers.mdx
-            slug: extending_optimizers
-          - page: Custom metrics
-            icon: fa-regular fa-sliders
-            path: ../docs/agent_optimization/advanced/custom_metrics.mdx
-            slug: custom_metrics
-          - page: Custom optimizer prompts
-            icon: fa-regular fa-pen-to-square
-            path: ../docs/agent_optimization/advanced/prompt_customization.mdx
-            slug: prompt_customization
-          - page: Sampling controls
-            icon: fa-regular fa-scale-balanced
-            path: ../docs/agent_optimization/advanced/n_samples.mdx
-            slug: n_samples
-          - page: Multiple completions (n)
-            icon: fa-regular fa-code-fork
-            path: ../docs/agent_optimization/advanced/multiple_completions.mdx
-            slug: multiple_completions
-          - page: Chaining optimizers
-            icon: fa-regular fa-objects-align-bottom
-            path: ../docs/agent_optimization/advanced/chaining_optimizers.mdx
-            slug: chaining_optimizers
-          - page: API Reference
-            icon: fa-regular fa-square-terminal
-            path: ../docs/agent_optimization/opik_optimizer/reference.mdx
-            slug: api_reference
+      - page: Overview
+        path: ../docs-v2/self_improving_agents/overview.mdx
+        slug: overview
+      - page: Ollie and your codebase
+        path: ../docs-v2/self_improving_agents/ollie_and_your_codebase.mdx
+        slug: ollie-and-your-codebase
   - tab: self-host
     layout:
       - page: Overview

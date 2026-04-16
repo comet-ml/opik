@@ -1,13 +1,13 @@
 ---
-headline: Building Evaluation Suites | Opik Documentation
-og:description: Create and manage Evaluation Suites using the SDK, UI, or Ollie to build
+headline: Building Test Suites | Opik Documentation
+og:description: Create and manage Test Suites using the SDK, UI, or Ollie to build
   regression tests from real production failures
 og:site_name: Opik Documentation
-og:title: Building Evaluation Suites — Opik
-title: Building Evaluation Suites
+og:title: Building Test Suites — Opik
+title: Building Test Suites
 ---
 
-Evaluation suites grow as you debug and improve your agent. There are three ways to build them: with Ollie, through the UI, or via the SDK.
+Test suites grow as you debug and improve your agent. There are three ways to build them: with Ollie, through the UI, or via the SDK.
 
 ## With Ollie
 
@@ -23,7 +23,11 @@ See [Debugging agents](/tracing/debug-agents) for the full workflow.
 
 ## With the UI
 
-In the Opik dashboard, navigate to the Evaluation Suites section to create and manage suites visually. You can add test items, define assertions, configure execution policies, and review results — all without writing code.
+In the Opik dashboard, navigate to the Test Suites section to create and manage suites visually. You can add test items, define assertions, configure execution policies, and review results — all without writing code.
+
+<Frame>
+  <img src="/img/v2/evaluation/test-suite-ui.png" alt="Test suite UI showing items list and the Add Item panel with assertions and pass criteria" />
+</Frame>
 
 ## With the SDK
 
@@ -37,32 +41,32 @@ Define the quality bars you care about as suite-level assertions:
 
   opik_client = opik.Opik()
 
-  suite = opik_client.get_or_create_evaluation_suite(
+  suite = opik_client.get_or_create_test_suite(
       name="customer-support-qa",
-      project_name="eval-suites-demo",
-      assertions=[
+      project_name="test-suites-demo",
+      global_assertions=[
           "The response is grounded in the provided documentation context",
           "The response directly addresses the user's question",
           "The response is concise (3 sentences or fewer)",
       ],
-      execution_policy={"runs_per_item": 2, "pass_threshold": 2},
+      global_execution_policy={"runs_per_item": 2, "pass_threshold": 2},
   )
   ```
 
   ```ts title="Typescript"
-  import { Opik, EvaluationSuite } from "opik";
+  import { Opik, TestSuite } from "opik";
 
   const client = new Opik();
 
-  const suite = await EvaluationSuite.getOrCreate(client, {
+  const suite = await TestSuite.getOrCreate(client, {
     name: "customer-support-qa",
-    projectName: "eval-suites-demo",
-    assertions: [
+    projectName: "test-suites-demo",
+    globalAssertions: [
       "The response is grounded in the provided documentation context",
       "The response directly addresses the user's question",
       "The response is concise (3 sentences or fewer)",
     ],
-    executionPolicy: { runsPerItem: 2, passThreshold: 2 },
+    globalExecutionPolicy: { runsPerItem: 2, passThreshold: 2 },
   });
   ```
 </CodeBlocks>
@@ -73,7 +77,7 @@ Add individual items or batches. Items can include item-level assertions that ar
 
 <CodeBlocks>
   ```python title="Python"
-  suite.add_items([
+  suite.insert([
       {
           "data": {
               "question": "How do I create a new project?",
@@ -95,7 +99,7 @@ Add individual items or batches. Items can include item-level assertions that ar
   ```
 
   ```ts title="Typescript"
-  await suite.addItems([
+  await suite.insert([
     {
       data: {
         question: "How do I create a new project?",
@@ -143,14 +147,15 @@ The task function receives each item's `data` and must return an object with `in
   PROMPT_V1 = "You are a helpful assistant. Be as detailed as possible."
   PROMPT_V2 = "You are a concise assistant. Answer based ONLY on the provided context."
 
-  result_v1 = suite.run(task=make_task(PROMPT_V1))
-  result_v2 = suite.run(task=make_task(PROMPT_V2))
+  result_v1 = opik.run_tests(test_suite=suite, task=make_task(PROMPT_V1))
+  result_v2 = opik.run_tests(test_suite=suite, task=make_task(PROMPT_V2))
 
   print(f"v1 pass rate: {result_v1.pass_rate:.0%}")
   print(f"v2 pass rate: {result_v2.pass_rate:.0%}")
   ```
 
   ```ts title="Typescript"
+  import { runTests } from "opik";
   import OpenAI from "openai";
 
   const openai = new OpenAI();
@@ -171,8 +176,8 @@ The task function receives each item's `data` and must return an object with `in
   const PROMPT_V1 = "You are a helpful assistant. Be as detailed as possible.";
   const PROMPT_V2 = "You are a concise assistant. Answer based ONLY on the provided context.";
 
-  const resultV1 = await suite.run(makeTask(PROMPT_V1));
-  const resultV2 = await suite.run(makeTask(PROMPT_V2));
+  const resultV1 = await runTests({ testSuite: suite, task: makeTask(PROMPT_V1) });
+  const resultV2 = await runTests({ testSuite: suite, task: makeTask(PROMPT_V2) });
 
   console.log(`v1 pass rate: ${((resultV1.passRate ?? 0) * 100).toFixed(0)}%`);
   console.log(`v2 pass rate: ${((resultV2.passRate ?? 0) * 100).toFixed(0)}%`);
@@ -182,6 +187,10 @@ The task function receives each item's `data` and must return an object with `in
 </CodeBlocks>
 
 Each run creates a separate experiment in Opik, making it easy to compare results in the dashboard.
+
+<Frame>
+  <img src="/img/v2/evaluation/test-suite-run-results.png" alt="Test suite experiment results showing pass/fail per item with assertion details" />
+</Frame>
 
 <Note>
   The `input` should contain only the data your agent actually received when generating its response.
@@ -193,22 +202,22 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 
 <CodeBlocks>
   ```python title="Python"
-  suite.update(
-      assertions=[
+  suite.update_test_settings(
+      global_assertions=[
           "The response is grounded in the provided context",
           "The response is concise",
       ],
-      execution_policy={"runs_per_item": 5, "pass_threshold": 3},
+      global_execution_policy={"runs_per_item": 5, "pass_threshold": 3},
   )
   ```
 
   ```ts title="Typescript"
-  await suite.update({
-    assertions: [
+  await suite.updateTestSettings({
+    globalAssertions: [
       "The response is grounded in the provided context",
       "The response is concise",
     ],
-    executionPolicy: { runsPerItem: 5, passThreshold: 3 },
+    globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
   });
   ```
 </CodeBlocks>
@@ -218,8 +227,8 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 <CodeBlocks>
   ```python title="Python"
   items = suite.get_items()
-  assertions = suite.get_assertions()
-  policy = suite.get_execution_policy()
+  assertions = suite.get_global_assertions()
+  policy = suite.get_global_execution_policy()
 
   print(f"Items: {len(items)}")
   print(f"Assertions: {assertions}")
@@ -228,8 +237,8 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 
   ```ts title="Typescript"
   const items = await suite.getItems();
-  const assertions = await suite.getAssertions();
-  const policy = await suite.getExecutionPolicy();
+  const assertions = await suite.getGlobalAssertions();
+  const policy = await suite.getGlobalExecutionPolicy();
 
   console.log(`Items: ${items.length}`);
   console.log(`Assertions: ${assertions}`);
@@ -242,12 +251,12 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 <CodeBlocks>
   ```python title="Python"
   items = suite.get_items()
-  suite.delete_items([items[0]["id"]])
+  suite.delete([items[0]["id"]])
   ```
 
   ```ts title="Typescript"
   const items = await suite.getItems();
-  await suite.deleteItems([items[0].id]);
+  await suite.delete([items[0].id]);
   ```
 </CodeBlocks>
 
@@ -257,18 +266,18 @@ Execution policies control how many times each item is run and how many must pas
 
 <CodeBlocks>
   ```python title="Python"
-  suite = opik_client.get_or_create_evaluation_suite(
+  suite = opik_client.get_or_create_test_suite(
       name="flaky-output-tests",
-      assertions=["Response follows the expected format"],
-      execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+      global_assertions=["Response follows the expected format"],
+      global_execution_policy={"runs_per_item": 3, "pass_threshold": 2},
   )
   ```
 
   ```ts title="Typescript"
-  const suite = await EvaluationSuite.getOrCreate(client, {
+  const suite = await TestSuite.getOrCreate(client, {
     name: "flaky-output-tests",
-    assertions: ["Response follows the expected format"],
-    executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+    globalAssertions: ["Response follows the expected format"],
+    globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
   });
   ```
 </CodeBlocks>
@@ -282,20 +291,18 @@ You can also override the policy for individual items:
 
 <CodeBlocks>
   ```python title="Python"
-  suite.add_item(
-      data={"question": "Is my account compromised?", "context": "..."},
-      assertions=["Response treats the concern with urgency"],
-      execution_policy={"runs_per_item": 5, "pass_threshold": 4},
-  )
+  suite.insert([{
+      "data": {"question": "Is my account compromised?", "context": "..."},
+      "assertions": ["Response treats the concern with urgency"],
+      "execution_policy": {"runs_per_item": 5, "pass_threshold": 4},
+  }])
   ```
 
   ```ts title="Typescript"
-  await suite.addItem(
-    { question: "Is my account compromised?", context: "..." },
-    {
-      assertions: ["Response treats the concern with urgency"],
-      executionPolicy: { runsPerItem: 5, passThreshold: 4 },
-    }
-  );
+  await suite.insert([{
+    data: { question: "Is my account compromised?", context: "..." },
+    assertions: ["Response treats the concern with urgency"],
+    executionPolicy: { runsPerItem: 5, passThreshold: 4 },
+  }]);
   ```
 </CodeBlocks>

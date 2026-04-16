@@ -1,6 +1,6 @@
 ---
 headline: Getting Started with Evaluation | Opik Documentation
-og:description: Get started evaluating your LLM application with Opik using Evaluation
+og:description: Get started evaluating your LLM application with Opik using Test
   Suites or dataset-driven metrics
 og:site_name: Opik Documentation
 og:title: Getting Started with Evaluation — Opik
@@ -9,14 +9,14 @@ title: Getting started with Evaluation
 
 Opik provides two approaches to evaluation. Choose the one that fits your use case:
 
-- **Evaluation Suites**: Define assertions in natural language and let an LLM judge test them. Best for pass/fail behavioral testing.
+- **Test Suites**: Define assertions in natural language and let an LLM judge test them. Best for pass/fail behavioral testing.
 - **Datasets & Metrics**: Score outputs against a dataset using quantitative metrics. Best for measuring quality across many traces.
 
 ## Quick start
 
 <Tabs>
-  <Tab title="Evaluation Suites">
-    Evaluation Suites let you define expected behaviors as natural-language assertions and run them
+  <Tab title="Test Suites">
+    Test Suites let you define expected behaviors as natural-language assertions and run them
     against your agent. An LLM judge checks each assertion automatically.
 
     <CodeBlocks>
@@ -29,18 +29,18 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
       opik_client = opik.Opik()
 
       # Create a suite with assertions
-      suite = opik_client.get_or_create_evaluation_suite(
+      suite = opik_client.get_or_create_test_suite(
           name="my-agent-tests",
           project_name="my-agent",
-          assertions=[
+          global_assertions=[
               "The response directly addresses the user's question",
               "The response is concise (3 sentences or fewer)",
           ],
-          execution_policy={"runs_per_item": 2, "pass_threshold": 2},
+          global_execution_policy={"runs_per_item": 2, "pass_threshold": 2},
       )
 
       # Add test cases
-      suite.add_items([
+      suite.insert([
           {"data": {"question": "How do I create a new project?", "context": "Go to Dashboard and click 'New Project'."}},
           {"data": {"question": "What are the pricing tiers?", "context": "Free ($0/month), Pro ($29/month), Enterprise (custom)."}},
       ])
@@ -57,30 +57,30 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
           return {"input": item, "output": response.choices[0].message.content}
 
       # Run the evaluation
-      result = suite.run(task=task)
+      result = opik.run_tests(test_suite=suite, task=task)
       print(f"Pass rate: {result.pass_rate:.0%}")
       ```
 
       ```ts title="Typescript"
-      import Opik, { EvaluationSuite } from "opik";
+      import { Opik, TestSuite, runTests } from "opik";
       import OpenAI from "openai";
 
       const client = new Opik();
       const openai = new OpenAI();
 
       // Create a suite with assertions
-      const suite = await EvaluationSuite.getOrCreate({
+      const suite = await TestSuite.getOrCreate(client, {
           name: "my-agent-tests",
           projectName: "my-agent",
-          assertions: [
+          globalAssertions: [
               "The response directly addresses the user's question",
               "The response is concise (3 sentences or fewer)",
           ],
-          executionPolicy: { runsPerItem: 2, passThreshold: 2 },
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 2 },
       });
 
       // Add test cases
-      await suite.addItems([
+      await suite.insert([
           { data: { question: "How do I create a new project?", context: "Go to Dashboard and click 'New Project'." } },
           { data: { question: "What are the pricing tiers?", context: "Free ($0/month), Pro ($29/month), Enterprise (custom)." } },
       ]);
@@ -98,13 +98,18 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
       };
 
       // Run the evaluation
-      const result = await suite.run({ task });
-      console.log(`Pass rate: ${(result.passRate * 100).toFixed(0)}%`);
+      const result = await runTests({ testSuite: suite, task });
+      console.log(`Pass rate: ${((result.passRate ?? 0) * 100).toFixed(0)}%`);
       ```
     </CodeBlocks>
 
-    Each run creates an experiment in the Opik dashboard for easy comparison. See the
-    [Building Evaluation Suites](/evaluation/advanced/building-evaluation-suites) guide for the full walkthrough.
+    Each run creates an experiment in the Opik dashboard for easy comparison.
+
+    <Frame>
+      <img src="/img/v2/evaluation/test-suite-run-results.png" alt="Test suite experiment results showing pass/fail per item with assertion details" />
+    </Frame>
+
+    See the [Building Test Suites](/evaluation/advanced/building-test-suites) guide for the full walkthrough.
   </Tab>
   <Tab title="Datasets & Metrics">
     Dataset-based evaluation scores your agent's outputs using quantitative metrics like
@@ -142,7 +147,7 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
       ```
 
       ```ts title="Typescript"
-      import Opik from "opik";
+      import { Opik } from "opik";
 
       const client = new Opik();
 

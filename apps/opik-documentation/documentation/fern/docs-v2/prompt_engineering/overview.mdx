@@ -7,13 +7,18 @@ og:title: Agent Configuration Overview — Opik
 title: Agent Configuration Overview
 ---
 
-When you're building agents, the stuff that actually matters — your prompts, model settings, tool definitions — usually ends up hardcoded somewhere in your repo. Agent Configuration pulls all of that out into a versioned, manageable system so you can tweak things without redeploying.
+Agent Configuration lets you manage your prompts, model settings, and tool definitions outside
+your codebase. Version them, update them without redeploying, and keep a full history of every
+change.
 
 ## Why use Agent Configuration
 
-If you've ever had to push a whole new deploy just to change a system prompt, you know the pain. There's no history of what you changed, no way to quickly roll back, and no clean way to test a different prompt in staging vs. production.
+When prompts and parameters are hardcoded, every change requires a deploy. There is no history of
+what changed, no way to roll back quickly, and no clean way to test a different prompt in staging
+vs. production.
 
-Agent Configuration gives you version control for your agent's parameters. You define them once in code, push them to Opik, and from there you can update, compare, and promote versions through the UI or SDK.
+Agent Configuration gives you version control for your agent's parameters. Define them once in
+code, push them to Opik, and update, compare, and promote versions through the UI or SDK.
 
 ## Key features
 
@@ -25,14 +30,13 @@ Agent Configuration gives you version control for your agent's parameters. You d
 
 ## How it works
 
-There are really just two steps:
-
 1. **Define your configuration** — Declare a `Config` subclass (Python) or a plain object (TypeScript) with your fields and defaults, then push it with `create_config` / `createConfig`.
 2. **Fetch it at runtime** — Inside a tracked function, call `get_or_create_config` / `getOrCreateConfig`. The SDK returns the version that matches your requested environment or version. If Opik is temporarily unreachable, it falls back to the defaults you provided.
 
-When you want to change something, create a new version and move the `prod` label to it. Your running agent picks up the change on its next fetch — no redeploy.
+When you want to change something, create a new version and move the `prod` label to it. Your
+running agent picks up the change on its next fetch — no redeploy needed.
 
 ## Next steps
 
-- [Getting started](/prompt_engineering/getting-started) — Add Agent Configuration to your code in minutes
-- [Concepts](/prompt_engineering/concepts) — Deep dive into versions, environments, and configuration types
+- [Getting started](/development/agent-configuration/getting-started) — Add Agent Configuration to your code in minutes
+- [Concepts](/development/agent-configuration/concepts) — Deep dive into versions, environments, and configuration types

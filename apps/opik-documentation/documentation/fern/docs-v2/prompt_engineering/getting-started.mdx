@@ -7,7 +7,13 @@ og:title: Manage Prompts Effectively with Opik
 title: Getting started with Agent Configuration
 ---
 
-When working on agents there are a lot of different prompts and parameters you need to track and version. Opik lets you manage all of these outside your codebase, update them without redeploying, and keep a full history of what changed.
+Agents depend on prompts, model settings, and tool definitions that change frequently. Opik lets
+you manage all of these outside your codebase, update them without redeploying, and keep a full
+history of every change.
+
+<Frame>
+  <img src="/img/v2/agent-configuration/getting-started.png" alt="Agent Configuration page showing versioned prompts, model parameters, and environment labels" />
+</Frame>
 
 ## Adding Agent Configuration to your code
 
@@ -66,7 +72,7 @@ When working on agents there are a lot of different prompts and parameters you n
     ```
 
     ```ts title="TypeScript"
-    import Opik from "opik";
+    import { Opik } from "opik";
 
     const client = new Opik();
 
@@ -126,7 +132,7 @@ When working on agents there are a lot of different prompts and parameters you n
       ```
 
       ```ts title="TypeScript"
-      import Opik, { track } from "opik";
+      import { Opik, track } from "opik";
 
       const client = new Opik();
 

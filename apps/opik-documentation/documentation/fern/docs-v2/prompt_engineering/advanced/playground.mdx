@@ -1,46 +1,64 @@
 ---
 headline: Playground | Opik Documentation
-og:description: Use the Opik Playground to interactively test and compare prompt variants across multiple LLM providers
+og:description: Test and compare prompt variants across models, then validate them
+  against test suites — all without writing code
 og:site_name: Opik Documentation
-og:title: Playground
+og:title: Playground — Opik
 title: Playground
 ---
 
-The Playground is an interactive environment within Opik for testing and iterating on prompts. It lets you create multiple prompt variants, run them side-by-side across different models, and compare outputs — all without writing any code.
+The Playground lets you test prompt changes and compare models without writing code. Create
+multiple prompt variants, run them side by side, and validate the results against a test suite —
+all from the Opik UI.
 
-You can access the Playground from the left sidebar within any project.
+<Frame>
+  <img src="/img/v2/prompt-engineering/playground.png" alt="Playground with two prompt variants running against a test suite, showing pass/fail results" />
+</Frame>
 
-## Multi-variant testing
+## Compare prompt variants side by side
 
-The Playground supports creating multiple prompt variants in a side-by-side layout. Each variant has its own:
+Each variant in the Playground is independent — it has its own model, messages, and configuration.
+This means you can test a prompt change against the current version, try different models on the
+same prompt, or experiment with temperature and sampling parameters, all in a single view.
 
-- **Model and provider** — Choose from OpenAI, Anthropic, Gemini, OpenRouter, Vertex AI, or a custom endpoint
-- **Messages** — Add system, user, assistant, and tool messages
-- **Configuration** — Temperature, sampling parameters, and model-specific settings (e.g., thinking effort for reasoning models like Claude or o1/o3)
+Supported providers include OpenAI, Anthropic, Gemini, OpenRouter, Vertex AI, and custom
+endpoints. Reasoning models like Claude and o1/o3 expose additional controls such as thinking
+effort.
 
-This makes it easy to compare how different models or prompt phrasings perform on the same input.
+Click **Run** (or press **Shift+Enter**) to execute all variants at once. Results stream in real
+time with the model's response, token usage, latency, and a link to the full trace.
 
-## Running prompts
+## Validate against test suites
 
-Click **Run** or press **Shift+Enter** to execute all prompt variants simultaneously. Results stream in real-time and include:
+The real power of the Playground is running your prompt variants against a dataset or test suite.
+Instead of manually checking a handful of inputs, you can validate across your full set of test
+cases and see which variant performs better.
 
-- The model's response
-- Token usage (input and output tokens)
-- Latency
-- A link to the full trace for deeper inspection
+<Steps>
+  <Step title="Bind a dataset or test suite">
+    Click **Test on Dataset** in the header and select a dataset or test suite. If you're using
+    template variables (`{{variable_name}}`), they are automatically mapped to dataset columns.
+  </Step>
+  <Step title="Run the experiment">
+    Click **Run experiment** to execute all prompt variants against every item in the dataset.
+    Results appear in a table below the prompts, with each variant's output shown side by side.
+  </Step>
+  <Step title="Review results">
+    When using a test suite, each output is scored against the suite's evaluation rules and
+    displayed as pass/fail. You can click into any result to inspect the full trace.
 
-You can also run individual variants independently.
-
-## Testing on datasets
-
-For more systematic evaluation, you can bind the Playground to a dataset:
-
-1. Click **Test on Dataset** in the header
-2. Select a dataset and configure any variable mappings
-3. Run all prompt variants against every item in the dataset
-
-This generates experiments that you can review in the Experiments tab, with full tracing for each run. You can optionally attach evaluation rules to score the outputs automatically.
+    Experiments are saved automatically — compare them over time in the **Experiments** tab.
+  </Step>
+</Steps>
 
 ## Template variables
 
-Prompt messages can include template variables using `{{variable_name}}` syntax. When you run a prompt, the Playground will ask you to fill in the values — or if you're in dataset mode, variables are automatically mapped to dataset columns.
+Use `{{variable_name}}` syntax in your prompt messages to create dynamic templates. When running
+in standard mode, the Playground asks you to fill in the values. In dataset mode, variables are
+mapped to dataset columns automatically.
+
+## Next steps
+
+- [Agent Configuration](/development/agent-configuration/overview) — Manage prompts and parameters that your agent loads at runtime
+- [Test suites](/evaluation/advanced/building-test-suites) — Build the test cases your playground experiments run against
+- [Experiments](/evaluation/advanced/evaluate_your_llm) — Review and compare experiment results over time

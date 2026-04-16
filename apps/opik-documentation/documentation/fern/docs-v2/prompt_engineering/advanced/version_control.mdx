@@ -56,7 +56,7 @@ You can create new versions from the Opik UI or from code using the SDK.
     Use `createConfig` to create a new version programmatically:
 
     ```ts
-    import Opik from "opik";
+    import { Opik } from "opik";
 
     const client = new Opik();
 
@@ -127,7 +127,7 @@ Once you have a version, you can tag it with an environment label to control whi
     Use `setConfigEnv` to assign an environment label to a specific version:
 
     ```ts
-    import Opik from "opik";
+    import { Opik } from "opik";
 
     const client = new Opik();
 
@@ -164,4 +164,9 @@ Once you have a version, you can tag it with an environment label to control whi
 
 ## Comparing versions
 
-You can compare any two versions side-by-side in the Opik UI to see exactly what changed. This is handy for reviewing changes before promoting a new version to production.
+You can compare any two versions side-by-side in the Opik UI to see exactly what changed. This is
+useful for reviewing changes before promoting a new version to production.
+
+<Frame>
+  <img src="/img/v2/agent-configuration/version-comparison.png" alt="Version comparison view showing a diff of configuration changes between two versions" />
+</Frame>
